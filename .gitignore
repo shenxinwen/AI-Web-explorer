@@ -1,0 +1,32 @@
+# python generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# venv
+.venv
+
+# vim config
+.vim
+
+# env
+.env
+
+# data
+data/*.jsonl
+data/*.txt
+data/*.json
+data/htmls/*.html
+data/screenshots/*.png
+data/actions_screenshots/*.png
+data/actions_htmls/*.html
+
+# claude
+.claude/
+
+# mlflow
+mlruns/
+mlartifacts/
