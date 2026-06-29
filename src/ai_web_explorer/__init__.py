@@ -2,14 +2,6 @@ import argparse
 import logging
 import os
 
-import openai
-from dotenv import load_dotenv
-
-from . import loop
-from . import webstate
-
-load_dotenv()
-
 logging.basicConfig(level=logging.INFO)
 
 parser = argparse.ArgumentParser(description="Explore a website")
@@ -63,6 +55,14 @@ parser.add_argument(
 
 
 def main():
+    import openai
+    from dotenv import load_dotenv
+
+    from . import loop
+    from . import webstate
+
+    load_dotenv()
+
     args = parser.parse_args()
     domain = args.domain
     url = f"http://{domain}"
