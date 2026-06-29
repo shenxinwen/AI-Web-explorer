@@ -27,6 +27,9 @@ data/actions_htmls/*.html
 # claude
 .claude/
 
+# isolated Codex worktrees
+.worktrees/
+
 # mlflow
 mlruns/
 mlartifacts/
