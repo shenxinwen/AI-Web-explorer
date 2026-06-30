@@ -37,6 +37,13 @@ Expected result:
 Wrote SafeSym FSM to outputs/saucedemo_fsm.json
 ```
 
+`outputs/` is treated as a local generated-output directory. A committed example
+FSM is stored at:
+
+```text
+examples/safesym/saucedemo_fsm.json
+```
+
 ## Run bridge tests
 
 ```bash

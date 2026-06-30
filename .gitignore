@@ -24,6 +24,9 @@ data/screenshots/*.png
 data/actions_screenshots/*.png
 data/actions_htmls/*.html
 
+# generated bridge outputs
+outputs/
+
 # claude
 .claude/
 
