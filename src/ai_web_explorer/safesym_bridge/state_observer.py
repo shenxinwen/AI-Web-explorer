@@ -64,3 +64,37 @@ def signature_from_observed_values(
         "$.order_review_ready": order_review_ready,
         "$.order_created": order_created,
     }
+
+
+async def _input_value_or_empty(page, selector: str) -> str:
+    locator = page.locator(selector)
+    if await locator.count() == 0:
+        return ""
+    return await locator.input_value()
+
+
+async def _inner_text_or_empty(page, selector: str) -> str:
+    locator = page.locator(selector)
+    if await locator.count() == 0:
+        return ""
+    return await locator.inner_text()
+
+
+async def observe_saucedemo_state(page) -> StateSnapshot:
+    page_id = page_id_from_url(page.url)
+    title = await page.title()
+    cart_badge_text = await _inner_text_or_empty(page, ".shopping_cart_badge")
+    values = {
+        "username_value": await _input_value_or_empty(page, "#user-name"),
+        "password_value": await _input_value_or_empty(page, "#password"),
+        "cart_count": parse_cart_count(cart_badge_text),
+        "checkout_first_name": await _input_value_or_empty(page, "#first-name"),
+        "checkout_last_name": await _input_value_or_empty(page, "#last-name"),
+        "checkout_postal_code": await _input_value_or_empty(page, "#postal-code"),
+    }
+    return StateSnapshot(
+        page_id=page_id,
+        url=page.url,
+        title=title,
+        signature=signature_from_observed_values(page_id, values),
+    )
