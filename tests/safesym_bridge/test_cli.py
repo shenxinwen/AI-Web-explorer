@@ -1,5 +1,6 @@
 import json
 
+from ai_web_explorer.safesym_bridge import cli
 from ai_web_explorer.safesym_bridge.cli import build_saucedemo_fsm, main
 
 
@@ -21,3 +22,35 @@ def test_main_writes_json_file(tmp_path):
     assert data["meta"]["app"] == "saucedemo"
     assert data["meta"]["initial_page_id"] == "login"
     assert data["meta"]["terminal_pages"] == ["checkout_complete"]
+
+
+def test_main_fixed_subcommand_writes_json_file(tmp_path):
+    output_path = tmp_path / "fixed.json"
+
+    exit_code = main(["fixed", "--output", str(output_path)])
+
+    assert exit_code == 0
+    data = json.loads(output_path.read_text(encoding="utf-8"))
+    assert data["meta"]["app"] == "saucedemo"
+
+
+def test_main_observed_subcommand_runs_browser_flow(tmp_path, monkeypatch):
+    output_path = tmp_path / "observed.json"
+    calls = []
+
+    async def fake_run_saucedemo_observed_flow(path, *, headless=True):
+        calls.append((path, headless))
+        path.write_text('{"ok": true}', encoding="utf-8")
+        return path
+
+    monkeypatch.setattr(
+        cli,
+        "run_saucedemo_observed_flow",
+        fake_run_saucedemo_observed_flow,
+    )
+
+    exit_code = main(["observed", "--output", str(output_path), "--headed"])
+
+    assert exit_code == 0
+    assert calls == [(output_path, False)]
+    assert json.loads(output_path.read_text(encoding="utf-8")) == {"ok": True}
