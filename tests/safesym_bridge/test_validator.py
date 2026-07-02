@@ -66,3 +66,34 @@ def test_validate_with_safesym_loader_reports_missing_root(tmp_path):
 
     assert result.ok is False
     assert result.errors == ["SafeSym root does not exist"]
+
+
+def test_validate_with_safesym_loader_uses_load_fsm_api(tmp_path):
+    safesym_root = tmp_path / "SafeSym"
+    fsm_package = safesym_root / "safeww" / "fsm"
+    fsm_package.mkdir(parents=True)
+    (safesym_root / "safeww" / "__init__.py").write_text("", encoding="utf-8")
+    (fsm_package / "__init__.py").write_text("", encoding="utf-8")
+    (fsm_package / "loader.py").write_text(
+        "\n".join(
+            [
+                "from pathlib import Path",
+                "",
+                "def load_fsm(path):",
+                "    if not Path(path).exists():",
+                "        raise FileNotFoundError(path)",
+                "    return {'loaded': str(path)}",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    fsm_path = tmp_path / "fsm.json"
+    fsm_path.write_text('{"meta": {"app": "demo"}, "pages": []}', encoding="utf-8")
+
+    result = validate_with_safesym_loader(
+        fsm_path=str(fsm_path),
+        safesym_root=str(safesym_root),
+    )
+
+    assert result.ok is True
+    assert result.errors == []

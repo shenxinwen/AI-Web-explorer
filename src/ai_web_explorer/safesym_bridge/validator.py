@@ -86,12 +86,14 @@ def validate_with_safesym_loader(
         )
 
     try:
-        if hasattr(loader, "FsmDocument"):
+        if hasattr(loader, "load_fsm"):
+            loader.load_fsm(fsm_path)
+        elif hasattr(loader, "FsmDocument") and hasattr(loader.FsmDocument, "from_path"):
             loader.FsmDocument.from_path(fsm_path)
         else:
             return ValidationResult(
                 ok=False,
-                errors=["SafeSym loader has no FsmDocument"],
+                errors=["SafeSym loader has no load_fsm or FsmDocument.from_path"],
             )
     except Exception as exc:
         return ValidationResult(
