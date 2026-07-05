@@ -54,3 +54,14 @@ def test_main_observed_subcommand_runs_browser_flow(tmp_path, monkeypatch):
     assert exit_code == 0
     assert calls == [(output_path, False)]
     assert json.loads(output_path.read_text(encoding="utf-8")) == {"ok": True}
+
+
+def test_main_graph_subcommand_writes_observed_graph(tmp_path):
+    output_path = tmp_path / "observed_graph.json"
+
+    exit_code = main(["graph", "--output", str(output_path)])
+
+    assert exit_code == 0
+    data = json.loads(output_path.read_text(encoding="utf-8"))
+    assert data["meta"]["schema_version"] == "web-observed-graph-v1"
+    assert data["meta"]["app"] == "saucedemo"

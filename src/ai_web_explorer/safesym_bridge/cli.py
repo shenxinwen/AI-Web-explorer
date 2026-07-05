@@ -5,7 +5,10 @@ import asyncio
 import json
 from pathlib import Path
 
-from ai_web_explorer.safesym_bridge.browser_runner import run_saucedemo_observed_flow
+from ai_web_explorer.safesym_bridge.browser_runner import (
+    run_saucedemo_observed_flow,
+    write_observed_graph,
+)
 from ai_web_explorer.safesym_bridge.fsm_exporter import build_fsm
 from ai_web_explorer.safesym_bridge.models import SafeSymFsm
 from ai_web_explorer.safesym_bridge.task_spec import build_saucedemo_mvp_transitions
@@ -69,6 +72,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Show the browser window while running the observed flow.",
     )
+    graph_parser = subparsers.add_parser(
+        "graph",
+        help="Write the SauceDemo observed graph JSON from fixed MVP transitions.",
+    )
+    graph_parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("outputs/saucedemo_observed_graph.json"),
+        help="Path to write the generated observed graph JSON.",
+    )
 
     args = parser.parse_args(argv)
 
@@ -80,6 +93,11 @@ def main(argv: list[str] | None = None) -> int:
                     headless=not args.headed,
                 )
             )
+        elif args.mode == "graph":
+            output_path = write_observed_graph(
+                build_saucedemo_mvp_transitions(),
+                args.output,
+            )
         else:
             output_path = write_fixed_fsm(
                 args.output or Path("outputs/saucedemo_fsm.json")
@@ -88,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: {error}")
         return 1
 
-    print(f"Wrote SafeSym FSM to {output_path}")
+    print(f"Wrote output to {output_path}")
     return 0
 
 

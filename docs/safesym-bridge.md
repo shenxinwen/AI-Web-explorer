@@ -51,6 +51,18 @@ FSM is stored at:
 examples/safesym/saucedemo_fsm.json
 ```
 
+## Generate the observed graph
+
+The graph command writes the UI-KOBE-inspired intermediate graph used by the
+bridge:
+
+```bash
+python -m ai_web_explorer.safesym_bridge.cli graph --output outputs/saucedemo_observed_graph.json
+```
+
+The graph is useful for debugging exploration state. SafeSym still consumes the
+exported FSM JSON, not the graph directly.
+
 ## Generate the browser-observed FSM
 
 The observed mode runs a real Playwright browser flow against SauceDemo, records
