@@ -3,21 +3,40 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ai_web_explorer.safesym_bridge.fsm_exporter import build_fsm
+from ai_web_explorer.safesym_bridge.graph_exporter import graph_to_fsm
 from ai_web_explorer.safesym_bridge.models import ObservedTransition
+from ai_web_explorer.safesym_bridge.observed_graph import build_observed_graph
 from ai_web_explorer.safesym_bridge.validator import validate_fsm
+
+
+def write_observed_graph(
+    transitions: list[ObservedTransition],
+    output_path: Path,
+) -> Path:
+    graph = build_observed_graph(
+        app="saucedemo",
+        start_node="login",
+        transitions=transitions,
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        json.dumps(graph.to_dict(), indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    return output_path
+
 
 # transitions --> fsm
 def write_observed_fsm(
     transitions: list[ObservedTransition],
     output_path: Path,
 ) -> Path:
-    fsm = build_fsm(
+    graph = build_observed_graph(
         app="saucedemo",
-        initial_page_id="login",
-        terminal_pages=["checkout_complete"],
+        start_node="login",
         transitions=transitions,
     )
+    fsm = graph_to_fsm(graph, terminal_pages=["checkout_complete"])
     validation = validate_fsm(fsm)
     if not validation.ok:
         joined = "; ".join(validation.errors)
