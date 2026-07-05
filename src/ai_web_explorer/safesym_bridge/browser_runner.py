@@ -7,7 +7,7 @@ from ai_web_explorer.safesym_bridge.fsm_exporter import build_fsm
 from ai_web_explorer.safesym_bridge.models import ObservedTransition
 from ai_web_explorer.safesym_bridge.validator import validate_fsm
 
-
+# transitions --> fsm
 def write_observed_fsm(
     transitions: list[ObservedTransition],
     output_path: Path,

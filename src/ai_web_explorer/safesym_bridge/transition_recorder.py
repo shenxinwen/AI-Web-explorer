@@ -37,6 +37,7 @@ async def record_transition(
             semantic_id=action_id,
             playwright_calls=[],
         ),
+        # 根据动作检索预设的前提条件，并推断状态变化的效果
         preconditions=preconditions_for(action_id),
         effects=infer_effects(before, after),
     )

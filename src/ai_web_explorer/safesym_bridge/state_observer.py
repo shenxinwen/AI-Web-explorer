@@ -65,7 +65,7 @@ def signature_from_observed_values(
         "$.order_created": order_created,
     }
 
-
+# 调用css选择器获取input的value，如果没有找到元素，则返回空字符串
 async def _input_value_or_empty(page, selector: str) -> str:
     locator = page.locator(selector)
     if await locator.count() == 0:
@@ -84,6 +84,8 @@ async def observe_saucedemo_state(page) -> StateSnapshot:
     page_id = page_id_from_url(page.url)
     title = await page.title()
     cart_badge_text = await _inner_text_or_empty(page, ".shopping_cart_badge")
+    
+    # 检测当前page的状态，获取各种输入框的值和购物车数量等信息
     values = {
         "username_value": await _input_value_or_empty(page, "#user-name"),
         "password_value": await _input_value_or_empty(page, "#password"),
@@ -92,6 +94,7 @@ async def observe_saucedemo_state(page) -> StateSnapshot:
         "checkout_last_name": await _input_value_or_empty(page, "#last-name"),
         "checkout_postal_code": await _input_value_or_empty(page, "#postal-code"),
     }
+    
     return StateSnapshot(
         page_id=page_id,
         url=page.url,
