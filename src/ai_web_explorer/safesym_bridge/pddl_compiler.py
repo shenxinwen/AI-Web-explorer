@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from ai_web_explorer.safesym_bridge.observed_graph import WebObservedGraph
+from ai_web_explorer.safesym_bridge.observed_graph import WebObservedEdge, WebObservedGraph
 
 BOOLEAN_STATE_PREDICATES = {
     "$.is_logged_in": "state_is_logged_in",
@@ -43,6 +43,18 @@ def _predicate_for_condition(path: str, value: object) -> tuple[str, bool] | Non
     if path in BOOLEAN_STATE_PREDICATES and isinstance(value, bool):
         return BOOLEAN_STATE_PREDICATES[path], value
     return None
+
+
+def _predicate_for_precondition(
+    path: str, cond: object, value: object
+) -> tuple[str, bool] | None:
+    if path == "$.cart_count":
+        if cond == "gt" and value == 0:
+            return CART_COUNT_POSITIVE, True
+        if cond == "eq" and isinstance(value, (int, float)):
+            return CART_COUNT_POSITIVE, value > 0
+        return None
+    return _predicate_for_condition(path, value)
 
 
 def _format_positive_atoms(atoms: list[str], indent: str) -> list[str]:
@@ -99,10 +111,14 @@ def _saucedemo_fill_actions() -> list[str]:
     ]
 
 
-def _edge_action_preconditions(edge) -> list[str]:
+def _edge_action_preconditions(edge: WebObservedEdge) -> list[str]:
     atoms = [f"at {edge.source}"]
     for condition in edge.preconditions:
-        mapped = _predicate_for_condition(condition["path"], condition["value"])
+        mapped = _predicate_for_precondition(
+            condition["path"],
+            condition.get("cond"),
+            condition["value"],
+        )
         if mapped is None:
             continue
         predicate, is_positive = mapped
@@ -111,7 +127,7 @@ def _edge_action_preconditions(edge) -> list[str]:
     return atoms
 
 
-def _edge_action_effects(edge) -> tuple[list[str], list[str]]:
+def _edge_action_effects(edge: WebObservedEdge) -> tuple[list[str], list[str]]:
     add_effects: list[str] = []
     delete_effects: list[str] = []
     if edge.source != edge.target:

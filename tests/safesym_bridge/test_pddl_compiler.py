@@ -83,3 +83,19 @@ def test_fill_actions_make_submit_preconditions_reachable():
         checkout_submit_start : checkout_submit_start + 500
     ]
     assert "(state_checkout_info_filled)" in checkout_submit_chunk
+
+
+def test_cart_positive_preconditions_are_preserved_for_checkout_actions():
+    artifacts = _compile_saucedemo()
+
+    cart_checkout_start = artifacts.domain.index("(:action cart_checkout_start")
+    cart_checkout_chunk = artifacts.domain[
+        cart_checkout_start : cart_checkout_start + 500
+    ]
+    assert "(state_cart_count_positive)" in cart_checkout_chunk
+
+    order_place_confirm_start = artifacts.domain.index("(:action order_place_confirm")
+    order_place_confirm_chunk = artifacts.domain[
+        order_place_confirm_start : order_place_confirm_start + 500
+    ]
+    assert "(state_cart_count_positive)" in order_place_confirm_chunk
