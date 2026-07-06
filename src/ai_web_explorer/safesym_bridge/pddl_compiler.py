@@ -5,6 +5,18 @@ from pathlib import Path
 
 from ai_web_explorer.safesym_bridge.observed_graph import WebObservedGraph
 
+BOOLEAN_STATE_PREDICATES = {
+    "$.is_logged_in": "state_is_logged_in",
+    "$.username_filled": "state_username_filled",
+    "$.password_filled": "state_password_filled",
+    "$.checkout_info_filled": "state_checkout_info_filled",
+    "$.checkout_started": "state_checkout_started",
+    "$.order_review_ready": "state_order_review_ready",
+    "$.order_created": "state_order_created",
+}
+
+CART_COUNT_POSITIVE = "state_cart_count_positive"
+
 
 @dataclass(frozen=True)
 class PddlArtifacts:
@@ -12,14 +24,28 @@ class PddlArtifacts:
     problem: str
 
 
+def _state_predicates_for_graph(graph: WebObservedGraph) -> list[str]:
+    predicates: set[str] = set()
+    for node in graph.nodes:
+        for path in node.state_schema:
+            if path == "$.cart_count":
+                predicates.add(CART_COUNT_POSITIVE)
+            elif path in BOOLEAN_STATE_PREDICATES:
+                predicates.add(BOOLEAN_STATE_PREDICATES[path])
+    return sorted(predicates)
+
+
 def compile_graph_to_pddl(graph: WebObservedGraph) -> PddlArtifacts:
+    state_predicates = _state_predicates_for_graph(graph)
+    predicate_lines = ["    (at ?page)"] + [
+        f"    ({predicate})" for predicate in state_predicates
+    ]
     domain = "\n".join(
         [
             f"(define (domain {graph.app})",
             "  (:requirements :strips)",
             "  (:predicates",
-            "    (at ?page)",
-            "    (state_order_created)",
+            *predicate_lines,
             "  )",
             ")",
             "",
