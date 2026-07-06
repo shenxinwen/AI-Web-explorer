@@ -45,3 +45,41 @@ def test_compile_graph_to_pddl_declares_stable_state_predicates():
 
     assert "state_cart_count_is_value" not in artifacts.domain
     assert "state_cart_count_is_value" not in artifacts.problem
+
+
+def test_compile_graph_to_pddl_emits_expected_actions():
+    artifacts = _compile_saucedemo()
+
+    expected_actions = [
+        "(:action login_fill_credentials",
+        "(:action login_submit",
+        "(:action product_add_to_cart",
+        "(:action cart_open",
+        "(:action cart_checkout_start",
+        "(:action checkout_info_fill",
+        "(:action checkout_info_submit",
+        "(:action order_place_confirm",
+    ]
+    for action in expected_actions:
+        assert action in artifacts.domain
+
+
+def test_fill_actions_make_submit_preconditions_reachable():
+    artifacts = _compile_saucedemo()
+
+    assert "(:action login_fill_credentials" in artifacts.domain
+    assert "(state_username_filled)" in artifacts.domain
+    assert "(state_password_filled)" in artifacts.domain
+    assert "(:action checkout_info_fill" in artifacts.domain
+    assert "(state_checkout_info_filled)" in artifacts.domain
+
+    login_submit_start = artifacts.domain.index("(:action login_submit")
+    login_submit_chunk = artifacts.domain[login_submit_start : login_submit_start + 500]
+    assert "(state_username_filled)" in login_submit_chunk
+    assert "(state_password_filled)" in login_submit_chunk
+
+    checkout_submit_start = artifacts.domain.index("(:action checkout_info_submit")
+    checkout_submit_chunk = artifacts.domain[
+        checkout_submit_start : checkout_submit_start + 500
+    ]
+    assert "(state_checkout_info_filled)" in checkout_submit_chunk
