@@ -9,6 +9,8 @@ from ai_web_explorer.safesym_bridge.browser_runner import (
     run_saucedemo_observed_flow,
     write_observed_graph,
 )
+from ai_web_explorer.safesym_bridge.observed_graph import build_observed_graph
+from ai_web_explorer.safesym_bridge.pddl_compiler import write_pddl_artifacts
 from ai_web_explorer.safesym_bridge.fsm_exporter import build_fsm
 from ai_web_explorer.safesym_bridge.models import SafeSymFsm
 from ai_web_explorer.safesym_bridge.task_spec import build_saucedemo_mvp_transitions
@@ -37,6 +39,16 @@ def write_fixed_fsm(output_path: Path) -> Path:
         encoding="utf-8",
     )
     return output_path
+
+
+def write_saucedemo_pddl(output_dir: Path) -> Path:
+    graph = build_observed_graph(
+        app="saucedemo",
+        start_node="login",
+        transitions=build_saucedemo_mvp_transitions(),
+    )
+    write_pddl_artifacts(graph, output_dir)
+    return output_dir
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -82,6 +94,16 @@ def main(argv: list[str] | None = None) -> int:
         default=Path("outputs/saucedemo_observed_graph.json"),
         help="Path to write the generated observed graph JSON.",
     )
+    pddl_parser = subparsers.add_parser(
+        "pddl",
+        help="Write the SauceDemo graph-derived PDDL domain/problem files.",
+    )
+    pddl_parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("outputs/safesym_e2e/graph_pddl"),
+        help="Directory to write domain.pddl and problem.pddl.",
+    )
 
     args = parser.parse_args(argv)
 
@@ -98,6 +120,8 @@ def main(argv: list[str] | None = None) -> int:
                 build_saucedemo_mvp_transitions(),
                 args.output,
             )
+        elif args.mode == "pddl":
+            output_path = write_saucedemo_pddl(args.output)
         else:
             output_path = write_fixed_fsm(
                 args.output or Path("outputs/saucedemo_fsm.json")

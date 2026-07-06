@@ -65,3 +65,18 @@ def test_main_graph_subcommand_writes_observed_graph(tmp_path):
     data = json.loads(output_path.read_text(encoding="utf-8"))
     assert data["meta"]["schema_version"] == "web-observed-graph-v1"
     assert data["meta"]["app"] == "saucedemo"
+
+
+def test_main_pddl_subcommand_writes_domain_and_problem(tmp_path):
+    output_dir = tmp_path / "graph_pddl"
+
+    exit_code = main(["pddl", "--output", str(output_dir)])
+
+    assert exit_code == 0
+    domain = (output_dir / "domain.pddl").read_text(encoding="utf-8")
+    problem = (output_dir / "problem.pddl").read_text(encoding="utf-8")
+    assert "(define (domain saucedemo)" in domain
+    assert "(:action order_place_confirm" in domain
+    assert "(:domain saucedemo)" in problem
+    assert "(at login)" in problem
+    assert "(state_order_created)" in problem
