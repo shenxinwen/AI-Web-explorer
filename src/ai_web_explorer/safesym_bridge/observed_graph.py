@@ -4,7 +4,6 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any
 
-from ai_web_explorer.safesym_bridge.fsm_exporter import schema_type_for
 from ai_web_explorer.safesym_bridge.models import ObservedTransition, StateSnapshot
 
 SCHEMA_VERSION = "web-observed-graph-v1"
@@ -16,6 +15,14 @@ PAGE_DESCRIPTIONS = {
     "checkout_overview": "checkout overview page",
     "checkout_complete": "checkout complete page",
 }
+
+
+def schema_type_for(value: Any) -> str:
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, int | float):
+        return "number"
+    return "string"
 
 
 @dataclass(frozen=True)

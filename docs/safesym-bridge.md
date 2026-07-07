@@ -13,15 +13,17 @@ real browser exploration
   -> planner
 ```
 
-In CLI terms:
+In CLI terms, the active commands are:
 
 ```text
-explore-graph -> explore-pddl -> SafeSym
+explore-graph
+explore-pddl
 ```
 
-Older FSM commands are still kept as compatibility and debugging tools. They are
-useful for regression tests and for comparing the current graph/PDDL path
-against earlier bridge milestones.
+Earlier FSM export commands were removed after `WebObservedGraph -> PDDL`
+became the primary bridge path. The historical design notes remain under
+`docs/superpowers/` for context, but the runtime code now follows the graph/PDDL
+path only.
 
 ## Current Recommended Path
 
@@ -84,52 +86,6 @@ Its effect is:
 
 SafeSym can inject checks before safety-relevant actions such as
 `order_place_confirm`.
-
-## Compatibility And Debug Commands
-
-These commands are still supported, but they are not the current main path.
-
-### Fixed FSM fixture
-
-```bash
-python -m ai_web_explorer.safesym_bridge.cli fixed --output outputs/saucedemo_fsm.json
-```
-
-This writes a hand-authored MVP FSM fixture. Use it for regression tests and
-simple SafeSym loader checks.
-
-### Browser-observed FSM
-
-```bash
-python -m ai_web_explorer.safesym_bridge.cli observed --output outputs/saucedemo_observed_fsm.json
-```
-
-This runs a fixed browser flow, records observed transitions, and exports them
-as the older SafeSym FSM shape.
-
-To watch the browser:
-
-```bash
-python -m ai_web_explorer.safesym_bridge.cli observed --headed --output outputs/saucedemo_observed_fsm.json
-```
-
-### Graph from fixed transitions
-
-```bash
-python -m ai_web_explorer.safesym_bridge.cli graph --output outputs/saucedemo_observed_graph.json
-```
-
-This writes a graph from fixed MVP transitions. It is useful for debugging graph
-serialization without launching a browser.
-
-### PDDL from fixed graph
-
-```bash
-python -m ai_web_explorer.safesym_bridge.cli pddl --output outputs/safesym_e2e/graph_pddl
-```
-
-This compiles the fixed-transition graph into PDDL. It is useful for fast PDDL
-regression tests without browser exploration.
 
 ## Run Tests
 

@@ -1,7 +1,6 @@
 from ai_web_explorer.safesym_bridge.models import (
-    SafeSymAction,
-    SafeSymFsm,
-    SafeSymPage,
+    ObservedAction,
+    ObservedTransition,
     StateSnapshot,
 )
 
@@ -19,71 +18,32 @@ def test_state_snapshot_stores_signature():
     assert snapshot.signature["$.is_logged_in"] is True
 
 
-def test_safesym_fsm_to_dict_uses_expected_json_shape():
-    action = SafeSymAction(
-        id="order_place_confirm",
-        name="order_place_confirm",
-        from_page="checkout_overview",
-        to_page="checkout_complete",
-        is_navigation=True,
-        preconditions=[
-            {"path": "$.cart_count", "cond": "gt", "value": 0},
-            {"path": "$.order_review_ready", "cond": "eq", "value": True},
-        ],
-        effects=[
-            {"path": "$.order_created", "op": "set", "value": True},
-        ],
+def test_observed_transition_stores_before_action_and_after():
+    before = StateSnapshot(
+        page_id="inventory",
+        url="https://www.saucedemo.com/inventory.html",
+        title="Swag Labs",
+        signature={"$.cart_count": 0},
     )
-    page = SafeSymPage(
-        id="checkout_overview",
-        signature_schema={
-            "$.cart_count": "number",
-            "$.order_review_ready": "boolean",
-            "$.order_created": "boolean",
-        },
-        actions=[action],
+    after = StateSnapshot(
+        page_id="inventory",
+        url="https://www.saucedemo.com/inventory.html",
+        title="Swag Labs",
+        signature={"$.cart_count": 1},
     )
-    fsm = SafeSymFsm(
-        app="saucedemo",
-        initial_page_id="login",
-        terminal_pages=["checkout_complete"],
-        pages=[page],
+    action = ObservedAction(
+        raw_description="Click Add to cart",
+        semantic_id="product_add_to_cart",
     )
 
-    assert fsm.to_dict() == {
-        "meta": {
-            "app": "saucedemo",
-            "initial_page_id": "login",
-            "terminal_pages": ["checkout_complete"],
-        },
-        "pages": [
-            {
-                "id": "checkout_overview",
-                "signature_schema": {
-                    "$.cart_count": "number",
-                    "$.order_review_ready": "boolean",
-                    "$.order_created": "boolean",
-                },
-                "actions": [
-                    {
-                        "id": "order_place_confirm",
-                        "name": "order_place_confirm",
-                        "from": "checkout_overview",
-                        "to": "checkout_complete",
-                        "is_navigation": True,
-                        "preconditions": [
-                            {"path": "$.cart_count", "cond": "gt", "value": 0},
-                            {
-                                "path": "$.order_review_ready",
-                                "cond": "eq",
-                                "value": True,
-                            },
-                        ],
-                        "effects": [
-                            {"path": "$.order_created", "op": "set", "value": True},
-                        ],
-                    }
-                ],
-            }
-        ],
-    }
+    transition = ObservedTransition(
+        source=before,
+        target=after,
+        action=action,
+        effects=[{"path": "$.cart_count", "op": "set", "value": 1}],
+    )
+
+    assert transition.source.signature["$.cart_count"] == 0
+    assert transition.target.signature["$.cart_count"] == 1
+    assert transition.action.semantic_id == "product_add_to_cart"
+    assert transition.effects == [{"path": "$.cart_count", "op": "set", "value": 1}]
