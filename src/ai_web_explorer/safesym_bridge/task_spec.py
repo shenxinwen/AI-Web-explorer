@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""Fixed SauceDemo MVP fixtures used by compatibility and regression paths."""
+
 from ai_web_explorer.safesym_bridge.action_semantics import semantic_id_for
 from ai_web_explorer.safesym_bridge.effect_inferer import (
     infer_effects,
