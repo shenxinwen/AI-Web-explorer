@@ -4,6 +4,8 @@ import os
 import pytest
 
 from ai_web_explorer.safesym_bridge.browser_runner import (
+    run_saucedemo_explored_graph,
+    run_saucedemo_explored_pddl,
     run_saucedemo_observed_flow,
     write_observed_graph,
     write_observed_fsm,
@@ -50,6 +52,14 @@ def test_write_observed_graph_writes_graph_json(tmp_path):
 
 def test_run_saucedemo_observed_flow_is_async_callable():
     assert callable(run_saucedemo_observed_flow)
+
+
+def test_run_saucedemo_explored_graph_is_async_callable():
+    assert callable(run_saucedemo_explored_graph)
+
+
+def test_run_saucedemo_explored_pddl_is_async_callable():
+    assert callable(run_saucedemo_explored_pddl)
 
 
 @pytest.mark.skipif(

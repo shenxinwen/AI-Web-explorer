@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 
 from ai_web_explorer.safesym_bridge.browser_runner import (
+    run_saucedemo_explored_graph,
+    run_saucedemo_explored_pddl,
     run_saucedemo_observed_flow,
     write_observed_graph,
 )
@@ -104,6 +106,36 @@ def main(argv: list[str] | None = None) -> int:
         default=Path("outputs/safesym_e2e/graph_pddl"),
         help="Directory to write domain.pddl and problem.pddl.",
     )
+    explore_graph_parser = subparsers.add_parser(
+        "explore-graph",
+        help="Run graph-guided SauceDemo browser exploration and write graph JSON.",
+    )
+    explore_graph_parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("outputs/saucedemo_explored_graph.json"),
+        help="Path to write the explored graph JSON.",
+    )
+    explore_graph_parser.add_argument(
+        "--headed",
+        action="store_true",
+        help="Show the browser window while running exploration.",
+    )
+    explore_pddl_parser = subparsers.add_parser(
+        "explore-pddl",
+        help="Run graph-guided SauceDemo exploration and write PDDL artifacts.",
+    )
+    explore_pddl_parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("outputs/safesym_e2e/explored_graph_pddl"),
+        help="Directory to write domain.pddl and problem.pddl.",
+    )
+    explore_pddl_parser.add_argument(
+        "--headed",
+        action="store_true",
+        help="Show the browser window while running exploration.",
+    )
 
     args = parser.parse_args(argv)
 
@@ -111,6 +143,20 @@ def main(argv: list[str] | None = None) -> int:
         if args.mode == "observed":
             output_path = asyncio.run(
                 run_saucedemo_observed_flow(
+                    args.output,
+                    headless=not args.headed,
+                )
+            )
+        elif args.mode == "explore-graph":
+            output_path = asyncio.run(
+                run_saucedemo_explored_graph(
+                    args.output,
+                    headless=not args.headed,
+                )
+            )
+        elif args.mode == "explore-pddl":
+            output_path = asyncio.run(
+                run_saucedemo_explored_pddl(
                     args.output,
                     headless=not args.headed,
                 )
