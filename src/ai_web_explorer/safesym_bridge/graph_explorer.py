@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""Generic graph-guided exploration loop for browser-observed planning data."""
+
 import json
 from dataclasses import dataclass, field
 from pathlib import Path

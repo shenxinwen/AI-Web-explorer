@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""SauceDemo-specific compiler from WebObservedGraph to planning PDDL."""
+
 from dataclasses import dataclass
 from pathlib import Path
 

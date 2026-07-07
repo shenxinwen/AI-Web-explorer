@@ -54,7 +54,12 @@ def write_saucedemo_pddl(output_dir: Path) -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Generate a SafeSym FSM for SauceDemo.")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Generate SauceDemo SafeSym bridge artifacts. "
+            "Recommended path: explore-graph or explore-pddl."
+        )
+    )
     parser.add_argument(
         "--output",
         type=Path,
@@ -63,7 +68,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     subparsers = parser.add_subparsers(dest="mode")
 
-    fixed_parser = subparsers.add_parser("fixed", help="Write the fixed SauceDemo MVP FSM.")
+    fixed_parser = subparsers.add_parser(
+        "fixed",
+        help="Compatibility/debug: write the fixed SauceDemo MVP FSM.",
+    )
     fixed_parser.add_argument(
         "--output",
         type=Path,
@@ -73,7 +81,7 @@ def main(argv: list[str] | None = None) -> int:
 
     observed_parser = subparsers.add_parser(
         "observed",
-        help="Run a real browser flow and write the observed SauceDemo FSM.",
+        help="Compatibility/debug: run a fixed browser flow and write observed FSM.",
     )
     observed_parser.add_argument(
         "--output",
@@ -88,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     graph_parser = subparsers.add_parser(
         "graph",
-        help="Write the SauceDemo observed graph JSON from fixed MVP transitions.",
+        help="Debug: write graph JSON from fixed MVP transitions.",
     )
     graph_parser.add_argument(
         "--output",
@@ -98,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     pddl_parser = subparsers.add_parser(
         "pddl",
-        help="Write the SauceDemo graph-derived PDDL domain/problem files.",
+        help="Debug: write PDDL from fixed-transition graph.",
     )
     pddl_parser.add_argument(
         "--output",
@@ -108,7 +116,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     explore_graph_parser = subparsers.add_parser(
         "explore-graph",
-        help="Run graph-guided SauceDemo browser exploration and write graph JSON.",
+        help="Recommended: run graph-guided browser exploration and write graph JSON.",
     )
     explore_graph_parser.add_argument(
         "--output",
@@ -123,7 +131,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     explore_pddl_parser = subparsers.add_parser(
         "explore-pddl",
-        help="Run graph-guided SauceDemo exploration and write PDDL artifacts.",
+        help="Recommended: explore with browser and write graph-derived PDDL.",
     )
     explore_pddl_parser.add_argument(
         "--output",

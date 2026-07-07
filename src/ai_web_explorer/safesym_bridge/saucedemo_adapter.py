@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""SauceDemo-specific adapter for the generic graph exploration loop."""
+
 from ai_web_explorer.safesym_bridge.graph_explorer import ExplorationAction
 from ai_web_explorer.safesym_bridge.models import StateSnapshot
 from ai_web_explorer.safesym_bridge.state_observer import observe_saucedemo_state

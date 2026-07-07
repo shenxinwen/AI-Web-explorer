@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""Compatibility exporter from WebObservedGraph to the older SafeSym FSM shape."""
+
 from ai_web_explorer.safesym_bridge.models import (
     SafeSymAction,
     SafeSymFsm,
