@@ -120,3 +120,15 @@ async def test_graph_explorer_records_transitions_until_goal(tmp_path: Path):
         "order_place_confirm",
     ]
     assert output_path.exists()
+
+
+@pytest.mark.anyio
+async def test_graph_explorer_marks_successful_action_interactable_explored():
+    adapter = FakeAdapter()
+    explorer = GraphExplorer(adapter, max_steps=1)
+
+    result = await explorer.run(object())
+
+    login = next(node for node in result.graph.nodes if node.id == "login")
+    assert login.interactable_elements[0].description == "Run login_submit"
+    assert login.interactable_elements[0].explored is True

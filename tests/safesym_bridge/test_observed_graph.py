@@ -129,3 +129,27 @@ def test_build_observed_graph_accumulates_nodes_values_and_edges():
     assert add_to_cart["effects"] == [
         {"path": "$.cart_count", "op": "set", "value": 1}
     ]
+
+
+def test_build_observed_graph_can_attach_interactable_elements():
+    graph = build_observed_graph(
+        app="saucedemo",
+        start_node="login",
+        transitions=build_saucedemo_mvp_transitions(),
+        interactable_elements_by_node={
+            "inventory": [
+                InteractableElement(
+                    description="Click Add to cart",
+                    position="product list",
+                    explored=True,
+                    execution_hints={
+                        "selector": '[data-test="add-to-cart-sauce-labs-backpack"]'
+                    },
+                )
+            ]
+        },
+    )
+
+    inventory = next(node for node in graph.nodes if node.id == "inventory")
+    assert inventory.interactable_elements[0].description == "Click Add to cart"
+    assert inventory.interactable_elements[0].explored is True

@@ -145,9 +145,11 @@ def build_observed_graph(
     app: str,
     start_node: str,
     transitions: list[ObservedTransition],
+    interactable_elements_by_node: dict[str, list[InteractableElement]] | None = None,
 ) -> WebObservedGraph:
     node_state: OrderedDict[str, dict[str, Any]] = OrderedDict()
     edge_state: OrderedDict[tuple[str, str, str], dict[str, Any]] = OrderedDict()
+    interactable_elements_by_node = interactable_elements_by_node or {}
 
     def merge_snapshot(snapshot: StateSnapshot) -> None:
         if snapshot.page_id not in node_state:
@@ -209,7 +211,7 @@ def build_observed_graph(
                 for path, values in sorted(record["observed_values"].items())
             },
             last_state_snapshot=dict(sorted(record["last_state_snapshot"].items())),
-            interactable_elements=[],
+            interactable_elements=interactable_elements_by_node.get(node_id, []),
             visit_count=record["visit_count"],
         )
         for node_id, record in node_state.items()

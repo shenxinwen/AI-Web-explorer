@@ -15,6 +15,7 @@ from ai_web_explorer.safesym_bridge.models import (
     StateSnapshot,
 )
 from ai_web_explorer.safesym_bridge.observed_graph import (
+    InteractableElement,
     WebObservedGraph,
     build_observed_graph,
 )
@@ -80,6 +81,23 @@ def choose_next_unexplored_action(
     return None
 
 
+def _element_for_action(
+    action: ExplorationAction,
+    *,
+    explored: bool,
+) -> InteractableElement:
+    hints = {}
+    if action.selector:
+        hints["selector"] = action.selector
+    hints["execution_kind"] = action.execution_kind
+    return InteractableElement(
+        description=action.raw_description,
+        position=action.position,
+        explored=explored,
+        execution_hints=hints,
+    )
+
+
 class GraphExplorer:
     def __init__(self, adapter: ExplorationAdapter, *, max_steps: int = 20):
         self.adapter = adapter
@@ -88,6 +106,7 @@ class GraphExplorer:
     async def run(self, page, *, output_path: Path | None = None) -> ExplorationRunResult:
         transitions: list[ObservedTransition] = []
         failed_actions: list[str] = []
+        interactables: dict[str, dict[str, InteractableElement]] = {}
         graph: WebObservedGraph | None = None
         current_state = await self.adapter.observe_state(page)
         stop_reason = "max_steps_reached"
@@ -97,12 +116,21 @@ class GraphExplorer:
                 app=self.adapter.app_name,
                 start_node=self.adapter.start_node,
                 transitions=transitions,
+                interactable_elements_by_node=self._interactables_by_node(
+                    interactables
+                ),
             )
             if self.adapter.is_goal_state(current_state):
                 stop_reason = "goal_reached"
                 break
 
             actions = await self.adapter.list_actions(page, current_state)
+            page_elements = interactables.setdefault(current_state.page_id, {})
+            for candidate in actions:
+                page_elements.setdefault(
+                    candidate.semantic_id,
+                    _element_for_action(candidate, explored=False),
+                )
             selected = choose_next_unexplored_action(current_state, actions, graph)
             if selected is None:
                 stop_reason = "no_unexplored_actions"
@@ -116,6 +144,10 @@ class GraphExplorer:
                 continue
 
             after = await self.adapter.observe_state(page)
+            interactables[before.page_id][selected.semantic_id] = _element_for_action(
+                selected,
+                explored=True,
+            )
             transitions.append(
                 ObservedTransition(
                     source=before,
@@ -134,6 +166,9 @@ class GraphExplorer:
                 app=self.adapter.app_name,
                 start_node=self.adapter.start_node,
                 transitions=transitions,
+                interactable_elements_by_node=self._interactables_by_node(
+                    interactables
+                ),
             )
             self._write_graph(graph, output_path)
         else:
@@ -141,6 +176,9 @@ class GraphExplorer:
                 app=self.adapter.app_name,
                 start_node=self.adapter.start_node,
                 transitions=transitions,
+                interactable_elements_by_node=self._interactables_by_node(
+                    interactables
+                ),
             )
 
         if graph is None:
@@ -148,6 +186,9 @@ class GraphExplorer:
                 app=self.adapter.app_name,
                 start_node=self.adapter.start_node,
                 transitions=transitions,
+                interactable_elements_by_node=self._interactables_by_node(
+                    interactables
+                ),
             )
         self._write_graph(graph, output_path)
         return ExplorationRunResult(
@@ -167,3 +208,12 @@ class GraphExplorer:
             json.dumps(graph.to_dict(), indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
+
+    @staticmethod
+    def _interactables_by_node(
+        interactables: dict[str, dict[str, InteractableElement]],
+    ) -> dict[str, list[InteractableElement]]:
+        return {
+            node_id: list(elements.values())
+            for node_id, elements in interactables.items()
+        }
