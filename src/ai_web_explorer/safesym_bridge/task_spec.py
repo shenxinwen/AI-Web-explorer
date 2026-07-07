@@ -44,7 +44,7 @@ def _transition(
     after: StateSnapshot,
     raw_description: str,
 ) -> ObservedTransition:
-    action_id = semantic_id_for(raw_description)
+    action_id = semantic_id_for(raw_description)    # 自然语言-->语义动作id，使其更符合SafeSym的语义动作定义
     return ObservedTransition(
         source=before,
         target=after,

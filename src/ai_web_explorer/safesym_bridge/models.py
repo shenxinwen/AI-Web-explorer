@@ -6,13 +6,13 @@ from typing import Any
 Condition = dict[str, Any]
 Effect = dict[str, Any]
 
-
+# 用于描述页面状态
 @dataclass(frozen=True)
 class StateSnapshot:
-    page_id: str
+    page_id: str    # 当前页面（登录页、商品页、购物车页...)
     url: str
     title: str
-    signature: dict[str, Any]
+    signature: dict[str, Any]   # 描述状态的键值对
 
 
 @dataclass(frozen=True)

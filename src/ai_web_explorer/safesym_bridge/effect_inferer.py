@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from ai_web_explorer.safesym_bridge.models import Condition, Effect, StateSnapshot
 
+# 预设的一些前提条件
 _PRECONDITIONS: dict[str, list[Condition]] = {
     "login_submit": [
         {"path": "$.username_filled", "cond": "eq", "value": True},
