@@ -94,6 +94,55 @@ async def test_checkout_complete_has_no_actions():
     assert await collect_ids("checkout_complete") == []
 
 
+class FakeLocator:
+    def __init__(self, *, value: str = "", text: str = "", count: int = 0) -> None:
+        self.value = value
+        self.text = text
+        self._count = count
+
+    async def count(self) -> int:
+        return self._count
+
+    async def input_value(self) -> str:
+        return self.value
+
+    async def inner_text(self) -> str:
+        return self.text
+
+
+class FakeStatePage:
+    url = "https://www.saucedemo.com/cart.html"
+
+    async def title(self) -> str:
+        return "Swag Labs"
+
+    def locator(self, selector: str) -> FakeLocator:
+        locators = {
+            "#user-name": FakeLocator(),
+            "#password": FakeLocator(),
+            ".shopping_cart_badge": FakeLocator(text="1", count=1),
+            "#first-name": FakeLocator(),
+            "#last-name": FakeLocator(),
+            "#postal-code": FakeLocator(),
+        }
+        return locators[selector]
+
+
+async def test_adapter_stores_latest_web_observation():
+    adapter = SauceDemoAdapter()
+
+    snapshot = await adapter.observe_state(FakeStatePage())
+
+    assert snapshot.page_id == "cart"
+    assert snapshot.signature["$.cart_count"] == 1
+    assert adapter.last_observation is not None
+    assert adapter.last_observation.identity.page_id == "cart"
+    assert (
+        adapter.last_observation.facts["$.cart_count"].evidence[0].selector
+        == ".shopping_cart_badge"
+    )
+
+
 def test_goal_detection_requires_complete_page_and_order_created():
     adapter = SauceDemoAdapter()
 

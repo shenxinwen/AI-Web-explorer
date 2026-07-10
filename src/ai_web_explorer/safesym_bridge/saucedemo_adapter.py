@@ -18,7 +18,10 @@ from ai_web_explorer.safesym_bridge.semantic_resolver import (
     ResolutionBatch,
     SemanticActionResolver,
 )
-from ai_web_explorer.safesym_bridge.state_observer import observe_saucedemo_state
+from ai_web_explorer.safesym_bridge.state_observer import (
+    observe_saucedemo_web_observation,
+)
+from ai_web_explorer.safesym_bridge.web_observation import WebObservation
 
 
 def static_actions_for_state(state: StateSnapshot) -> list[ExplorationAction]:
@@ -107,9 +110,17 @@ class SauceDemoAdapter:
         self.resolver = resolver or SauceDemoRuleResolver()
         self.catalog = catalog or create_saucedemo_action_catalog()
         self.last_resolution: ResolutionBatch | None = None
+        self.last_observation: WebObservation | None = None
 
     async def observe_state(self, page) -> StateSnapshot:
-        return await observe_saucedemo_state(page)
+        observation = await observe_saucedemo_web_observation(page)
+        self.last_observation = observation
+        return StateSnapshot(
+            page_id=observation.identity.page_id,
+            url=observation.identity.url,
+            title=observation.identity.title,
+            signature=observation.to_signature(),
+        )
 
     async def list_actions(
         self,
