@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
@@ -6,13 +6,13 @@ from typing import Any
 Condition = dict[str, Any]
 Effect = dict[str, Any]
 
-# 用于描述浏览器观察到的页面状态。
+
 @dataclass(frozen=True)
 class StateSnapshot:
-    page_id: str  # 当前页面，例如 login、inventory、cart。
+    page_id: str
     url: str
     title: str
-    signature: dict[str, Any]  # 描述状态事实的键值对。
+    signature: dict[str, Any]
 
 
 @dataclass(frozen=True)

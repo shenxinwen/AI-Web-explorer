@@ -1,4 +1,4 @@
-import json
+﻿import json
 import os
 
 import pytest
@@ -6,12 +6,32 @@ import pytest
 from ai_web_explorer.safesym_bridge.browser_runner import (
     run_saucedemo_explored_graph,
     run_saucedemo_explored_pddl,
+    write_observed_graph,
 )
+from ai_web_explorer.safesym_bridge.task_spec import build_saucedemo_mvp_transitions
 
 
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+def test_write_observed_graph_writes_graph_json(tmp_path):
+    output_path = tmp_path / "saucedemo_observed_graph.json"
+
+    result_path = write_observed_graph(
+        transitions=build_saucedemo_mvp_transitions(),
+        output_path=output_path,
+    )
+
+    assert result_path == output_path
+    data = json.loads(output_path.read_text(encoding="utf-8"))
+    assert data["meta"]["schema_version"] == "web-observed-graph-v1"
+    assert data["meta"]["app"] == "saucedemo"
+    assert any(node["id"] == "inventory" for node in data["nodes"])
+    assert any(
+        edge["semantic_action"] == "order_place_confirm" for edge in data["edges"]
+    )
 
 
 def test_run_saucedemo_explored_graph_is_async_callable():

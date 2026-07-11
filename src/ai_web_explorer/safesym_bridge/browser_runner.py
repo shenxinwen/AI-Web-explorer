@@ -1,10 +1,30 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from ai_web_explorer.safesym_bridge.graph_explorer import GraphExplorer
+from ai_web_explorer.safesym_bridge.models import ObservedTransition
+from ai_web_explorer.safesym_bridge.observed_graph import build_observed_graph
 from ai_web_explorer.safesym_bridge.pddl_compiler import write_pddl_artifacts
 from ai_web_explorer.safesym_bridge.saucedemo_adapter import SauceDemoAdapter
+
+
+def write_observed_graph(
+    transitions: list[ObservedTransition],
+    output_path: Path,
+) -> Path:
+    graph = build_observed_graph(
+        app="saucedemo",
+        start_node="login",
+        transitions=transitions,
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        json.dumps(graph.to_dict(), indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    return output_path
 
 
 async def run_saucedemo_explored_graph(

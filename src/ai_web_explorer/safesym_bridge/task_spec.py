@@ -1,8 +1,7 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
-"""Fixed SauceDemo MVP fixtures used by compatibility and regression paths."""
+"""Fixed SauceDemo MVP transitions used by graph/PDDL regression paths."""
 
-from ai_web_explorer.safesym_bridge.action_semantics import semantic_id_for
 from ai_web_explorer.safesym_bridge.effect_inferer import (
     infer_effects,
     preconditions_for,
@@ -45,17 +44,17 @@ def _transition(
     before: StateSnapshot,
     after: StateSnapshot,
     raw_description: str,
+    semantic_id: str,
 ) -> ObservedTransition:
-    action_id = semantic_id_for(raw_description)    # 自然语言-->语义动作id，使其更符合SafeSym的语义动作定义
     return ObservedTransition(
         source=before,
         target=after,
         action=ObservedAction(
             raw_description=raw_description,
-            semantic_id=action_id,
+            semantic_id=semantic_id,
             playwright_calls=[],
         ),
-        preconditions=preconditions_for(action_id),
+        preconditions=preconditions_for(semantic_id),
         effects=infer_effects(before, after),
     )
 
@@ -129,14 +128,30 @@ def build_saucedemo_mvp_transitions() -> list[ObservedTransition]:
     )
 
     return [
-        _transition(login_ready, inventory_empty, "Click the Login button"),
-        _transition(inventory_empty, inventory_with_cart, "Click Add to cart"),
-        _transition(inventory_with_cart, cart, "Click the shopping cart link"),
-        _transition(cart, checkout_info_empty, "Click Checkout"),
+        _transition(login_ready, inventory_empty, "Click the Login button", "login_submit"),
+        _transition(
+            inventory_empty,
+            inventory_with_cart,
+            "Click Add to cart",
+            "product_add_to_cart",
+        ),
+        _transition(
+            inventory_with_cart,
+            cart,
+            "Click the shopping cart link",
+            "cart_open",
+        ),
+        _transition(cart, checkout_info_empty, "Click Checkout", "cart_checkout_start"),
         _transition(
             checkout_info_filled,
             checkout_overview,
             "Click Continue on checkout information",
+            "checkout_info_submit",
         ),
-        _transition(checkout_overview, checkout_complete, "Click Finish"),
+        _transition(
+            checkout_overview,
+            checkout_complete,
+            "Click Finish",
+            "order_place_confirm",
+        ),
     ]
