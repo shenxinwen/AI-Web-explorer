@@ -148,5 +148,5 @@ class SauceDemoAdapter:
 
     def is_goal_state(self, state: StateSnapshot) -> bool:
         return state.page_id == "checkout_complete" and bool(
-            state.signature.get("$.order_created")
+            state.signature.get("order_created")
         )

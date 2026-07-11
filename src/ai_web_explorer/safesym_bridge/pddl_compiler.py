@@ -8,13 +8,13 @@ from pathlib import Path
 from ai_web_explorer.safesym_bridge.observed_graph import WebObservedEdge, WebObservedGraph
 
 BOOLEAN_STATE_PREDICATES = {
-    "$.is_logged_in": "state_is_logged_in",
-    "$.username_filled": "state_username_filled",
-    "$.password_filled": "state_password_filled",
-    "$.checkout_info_filled": "state_checkout_info_filled",
-    "$.checkout_started": "state_checkout_started",
-    "$.order_review_ready": "state_order_review_ready",
-    "$.order_created": "state_order_created",
+    "is_logged_in": "state_is_logged_in",
+    "username_filled": "state_username_filled",
+    "password_filled": "state_password_filled",
+    "checkout_info_filled": "state_checkout_info_filled",
+    "checkout_started": "state_checkout_started",
+    "order_review_ready": "state_order_review_ready",
+    "order_created": "state_order_created",
 }
 
 CART_COUNT_POSITIVE = "state_cart_count_positive"
@@ -30,7 +30,7 @@ def _state_predicates_for_graph(graph: WebObservedGraph) -> list[str]:
     predicates: set[str] = set()
     for node in graph.nodes:
         for path in node.state_schema:
-            if path == "$.cart_count":
+            if path == "cart_count":
                 predicates.add(CART_COUNT_POSITIVE)
             elif path in BOOLEAN_STATE_PREDICATES:
                 predicates.add(BOOLEAN_STATE_PREDICATES[path])
@@ -38,7 +38,7 @@ def _state_predicates_for_graph(graph: WebObservedGraph) -> list[str]:
 
 
 def _predicate_for_condition(path: str, value: object) -> tuple[str, bool] | None:
-    if path == "$.cart_count":
+    if path == "cart_count":
         if isinstance(value, (int, float)):
             return CART_COUNT_POSITIVE, value > 0
         return None
@@ -50,7 +50,7 @@ def _predicate_for_condition(path: str, value: object) -> tuple[str, bool] | Non
 def _predicate_for_precondition(
     path: str, cond: object, value: object
 ) -> tuple[str, bool] | None:
-    if path == "$.cart_count":
+    if path == "cart_count":
         if cond == "gt" and value == 0:
             return CART_COUNT_POSITIVE, True
         if cond == "eq" and isinstance(value, (int, float)):

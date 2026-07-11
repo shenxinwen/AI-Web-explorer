@@ -63,67 +63,67 @@ def build_saucedemo_mvp_transitions() -> list[ObservedTransition]:
     login_ready = _snapshot(
         "login",
         {
-            "$.username_filled": True,
-            "$.password_filled": True,
-            "$.is_logged_in": False,
-            "$.cart_count": 0,
+            "username_filled": True,
+            "password_filled": True,
+            "is_logged_in": False,
+            "cart_count": 0,
         },
     )
     inventory_empty = _snapshot(
         "inventory",
         {
-            "$.username_filled": True,
-            "$.password_filled": True,
-            "$.is_logged_in": True,
-            "$.cart_count": 0,
+            "username_filled": True,
+            "password_filled": True,
+            "is_logged_in": True,
+            "cart_count": 0,
         },
     )
     inventory_with_cart = _snapshot(
         "inventory",
         {
-            "$.is_logged_in": True,
-            "$.cart_count": 1,
+            "is_logged_in": True,
+            "cart_count": 1,
         },
     )
     cart = _snapshot(
         "cart",
         {
-            "$.is_logged_in": True,
-            "$.cart_count": 1,
+            "is_logged_in": True,
+            "cart_count": 1,
         },
     )
     checkout_info_empty = _snapshot(
         "checkout_info",
         {
-            "$.cart_count": 1,
-            "$.checkout_started": True,
-            "$.checkout_info_filled": False,
+            "cart_count": 1,
+            "checkout_started": True,
+            "checkout_info_filled": False,
         },
     )
     checkout_info_filled = _snapshot(
         "checkout_info",
         {
-            "$.cart_count": 1,
-            "$.checkout_started": True,
-            "$.checkout_info_filled": True,
+            "cart_count": 1,
+            "checkout_started": True,
+            "checkout_info_filled": True,
         },
     )
     checkout_overview = _snapshot(
         "checkout_overview",
         {
-            "$.cart_count": 1,
-            "$.checkout_started": True,
-            "$.checkout_info_filled": True,
-            "$.order_review_ready": True,
-            "$.order_created": False,
+            "cart_count": 1,
+            "checkout_started": True,
+            "checkout_info_filled": True,
+            "order_review_ready": True,
+            "order_created": False,
         },
     )
     checkout_complete = _snapshot(
         "checkout_complete",
         {
-            "$.cart_count": 1,
-            "$.order_review_ready": True,
-            "$.order_created": True,
+            "cart_count": 1,
+            "order_review_ready": True,
+            "order_created": True,
         },
     )
 

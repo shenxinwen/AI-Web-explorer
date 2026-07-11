@@ -18,9 +18,9 @@ def test_web_observed_graph_to_dict_uses_expected_shape():
                 id="inventory",
                 page_description="product listing page",
                 url_patterns=["/inventory.html"],
-                state_schema={"$.cart_count": "number"},
-                observed_values={"$.cart_count": [0, 1]},
-                last_state_snapshot={"$.cart_count": 1},
+                state_schema={"cart_count": "number"},
+                observed_values={"cart_count": [0, 1]},
+                last_state_snapshot={"cart_count": 1},
                 interactable_elements=[
                     InteractableElement(
                         description="shopping cart link",
@@ -59,9 +59,9 @@ def test_web_observed_graph_to_dict_uses_expected_shape():
                 "id": "inventory",
                 "page_description": "product listing page",
                 "url_patterns": ["/inventory.html"],
-                "state_schema": {"$.cart_count": "number"},
-                "observed_values": {"$.cart_count": [0, 1]},
-                "last_state_snapshot": {"$.cart_count": 1},
+                "state_schema": {"cart_count": "number"},
+                "observed_values": {"cart_count": [0, 1]},
+                "last_state_snapshot": {"cart_count": 1},
                 "interactable_elements": [
                     {
                         "description": "shopping cart link",
@@ -112,9 +112,9 @@ def test_build_observed_graph_accumulates_nodes_values_and_edges():
         "checkout_complete",
     }
     assert nodes["inventory"]["page_description"] == "inventory page"
-    assert nodes["inventory"]["state_schema"]["$.cart_count"] == "number"
-    assert nodes["inventory"]["observed_values"]["$.cart_count"] == [0, 1]
-    assert nodes["inventory"]["last_state_snapshot"]["$.cart_count"] == 1
+    assert nodes["inventory"]["state_schema"]["cart_count"] == "number"
+    assert nodes["inventory"]["observed_values"]["cart_count"] == [0, 1]
+    assert nodes["inventory"]["last_state_snapshot"]["cart_count"] == 1
     assert nodes["inventory"]["visit_count"] == 4
 
     edges = {
@@ -124,10 +124,10 @@ def test_build_observed_graph_accumulates_nodes_values_and_edges():
     add_to_cart = edges[("inventory", "inventory", "product_add_to_cart")]
     assert add_to_cart["instructions"] == ["Click Add to cart"]
     assert add_to_cart["schema_deltas"] == [
-        {"$.cart_count": {"before": 0, "after": 1}}
+        {"cart_count": {"before": 0, "after": 1}}
     ]
     assert add_to_cart["effects"] == [
-        {"path": "$.cart_count", "op": "set", "value": 1}
+        {"path": "cart_count", "op": "set", "value": 1}
     ]
 
 

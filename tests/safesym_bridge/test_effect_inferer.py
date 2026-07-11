@@ -17,32 +17,32 @@ def snapshot(page_id, signature):
 def test_infer_effects_returns_set_for_changed_values_only():
     before = snapshot(
         "inventory",
-        {"$.is_logged_in": True, "$.cart_count": 0},
+        {"is_logged_in": True, "cart_count": 0},
     )
     after = snapshot(
         "inventory",
-        {"$.is_logged_in": True, "$.cart_count": 1},
+        {"is_logged_in": True, "cart_count": 1},
     )
 
     assert infer_effects(before, after) == [
-        {"path": "$.cart_count", "op": "set", "value": 1}
+        {"path": "cart_count", "op": "set", "value": 1}
     ]
 
 
 def test_infer_effects_sorts_paths_for_stable_json():
-    before = snapshot("a", {"$.z": False, "$.a": False})
-    after = snapshot("b", {"$.z": True, "$.a": True})
+    before = snapshot("a", {"z": False, "a": False})
+    after = snapshot("b", {"z": True, "a": True})
 
     assert infer_effects(before, after) == [
-        {"path": "$.a", "op": "set", "value": True},
-        {"path": "$.z", "op": "set", "value": True},
+        {"path": "a", "op": "set", "value": True},
+        {"path": "z", "op": "set", "value": True},
     ]
 
 
 def test_preconditions_for_order_place_confirm():
     assert preconditions_for("order_place_confirm") == [
-        {"path": "$.cart_count", "cond": "gt", "value": 0},
-        {"path": "$.order_review_ready", "cond": "eq", "value": True},
+        {"path": "cart_count", "cond": "gt", "value": 0},
+        {"path": "order_review_ready", "cond": "eq", "value": True},
     ]
 
 

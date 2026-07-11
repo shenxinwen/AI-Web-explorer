@@ -25,9 +25,9 @@ def snapshot(page_id: str, *, order_created: bool = False) -> StateSnapshot:
         url=f"https://example.test/{page_id}",
         title=page_id,
         signature={
-            "$.is_logged_in": page_id != "login",
-            "$.cart_count": 0,
-            "$.order_created": order_created,
+            "is_logged_in": page_id != "login",
+            "cart_count": 0,
+            "order_created": order_created,
         },
     )
 
@@ -101,7 +101,7 @@ class FakeAdapter:
 
     def is_goal_state(self, state):
         return state.page_id == "checkout_complete" and bool(
-            state.signature.get("$.order_created")
+            state.signature.get("order_created")
         )
 
 

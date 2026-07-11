@@ -21,18 +21,18 @@ def snapshot(page_id: str, *, order_created: bool = False) -> StateSnapshot:
         url=f"https://www.saucedemo.com/{page_id}",
         title=page_id,
         signature={
-            "$.username_filled": False,
-            "$.password_filled": False,
-            "$.is_logged_in": page_id != "login",
-            "$.cart_count": 0,
-            "$.checkout_started": page_id.startswith("checkout"),
-            "$.checkout_info_filled": False,
-            "$.order_review_ready": page_id
+            "username_filled": False,
+            "password_filled": False,
+            "is_logged_in": page_id != "login",
+            "cart_count": 0,
+            "checkout_started": page_id.startswith("checkout"),
+            "checkout_info_filled": False,
+            "order_review_ready": page_id
             in {
                 "checkout_overview",
                 "checkout_complete",
             },
-            "$.order_created": order_created,
+            "order_created": order_created,
         },
     )
 
@@ -134,11 +134,11 @@ async def test_adapter_stores_latest_web_observation():
     snapshot = await adapter.observe_state(FakeStatePage())
 
     assert snapshot.page_id == "cart"
-    assert snapshot.signature["$.cart_count"] == 1
+    assert snapshot.signature["cart_count"] == 1
     assert adapter.last_observation is not None
     assert adapter.last_observation.identity.page_id == "cart"
     assert (
-        adapter.last_observation.facts["$.cart_count"].evidence[0].selector
+        adapter.last_observation.facts["cart_count"].evidence[0].selector
         == ".shopping_cart_badge"
     )
 
