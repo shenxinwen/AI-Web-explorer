@@ -5,8 +5,10 @@ import asyncio
 from pathlib import Path
 
 from ai_web_explorer.safesym_bridge.browser_runner import (
+    run_saucedemo_explored_capability_graph,
     run_saucedemo_explored_graph,
     run_saucedemo_explored_pddl,
+    write_capability_graph,
     write_observed_graph,
 )
 from ai_web_explorer.safesym_bridge.observed_graph import build_observed_graph
@@ -43,6 +45,16 @@ def main(argv: list[str] | None = None) -> int:
         default=Path("outputs/saucedemo_observed_graph.json"),
         help="Path to write the generated observed graph JSON.",
     )
+    capability_graph_parser = subparsers.add_parser(
+        "capability-graph",
+        help="Experimental: write capability graph JSON from fixed MVP transitions.",
+    )
+    capability_graph_parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("outputs/saucedemo_capability_graph.json"),
+        help="Path to write the generated capability graph JSON.",
+    )
     pddl_parser = subparsers.add_parser(
         "pddl",
         help="Debug: write PDDL from fixed-transition graph.",
@@ -64,6 +76,21 @@ def main(argv: list[str] | None = None) -> int:
         help="Path to write the explored graph JSON.",
     )
     explore_graph_parser.add_argument(
+        "--headed",
+        action="store_true",
+        help="Show the browser window while running exploration.",
+    )
+    explore_capability_graph_parser = subparsers.add_parser(
+        "explore-capability-graph",
+        help="Experimental: run browser exploration and write capability graph JSON.",
+    )
+    explore_capability_graph_parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("outputs/saucedemo_explored_capability_graph.json"),
+        help="Path to write the explored capability graph JSON.",
+    )
+    explore_capability_graph_parser.add_argument(
         "--headed",
         action="store_true",
         help="Show the browser window while running exploration.",
@@ -94,6 +121,13 @@ def main(argv: list[str] | None = None) -> int:
                     headless=not args.headed,
                 )
             )
+        elif args.mode == "explore-capability-graph":
+            output_path = asyncio.run(
+                run_saucedemo_explored_capability_graph(
+                    args.output,
+                    headless=not args.headed,
+                )
+            )
         elif args.mode == "explore-pddl":
             output_path = asyncio.run(
                 run_saucedemo_explored_pddl(
@@ -103,6 +137,11 @@ def main(argv: list[str] | None = None) -> int:
             )
         elif args.mode == "graph":
             output_path = write_observed_graph(
+                build_saucedemo_mvp_transitions(),
+                args.output,
+            )
+        elif args.mode == "capability-graph":
+            output_path = write_capability_graph(
                 build_saucedemo_mvp_transitions(),
                 args.output,
             )

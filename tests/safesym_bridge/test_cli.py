@@ -82,3 +82,42 @@ def test_main_explore_pddl_subcommand_runs_explorer(tmp_path, monkeypatch):
 
     assert exit_code == 0
     assert calls == [(output_dir, True)]
+
+
+def test_main_capability_graph_subcommand_writes_capability_graph(tmp_path):
+    output_path = tmp_path / "capability_graph.json"
+
+    exit_code = main(["capability-graph", "--output", str(output_path)])
+
+    assert exit_code == 0
+    data = json.loads(output_path.read_text(encoding="utf-8"))
+    assert data["meta"]["schema_version"] == "web-capability-graph-v1"
+    assert data["meta"]["app"] == "saucedemo"
+    assert "states" in data
+    assert "transitions" in data
+
+
+def test_main_explore_capability_graph_subcommand_runs_explorer(tmp_path, monkeypatch):
+    output_path = tmp_path / "explored_capability_graph.json"
+    calls = []
+
+    async def fake_run_saucedemo_explored_capability_graph(path, *, headless=True):
+        calls.append((path, headless))
+        path.write_text(
+            '{"meta": {"schema_version": "web-capability-graph-v1"}}',
+            encoding="utf-8",
+        )
+        return path
+
+    monkeypatch.setattr(
+        cli,
+        "run_saucedemo_explored_capability_graph",
+        fake_run_saucedemo_explored_capability_graph,
+    )
+
+    exit_code = main(
+        ["explore-capability-graph", "--output", str(output_path), "--headed"]
+    )
+
+    assert exit_code == 0
+    assert calls == [(output_path, False)]
