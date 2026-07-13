@@ -13,17 +13,14 @@ real browser exploration
   -> planner
 ```
 
-In CLI terms, the active commands are:
+In CLI terms:
 
 ```text
-explore-graph
-explore-pddl
+explore-graph -> explore-pddl -> SafeSym
 ```
 
-Earlier FSM export commands were removed after `WebObservedGraph -> PDDL`
-became the primary bridge path. The historical design notes remain under
-`docs/superpowers/` for context, but the runtime code now follows the graph/PDDL
-path only.
+Older FSM work is kept only as historical design notes and example artifacts.
+The current CLI does not expose the old `fixed` or `observed` FSM commands.
 
 ## Current Recommended Path
 
@@ -43,7 +40,10 @@ The graph records:
 - abstract page nodes such as `login`, `inventory`, and `checkout_complete`;
 - semantic action edges such as `login_submit` and `order_place_confirm`;
 - observed state values such as `$.cart_count` and `$.order_created`;
-- adapter-declared interactable elements for continued exploration.
+- DOM-backed, adapter-mapped interactable elements for continued exploration.
+
+The DOM observation layer discovers candidate controls first; the SauceDemo
+adapter maps checkout-relevant candidates into semantic exploration actions.
 
 ### Explore and write PDDL
 
@@ -86,6 +86,29 @@ Its effect is:
 
 SafeSym can inject checks before safety-relevant actions such as
 `order_place_confirm`.
+
+## Debug Commands
+
+These commands are still supported, but they are debug shortcuts for the current
+graph/PDDL path rather than the recommended browser-exploration path.
+
+### Graph from fixed transitions
+
+```bash
+python -m ai_web_explorer.safesym_bridge.cli graph --output outputs/saucedemo_observed_graph.json
+```
+
+This writes a graph from fixed MVP transitions. It is useful for debugging graph
+serialization without launching a browser.
+
+### PDDL from fixed graph
+
+```bash
+python -m ai_web_explorer.safesym_bridge.cli pddl --output outputs/safesym_e2e/graph_pddl
+```
+
+This compiles the fixed-transition graph into PDDL. It is useful for fast PDDL
+regression tests without browser exploration.
 
 ## Run Tests
 

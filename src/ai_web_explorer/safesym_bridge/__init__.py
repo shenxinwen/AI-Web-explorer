@@ -1,1 +1,1 @@
-"""SafeSym bridge for exporting web task observations as FSM JSON."""
+"""SafeSym bridge for turning web observations into graph/PDDL planning data."""

@@ -110,6 +110,8 @@ class GraphExplorer:
         failed_actions: list[str] = []
         interactables: dict[str, dict[str, InteractableElement]] = {}
         graph: WebObservedGraph | None = None
+
+        # 记录当前状态
         current_state = await self.adapter.observe_state(page)
         stop_reason = "max_steps_reached"
 
@@ -122,17 +124,24 @@ class GraphExplorer:
                     interactables
                 ),
             )
+
+            # 到达目标状态
             if self.adapter.is_goal_state(current_state):
                 stop_reason = "goal_reached"
                 break
 
             actions = await self.adapter.list_actions(page, current_state)
             page_elements = interactables.setdefault(current_state.page_id, {})
+            
+            # 迭代候选动作
             for candidate in actions:
+                # 初始状态为未探索
                 page_elements.setdefault(
                     candidate.semantic_id,
                     _element_for_action(candidate, explored=False),
                 )
+
+            # 选择下一个未探索的动作，selected是ExplorationAction类型
             selected = choose_next_unexplored_action(current_state, actions, graph)
             if selected is None:
                 stop_reason = "no_unexplored_actions"
@@ -145,7 +154,10 @@ class GraphExplorer:
                 failed_actions.append(selected.raw_description)
                 continue
 
+            # 记录执行后状态
             after = await self.adapter.observe_state(page)
+
+            # 修改该动作状态为已探索
             interactables[before.page_id][selected.semantic_id] = _element_for_action(
                 selected,
                 explored=True,
@@ -163,6 +175,8 @@ class GraphExplorer:
                     effects=infer_effects(before, after),
                 )
             )
+
+            # 更新当前状态，到下一个节点，重新观察
             current_state = after
             graph = build_observed_graph(
                 app=self.adapter.app_name,

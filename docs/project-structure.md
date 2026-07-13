@@ -7,7 +7,7 @@ src/ai_web_explorer/
   Core Python package for the web explorer.
 
 src/ai_web_explorer/safesym_bridge/
-  SauceDemo → SafeSym FSM bridge MVP.
+  SauceDemo -> SafeSym graph/PDDL bridge MVP.
 
 tests/
   Automated tests.
@@ -31,7 +31,7 @@ examples/
   Committed example artifacts.
 
 examples/safesym/
-  Example SafeSym FSM JSON files.
+  Historical SafeSym FSM JSON example files.
 
 outputs/
   Local generated outputs. This directory is ignored by git.
