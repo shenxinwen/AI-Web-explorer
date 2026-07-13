@@ -154,6 +154,265 @@ This reinforces the project direction: pre-explore the interface, build a
 capability graph, then make runtime agents cheaper and more stable by grounding
 their decisions in the precomputed graph.
 
+## Reusable UI-KOBE Implementation Patterns
+
+The local UI-KOBE repository contains several engineering patterns that are
+worth borrowing for the web version. The Android-specific execution code should
+not be copied directly, but the graph-building and graph-guided runtime ideas
+map well to this project.
+
+Relevant local reference files:
+
+```text
+D:\GitHUb\UI-KOBE-main\ui_kobe\kobe.py
+D:\GitHUb\UI-KOBE-main\ui_kobe\utils\graph_manager.py
+D:\GitHUb\UI-KOBE-main\ui_kobe\utils\vlm_utils.py
+D:\GitHUb\UI-KOBE-main\aitk_files\ui_kobe_v2.py
+D:\GitHUb\UI-KOBE-main\scripts\audit_graph.py
+```
+
+### 1. Screen/page description as a reusable type
+
+UI-KOBE's page-description prompt explicitly treats the description as a screen
+template, not a content instance. It asks the model to avoid user-specific
+content in the screen label and to put dynamic values into a separate state
+object.
+
+The equivalent web rule should be:
+
+```text
+PageFrame.page_type describes the reusable page/function type.
+Dynamic content belongs in StateIndicator only if it affects capability,
+transition, planning, or verification.
+```
+
+This supports the project's capability-first principle. For example:
+
+```text
+Good:
+  page_type = product_listing
+  target_type = product
+  capability = add_to_cart(product)
+
+Bad:
+  page_type = product listing for Sauce Labs Backpack
+  one graph node per product card
+```
+
+### 2. Repeated content should become one representative interactable group
+
+UI-KOBE's element extraction prompt tells the model to list repeated content
+elements as one representative group, such as `search result items`, instead of
+listing every item.
+
+The web explorer should follow the same rule:
+
+```text
+product cards -> one product listed_item target type
+forum posts -> one post listed_item target type
+search results -> one result listed_item target type
+table rows -> one row/record listed_item target type
+```
+
+This prevents graph blow-up and keeps exploration focused on distinct
+capabilities rather than repeated content instances.
+
+### 3. State matching should combine retrieval with verification
+
+UI-KOBE's `GraphManager.identify_state()` uses a two-stage state identification
+process:
+
+```text
+1. retrieve likely existing nodes by similarity
+2. verify whether the current screen is truly the same semantic state
+```
+
+The web version should prefer deterministic signals first:
+
+```text
+URL pattern
+title / heading
+DOM landmarks
+available capabilities
+state indicators
+```
+
+Then, when confidence is low, it can use an LLM/VLM verifier to decide whether
+to merge with an existing state or create a new one.
+
+This is useful for cases like:
+
+```text
+/products/123 and /products/456 are the same product_detail state type
+search results for different queries are the same search_results state type
+checkout_info and checkout_review are different workflow states
+cart with and without an error banner may be different semantic states
+```
+
+### 4. Self-loop edges are first-class transitions
+
+UI-KOBE records schema deltas for self-loop edges when an action changes state
+without changing the screen node.
+
+The web graph should do the same with `ObservedDelta`.
+
+Examples:
+
+```text
+product_listing --add_to_cart(product)--> product_listing
+delta: cart_nonempty false -> true
+
+checkout_form --fill_field(first_name)--> checkout_form
+delta: first_name_filled false -> true
+
+listing_page --open_filter_menu--> listing_page
+delta: filter_overlay_open false -> true
+```
+
+This is especially important for web apps, where many meaningful interactions
+are client-side state changes rather than full navigations.
+
+### 5. Edge normalization can become capability normalization
+
+UI-KOBE normalizes concrete instructions into reusable templates:
+
+```text
+Search for egg
+Search for milk
+  -> Search for {query}
+```
+
+For this project, the analogous step is capability normalization:
+
+```text
+click add-to-cart-sauce-labs-backpack
+click add-to-cart-bike-light
+  -> add_to_cart(product)
+```
+
+This suggests a future `CapabilityNormalizer` component that takes concrete DOM
+actions, nearby context, and observed outcomes, then proposes:
+
+```text
+semantic_action
+target_type
+target_role
+locator_pattern
+input_schema
+expected_delta
+```
+
+### 6. Exploration should prioritize structural diversity
+
+UI-KOBE's exploration planner contains practical rules that transfer well to
+the web:
+
+```text
+explore global navigation and major feature entry points early
+for text inputs, use atomic steps: focus -> type -> submit
+tap one representative repeated item instead of every item
+avoid scrolling just to reveal more of the same repeated content
+go back when the current state is fully explored
+avoid dangerous or irreversible commitments during exploration
+```
+
+For the web project, this should become a `WebExplorationPolicy` that ranks
+capabilities by expected structural value, not by the number of visible DOM
+elements.
+
+### 7. Coverage checkpoints and resume are valuable
+
+UI-KOBE periodically selects under-explored reachable nodes, navigates back to
+them by replaying known graph edges, and continues exploration from there.
+
+The web explorer should eventually support the same workflow:
+
+```text
+find under-explored SemanticPageState
+replay known CapabilityTransitions from the start state
+verify arrival
+continue exploring uncovered capabilities
+```
+
+This avoids over-exploring one path while missing important branches elsewhere.
+
+### 8. Runtime graph guidance should be local and constrained
+
+UI-KOBE v2 presents the runtime model with local choices:
+
+```text
+DONE
+self-loop actions
+neighbor transitions
+FREE fallback
+```
+
+The web runtime agent can use the same shape:
+
+```text
+Current state:
+  cart_nonempty
+
+Options:
+  A) checkout_start -> checkout_info
+  B) remove_from_cart(product) -> maybe cart_empty
+  C) continue_shopping -> product_listing
+  D) free fallback
+```
+
+The model chooses from local graph-grounded options instead of planning over the
+entire raw page. This keeps runtime cheaper and more predictable.
+
+### 9. Graph audit should be part of the workflow
+
+UI-KOBE's audit script checks for:
+
+```text
+merge_nodes: duplicate or equivalent states
+retry_edge: edges whose action does not match the destination
+explore_node: nodes missing expected outgoing actions
+```
+
+The web version should eventually include a `WebCapabilityGraphAuditor` that
+checks:
+
+```text
+duplicate semantic page states
+incorrect transitions
+missing capabilities
+noisy self-loop deltas
+unsupported PDDL projections
+low-confidence edges that need re-exploration
+```
+
+### What not to reuse directly
+
+The following UI-KOBE pieces are Android-specific and should not be copied into
+the web implementation:
+
+```text
+ADB controller integration
+Android activity/package matching
+AITK action dictionaries
+coordinate-based tap execution as the primary action model
+Android World adapter
+image embedding as the primary state identity signal
+open-ended VLM state schema as the only source of truth
+```
+
+The web version should instead prefer:
+
+```text
+Playwright actions
+DOM and accessibility tree observations
+URL patterns
+role/name/data-test locators
+form structure
+semantic DOM candidates
+deterministic state indicators where possible
+LLM/VLM as verifier or fallback rather than the default observer
+```
+
 ## Core Model
 
 ```text
