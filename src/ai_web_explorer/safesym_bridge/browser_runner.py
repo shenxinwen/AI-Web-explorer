@@ -15,6 +15,13 @@ from ai_web_explorer.safesym_bridge.web_kobe_graph import (
     WebKobeGraph,
     WebKobeNode,
 )
+from ai_web_explorer.safesym_bridge.web_kobe_explorer import WebKobeExplorer
+from ai_web_explorer.safesym_bridge.web_kobe_playwright_adapter import (
+    WebKobePlaywrightAdapter,
+)
+from ai_web_explorer.safesym_bridge.web_semantic_assistor import (
+    DeterministicSemanticAssistor,
+)
 
 
 def write_observed_graph(
@@ -87,6 +94,42 @@ def write_web_kobe_graph(graph: WebKobeGraph, output_path: Path) -> Path:
         encoding="utf-8",
     )
     return output_path
+
+
+async def run_web_kobe_exploration(
+    url: str,
+    output_path: Path,
+    *,
+    app_name: str = "web",
+    page_id: str | None = None,
+    steps: int = 1,
+    headless: bool = True,
+) -> Path:
+    from playwright.async_api import async_playwright
+
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(headless=headless)
+        page = await browser.new_page()
+        try:
+            await page.goto(url)
+            adapter = WebKobePlaywrightAdapter(
+                page,
+                app_name=app_name,
+                page_id=page_id,
+            )
+            explorer = WebKobeExplorer(
+                adapter=adapter,
+                semantic_assistor=DeterministicSemanticAssistor(app=app_name),
+            )
+            graph = None
+            for _ in range(max(steps, 1)):
+                graph = await explorer.explore_one_step()
+            if graph is None:
+                graph = explorer.manager.to_graph()
+            write_web_kobe_graph(graph, output_path)
+            return output_path
+        finally:
+            await browser.close()
 
 
 async def run_saucedemo_explored_graph(

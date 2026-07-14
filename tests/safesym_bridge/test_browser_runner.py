@@ -6,6 +6,7 @@ import pytest
 from ai_web_explorer.safesym_bridge.browser_runner import (
     run_saucedemo_explored_graph,
     run_saucedemo_explored_pddl,
+    run_web_kobe_exploration,
     write_observed_graph,
 )
 from ai_web_explorer.safesym_bridge.task_spec import build_saucedemo_mvp_transitions
@@ -40,6 +41,10 @@ def test_run_saucedemo_explored_graph_is_async_callable():
 
 def test_run_saucedemo_explored_pddl_is_async_callable():
     assert callable(run_saucedemo_explored_pddl)
+
+
+def test_run_web_kobe_exploration_is_async_callable():
+    assert callable(run_web_kobe_exploration)
 
 
 @pytest.mark.skipif(
