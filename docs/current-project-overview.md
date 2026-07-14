@@ -78,7 +78,22 @@ unknown websites. It records semantic page states, browser-grounded actions,
 observed deltas, and evidence so the project can later project unknown web
 environments into SafeSym-compatible PDDL.
 
-A real Playwright-backed Web-KOBE exploration command is also available for
+The preferred generic Web-KOBE path is now to reuse the original
+`ai-web-explorer` exploration engine and attach a Web-KOBE collector as a
+sidecar. The original explorer remains responsible for choosing and executing
+browser actions; the collector observes the same states/transitions and records
+the richer planning-facing graph needed by SafeSym.
+
+```bash
+explore example.com -i 10 --web-kobe-output outputs/example_web_kobe.json
+```
+
+This route is the main place to improve generic unknown-site exploration because
+it preserves the original project's existing ReAct/browser exploration
+capability while replacing the information collection layer with Web-KOBE-style
+state/action/evidence capture.
+
+A separate Playwright-backed Web-KOBE exploration command is also available for
 controlled local or fixture pages:
 
 ```bash
@@ -104,6 +119,10 @@ observer and action profile so the Web-KOBE graph can record meaningful browser
 steps such as login, add-to-cart, cart open, and checkout start. Generic pages
 still use local DOM extraction. Real SauceDemo browser verification is gated by
 `RUN_WEB_KOBE_SAUCEDEMO_TEST=1`.
+
+This command is useful as an experimental validation path, but new generic
+exploration work should prefer collector hooks in the original explorer rather
+than expanding a second independent exploration loop.
 
 The debug-only commands are still available:
 

@@ -108,6 +108,18 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-graph --output outputs/web
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-pddl --output outputs/web_kobe_pddl --goal-node start
 ```
 
+The preferred generic exploration route is to run the original `explore` command
+with the Web-KOBE collector enabled:
+
+```bash
+explore example.com -i 10 --web-kobe-output outputs/example_web_kobe.json
+```
+
+In this mode, the original explorer still drives unknown-site navigation and
+action execution. The Web-KOBE collector records planning-facing page states,
+browser-grounded actions, observed deltas, and evidence as a sidecar graph. This
+is the recommended place to improve data collection for arbitrary websites.
+
 For a real Playwright-backed exploration run against a controlled page:
 
 ```bash
@@ -133,6 +145,10 @@ action profile. This keeps the real browser test deterministic while still
 recording browser-grounded Web-KOBE graph edges. Generic pages continue to use
 DOM extraction. The optional real SauceDemo verification test is gated by
 `RUN_WEB_KOBE_SAUCEDEMO_TEST=1`.
+
+The `web-kobe-explore` command remains useful for deterministic fixtures and
+smoke tests, but it should not become a second full exploration framework unless
+there is a clear reason to diverge from the original explorer.
 
 ## Debug Commands
 
