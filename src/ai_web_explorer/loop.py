@@ -14,6 +14,8 @@ from . import config
 from . import cookies
 from . import html
 from . import config
+from ai_web_explorer.safesym_bridge.web_kobe_collector import NoOpWebKobeCollector
+from ai_web_explorer.safesym_bridge.web_kobe_observer import observe_web_kobe_page
 # from.表示引用同一目录下的包
 
 @dataclasses.dataclass
@@ -24,6 +26,7 @@ class LoopConfig:
     username: str | None = dataclasses.field(default=None)
     password: str | None = dataclasses.field(default=None)
     additional_info: str | None = dataclasses.field(default=None)
+    collector: object | None = dataclasses.field(default=None)
 
 
 WebStateBacktrack = tuple[
@@ -48,6 +51,8 @@ class ExploreLoop:
         self._webstates: list[webstate.WebState] = []
         self._webstate_current: webstate.WebState | None = None
         self._action_current: webstate.Action | None = None
+        self._collector = config.collector or NoOpWebKobeCollector()
+        self._web_kobe_previous_observation = None
         self._pw, self._page = self._init_browser(self._url)
         # 初始化描述器和执行器
         self._describer = describer.Describer(
@@ -78,12 +83,40 @@ class ExploreLoop:
     def _explore(self, finish=False):
         logging.info(f"Current URL: {self._page.url}")
         ws = self._get_webstate()
+        collector = getattr(
+            self,
+            "_collector",
+            getattr(self._config, "collector", None) or NoOpWebKobeCollector(),
+        )
+        observation = observe_web_kobe_page(
+            self._page,
+            web_state_id=str(ws.ws_id),
+            llm_title=ws.title,
+        )
+        collector.on_state_observed(
+            page=self._page,
+            web_state=ws,
+            observation=observation,
+        )
 
         if (
             self._webstate_current
             and self._action_current
             and self._action_current.status == "success"
         ):
+            previous_observation = getattr(
+                self,
+                "_web_kobe_previous_observation",
+                None,
+            )
+            if previous_observation is not None:
+                collector.on_transition(
+                    source_state=self._webstate_current,
+                    action=self._action_current,
+                    target_state=ws,
+                    before_observation=previous_observation,
+                    after_observation=observation,
+                )
             self._webstate_current.transitions.append(
                 webstate.StateTransition(action=self._action_current, state_new=ws)
             )
@@ -102,6 +135,10 @@ class ExploreLoop:
                 return
 
         logging.info(f"Randomly selected action: {self._action_current.description}")
+        collector.on_action_selected(
+            source_state=ws,
+            action=self._action_current,
+        )
         action_result, tool_calls = self._executor.execute(self._action_current)
         self._action_current.function_calls = tool_calls
 
@@ -113,6 +150,15 @@ class ExploreLoop:
         else:
             self._action_current.status = "success" if action_result else "failure"
 
+        collector.on_action_executed(
+            action=self._action_current,
+            success=self._action_current.status == "success",
+            tool_calls=tool_calls,
+            error=None
+            if self._action_current.status == "success"
+            else "execution_failed",
+        )
+        self._web_kobe_previous_observation = observation
         logging.info(f"Action result: {self._action_current.status}")
 
     def _get_webstate(self) -> webstate.WebState:
