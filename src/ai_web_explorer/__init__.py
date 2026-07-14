@@ -1,6 +1,8 @@
 import argparse
+import json
 import logging
 import os
+from pathlib import Path
 
 logging.basicConfig(level=logging.INFO)
 
@@ -53,6 +55,13 @@ parser.add_argument(
     default=None,
 )
 
+parser.add_argument(
+    "--web-kobe-output",
+    type=str,
+    help="Write a Web-KOBE graph collected during exploration to this JSON path",
+    default=None,
+)
+
 
 def main():
     import openai
@@ -60,6 +69,7 @@ def main():
 
     from . import loop
     from . import webstate
+    from .safesym_bridge.web_kobe_collector import WebKobeCollector
 
     load_dotenv()
 
@@ -72,6 +82,7 @@ def main():
     )
 
     logging.info(f"Exploring {domain}")
+    collector = WebKobeCollector(app=domain) if args.web_kobe_output else None
     
     # 冒号作分隔
     credentials = args.login.split(":") if args.login else [None, None]
@@ -83,6 +94,7 @@ def main():
         username=credentials[0],
         password=credentials[1],
         additional_info=args.additional_info,
+        collector=collector,
     )
 
     explore_loop = loop.ExploreLoop(domain, url, openai_client, loop_config)
@@ -93,6 +105,18 @@ def main():
         explore_loop.set_webstates(webstates)
 
     explore_loop.start()
+
+    if collector is not None:
+        output_path = Path(args.web_kobe_output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(
+            json.dumps(
+                collector.to_web_kobe_graph().to_dict(),
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
 
     if args.output == "jsonsimple":
         explore_loop.print_json(True)
