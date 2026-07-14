@@ -1,6 +1,7 @@
 import pytest
 
 from ai_web_explorer.safesym_bridge.dom_observer import DomInteractableCandidate
+from ai_web_explorer.safesym_bridge.models import StateSnapshot
 from ai_web_explorer.safesym_bridge.web_kobe_graph import BrowserAction
 from ai_web_explorer.safesym_bridge.web_kobe_playwright_adapter import (
     WebKobePlaywrightAdapter,
@@ -115,6 +116,56 @@ async def test_list_interactables_uses_dom_candidates(monkeypatch):
             "description": "Add to cart",
             "locator": 'button[data-test="add-to-cart"]',
             "action_kind": "click",
+            "input_values": {},
+            "explored": False,
+        }
+    ]
+
+
+@pytest.mark.anyio
+async def test_saucedemo_adapter_reuses_saucedemo_state_observer(monkeypatch):
+    async def fake_observe_saucedemo_state(page):
+        return StateSnapshot(
+            page_id="inventory",
+            url="https://www.saucedemo.com/inventory.html",
+            title="Swag Labs",
+            signature={"is_logged_in": True, "cart_count": 0},
+        )
+
+    monkeypatch.setattr(
+        "ai_web_explorer.safesym_bridge.web_kobe_playwright_adapter.observe_saucedemo_state",
+        fake_observe_saucedemo_state,
+    )
+    adapter = WebKobePlaywrightAdapter(FakePage(), app_name="saucedemo")
+
+    snapshot = await adapter.observe_state()
+
+    assert snapshot.page_id == "inventory"
+    assert snapshot.signature == {"is_logged_in": True, "cart_count": 0}
+
+
+@pytest.mark.anyio
+async def test_saucedemo_adapter_uses_static_action_profile():
+    adapter = WebKobePlaywrightAdapter(FakePage(), app_name="saucedemo")
+    state = StateSnapshot(
+        page_id="login",
+        url="https://www.saucedemo.com/",
+        title="Swag Labs",
+        signature={"is_logged_in": False},
+    )
+
+    interactables = await adapter.list_interactables(state)
+
+    assert interactables == [
+        {
+            "semantic_id": "login_submit",
+            "description": "Click the Login button",
+            "locator": "#login-button",
+            "action_kind": "fill_then_click",
+            "input_values": {
+                "#user-name": "standard_user",
+                "#password": "secret_sauce",
+            },
             "explored": False,
         }
     ]
@@ -137,3 +188,13 @@ async def test_execute_click_fill_and_select_actions():
         BrowserAction("select", "#sort", "select_sort", {"value": "price"})
     ) is True
     assert page.action_locator.selected == ["price"]
+
+    assert await adapter.execute(
+        BrowserAction(
+            "fill_then_click",
+            "#submit",
+            "submit_form",
+            {"#username": "standard_user", "#password": "secret_sauce"},
+        )
+    ) is True
+    assert page.action_locator.filled[-2:] == ["standard_user", "secret_sauce"]

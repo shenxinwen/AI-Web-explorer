@@ -118,8 +118,21 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-explore \
   --steps 1
 ```
 
-The first version is intentionally local and deterministic. It is meant to
-prove the browser-grounded graph loop before adding LLM/VLM semantic assistance.
+SauceDemo is the primary real-site smoke target:
+
+```bash
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-explore \
+  --url https://www.saucedemo.com/ \
+  --output outputs/saucedemo_web_kobe_graph.json \
+  --app-name saucedemo \
+  --steps 4
+```
+
+For this profile, Web-KOBE reuses the existing SauceDemo state observer and
+action profile. This keeps the real browser test deterministic while still
+recording browser-grounded Web-KOBE graph edges. Generic pages continue to use
+DOM extraction. The optional real SauceDemo verification test is gated by
+`RUN_WEB_KOBE_SAUCEDEMO_TEST=1`.
 
 ## Debug Commands
 

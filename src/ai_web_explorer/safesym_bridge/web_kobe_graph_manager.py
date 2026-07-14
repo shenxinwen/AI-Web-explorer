@@ -103,6 +103,10 @@ class WebKobeGraphManager:
             interactables.append(updated)
         self._nodes[node_id] = replace(node, interactable_elements=interactables)
 
+    def interactables_for_node(self, node_id: str) -> list[dict[str, Any]]:
+        node = self._nodes[node_id]
+        return [dict(item) for item in node.interactable_elements]
+
     def to_graph(self, start_node_id: str | None = None) -> WebKobeGraph:
         resolved_start = start_node_id
         if resolved_start is None and self._nodes:

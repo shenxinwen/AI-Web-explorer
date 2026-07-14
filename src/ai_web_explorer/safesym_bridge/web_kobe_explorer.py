@@ -95,6 +95,7 @@ def _first_unexplored_action(
             action_kind=str(item.get("action_kind") or "click"),
             locator=item.get("locator"),
             semantic_id=semantic_id,
+            input_values=dict(item.get("input_values") or {}),
             description=item.get("description"),
         )
     return None
@@ -119,8 +120,9 @@ class WebKobeExplorer:
             interactables=before_interactables,
         )
         source_id = self.manager.identify_or_add_node(_node_from_draft(before_draft))
+        source_interactables = self.manager.interactables_for_node(source_id)
 
-        selected = _first_unexplored_action(before_interactables)
+        selected = _first_unexplored_action(source_interactables)
         if selected is None:
             return self.manager.to_graph(start_node_id=source_id)
 

@@ -89,9 +89,21 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-explore \
   --steps 1
 ```
 
-This command opens the page with Playwright, observes local state, extracts DOM
-interactables, executes a small number of actions, and records browser-grounded
-Web-KOBE graph edges.
+SauceDemo is the primary real-site smoke target for this path:
+
+```bash
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-explore \
+  --url https://www.saucedemo.com/ \
+  --output outputs/saucedemo_web_kobe_graph.json \
+  --app-name saucedemo \
+  --steps 4
+```
+
+For `--app-name saucedemo`, the adapter reuses the existing SauceDemo state
+observer and action profile so the Web-KOBE graph can record meaningful browser
+steps such as login, add-to-cart, cart open, and checkout start. Generic pages
+still use local DOM extraction. Real SauceDemo browser verification is gated by
+`RUN_WEB_KOBE_SAUCEDEMO_TEST=1`.
 
 The debug-only commands are still available:
 

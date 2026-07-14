@@ -52,6 +52,44 @@ class FakeAdapter:
         return True
 
 
+class RepeatedStateAdapter:
+    app_name = "fake"
+
+    def __init__(self):
+        self.executed = []
+
+    async def observe_state(self):
+        return StateSnapshot(
+            page_id="listing",
+            url="https://example.test/listing",
+            title="Listing",
+            signature={"cart_count": len(self.executed)},
+        )
+
+    async def list_interactables(self, state):
+        return [
+            {
+                "semantic_id": "first_action",
+                "description": "First action",
+                "locator": "#first",
+                "action_kind": "click",
+                "explored": False,
+            },
+            {
+                "semantic_id": "second_action",
+                "description": "Second action",
+                "locator": "#second",
+                "action_kind": "click",
+                "input_values": {"#name": "Alice"},
+                "explored": False,
+            },
+        ]
+
+    async def execute(self, action: BrowserAction):
+        self.executed.append(action)
+        return True
+
+
 @pytest.mark.anyio
 async def test_explore_one_step_records_self_loop_delta():
     explorer = WebKobeExplorer(
@@ -72,3 +110,25 @@ async def test_explore_one_step_records_self_loop_delta():
         "cart_nonempty": {"before": False, "after": True}
     }
     assert edge.observed_delta[0].field == "cart_nonempty"
+
+
+@pytest.mark.anyio
+async def test_explore_one_step_skips_previously_explored_self_loop_action():
+    adapter = RepeatedStateAdapter()
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+    )
+
+    await explorer.explore_one_step()
+    graph = await explorer.explore_one_step()
+
+    assert [action.semantic_id for action in adapter.executed] == [
+        "first_action",
+        "second_action",
+    ]
+    assert adapter.executed[1].input_values == {"#name": "Alice"}
+    assert [edge.action.semantic_id for edge in graph.edges] == [
+        "first_action",
+        "second_action",
+    ]

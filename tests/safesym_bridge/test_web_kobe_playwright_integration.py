@@ -1,7 +1,9 @@
 import os
+import json
 
 import pytest
 
+from ai_web_explorer.safesym_bridge.browser_runner import run_web_kobe_exploration
 from ai_web_explorer.safesym_bridge.web_kobe_explorer import WebKobeExplorer
 from ai_web_explorer.safesym_bridge.web_kobe_playwright_adapter import (
     WebKobePlaywrightAdapter,
@@ -82,3 +84,42 @@ async def test_playwright_web_kobe_explorer_records_real_self_loop_delta():
             }
         finally:
             await browser.close()
+
+
+@pytest.mark.skipif(
+    os.getenv("RUN_WEB_KOBE_SAUCEDEMO_TEST") != "1",
+    reason=(
+        "Set RUN_WEB_KOBE_SAUCEDEMO_TEST=1 to run the real SauceDemo "
+        "Web-KOBE browser test."
+    ),
+)
+@pytest.mark.anyio
+async def test_saucedemo_web_kobe_runner_records_real_checkout_prefix(tmp_path):
+    output_path = tmp_path / "saucedemo_web_kobe_graph.json"
+
+    result_path = await run_web_kobe_exploration(
+        "https://www.saucedemo.com/",
+        output_path,
+        app_name="saucedemo",
+        steps=4,
+    )
+
+    assert result_path == output_path
+    data = json.loads(output_path.read_text(encoding="utf-8"))
+    assert data["meta"]["app"] == "saucedemo"
+
+    node_ids = {node["node_id"] for node in data["nodes"]}
+    action_ids = {edge["action"]["semantic_id"] for edge in data["edges"]}
+
+    assert {"login", "inventory", "cart", "checkout_info"}.issubset(node_ids)
+    assert {
+        "login_submit",
+        "product_add_to_cart",
+        "cart_open",
+        "cart_checkout_start",
+    }.issubset(action_ids)
+    assert any(
+        edge["schema_delta"]
+        and edge["schema_delta"].get("cart_count") == {"before": 0, "after": 1}
+        for edge in data["edges"]
+    )

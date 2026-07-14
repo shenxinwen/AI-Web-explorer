@@ -5,6 +5,8 @@ from typing import Any
 
 from ai_web_explorer.safesym_bridge.dom_observer import extract_dom_interactables
 from ai_web_explorer.safesym_bridge.models import StateSnapshot
+from ai_web_explorer.safesym_bridge.saucedemo_adapter import static_actions_for_state
+from ai_web_explorer.safesym_bridge.state_observer import observe_saucedemo_state
 from ai_web_explorer.safesym_bridge.web_action_extractor import (
     browser_actions_from_candidates,
 )
@@ -42,6 +44,17 @@ class WebKobePlaywrightAdapter:
         self.page_id = page_id
 
     async def observe_state(self) -> StateSnapshot:
+        if self.app_name == "saucedemo":
+            snapshot = await observe_saucedemo_state(self.page)
+            if self.page_id is not None:
+                return StateSnapshot(
+                    page_id=self.page_id,
+                    url=snapshot.url,
+                    title=snapshot.title,
+                    signature=snapshot.signature,
+                )
+            return snapshot
+
         title = await self.page.title()
         page_id = self.page_id or _slug(title or self.page.url)
         signature: dict[str, Any] = {}
@@ -66,6 +79,19 @@ class WebKobePlaywrightAdapter:
         self,
         state: StateSnapshot,
     ) -> list[dict[str, Any]]:
+        if self.app_name == "saucedemo":
+            return [
+                {
+                    "semantic_id": action.semantic_id,
+                    "description": action.raw_description,
+                    "locator": action.selector,
+                    "action_kind": action.execution_kind,
+                    "input_values": dict(action.values),
+                    "explored": False,
+                }
+                for action in static_actions_for_state(state)
+            ]
+
         candidates = await extract_dom_interactables(self.page)
         actions = browser_actions_from_candidates(candidates)
         return [
@@ -74,6 +100,7 @@ class WebKobePlaywrightAdapter:
                 "description": action.description,
                 "locator": action.locator,
                 "action_kind": action.action_kind,
+                "input_values": dict(action.input_values),
                 "explored": False,
             }
             for action in actions
@@ -88,6 +115,10 @@ class WebKobePlaywrightAdapter:
                 await locator.click()
             elif action.action_kind == "fill":
                 await locator.fill(_first_input_value(action.input_values) or "test")
+            elif action.action_kind == "fill_then_click":
+                for selector, value in action.input_values.items():
+                    await self.page.locator(selector).first.fill(value)
+                await locator.click()
             elif action.action_kind == "select":
                 value = _first_input_value(action.input_values)
                 if value is None:
