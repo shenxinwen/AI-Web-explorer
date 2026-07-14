@@ -1,0 +1,139 @@
+import pytest
+
+from ai_web_explorer.safesym_bridge.dom_observer import DomInteractableCandidate
+from ai_web_explorer.safesym_bridge.web_kobe_graph import BrowserAction
+from ai_web_explorer.safesym_bridge.web_kobe_playwright_adapter import (
+    WebKobePlaywrightAdapter,
+)
+
+
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
+
+
+class FakeTextLocator:
+    def __init__(self, text: str, count_value: int = 1):
+        self.text = text
+        self.count_value = count_value
+
+    async def count(self):
+        return self.count_value
+
+    @property
+    def first(self):
+        return self
+
+    async def inner_text(self):
+        return self.text
+
+
+class FakeActionLocator:
+    def __init__(self):
+        self.clicked = False
+        self.filled = []
+        self.selected = []
+
+    @property
+    def first(self):
+        return self
+
+    async def click(self):
+        self.clicked = True
+
+    async def fill(self, value):
+        self.filled.append(value)
+
+    async def select_option(self, value):
+        self.selected.append(value)
+
+
+class FakePage:
+    def __init__(self):
+        self.url = "https://example.test/shop"
+        self.action_locator = FakeActionLocator()
+        self.waits = []
+
+    async def title(self):
+        return "Fixture Shop"
+
+    def locator(self, selector):
+        if selector == '[data-state="cart-count"]':
+            return FakeTextLocator("1")
+        if selector == "#cart-count":
+            return FakeTextLocator("", count_value=0)
+        return self.action_locator
+
+    async def wait_for_timeout(self, ms):
+        self.waits.append(ms)
+
+
+@pytest.mark.anyio
+async def test_observe_state_reads_title_url_and_cart_count():
+    adapter = WebKobePlaywrightAdapter(
+        FakePage(),
+        app_name="fixture",
+        page_id="fixture_shop",
+    )
+
+    snapshot = await adapter.observe_state()
+
+    assert snapshot.page_id == "fixture_shop"
+    assert snapshot.url == "https://example.test/shop"
+    assert snapshot.title == "Fixture Shop"
+    assert snapshot.signature == {"cart_count": 1, "cart_nonempty": True}
+
+
+@pytest.mark.anyio
+async def test_list_interactables_uses_dom_candidates(monkeypatch):
+    async def fake_extract_dom_interactables(page):
+        return [
+            DomInteractableCandidate(
+                id="dom_001",
+                kind="button",
+                locator='button[data-test="add-to-cart"]',
+                locator_strategy="css",
+                name="Add to cart",
+                visible=True,
+                enabled=True,
+                metadata={"data-test": "add-to-cart"},
+            )
+        ]
+
+    monkeypatch.setattr(
+        "ai_web_explorer.safesym_bridge.web_kobe_playwright_adapter.extract_dom_interactables",
+        fake_extract_dom_interactables,
+    )
+    adapter = WebKobePlaywrightAdapter(FakePage(), page_id="fixture_shop")
+    state = await adapter.observe_state()
+
+    interactables = await adapter.list_interactables(state)
+
+    assert interactables == [
+        {
+            "semantic_id": "button_add_to_cart",
+            "description": "Add to cart",
+            "locator": 'button[data-test="add-to-cart"]',
+            "action_kind": "click",
+            "explored": False,
+        }
+    ]
+
+
+@pytest.mark.anyio
+async def test_execute_click_fill_and_select_actions():
+    page = FakePage()
+    adapter = WebKobePlaywrightAdapter(page, page_id="fixture_shop")
+
+    assert await adapter.execute(BrowserAction("click", "#add", "add")) is True
+    assert page.action_locator.clicked is True
+
+    assert await adapter.execute(
+        BrowserAction("fill", "#name", "fill_name", {"value": "Alice"})
+    ) is True
+    assert page.action_locator.filled == ["Alice"]
+
+    assert await adapter.execute(
+        BrowserAction("select", "#sort", "select_sort", {"value": "price"})
+    ) is True
+    assert page.action_locator.selected == ["price"]
