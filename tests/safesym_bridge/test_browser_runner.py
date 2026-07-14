@@ -3,6 +3,7 @@ import os
 
 import pytest
 
+from ai_web_explorer.safesym_bridge import browser_runner
 from ai_web_explorer.safesym_bridge.browser_runner import (
     run_saucedemo_explored_graph,
     run_saucedemo_explored_pddl,
@@ -10,6 +11,11 @@ from ai_web_explorer.safesym_bridge.browser_runner import (
     write_observed_graph,
 )
 from ai_web_explorer.safesym_bridge.task_spec import build_saucedemo_mvp_transitions
+from ai_web_explorer.safesym_bridge.web_kobe_controller import (
+    WebKobeExplorationResult,
+    WebKobeExplorationSummary,
+)
+from ai_web_explorer.safesym_bridge.web_kobe_graph import WebKobeGraph
 
 
 @pytest.fixture
@@ -45,6 +51,95 @@ def test_run_saucedemo_explored_pddl_is_async_callable():
 
 def test_run_web_kobe_exploration_is_async_callable():
     assert callable(run_web_kobe_exploration)
+
+
+@pytest.mark.anyio
+async def test_run_web_kobe_exploration_uses_controller(tmp_path, monkeypatch):
+    import playwright.async_api as playwright_async_api
+
+    output_path = tmp_path / "web_kobe_graph.json"
+    calls = []
+
+    class FakePage:
+        async def goto(self, url):
+            calls.append(("goto", url))
+
+    class FakeBrowser:
+        async def new_page(self):
+            calls.append(("new_page", None))
+            return FakePage()
+
+        async def close(self):
+            calls.append(("close", None))
+
+    class FakeChromium:
+        async def launch(self, *, headless=True):
+            calls.append(("launch", headless))
+            return FakeBrowser()
+
+    class FakePlaywright:
+        chromium = FakeChromium()
+
+    class FakePlaywrightContext:
+        async def __aenter__(self):
+            return FakePlaywright()
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+    class FakeController:
+        def __init__(self, explorer):
+            calls.append(("controller", explorer.adapter.app_name))
+
+        async def run(self, *, max_steps=1):
+            calls.append(("run", max_steps))
+            graph = WebKobeGraph(
+                app="fixture",
+                start_node_id="fixture_shop",
+                total_steps_completed=max_steps,
+            )
+            return WebKobeExplorationResult(
+                graph=graph,
+                summary=WebKobeExplorationSummary(
+                    requested_steps=max_steps,
+                    steps_completed=max_steps,
+                    stop_reason="max_steps",
+                    node_count=0,
+                    edge_count=0,
+                    failed_edge_count=0,
+                ),
+            )
+
+    monkeypatch.setattr(
+        playwright_async_api,
+        "async_playwright",
+        lambda: FakePlaywrightContext(),
+    )
+    monkeypatch.setattr(
+        browser_runner,
+        "WebKobeExplorationController",
+        FakeController,
+        raising=False,
+    )
+
+    result_path = await run_web_kobe_exploration(
+        "https://example.test/shop",
+        output_path,
+        app_name="fixture",
+        steps=3,
+    )
+
+    assert result_path == output_path
+    assert calls == [
+        ("launch", True),
+        ("new_page", None),
+        ("goto", "https://example.test/shop"),
+        ("controller", "fixture"),
+        ("run", 3),
+        ("close", None),
+    ]
+    data = json.loads(output_path.read_text(encoding="utf-8"))
+    assert data["meta"]["total_steps_completed"] == 3
 
 
 @pytest.mark.skipif(

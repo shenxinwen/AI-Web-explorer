@@ -15,6 +15,9 @@ from ai_web_explorer.safesym_bridge.web_kobe_graph import (
     WebKobeGraph,
     WebKobeNode,
 )
+from ai_web_explorer.safesym_bridge.web_kobe_controller import (
+    WebKobeExplorationController,
+)
 from ai_web_explorer.safesym_bridge.web_kobe_explorer import WebKobeExplorer
 from ai_web_explorer.safesym_bridge.web_kobe_playwright_adapter import (
     WebKobePlaywrightAdapter,
@@ -121,12 +124,9 @@ async def run_web_kobe_exploration(
                 adapter=adapter,
                 semantic_assistor=DeterministicSemanticAssistor(app=app_name),
             )
-            graph = None
-            for _ in range(max(steps, 1)):
-                graph = await explorer.explore_one_step()
-            if graph is None:
-                graph = explorer.manager.to_graph()
-            write_web_kobe_graph(graph, output_path)
+            controller = WebKobeExplorationController(explorer)
+            result = await controller.run(max_steps=max(steps, 1))
+            write_web_kobe_graph(result.graph, output_path)
             return output_path
         finally:
             await browser.close()
