@@ -87,6 +87,27 @@ Its effect is:
 SafeSym can inject checks before safety-relevant actions such as
 `order_place_confirm`.
 
+## Generic Web-KOBE Direction
+
+The project is adding a Web-KOBE-style exploration graph for unknown web
+environments. This does not replace the current SauceDemo graph/PDDL path yet.
+
+The intended long-term chain is:
+
+```text
+unknown website
+  -> Web-KOBE exploration graph
+  -> PDDL projection
+  -> SafeSym
+```
+
+Debug commands:
+
+```bash
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-graph --output outputs/web_kobe_graph.json
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-pddl --output outputs/web_kobe_pddl --goal-node start
+```
+
 ## Debug Commands
 
 These commands are still supported, but they are debug shortcuts for the current

@@ -65,6 +65,19 @@ This sidecar does not replace `WebObservedGraph -> PDDL -> SafeSym`. It projects
 the same observed transitions into a capability-first artifact that focuses on
 semantic page states, abstract capabilities, and observed state deltas.
 
+An early Web-KOBE-style exploration graph is being introduced as the next
+generic exploration direction:
+
+```bash
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-graph --output outputs/web_kobe_graph.json
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-pddl --output outputs/web_kobe_pddl --goal-node start
+```
+
+This graph is intended to become the main exploration-time representation for
+unknown websites. It records semantic page states, browser-grounded actions,
+observed deltas, and evidence so the project can later project unknown web
+environments into SafeSym-compatible PDDL.
+
 The debug-only commands are still available:
 
 ```bash
