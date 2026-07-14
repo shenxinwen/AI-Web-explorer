@@ -108,6 +108,19 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-graph --output outputs/web
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-pddl --output outputs/web_kobe_pddl --goal-node start
 ```
 
+For a real Playwright-backed exploration run against a controlled page:
+
+```bash
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-explore \
+  --url http://127.0.0.1:8000/index.html \
+  --output outputs/web_kobe_explored_graph.json \
+  --page-id fixture_shop \
+  --steps 1
+```
+
+The first version is intentionally local and deterministic. It is meant to
+prove the browser-grounded graph loop before adding LLM/VLM semantic assistance.
+
 ## Debug Commands
 
 These commands are still supported, but they are debug shortcuts for the current

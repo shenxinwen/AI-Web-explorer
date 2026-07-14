@@ -78,6 +78,21 @@ unknown websites. It records semantic page states, browser-grounded actions,
 observed deltas, and evidence so the project can later project unknown web
 environments into SafeSym-compatible PDDL.
 
+A real Playwright-backed Web-KOBE exploration command is also available for
+controlled local or fixture pages:
+
+```bash
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-explore \
+  --url http://127.0.0.1:8000/index.html \
+  --output outputs/web_kobe_explored_graph.json \
+  --page-id fixture_shop \
+  --steps 1
+```
+
+This command opens the page with Playwright, observes local state, extracts DOM
+interactables, executes a small number of actions, and records browser-grounded
+Web-KOBE graph edges.
+
 The debug-only commands are still available:
 
 ```bash
