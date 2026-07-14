@@ -178,3 +178,62 @@ def test_main_web_kobe_pddl_subcommand_writes_domain_and_problem(
     )
     assert (output / "domain.pddl").read_text(encoding="utf-8") == FakeArtifacts.domain
     assert (output / "problem.pddl").read_text(encoding="utf-8") == FakeArtifacts.problem
+
+
+def test_main_web_kobe_explore_subcommand_runs_playwright_runner(
+    tmp_path,
+    monkeypatch,
+):
+    output_path = tmp_path / "web_kobe_explored_graph.json"
+    calls = []
+
+    async def fake_run_web_kobe_exploration(
+        url,
+        output_path_arg,
+        *,
+        app_name="web",
+        page_id=None,
+        steps=1,
+        headless=True,
+    ):
+        calls.append((url, output_path_arg, app_name, page_id, steps, headless))
+        output_path_arg.write_text(
+            '{"meta": {"schema_version": "web-kobe-graph-v1"}}',
+            encoding="utf-8",
+        )
+        return output_path_arg
+
+    monkeypatch.setattr(
+        cli,
+        "run_web_kobe_exploration",
+        fake_run_web_kobe_exploration,
+    )
+
+    exit_code = main(
+        [
+            "web-kobe-explore",
+            "--url",
+            "http://127.0.0.1:8000/index.html",
+            "--output",
+            str(output_path),
+            "--app-name",
+            "fixture",
+            "--page-id",
+            "fixture_shop",
+            "--steps",
+            "2",
+            "--headed",
+        ]
+    )
+
+    assert exit_code == 0
+    assert calls == [
+        (
+            "http://127.0.0.1:8000/index.html",
+            output_path,
+            "fixture",
+            "fixture_shop",
+            2,
+            False,
+        )
+    ]

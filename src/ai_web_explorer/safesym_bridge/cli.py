@@ -9,6 +9,7 @@ from ai_web_explorer.safesym_bridge.browser_runner import (
     run_saucedemo_explored_capability_graph,
     run_saucedemo_explored_graph,
     run_saucedemo_explored_pddl,
+    run_web_kobe_exploration,
     write_capability_graph,
     write_observed_graph,
     write_web_kobe_graph,
@@ -69,6 +70,25 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         default=Path("outputs/web_kobe_graph.json"),
         help="Path to write the generated Web-KOBE graph JSON.",
+    )
+    web_kobe_explore_parser = subparsers.add_parser(
+        "web-kobe-explore",
+        help="Run real Playwright Web-KOBE exploration and write graph JSON.",
+    )
+    web_kobe_explore_parser.add_argument("--url", required=True)
+    web_kobe_explore_parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("outputs/web_kobe_explored_graph.json"),
+        help="Path to write the explored Web-KOBE graph JSON.",
+    )
+    web_kobe_explore_parser.add_argument("--app-name", default="web")
+    web_kobe_explore_parser.add_argument("--page-id", default=None)
+    web_kobe_explore_parser.add_argument("--steps", type=int, default=1)
+    web_kobe_explore_parser.add_argument(
+        "--headed",
+        action="store_true",
+        help="Show the browser window while running exploration.",
     )
     pddl_parser = subparsers.add_parser(
         "pddl",
@@ -162,6 +182,17 @@ def main(argv: list[str] | None = None) -> int:
             output_path = asyncio.run(
                 run_saucedemo_explored_pddl(
                     args.output,
+                    headless=not args.headed,
+                )
+            )
+        elif args.mode == "web-kobe-explore":
+            output_path = asyncio.run(
+                run_web_kobe_exploration(
+                    args.url,
+                    args.output,
+                    app_name=args.app_name,
+                    page_id=args.page_id,
+                    steps=args.steps,
                     headless=not args.headed,
                 )
             )
