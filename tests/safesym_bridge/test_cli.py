@@ -121,3 +121,60 @@ def test_main_explore_capability_graph_subcommand_runs_explorer(tmp_path, monkey
 
     assert exit_code == 0
     assert calls == [(output_path, False)]
+
+
+def test_main_web_kobe_graph_subcommand_writes_graph(monkeypatch, tmp_path):
+    output = tmp_path / "web_kobe_graph.json"
+
+    from ai_web_explorer.safesym_bridge.web_kobe_graph import WebKobeGraph
+
+    def fake_build_debug_web_kobe_graph():
+        return WebKobeGraph(
+            app="debug",
+            start_node_id="start",
+            total_steps_completed=0,
+            nodes=[],
+            edges=[],
+        )
+
+    monkeypatch.setattr(cli, "build_debug_web_kobe_graph", fake_build_debug_web_kobe_graph)
+
+    assert main(["web-kobe-graph", "--output", str(output)]) == 0
+    assert output.exists()
+    assert "web-kobe-graph-v1" in output.read_text(encoding="utf-8")
+
+
+def test_main_web_kobe_pddl_subcommand_writes_domain_and_problem(
+    monkeypatch,
+    tmp_path,
+):
+    output = tmp_path / "web_kobe_pddl"
+
+    from ai_web_explorer.safesym_bridge.web_kobe_graph import WebKobeGraph
+
+    def fake_build_debug_web_kobe_graph():
+        return WebKobeGraph(
+            app="debug",
+            start_node_id="start",
+            total_steps_completed=0,
+            nodes=[],
+            edges=[],
+        )
+
+    class FakeArtifacts:
+        domain = "(define (domain web-kobe))"
+        problem = "(define (problem web-kobe-problem))"
+
+    monkeypatch.setattr(cli, "build_debug_web_kobe_graph", fake_build_debug_web_kobe_graph)
+    monkeypatch.setattr(
+        cli,
+        "compile_web_kobe_graph_to_pddl",
+        lambda graph, goal_node_id: FakeArtifacts(),
+    )
+
+    assert (
+        main(["web-kobe-pddl", "--output", str(output), "--goal-node", "start"])
+        == 0
+    )
+    assert (output / "domain.pddl").read_text(encoding="utf-8") == FakeArtifacts.domain
+    assert (output / "problem.pddl").read_text(encoding="utf-8") == FakeArtifacts.problem

@@ -5,15 +5,20 @@ import asyncio
 from pathlib import Path
 
 from ai_web_explorer.safesym_bridge.browser_runner import (
+    build_debug_web_kobe_graph,
     run_saucedemo_explored_capability_graph,
     run_saucedemo_explored_graph,
     run_saucedemo_explored_pddl,
     write_capability_graph,
     write_observed_graph,
+    write_web_kobe_graph,
 )
 from ai_web_explorer.safesym_bridge.observed_graph import build_observed_graph
 from ai_web_explorer.safesym_bridge.pddl_compiler import write_pddl_artifacts
 from ai_web_explorer.safesym_bridge.task_spec import build_saucedemo_mvp_transitions
+from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
+    compile_web_kobe_graph_to_pddl,
+)
 
 
 def write_saucedemo_pddl(output_dir: Path) -> Path:
@@ -55,6 +60,16 @@ def main(argv: list[str] | None = None) -> int:
         default=Path("outputs/saucedemo_capability_graph.json"),
         help="Path to write the generated capability graph JSON.",
     )
+    web_kobe_graph_parser = subparsers.add_parser(
+        "web-kobe-graph",
+        help="Debug: write a Web-KOBE exploration graph JSON.",
+    )
+    web_kobe_graph_parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("outputs/web_kobe_graph.json"),
+        help="Path to write the generated Web-KOBE graph JSON.",
+    )
     pddl_parser = subparsers.add_parser(
         "pddl",
         help="Debug: write PDDL from fixed-transition graph.",
@@ -64,6 +79,21 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         default=Path("outputs/safesym_e2e/graph_pddl"),
         help="Directory to write domain.pddl and problem.pddl.",
+    )
+    web_kobe_pddl_parser = subparsers.add_parser(
+        "web-kobe-pddl",
+        help="Debug: write PDDL from the debug Web-KOBE graph.",
+    )
+    web_kobe_pddl_parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("outputs/web_kobe_pddl"),
+        help="Directory to write domain.pddl and problem.pddl.",
+    )
+    web_kobe_pddl_parser.add_argument(
+        "--goal-node",
+        required=True,
+        help="Goal node ID for the generated Web-KOBE PDDL problem.",
     )
     explore_graph_parser = subparsers.add_parser(
         "explore-graph",
@@ -145,8 +175,29 @@ def main(argv: list[str] | None = None) -> int:
                 build_saucedemo_mvp_transitions(),
                 args.output,
             )
+        elif args.mode == "web-kobe-graph":
+            output_path = write_web_kobe_graph(
+                build_debug_web_kobe_graph(),
+                args.output,
+            )
         elif args.mode == "pddl":
             output_path = write_saucedemo_pddl(args.output)
+        elif args.mode == "web-kobe-pddl":
+            graph = build_debug_web_kobe_graph()
+            artifacts = compile_web_kobe_graph_to_pddl(
+                graph,
+                goal_node_id=args.goal_node,
+            )
+            args.output.mkdir(parents=True, exist_ok=True)
+            (args.output / "domain.pddl").write_text(
+                artifacts.domain,
+                encoding="utf-8",
+            )
+            (args.output / "problem.pddl").write_text(
+                artifacts.problem,
+                encoding="utf-8",
+            )
+            output_path = args.output
         else:
             parser.print_help()
             return 2
