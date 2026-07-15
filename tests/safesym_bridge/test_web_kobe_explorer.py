@@ -189,3 +189,28 @@ async def test_explore_one_step_prefers_explicit_action_button_over_input():
 
     assert adapter.executed[0].semantic_id == "open_cart"
     assert graph.edges[0].action.semantic_id == "open_cart"
+
+
+class FailingDiagnosticAdapter(FakeAdapter):
+    def __init__(self):
+        super().__init__()
+        self.last_execution_error = None
+
+    async def execute(self, action: BrowserAction):
+        self.executed.append(action)
+        self.last_execution_error = "locator_not_visible"
+        return False
+
+
+@pytest.mark.anyio
+async def test_explore_one_step_records_backend_execution_error():
+    explorer = WebKobeExplorer(
+        adapter=FailingDiagnosticAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+    )
+
+    graph = await explorer.explore_one_step()
+
+    edge = graph.edges[0]
+    assert edge.status == "failed_execution"
+    assert edge.execution_trace.error == "locator_not_visible"

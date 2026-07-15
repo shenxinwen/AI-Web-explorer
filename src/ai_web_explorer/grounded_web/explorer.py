@@ -117,7 +117,18 @@ class WebKobeExplorer:
                 before_observation_id=source_id,
                 after_observation_id=target_id,
                 success=success,
-                error=None if success else "adapter execution returned false",
+                error=(
+                    None
+                    if success
+                    else str(
+                        getattr(
+                            self.adapter,
+                            "last_execution_error",
+                            "adapter execution returned false",
+                        )
+                        or "adapter execution returned false"
+                    )
+                ),
             ),
             status="verified" if success else "failed_execution",
             evidence=[Evidence(source="web_kobe_explorer", url=before.url)],
