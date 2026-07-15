@@ -133,6 +133,23 @@ ReAct loop, does not call an LLM, and does not own exploration policy. Its role
 is to make old-operation reuse explicit before a future `AiWebExplorerBackend`
 is designed.
 
+The explicit no-LLM baseline agent facade lives in:
+
+```text
+src/ai_web_explorer/safesym_bridge/simple_grounded_web_agent.py
+```
+
+`SimpleGroundedWebAgent` composes `AutomationBackend`, `WebKobeExplorer`, and
+`WebKobeExplorationController`. It exists to make the baseline agent concept
+clear without duplicating the Web-KOBE exploration engine. It observes grounded
+candidates, executes the simple first-unexplored policy, and records
+before/action/after deltas through the existing graph path.
+
+There are still overlapping structures from the original explorer, Web-KOBE
+collector, Playwright adapters, and sync/async action executors. Refactoring
+should happen gradually when a feature touches a boundary, not as a broad
+rewrite.
+
 ```bash
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-explore \
   --url http://127.0.0.1:8000/index.html \
