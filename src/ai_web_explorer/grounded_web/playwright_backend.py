@@ -137,11 +137,13 @@ class WebKobePlaywrightAdapter:
                 "semantic_id": action.semantic_id,
                 "description": action.description,
                 "locator": action.locator,
+                "locator_strategy": candidate.locator_strategy,
                 "action_kind": action.action_kind,
                 "input_values": dict(action.input_values),
+                "metadata": dict(candidate.metadata),
                 "explored": False,
             }
-            for action in actions
+            for candidate, action in zip(candidates, actions, strict=True)
         ]
 
     async def execute(self, action: BrowserAction) -> bool:
@@ -179,15 +181,19 @@ def _interactable_record(action: BrowserAction | dict[str, Any]) -> dict[str, An
             "semantic_id": action.semantic_id,
             "description": action.description,
             "locator": action.locator,
+            "locator_strategy": None,
             "action_kind": action.action_kind,
             "input_values": dict(action.input_values),
+            "metadata": {},
             "explored": False,
         }
     return {
         "semantic_id": action.get("semantic_id"),
         "description": action.get("description"),
         "locator": action.get("locator"),
+        "locator_strategy": action.get("locator_strategy"),
         "action_kind": action.get("action_kind"),
         "input_values": dict(action.get("input_values") or {}),
+        "metadata": dict(action.get("metadata") or {}),
         "explored": bool(action.get("explored", False)),
     }

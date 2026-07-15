@@ -11,9 +11,34 @@ def _slug(text: str) -> str:
     return cleaned or "unnamed"
 
 
+def _default_input_value(candidate: DomInteractableCandidate) -> str:
+    text = " ".join(
+        [
+            candidate.name,
+            candidate.locator,
+            candidate.metadata.get("type", ""),
+            candidate.metadata.get("placeholder", ""),
+            candidate.metadata.get("aria-label", ""),
+        ]
+    ).lower()
+    input_type = candidate.metadata.get("type", "").lower()
+
+    if input_type == "email" or "email" in text:
+        return "test@example.com"
+    if input_type == "password" or "password" in text:
+        return "secret_sauce"
+    if input_type in {"number", "range"} or "quantity" in text or "qty" in text:
+        return "1"
+    if input_type == "search" or "search" in text:
+        return "sample"
+    if "user" in text or "login" in text:
+        return "standard_user"
+    return "test"
+
+
 def _input_values_for(candidate: DomInteractableCandidate) -> dict[str, str]:
     if candidate.kind in {"input", "textarea"}:
-        return {candidate.locator: "test"}
+        return {candidate.locator: _default_input_value(candidate)}
     if candidate.kind == "select":
         raw_options = candidate.metadata.get("option-values", "")
         options = [

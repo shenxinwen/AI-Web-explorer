@@ -103,6 +103,23 @@ def test_candidate_from_element_preserves_select_option_values():
     assert candidate.metadata["option-values"] == "alpha,beta"
 
 
+def test_candidate_from_element_preserves_data_action_metadata():
+    candidate = candidate_from_element(
+        5,
+        {
+            "tag": "button",
+            "data_action": "open-cart",
+            "text": "Cart",
+            "visible": True,
+            "enabled": True,
+        },
+    )
+
+    assert candidate.kind == "button"
+    assert candidate.name == "Cart"
+    assert candidate.metadata["data-action"] == "open-cart"
+
+
 class FakeLocator:
     async def evaluate_all(self, script):
         return [

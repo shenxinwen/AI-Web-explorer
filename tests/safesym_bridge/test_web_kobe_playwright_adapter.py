@@ -115,8 +115,10 @@ async def test_list_interactables_uses_dom_candidates(monkeypatch):
             "semantic_id": "dom_001_button_add_to_cart",
             "description": "Add to cart",
             "locator": 'button[data-test="add-to-cart"]',
+            "locator_strategy": "css",
             "action_kind": "click",
             "input_values": {},
+            "metadata": {"data-test": "add-to-cart"},
             "explored": False,
         }
     ]
