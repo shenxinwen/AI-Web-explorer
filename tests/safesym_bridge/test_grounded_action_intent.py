@@ -99,6 +99,29 @@ def test_intent_input_values_override_resolved_action_values():
     assert resolved.input_values == {"#query": "kobe"}
 
 
+def test_fill_then_click_intent_can_resolve_to_click_target():
+    intent = ActionIntent(
+        action_kind="fill_then_click",
+        target_description="search",
+        input_values={"#query": "kobe"},
+        expectation=None,
+        source="rule_based",
+    )
+    action = BrowserAction(
+        action_kind="click",
+        locator='[data-action="run-search"]',
+        semantic_id="button_search",
+        description="Search",
+    )
+
+    resolved = resolve_action_intent(intent, [action])
+
+    assert resolved is not None
+    assert resolved.action_kind == "fill_then_click"
+    assert resolved.locator == '[data-action="run-search"]'
+    assert resolved.input_values == {"#query": "kobe"}
+
+
 def test_evaluate_outcome_failed_execution_preserves_error():
     outcome = evaluate_outcome(
         execution_success=False,

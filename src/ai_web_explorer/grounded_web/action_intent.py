@@ -109,9 +109,17 @@ def browser_action_from_record(action: BrowserAction | dict[str, Any]) -> Browse
 
 
 def _with_intent_inputs(action: BrowserAction, intent: ActionIntent) -> BrowserAction:
+    if action.action_kind != intent.action_kind:
+        action = replace(action, action_kind=intent.action_kind)
     if not intent.input_values:
         return action
     return replace(action, input_values=dict(intent.input_values))
+
+
+def _action_kind_matches(intent_kind: str, action_kind: str) -> bool:
+    if intent_kind == action_kind:
+        return True
+    return intent_kind == "fill_then_click" and action_kind == "click"
 
 
 def resolve_action_intent(
@@ -123,7 +131,7 @@ def resolve_action_intent(
         for action in normalized:
             if (
                 action.semantic_id == intent.target_semantic_id
-                and action.action_kind == intent.action_kind
+                and _action_kind_matches(intent.action_kind, action.action_kind)
             ):
                 return _with_intent_inputs(action, intent)
 
@@ -132,7 +140,7 @@ def resolve_action_intent(
         for action in normalized:
             action_description = (action.description or "").strip().lower()
             if (
-                action.action_kind == intent.action_kind
+                _action_kind_matches(intent.action_kind, action.action_kind)
                 and description in action_description
             ):
                 return _with_intent_inputs(action, intent)
