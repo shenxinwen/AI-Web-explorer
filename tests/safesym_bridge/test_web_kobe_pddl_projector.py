@@ -176,3 +176,55 @@ def test_compile_web_kobe_graph_to_pddl_projects_positive_numeric_facts():
         in artifacts.domain
     )
     assert "(cart_count_positive)" not in artifacts.problem
+
+
+def test_compile_web_kobe_graph_to_pddl_excludes_non_projectable_edges():
+    nodes = [
+        _node("start", "start", {}),
+        _node("success", "success", {}),
+        _node("failed", "failed", {}),
+        _node("no_change", "no_change", {}),
+        _node("unexpected", "unexpected", {}),
+    ]
+
+    def edge(target: str, semantic_id: str, success: bool, status: str) -> WebKobeEdge:
+        return WebKobeEdge(
+            source_node_id="start",
+            target_node_id=target,
+            instruction=semantic_id,
+            action=BrowserAction("click", f"#{semantic_id}", semantic_id),
+            capability=None,
+            target_observation=target,
+            observed_delta=[],
+            schema_delta={},
+            execution_trace=ExecutionTrace(
+                "click",
+                f"#{semantic_id}",
+                semantic_id,
+                {},
+                "start",
+                target,
+                success,
+            ),
+            status=status,
+        )
+
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="start",
+        total_steps_completed=4,
+        nodes=nodes,
+        edges=[
+            edge("success", "go_success", True, "succeeded_with_observed_change"),
+            edge("failed", "go_failed", False, "failed_execution"),
+            edge("no_change", "go_no_change", True, "no_observed_change"),
+            edge("unexpected", "go_unexpected", True, "unexpected_change"),
+        ],
+    )
+
+    artifacts = compile_web_kobe_graph_to_pddl(graph, goal_node_id="success")
+
+    assert "(:action go_success" in artifacts.domain
+    assert "(:action go_failed" not in artifacts.domain
+    assert "(:action go_no_change" not in artifacts.domain
+    assert "(:action go_unexpected" not in artifacts.domain

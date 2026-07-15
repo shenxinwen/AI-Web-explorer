@@ -4,6 +4,12 @@ from dataclasses import dataclass
 
 from ai_web_explorer.grounded_web.graph import WebKobeGraph
 
+PROJECTABLE_EDGE_STATUSES = {
+    "verified",
+    "succeeded",
+    "succeeded_with_observed_change",
+}
+
 
 @dataclass(frozen=True)
 class WebKobePddlArtifacts:
@@ -98,6 +104,10 @@ def _effects_for_edge(edge) -> list[str]:
     return effects
 
 
+def _is_projectable_edge(edge) -> bool:
+    return edge.execution_trace.success and edge.status in PROJECTABLE_EDGE_STATUSES
+
+
 def compile_web_kobe_graph_to_pddl(
     graph: WebKobeGraph,
     *,
@@ -115,6 +125,8 @@ def compile_web_kobe_graph_to_pddl(
 
     action_blocks = []
     for edge in graph.edges:
+        if not _is_projectable_edge(edge):
+            continue
         action_name = _action_name(edge.action.semantic_id)
         preconditions = [f"({_at(edge.source_node_id)})"]
         effects = _effects_for_edge(edge)
