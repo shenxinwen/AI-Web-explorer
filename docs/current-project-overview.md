@@ -110,6 +110,17 @@ the first concrete automation backend. Later work can wrap useful operation
 pieces from the original `ai-web-explorer` agent, or other web-agent tools, as
 additional backends without replacing the Web-KOBE/SafeSym exploration layer.
 
+The concrete backend boundary lives in:
+
+```text
+src/ai_web_explorer/safesym_bridge/automation_backend.py
+```
+
+Current implementations should satisfy `AutomationBackend`. The first concrete
+implementation is `WebKobePlaywrightAdapter`, which wraps Playwright browser
+operation while leaving exploration policy and graph recording in
+`WebKobeExplorer`.
+
 ```bash
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-explore \
   --url http://127.0.0.1:8000/index.html \
