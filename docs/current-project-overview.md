@@ -78,20 +78,81 @@ unknown websites. It records semantic page states, browser-grounded actions,
 observed deltas, and evidence so the project can later project unknown web
 environments into SafeSym-compatible PDDL.
 
-The preferred generic Web-KOBE path is now to reuse the original
-`ai-web-explorer` exploration engine and attach a Web-KOBE collector as a
-sidecar. The original explorer remains responsible for choosing and executing
-browser actions; the collector observes the same states/transitions and records
-the richer planning-facing graph needed by SafeSym.
+The current near-term generic Web-KOBE path is DOM-first grounded exploration.
+The explorer extracts real interactable elements from the page, converts them
+into grounded browser actions, executes those actions with Playwright locators,
+and records before/after state deltas in a Web-KOBE graph. LLM/VLM assistance
+can be added later for action selection and semantic labeling, but selectors
+should come from DOM-grounded candidates rather than being invented by the
+model.
 
-```bash
-explore example.com -i 10 --web-kobe-output outputs/example_web_kobe.json
+The intended architecture boundary is now:
+
+```text
+Reusable automation backend
+  -> operates the browser
+  -> click / fill / scroll / wait / navigate
+  -> locator resolution and browser/session handling
+
+Web-KOBE / SafeSym explorer
+  -> owns exploration strategy
+  -> records before/after observations
+  -> infers state deltas
+  -> builds Web-KOBE / capability graphs
+  -> later exports SafeSym/PDDL-facing artifacts
 ```
 
-This route is the main place to improve generic unknown-site exploration because
-it preserves the original project's existing ReAct/browser exploration
-capability while replacing the information collection layer with Web-KOBE-style
-state/action/evidence capture.
+This project should not become a from-scratch general-purpose web agent. It
+should reuse existing browser automation capability where possible while keeping
+the exploration goal, data model, state recording, graph construction, and
+SafeSym bridge under project control. The current Playwright-backed adapter is
+the first concrete automation backend. Later work can wrap useful operation
+pieces from the original `ai-web-explorer` agent, or other web-agent tools, as
+additional backends without replacing the Web-KOBE/SafeSym exploration layer.
+
+```bash
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-explore \
+  --url http://127.0.0.1:8000/index.html \
+  --output outputs/local_shop_web_kobe.json \
+  --app-name local_shop \
+  --page-id local_shop \
+  --steps 3
+```
+
+This route is the main place to improve generic unknown-site operation because
+it directly tests whether the agent can correctly operate real page controls and
+record the resulting state changes. The older original-explorer sidecar path is
+still useful as a comparison point, but it is less stable because it asks the
+LLM to generate both action descriptions and selectors.
+
+The preferred first smoke target is a local no-login fixture page:
+
+```bash
+python -m http.server 8000 --directory tests/fixtures/local_shop
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-explore \
+  --url http://127.0.0.1:8000/index.html \
+  --output outputs/local_shop_web_kobe.json \
+  --app-name local_shop \
+  --page-id local_shop \
+  --steps 3
+```
+
+This fixture avoids login, cookie banners, and third-party website changes. It
+contains repeated product-card entities and simple cart state changes, so it is
+the fastest way to check whether DOM candidate extraction, Playwright execution,
+state observation, and Web-KOBE graph recording are connected correctly.
+SauceDemo should be used after this local smoke path works, because SauceDemo
+requires a login state before `/inventory.html` is accessible.
+
+The fixture currently verifies click-based grounded operation. The expected
+recorded deltas include cart count changes and cart panel visibility changes.
+Complex state recovery, deduplication, and full PDDL projection are intentionally
+deferred until this operation-and-recording loop is reliable.
+
+The fixture uses `[data-state]` attributes for lightweight generic state
+observation. The Web-KOBE observer currently records each `[data-state]`
+element's text value and visibility, which lets the collector infer deltas such
+as `cart_panel_visible: false -> true` without a site-specific adapter.
 
 A separate Playwright-backed Web-KOBE exploration command is also available for
 controlled local or fixture pages:
