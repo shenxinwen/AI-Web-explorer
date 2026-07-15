@@ -121,6 +121,18 @@ implementation is `WebKobePlaywrightAdapter`, which wraps Playwright browser
 operation while leaving exploration policy and graph recording in
 `WebKobeExplorer`.
 
+A small reusable operation executor is also available at:
+
+```text
+src/ai_web_explorer/safesym_bridge/legacy_action_executor.py
+```
+
+`LegacyActionExecutor` reuses the original project's basic operation pattern:
+scroll a grounded locator into view, then perform click/fill/select. It is not a
+ReAct loop, does not call an LLM, and does not own exploration policy. Its role
+is to make old-operation reuse explicit before a future `AiWebExplorerBackend`
+is designed.
+
 ```bash
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-explore \
   --url http://127.0.0.1:8000/index.html \
