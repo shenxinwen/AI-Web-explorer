@@ -62,10 +62,10 @@ src/ai_web_explorer/grounded_web/
 ```
 
 That package is the stable boundary for DOM-grounded web operation, state
-recording, graph construction, and simple no-LLM baseline agents. During the
-migration it reuses implementation modules that still live under
-`safesym_bridge`, but new code should depend on `grounded_web` rather than
-reaching into SafeSym-specific modules directly.
+recording, graph construction, and simple no-LLM baseline agents.
+`safesym_bridge` consumes these graph/data structures and keeps compatibility
+shims for older imports, but generic exploration code should depend on
+`grounded_web` directly.
 
 The SauceDemo graph/PDDL route remains important as the SafeSym end-to-end
 regression path:
@@ -171,7 +171,7 @@ is designed.
 The explicit no-LLM baseline agent facade lives in:
 
 ```text
-src/ai_web_explorer/safesym_bridge/simple_grounded_web_agent.py
+src/ai_web_explorer/grounded_web/simple_agent.py
 ```
 
 `SimpleGroundedWebAgent` composes `AutomationBackend`, `WebKobeExplorer`, and
@@ -314,7 +314,7 @@ stable facts. `WebObservation` is the bridge between those two levels.
 Relevant file:
 
 ```text
-src/ai_web_explorer/safesym_bridge/models.py
+src/ai_web_explorer/grounded_web/models.py
 ```
 
 It stores:
@@ -334,7 +334,7 @@ The DOM observer finds visible and enabled interactive elements.
 Relevant file:
 
 ```text
-src/ai_web_explorer/safesym_bridge/dom_observer.py
+src/ai_web_explorer/grounded_web/dom_observer.py
 ```
 
 It scans elements such as:
@@ -596,7 +596,7 @@ src/ai_web_explorer/safesym_bridge/web_observation.py
 src/ai_web_explorer/safesym_bridge/state_observer.py
   SauceDemo-specific state fact extraction.
 
-src/ai_web_explorer/safesym_bridge/dom_observer.py
+src/ai_web_explorer/grounded_web/dom_observer.py
   DOM interactable candidate extraction.
 
 src/ai_web_explorer/safesym_bridge/semantic_resolver.py

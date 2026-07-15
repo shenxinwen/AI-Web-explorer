@@ -4,7 +4,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any
 
-from ai_web_explorer.safesym_bridge.capability_graph import (
+from ai_web_explorer.grounded_web.capability_graph import (
     AvailabilityCondition,
     Capability,
     CapabilityTransition,
@@ -19,7 +19,7 @@ from ai_web_explorer.safesym_bridge.capability_graph import (
     StateIndicator,
     WebCapabilityGraph,
 )
-from ai_web_explorer.safesym_bridge.models import ObservedTransition, StateSnapshot
+from ai_web_explorer.grounded_web.models import ObservedTransition, StateSnapshot
 from ai_web_explorer.safesym_bridge.observed_graph import _url_pattern_for
 
 PAGE_TYPES = {
@@ -314,8 +314,7 @@ def _capability_for_transition(transition: ObservedTransition) -> Capability:
         grounding=rule.grounding,
         availability=rule.availability,
         expected_delta=[
-            StateChangeHint(delta.field, delta.before, delta.after)
-            for delta in deltas
+            StateChangeHint(delta.field, delta.before, delta.after) for delta in deltas
         ],
         evidence=[
             _evidence(
@@ -378,7 +377,9 @@ def _capabilities_for_state(
     capabilities: OrderedDict[str, Capability] = OrderedDict(observed)
     for rule in CAPABILITY_RULES.values():
         if _availability_matches(rule, snapshot):
-            capabilities.setdefault(rule.capability_id, _capability_from_rule(rule, snapshot))
+            capabilities.setdefault(
+                rule.capability_id, _capability_from_rule(rule, snapshot)
+            )
     return list(capabilities.values())
 
 

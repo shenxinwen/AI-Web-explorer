@@ -4,7 +4,7 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any
 
-from ai_web_explorer.safesym_bridge.models import ObservedTransition, StateSnapshot
+from ai_web_explorer.grounded_web.models import ObservedTransition, StateSnapshot
 
 SCHEMA_VERSION = "web-observed-graph-v1"
 PAGE_DESCRIPTIONS = {

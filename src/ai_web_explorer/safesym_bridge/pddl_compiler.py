@@ -5,7 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from ai_web_explorer.safesym_bridge.observed_graph import WebObservedEdge, WebObservedGraph
+from ai_web_explorer.safesym_bridge.observed_graph import (
+    WebObservedEdge,
+    WebObservedGraph,
+)
 
 BOOLEAN_STATE_PREDICATES = {
     "is_logged_in": "state_is_logged_in",

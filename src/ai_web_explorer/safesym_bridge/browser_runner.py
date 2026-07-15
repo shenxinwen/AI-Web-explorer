@@ -1,28 +1,28 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from pathlib import Path
 
 from ai_web_explorer.safesym_bridge.capability_builder import build_capability_graph
-from ai_web_explorer.safesym_bridge.capability_graph import Evidence, PageFrame
+from ai_web_explorer.grounded_web.capability_graph import Evidence, PageFrame
 from ai_web_explorer.safesym_bridge.graph_explorer import GraphExplorer
-from ai_web_explorer.safesym_bridge.models import ObservedTransition
+from ai_web_explorer.grounded_web.models import ObservedTransition
 from ai_web_explorer.safesym_bridge.observed_graph import build_observed_graph
 from ai_web_explorer.safesym_bridge.pddl_compiler import write_pddl_artifacts
 from ai_web_explorer.safesym_bridge.saucedemo_adapter import SauceDemoAdapter
-from ai_web_explorer.safesym_bridge.web_kobe_graph import (
+from ai_web_explorer.grounded_web.graph import (
     ReferenceObservation,
     WebKobeGraph,
     WebKobeNode,
 )
-from ai_web_explorer.safesym_bridge.web_kobe_controller import (
+from ai_web_explorer.grounded_web.controller import (
     WebKobeExplorationController,
 )
-from ai_web_explorer.safesym_bridge.web_kobe_explorer import WebKobeExplorer
+from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
 from ai_web_explorer.safesym_bridge.web_kobe_playwright_adapter import (
     WebKobePlaywrightAdapter,
 )
-from ai_web_explorer.safesym_bridge.web_semantic_assistor import (
+from ai_web_explorer.grounded_web.semantic_assistor import (
     DeterministicSemanticAssistor,
 )
 

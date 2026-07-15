@@ -4,8 +4,8 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
-from ai_web_explorer.safesym_bridge.capability_graph import Evidence
-from ai_web_explorer.safesym_bridge.state_signature import (
+from ai_web_explorer.grounded_web.capability_graph import Evidence
+from ai_web_explorer.grounded_web.state_signature import (
     coerce_state_value,
     slug_identifier,
 )

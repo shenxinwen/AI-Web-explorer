@@ -102,7 +102,7 @@ async def test_list_interactables_uses_dom_candidates(monkeypatch):
         ]
 
     monkeypatch.setattr(
-        "ai_web_explorer.safesym_bridge.web_kobe_playwright_adapter.extract_dom_interactables",
+        "ai_web_explorer.grounded_web.playwright_backend.extract_dom_interactables",
         fake_extract_dom_interactables,
     )
     adapter = WebKobePlaywrightAdapter(FakePage(), page_id="fixture_shop")
@@ -179,22 +179,31 @@ async def test_execute_click_fill_and_select_actions():
     assert await adapter.execute(BrowserAction("click", "#add", "add")) is True
     assert page.action_locator.clicked is True
 
-    assert await adapter.execute(
-        BrowserAction("fill", "#name", "fill_name", {"value": "Alice"})
-    ) is True
+    assert (
+        await adapter.execute(
+            BrowserAction("fill", "#name", "fill_name", {"value": "Alice"})
+        )
+        is True
+    )
     assert page.action_locator.filled == ["Alice"]
 
-    assert await adapter.execute(
-        BrowserAction("select", "#sort", "select_sort", {"value": "price"})
-    ) is True
+    assert (
+        await adapter.execute(
+            BrowserAction("select", "#sort", "select_sort", {"value": "price"})
+        )
+        is True
+    )
     assert page.action_locator.selected == ["price"]
 
-    assert await adapter.execute(
-        BrowserAction(
-            "fill_then_click",
-            "#submit",
-            "submit_form",
-            {"#username": "standard_user", "#password": "secret_sauce"},
+    assert (
+        await adapter.execute(
+            BrowserAction(
+                "fill_then_click",
+                "#submit",
+                "submit_form",
+                {"#username": "standard_user", "#password": "secret_sauce"},
+            )
         )
-    ) is True
+        is True
+    )
     assert page.action_locator.filled[-2:] == ["standard_user", "secret_sauce"]

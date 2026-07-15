@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 """Fixed SauceDemo MVP transitions used by graph/PDDL regression paths."""
 
@@ -6,7 +6,7 @@ from ai_web_explorer.safesym_bridge.effect_inferer import (
     infer_effects,
     preconditions_for,
 )
-from ai_web_explorer.safesym_bridge.models import (
+from ai_web_explorer.grounded_web.models import (
     ObservedAction,
     ObservedTransition,
     StateSnapshot,
@@ -128,7 +128,9 @@ def build_saucedemo_mvp_transitions() -> list[ObservedTransition]:
     )
 
     return [
-        _transition(login_ready, inventory_empty, "Click the Login button", "login_submit"),
+        _transition(
+            login_ready, inventory_empty, "Click the Login button", "login_submit"
+        ),
         _transition(
             inventory_empty,
             inventory_with_cart,

@@ -3,10 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from ai_web_explorer.safesym_bridge.dom_observer import (
+from ai_web_explorer.grounded_web.dom_observer import (
     DomInteractableCandidate,
 )
-from ai_web_explorer.safesym_bridge.models import StateSnapshot
+from ai_web_explorer.grounded_web.models import StateSnapshot
 
 
 @dataclass(frozen=True)
@@ -28,5 +28,4 @@ class SemanticActionResolver(Protocol):
         self,
         state: StateSnapshot,
         candidates: list[DomInteractableCandidate],
-    ) -> ResolutionBatch:
-        ...
+    ) -> ResolutionBatch: ...

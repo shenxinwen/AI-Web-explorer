@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 """Generic graph-guided exploration loop for browser-observed planning data."""
 
@@ -11,7 +11,7 @@ from ai_web_explorer.safesym_bridge.effect_inferer import (
     infer_effects,
     preconditions_for,
 )
-from ai_web_explorer.safesym_bridge.models import (
+from ai_web_explorer.grounded_web.models import (
     ObservedAction,
     ObservedTransition,
     StateSnapshot,
@@ -39,21 +39,17 @@ class ExplorationAdapter(Protocol):
     app_name: str
     start_node: str
 
-    async def observe_state(self, page) -> StateSnapshot:
-        ...
+    async def observe_state(self, page) -> StateSnapshot: ...
 
     async def list_actions(
         self,
         page,
         state: StateSnapshot,
-    ) -> list[ExplorationAction]:
-        ...
+    ) -> list[ExplorationAction]: ...
 
-    async def execute_action(self, page, action: ExplorationAction) -> None:
-        ...
+    async def execute_action(self, page, action: ExplorationAction) -> None: ...
 
-    def is_goal_state(self, state: StateSnapshot) -> bool:
-        ...
+    def is_goal_state(self, state: StateSnapshot) -> bool: ...
 
 
 @dataclass(frozen=True)
@@ -78,7 +74,10 @@ def choose_next_unexplored_action(
             if edge.source == current_state.page_id
         }
     for action in actions:
-        if action.page_id == current_state.page_id and action.semantic_id not in explored:
+        if (
+            action.page_id == current_state.page_id
+            and action.semantic_id not in explored
+        ):
             return action
     return None
 
@@ -105,13 +104,15 @@ class GraphExplorer:
         self.adapter = adapter
         self.max_steps = max_steps
 
-    async def run(self, page, *, output_path: Path | None = None) -> ExplorationRunResult:
+    async def run(
+        self, page, *, output_path: Path | None = None
+    ) -> ExplorationRunResult:
         transitions: list[ObservedTransition] = []
         failed_actions: list[str] = []
         interactables: dict[str, dict[str, InteractableElement]] = {}
         graph: WebObservedGraph | None = None
 
-        # 记录当前状态
+        # Observe current state.
         current_state = await self.adapter.observe_state(page)
         stop_reason = "max_steps_reached"
 
@@ -125,23 +126,22 @@ class GraphExplorer:
                 ),
             )
 
-            # 到达目标状态
+            # Stop when the target state is reached.
             if self.adapter.is_goal_state(current_state):
                 stop_reason = "goal_reached"
                 break
 
             actions = await self.adapter.list_actions(page, current_state)
             page_elements = interactables.setdefault(current_state.page_id, {})
-            
-            # 迭代候选动作
+
+            # Record candidates as unexplored by default.
             for candidate in actions:
-                # 初始状态为未探索
                 page_elements.setdefault(
                     candidate.semantic_id,
                     _element_for_action(candidate, explored=False),
                 )
 
-            # 选择下一个未探索的动作，selected是ExplorationAction类型
+            # Choose the next unexplored action.
             selected = choose_next_unexplored_action(current_state, actions, graph)
             if selected is None:
                 stop_reason = "no_unexplored_actions"
@@ -154,10 +154,10 @@ class GraphExplorer:
                 failed_actions.append(selected.raw_description)
                 continue
 
-            # 记录执行后状态
+            # Observe state after execution.
             after = await self.adapter.observe_state(page)
 
-            # 修改该动作状态为已探索
+            # Mark the executed action as explored.
             interactables[before.page_id][selected.semantic_id] = _element_for_action(
                 selected,
                 explored=True,
@@ -176,7 +176,7 @@ class GraphExplorer:
                 )
             )
 
-            # 更新当前状态，到下一个节点，重新观察
+            # 鏇存柊褰撳墠鐘舵€侊紝鍒颁笅涓€涓妭鐐癸紝閲嶆柊瑙傚療
             current_state = after
             graph = build_observed_graph(
                 app=self.adapter.app_name,

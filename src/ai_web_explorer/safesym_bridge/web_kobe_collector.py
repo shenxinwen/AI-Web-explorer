@@ -2,24 +2,24 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ai_web_explorer.safesym_bridge.capability_graph import (
+from ai_web_explorer.grounded_web.capability_graph import (
     Evidence,
     ExecutionTrace,
     ObservedDelta,
     PageFrame,
 )
-from ai_web_explorer.safesym_bridge.web_kobe_graph import (
+from ai_web_explorer.grounded_web.graph import (
     BrowserAction,
     ReferenceObservation,
     WebKobeEdge,
     WebKobeGraph,
     WebKobeNode,
 )
-from ai_web_explorer.safesym_bridge.state_signature import (
+from ai_web_explorer.grounded_web.state_signature import (
     schema_delta,
     slug_identifier,
 )
-from ai_web_explorer.safesym_bridge.web_kobe_graph_manager import (
+from ai_web_explorer.grounded_web.graph_manager import (
     WebKobeGraphManager,
 )
 from ai_web_explorer.safesym_bridge.web_kobe_observer import WebKobeObservation

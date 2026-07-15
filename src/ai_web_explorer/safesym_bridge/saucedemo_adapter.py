@@ -1,13 +1,13 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 """SauceDemo-specific adapter for the generic graph exploration loop."""
 
 from ai_web_explorer.safesym_bridge.action_catalog import DomainActionCatalog
-from ai_web_explorer.safesym_bridge.dom_observer import (
+from ai_web_explorer.grounded_web.dom_observer import (
     extract_dom_interactables,
 )
 from ai_web_explorer.safesym_bridge.graph_explorer import ExplorationAction
-from ai_web_explorer.safesym_bridge.models import StateSnapshot
+from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.safesym_bridge.saucedemo_catalog import (
     create_saucedemo_action_catalog,
 )

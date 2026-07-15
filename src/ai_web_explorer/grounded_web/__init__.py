@@ -1,9 +1,10 @@
 """Public API for the DOM-grounded web exploration mainline.
 
 This package is the stable import surface for the current generic exploration
-direction. The underlying implementation still lives in `safesym_bridge`
-during the migration, but new code should import grounded exploration building
-blocks from here.
+direction. It owns browser-grounded observation, action extraction, execution
+adapters, exploration control, and the Web-KOBE exploration graph. SafeSym/PDDL
+conversion should consume this package's graph outputs from `safesym_bridge`,
+not the other way around.
 """
 
 from ai_web_explorer.grounded_web.automation_backend import AutomationBackend

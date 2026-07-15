@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ai_web_explorer.safesym_bridge.web_kobe_graph import WebKobeGraph
+from ai_web_explorer.grounded_web.graph import WebKobeGraph
 
 
 @dataclass(frozen=True)

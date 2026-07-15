@@ -1,8 +1,8 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from urllib.parse import urlparse
 
-from ai_web_explorer.safesym_bridge.models import StateSnapshot
+from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.safesym_bridge.web_observation import (
     ObservedFact,
     ObservationEvidence,
@@ -194,7 +194,7 @@ async def observe_saucedemo_web_observation(page) -> WebObservation:
     page_id = page_id_from_url(page.url)
     title = await page.title()
     cart_badge_text = await _inner_text_or_empty(page, ".shopping_cart_badge")
-    
+
     values = {
         "username_value": await _input_value_or_empty(page, "#user-name"),
         "password_value": await _input_value_or_empty(page, "#password"),
@@ -204,7 +204,7 @@ async def observe_saucedemo_web_observation(page) -> WebObservation:
         "checkout_last_name": await _input_value_or_empty(page, "#last-name"),
         "checkout_postal_code": await _input_value_or_empty(page, "#postal-code"),
     }
-    
+
     return web_observation_from_saucedemo_values(
         page_id=page_id,
         url=page.url,

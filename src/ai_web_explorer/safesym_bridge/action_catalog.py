@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ai_web_explorer.safesym_bridge.dom_observer import (
+from ai_web_explorer.grounded_web.dom_observer import (
     DomInteractableCandidate,
 )
 from ai_web_explorer.safesym_bridge.graph_explorer import ExplorationAction
-from ai_web_explorer.safesym_bridge.models import StateSnapshot
+from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.safesym_bridge.semantic_resolver import SemanticMatch
 
 
@@ -48,8 +48,7 @@ class DomainActionCatalog:
             definition = self._definitions.get(key)
             if definition is None:
                 raise ValueError(
-                    "Missing action definition: "
-                    f"{state.page_id}/{match.semantic_id}"
+                    "Missing action definition: " f"{state.page_id}/{match.semantic_id}"
                 )
             built.append(
                 (

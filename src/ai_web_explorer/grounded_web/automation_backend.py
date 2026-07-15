@@ -1,6 +1,28 @@
-from ai_web_explorer.safesym_bridge.automation_backend import (
-    AutomationBackend,
-    InteractableRecord,
-)
+from __future__ import annotations
 
-__all__ = ["AutomationBackend", "InteractableRecord"]
+from typing import Any, Protocol, runtime_checkable
+
+from ai_web_explorer.grounded_web.graph import BrowserAction
+from ai_web_explorer.grounded_web.models import StateSnapshot
+
+InteractableRecord = dict[str, Any]
+
+
+@runtime_checkable
+class AutomationBackend(Protocol):
+    """Browser operation boundary used by Web-KOBE exploration.
+
+    Implementations operate the browser. They do not own exploration strategy,
+    graph recording, state-delta inference, or SafeSym/PDDL projection.
+    """
+
+    app_name: str
+
+    async def observe_state(self) -> StateSnapshot: ...
+
+    async def list_interactables(
+        self,
+        state: StateSnapshot,
+    ) -> list[InteractableRecord]: ...
+
+    async def execute(self, action: BrowserAction) -> bool: ...

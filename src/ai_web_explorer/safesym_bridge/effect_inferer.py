@@ -1,8 +1,8 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
-from ai_web_explorer.safesym_bridge.models import Condition, Effect, StateSnapshot
+from ai_web_explorer.grounded_web.models import Condition, Effect, StateSnapshot
 
-# 预设的一些前提条件
+# Default preconditions for the SauceDemo regression path.
 _PRECONDITIONS: dict[str, list[Condition]] = {
     "login_submit": [
         {"path": "username_filled", "cond": "eq", "value": True},

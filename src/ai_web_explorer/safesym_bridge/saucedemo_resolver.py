@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from ai_web_explorer.safesym_bridge.dom_observer import (
+from ai_web_explorer.grounded_web.dom_observer import (
     DomInteractableCandidate,
 )
-from ai_web_explorer.safesym_bridge.models import StateSnapshot
+from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.safesym_bridge.semantic_resolver import (
     ResolutionBatch,
     SemanticMatch,
@@ -62,9 +62,7 @@ def _matches(
         or candidate.locator == f'[data-test="{data_test}"]'
     ):
         return True
-    return bool(
-        class_name and class_name in metadata.get("class", "").split()
-    )
+    return bool(class_name and class_name in metadata.get("class", "").split())
 
 
 class SauceDemoRuleResolver:
