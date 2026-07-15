@@ -18,6 +18,17 @@ def _slug(value: str) -> str:
     return cleaned or "page"
 
 
+def _coerce_state_value(value: str) -> Any:
+    stripped = value.strip()
+    if stripped.lower() == "true":
+        return True
+    if stripped.lower() == "false":
+        return False
+    if re.fullmatch(r"-?\d+", stripped):
+        return int(stripped)
+    return stripped
+
+
 async def _optional_inner_text(page, selector: str) -> str | None:
     locator = page.locator(selector)
     if await locator.count() == 0:
@@ -31,7 +42,41 @@ def _first_input_value(values: dict[str, str]) -> str | None:
     return next(iter(values.values()))
 
 
+async def _data_state_signature(page) -> dict[str, Any]:
+    signature: dict[str, Any] = {}
+    try:
+        locator = page.locator("[data-state]")
+        count = await locator.count()
+    except Exception:
+        return signature
+
+    for index in range(count):
+        element = locator.nth(index)
+        try:
+            raw_key = await element.get_attribute("data-state")
+        except Exception:
+            raw_key = None
+        if not raw_key:
+            continue
+        key = _slug(raw_key)
+        text = (await element.inner_text()).strip()
+        if text:
+            signature[key] = _coerce_state_value(text)
+        try:
+            signature[f"{key}_visible"] = await element.is_visible()
+        except Exception:
+            pass
+    return signature
+
+
 class WebKobePlaywrightAdapter:
+    """Playwright-backed AutomationBackend for Web-KOBE exploration.
+
+    This class operates the browser and exposes grounded page observations and
+    actions. Exploration strategy, graph recording, and SafeSym/PDDL projection
+    stay in the Web-KOBE layer.
+    """
+
     def __init__(
         self,
         page,
@@ -57,16 +102,19 @@ class WebKobePlaywrightAdapter:
 
         title = await self.page.title()
         page_id = self.page_id or _slug(title or self.page.url)
-        signature: dict[str, Any] = {}
+        signature: dict[str, Any] = await _data_state_signature(self.page)
 
-        cart_text = await _optional_inner_text(self.page, '[data-state="cart-count"]')
-        if cart_text is None:
-            cart_text = await _optional_inner_text(self.page, "#cart-count")
-        if cart_text is not None:
-            match = re.search(r"-?\d+", cart_text)
-            cart_count = int(match.group(0)) if match else 0
-            signature["cart_count"] = cart_count
-            signature["cart_nonempty"] = cart_count > 0
+        if "cart_count" not in signature:
+            cart_text = await _optional_inner_text(self.page, '[data-state="cart-count"]')
+            if cart_text is None:
+                cart_text = await _optional_inner_text(self.page, "#cart-count")
+            if cart_text is not None:
+                match = re.search(r"-?\d+", cart_text)
+                cart_count = int(match.group(0)) if match else 0
+                signature["cart_count"] = cart_count
+
+        if "cart_count" in signature:
+            signature["cart_nonempty"] = int(signature["cart_count"]) > 0
 
         return StateSnapshot(
             page_id=page_id,
