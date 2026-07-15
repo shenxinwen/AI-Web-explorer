@@ -88,6 +88,24 @@ async def test_controller_runs_until_max_steps():
 
 
 @pytest.mark.anyio
+async def test_controller_treats_action_loop_success_status_as_success():
+    explorer = FakeExplorer(
+        [
+            _graph(completed=1, edge_status="succeeded_with_observed_change"),
+            _graph(completed=2, edge_status="succeeded"),
+        ]
+    )
+    controller = WebKobeExplorationController(explorer)
+
+    result = await controller.run(max_steps=2)
+
+    assert explorer.calls == 2
+    assert result.summary.steps_completed == 2
+    assert result.summary.stop_reason == "max_steps"
+    assert result.summary.failed_edge_count == 0
+
+
+@pytest.mark.anyio
 async def test_controller_stops_when_no_action_is_available():
     explorer = FakeExplorer(
         [

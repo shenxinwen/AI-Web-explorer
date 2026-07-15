@@ -79,7 +79,7 @@ async def test_simple_grounded_agent_executes_one_grounded_action_and_records_de
     assert backend.executed[0].locator == "#add"
     assert result.summary.steps_completed == 1
     assert result.summary.stop_reason == "max_steps"
-    assert result.graph.edges[0].status == "verified"
+    assert result.graph.edges[0].status == "succeeded_with_observed_change"
     assert result.graph.edges[0].schema_delta == {
         "cart_count": {"before": 0, "after": 1}
     }

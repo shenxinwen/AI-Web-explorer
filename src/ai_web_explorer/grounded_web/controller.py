@@ -5,6 +5,14 @@ from typing import Protocol
 
 from ai_web_explorer.grounded_web.graph import WebKobeGraph
 
+SUCCESS_EDGE_STATUSES = frozenset(
+    {
+        "verified",
+        "succeeded",
+        "succeeded_with_observed_change",
+    }
+)
+
 
 class StepExplorer(Protocol):
     async def explore_one_step(self) -> WebKobeGraph: ...
@@ -27,7 +35,7 @@ class WebKobeExplorationResult:
 
 
 def _failed_edge_count(graph: WebKobeGraph) -> int:
-    return sum(1 for edge in graph.edges if edge.status != "verified")
+    return sum(1 for edge in graph.edges if edge.status not in SUCCESS_EDGE_STATUSES)
 
 
 def _summary(
@@ -69,7 +77,7 @@ class WebKobeExplorationController:
                 break
 
             previous_completed = graph.total_steps_completed
-            if graph.edges and graph.edges[-1].status != "verified":
+            if graph.edges and graph.edges[-1].status not in SUCCESS_EDGE_STATUSES:
                 stop_reason = "failed_action"
                 break
 
