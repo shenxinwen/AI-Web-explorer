@@ -28,13 +28,24 @@ def _boolean_predicates(graph: WebKobeGraph) -> list[str]:
     return sorted(names)
 
 
-def _initial_predicates(graph: WebKobeGraph) -> list[str]:
-    start = next(node for node in graph.nodes if node.node_id == graph.start_node_id)
+def _nodes_by_id(graph: WebKobeGraph) -> dict[str, object]:
+    return {node.node_id: node for node in graph.nodes}
+
+
+def _require_node(graph: WebKobeGraph, node_id: str, *, role: str):
+    nodes = _nodes_by_id(graph)
+    if node_id not in nodes:
+        raise ValueError(f"Unknown {role} node: {node_id}")
+    return nodes[node_id]
+
+
+def _initial_predicates(graph: WebKobeGraph, *, start_node_id: str) -> list[str]:
+    start = _require_node(graph, start_node_id, role="start")
     predicates = [_at(start.node_id)]
     for key, value in start.last_state_snapshot.items():
         if isinstance(value, bool) and value is True:
             predicates.append(_predicate(key))
-    return sorted(predicates)
+    return sorted(set(predicates))
 
 
 def _action_name(raw: str) -> str:
@@ -60,7 +71,12 @@ def compile_web_kobe_graph_to_pddl(
     graph: WebKobeGraph,
     *,
     goal_node_id: str,
+    start_node_id: str | None = None,
 ) -> WebKobePddlArtifacts:
+    selected_start_node_id = start_node_id or graph.start_node_id
+    _require_node(graph, selected_start_node_id, role="start")
+    _require_node(graph, goal_node_id, role="goal")
+
     predicates = sorted(
         set([_at(node.node_id) for node in graph.nodes] + _boolean_predicates(graph))
     )
@@ -93,7 +109,13 @@ def compile_web_kobe_graph_to_pddl(
             ")",
         ]
     )
-    init_text = " ".join(f"({name})" for name in _initial_predicates(graph))
+    init_text = " ".join(
+        f"({name})"
+        for name in _initial_predicates(
+            graph,
+            start_node_id=selected_start_node_id,
+        )
+    )
     problem = "\n".join(
         [
             "(define (problem web-kobe-problem)",

@@ -1,3 +1,5 @@
+import pytest
+
 from ai_web_explorer.grounded_web.capability_graph import (
     Evidence,
     ExecutionTrace,
@@ -90,3 +92,37 @@ def test_compile_web_kobe_graph_to_pddl_uses_page_and_boolean_delta():
     assert "(:goal (and (at_listing_nonempty)))" in artifacts.problem
     assert "(not (at_listing_empty))" in artifacts.domain
     assert "(at_listing_nonempty)" in artifacts.domain
+
+
+def test_compile_web_kobe_graph_to_pddl_uses_custom_start_node():
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="landing",
+        total_steps_completed=0,
+        nodes=[
+            _node("landing", "landing", {"cart_nonempty": False}),
+            _node("cart", "cart", {"cart_nonempty": True}),
+        ],
+        edges=[],
+    )
+
+    artifacts = compile_web_kobe_graph_to_pddl(
+        graph,
+        start_node_id="cart",
+        goal_node_id="cart",
+    )
+
+    assert "(:init (at_cart) (cart_nonempty))" in artifacts.problem
+
+
+def test_compile_web_kobe_graph_to_pddl_rejects_missing_goal_node():
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="landing",
+        total_steps_completed=0,
+        nodes=[_node("landing", "landing", {})],
+        edges=[],
+    )
+
+    with pytest.raises(ValueError, match="Unknown goal node"):
+        compile_web_kobe_graph_to_pddl(graph, goal_node_id="missing")
