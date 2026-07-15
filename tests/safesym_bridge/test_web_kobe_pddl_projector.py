@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from ai_web_explorer.grounded_web.capability_graph import (
@@ -15,6 +17,7 @@ from ai_web_explorer.grounded_web.graph import (
 )
 from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
     compile_web_kobe_graph_to_pddl,
+    load_web_kobe_graph_json,
 )
 
 
@@ -228,3 +231,54 @@ def test_compile_web_kobe_graph_to_pddl_excludes_non_projectable_edges():
     assert "(:action go_failed" not in artifacts.domain
     assert "(:action go_no_change" not in artifacts.domain
     assert "(:action go_unexpected" not in artifacts.domain
+
+
+def test_load_web_kobe_graph_json_reads_to_dict_output(tmp_path):
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="empty",
+        total_steps_completed=1,
+        nodes=[
+            _node("empty", "listing", {"cart_count": 0}),
+            _node("filled", "listing", {"cart_count": 1}),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="empty",
+                target_node_id="filled",
+                instruction="add to cart",
+                action=BrowserAction("click", "button.add", "add_to_cart"),
+                capability=None,
+                target_observation="filled cart",
+                observed_delta=[
+                    ObservedDelta(
+                        "cart_count",
+                        0,
+                        1,
+                        "state_indicator_change",
+                        evidence=[Evidence(source="unit_test")],
+                    )
+                ],
+                schema_delta={"cart_count": {"before": 0, "after": 1}},
+                execution_trace=ExecutionTrace(
+                    "click",
+                    "button.add",
+                    "add",
+                    {},
+                    "empty",
+                    "filled",
+                    True,
+                ),
+            )
+        ],
+    )
+    path = tmp_path / "web_kobe_graph.json"
+    path.write_text(json.dumps(graph.to_dict()), encoding="utf-8")
+
+    loaded = load_web_kobe_graph_json(path)
+
+    assert loaded.app == "example"
+    assert loaded.start_node_id == "empty"
+    assert loaded.nodes[1].last_state_snapshot == {"cart_count": 1}
+    assert loaded.edges[0].action.semantic_id == "add_to_cart"
+    assert loaded.edges[0].execution_trace.success is True

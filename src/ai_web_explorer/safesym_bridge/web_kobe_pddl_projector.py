@@ -1,8 +1,23 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
-from ai_web_explorer.grounded_web.graph import WebKobeGraph
+from ai_web_explorer.grounded_web.capability_graph import (
+    Evidence,
+    ExecutionTrace,
+    ObservedDelta,
+    PageFrame,
+)
+from ai_web_explorer.grounded_web.graph import (
+    BrowserAction,
+    ReferenceObservation,
+    WebKobeEdge,
+    WebKobeGraph,
+    WebKobeNode,
+)
 
 PROJECTABLE_EDGE_STATUSES = {
     "verified",
@@ -15,6 +30,138 @@ PROJECTABLE_EDGE_STATUSES = {
 class WebKobePddlArtifacts:
     domain: str
     problem: str
+
+
+def _evidence_from_dict(data: dict[str, Any]) -> Evidence:
+    return Evidence(
+        source=str(data.get("source", "json")),
+        selector=data.get("selector"),
+        text_sample=data.get("text_sample"),
+        url=data.get("url"),
+        confidence=float(data.get("confidence", 1.0)),
+    )
+
+
+def _page_frame_from_dict(data: dict[str, Any]) -> PageFrame:
+    return PageFrame(
+        page_id=str(data.get("page_id", "")),
+        page_type=str(data.get("page_type", "")),
+        url=str(data.get("url", "")),
+        url_pattern=str(data.get("url_pattern", data.get("url", ""))),
+        title=str(data.get("title", "")),
+        heading=data.get("heading"),
+        signature_hints=dict(data.get("signature_hints", {})),
+        evidence=[_evidence_from_dict(item) for item in data.get("evidence", [])],
+    )
+
+
+def _reference_observation_from_dict(
+    data: dict[str, Any] | None,
+) -> ReferenceObservation | None:
+    if data is None:
+        return None
+    return ReferenceObservation(
+        url=str(data.get("url", "")),
+        title=str(data.get("title", "")),
+        screenshot_path=data.get("screenshot_path"),
+        dom_summary=data.get("dom_summary"),
+        accessibility_summary=data.get("accessibility_summary"),
+        observation_hash=data.get("observation_hash"),
+    )
+
+
+def _node_from_dict(data: dict[str, Any]) -> WebKobeNode:
+    return WebKobeNode(
+        node_id=str(data["node_id"]),
+        page_description=str(data.get("page_description", "")),
+        page_frame=_page_frame_from_dict(dict(data.get("page_frame", {}))),
+        state_schema={
+            key: list(values)
+            for key, values in dict(data.get("state_schema", {})).items()
+        },
+        last_state_snapshot=dict(data.get("last_state_snapshot", {})),
+        reference_observation=_reference_observation_from_dict(
+            data.get("reference_observation")
+        ),
+        visit_count=int(data.get("visit_count", 0)),
+        status=str(data.get("status", "verified")),
+        evidence=[_evidence_from_dict(item) for item in data.get("evidence", [])],
+    )
+
+
+def _action_from_dict(data: dict[str, Any]) -> BrowserAction:
+    return BrowserAction(
+        action_kind=str(data.get("action_kind", "")),
+        locator=data.get("locator"),
+        semantic_id=str(data["semantic_id"]),
+        input_values=dict(data.get("input_values", {})),
+        description=data.get("description"),
+    )
+
+
+def _observed_delta_from_dict(data: dict[str, Any]) -> ObservedDelta:
+    return ObservedDelta(
+        field=str(data["field"]),
+        before=data.get("before"),
+        after=data.get("after"),
+        delta_type=str(data.get("delta_type", "unknown")),
+        confidence=float(data.get("confidence", 1.0)),
+        evidence=[_evidence_from_dict(item) for item in data.get("evidence", [])],
+    )
+
+
+def _execution_trace_from_dict(data: dict[str, Any]) -> ExecutionTrace:
+    return ExecutionTrace(
+        concrete_action_kind=str(data.get("concrete_action_kind", "")),
+        concrete_locator=data.get("concrete_locator"),
+        concrete_target_sample=data.get("concrete_target_sample"),
+        input_values_used=dict(data.get("input_values_used", {})),
+        before_observation_id=str(data.get("before_observation_id", "")),
+        after_observation_id=str(data.get("after_observation_id", "")),
+        success=bool(data.get("success", False)),
+        error=data.get("error"),
+    )
+
+
+def _edge_from_dict(data: dict[str, Any]) -> WebKobeEdge:
+    return WebKobeEdge(
+        source_node_id=str(data["source_node_id"]),
+        target_node_id=str(data["target_node_id"]),
+        instruction=str(data.get("instruction", "")),
+        action=_action_from_dict(dict(data["action"])),
+        capability=None,
+        target_observation=str(data.get("target_observation", "")),
+        observed_delta=[
+            _observed_delta_from_dict(item)
+            for item in data.get("observed_delta", [])
+        ],
+        schema_delta=data.get("schema_delta"),
+        execution_trace=_execution_trace_from_dict(
+            dict(data.get("execution_trace", {}))
+        ),
+        visit_count=int(data.get("visit_count", 1)),
+        status=str(data.get("status", "verified")),
+        evidence=[_evidence_from_dict(item) for item in data.get("evidence", [])],
+    )
+
+
+def _web_kobe_graph_from_dict(data: dict[str, Any]) -> WebKobeGraph:
+    meta = dict(data.get("meta", {}))
+    return WebKobeGraph(
+        app=str(meta.get("app", "web")),
+        start_node_id=str(meta["start_node_id"]),
+        total_steps_completed=int(meta.get("total_steps_completed", 0)),
+        nodes=[_node_from_dict(item) for item in data.get("nodes", [])],
+        edges=[_edge_from_dict(item) for item in data.get("edges", [])],
+        meta=meta,
+    )
+
+
+def load_web_kobe_graph_json(path: Path) -> WebKobeGraph:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError("WebKobeGraph JSON root must be an object")
+    return _web_kobe_graph_from_dict(data)
 
 
 def _predicate(name: str) -> str:
