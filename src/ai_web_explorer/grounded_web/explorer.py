@@ -11,6 +11,10 @@ from ai_web_explorer.grounded_web.capability_graph import (
 )
 from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.grounded_web.state_signature import schema_delta
+from ai_web_explorer.grounded_web.typed_delta import (
+    observed_deltas_from_typed,
+    typed_deltas_from_facts,
+)
 from ai_web_explorer.grounded_web.graph import (
     BrowserAction,
     ReferenceObservation,
@@ -42,6 +46,21 @@ def _observed_delta(
     return deltas
 
 
+def _observed_delta_from_adapter(
+    adapter: AutomationBackend,
+    *,
+    before_facts,
+    after_facts,
+    before_signature: dict[str, Any],
+    after_signature: dict[str, Any],
+    url: str,
+) -> list[ObservedDelta]:
+    if before_facts is not None and after_facts is not None:
+        typed = typed_deltas_from_facts(before_facts, after_facts)
+        return observed_deltas_from_typed(typed, url=url)
+    return _observed_delta(before_signature, after_signature, url)
+
+
 def _node_from_draft(draft) -> WebKobeNode:
     return WebKobeNode(
         node_id=draft.node_id,
@@ -71,6 +90,7 @@ class WebKobeExplorer:
 
     async def explore_one_step(self) -> WebKobeGraph:
         before = await self.adapter.observe_state()
+        before_facts = getattr(self.adapter, "last_state_facts", None)
         before_interactables = await self.adapter.list_interactables(before)
         before_draft = self.semantic_assistor.describe_state(
             snapshot=before,
@@ -85,6 +105,7 @@ class WebKobeExplorer:
 
         success = await self.adapter.execute(selected)
         after = await self.adapter.observe_state()
+        after_facts = getattr(self.adapter, "last_state_facts", None)
         after_interactables = await self.adapter.list_interactables(after)
         after_draft = self.semantic_assistor.describe_state(
             snapshot=after,
@@ -103,10 +124,13 @@ class WebKobeExplorer:
             action=selected,
             capability=None,
             target_observation=after_draft.page_description,
-            observed_delta=_observed_delta(
-                before_draft.last_state_snapshot,
-                after_draft.last_state_snapshot,
-                after.url,
+            observed_delta=_observed_delta_from_adapter(
+                self.adapter,
+                before_facts=before_facts,
+                after_facts=after_facts,
+                before_signature=before_draft.last_state_snapshot,
+                after_signature=after_draft.last_state_snapshot,
+                url=after.url,
             ),
             schema_delta=delta,
             execution_trace=ExecutionTrace(

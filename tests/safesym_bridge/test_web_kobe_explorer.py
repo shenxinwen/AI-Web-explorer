@@ -6,6 +6,8 @@ from ai_web_explorer.grounded_web.graph import BrowserAction
 from ai_web_explorer.grounded_web.semantic_assistor import (
     DeterministicSemanticAssistor,
 )
+from ai_web_explorer.grounded_web.state_facts import AbstractStateFact
+from ai_web_explorer.grounded_web.structure import StructureEvidence
 
 
 @pytest.fixture
@@ -214,3 +216,58 @@ async def test_explore_one_step_records_backend_execution_error():
     edge = graph.edges[0]
     assert edge.status == "failed_execution"
     assert edge.execution_trace.error == "locator_not_visible"
+
+
+class TypedFactsAdapter(FakeAdapter):
+    def __init__(self):
+        super().__init__()
+        self.fact_sets = [
+            [
+                AbstractStateFact(
+                    fact_id="result_count",
+                    fact_type="numeric",
+                    value=0,
+                    identity_role="identity",
+                    source_ref="result-count",
+                    evidence=[
+                        StructureEvidence(
+                            source="dom_indicator",
+                            selector="#result-count",
+                        )
+                    ],
+                )
+            ],
+            [
+                AbstractStateFact(
+                    fact_id="result_count",
+                    fact_type="numeric",
+                    value=3,
+                    identity_role="identity",
+                    source_ref="result-count",
+                    evidence=[
+                        StructureEvidence(
+                            source="dom_indicator",
+                            selector="#result-count",
+                        )
+                    ],
+                )
+            ],
+        ]
+
+    async def observe_state(self):
+        self.last_state_facts = self.fact_sets[min(len(self.executed), 1)]
+        return await super().observe_state()
+
+
+@pytest.mark.anyio
+async def test_explore_one_step_uses_typed_delta_when_adapter_exposes_facts():
+    explorer = WebKobeExplorer(
+        adapter=TypedFactsAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+    )
+
+    graph = await explorer.explore_one_step()
+
+    assert graph.edges[0].observed_delta[0].field == "result_count"
+    assert graph.edges[0].observed_delta[0].delta_type == "numeric_changed"
+    assert graph.edges[0].observed_delta[0].evidence[0].selector == "#result-count"
