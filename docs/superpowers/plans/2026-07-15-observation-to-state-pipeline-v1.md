@@ -459,6 +459,23 @@ def test_page_structure_from_snapshot_extracts_generic_indicators_and_groups():
                     "metadata": {"data-action": "add-to-cart"},
                 }
             ],
+            "forms": [
+                {
+                    "id": "search-form",
+                    "locator": "#search-form",
+                    "fields": [
+                        {
+                            "id": "query",
+                            "kind": "input",
+                            "name": "Query",
+                            "locator": "#query",
+                            "value": "sample",
+                            "metadata": {"type": "search"},
+                        }
+                    ],
+                    "submit_controls": ["run-search"],
+                }
+            ],
             "indicators": [
                 {
                     "id": "cart-count",
@@ -485,6 +502,7 @@ def test_page_structure_from_snapshot_extracts_generic_indicators_and_groups():
     assert observation.indicators[0].key_hint == "cart-count"
     assert observation.repeated_groups[0].count == 2
     assert observation.controls[0].metadata == {"data-action": "add-to-cart"}
+    assert observation.forms[0].fields[0].value == "sample"
 ```
 
 - [ ] **Step 2: Run conversion test and verify it fails**
@@ -579,7 +597,30 @@ def page_structure_from_snapshot(
         FormObservation(
             id=slug_identifier(_clean(item.get("id")), fallback=f"form_{index}"),
             locator=_clean(item.get("locator")) or None,
-            fields=[],
+            fields=[
+                FormFieldObservation(
+                    id=slug_identifier(
+                        _clean(field.get("id")),
+                        fallback=f"field_{field_index}",
+                    ),
+                    kind=_clean(field.get("kind")) or "input",
+                    name=_clean(field.get("name")),
+                    locator=_clean(field.get("locator")),
+                    value=coerce_state_value(_clean(field.get("value"))),
+                    metadata=dict(field.get("metadata") or {}),
+                    evidence=_evidence(
+                        source="dom_form_field",
+                        selector=_clean(field.get("locator")) or None,
+                        text_sample=field.get("name"),
+                        url=page.url,
+                    ),
+                )
+                for field_index, field in enumerate(
+                    item.get("fields") or [],
+                    start=1,
+                )
+                if _clean(field.get("locator"))
+            ],
             submit_controls=list(item.get("submit_controls") or []),
             evidence=_evidence(
                 source="dom_form",
@@ -820,7 +861,27 @@ async def observe_page_structure(page, *, page_id: str | None = None) -> PageStr
                 count: elements.length,
                 representative_locator: `[data-entity-type="${key}"]`,
             }));
-            return {regions, controls, forms: [], indicators, repeated_groups};
+            const forms = Array.from(body.querySelectorAll("form")).map((form, index) => ({
+                id: form.id || `form-${index + 1}`,
+                locator: locatorFor(form),
+                fields: Array.from(form.querySelectorAll("input,textarea,select")).map((field, fieldIndex) => ({
+                    id: field.id || field.name || `field-${fieldIndex + 1}`,
+                    kind: field.tagName.toLowerCase(),
+                    name: field.getAttribute("aria-label") || field.getAttribute("placeholder") || field.name || field.id || "",
+                    locator: locatorFor(field),
+                    value: field.type === "checkbox" || field.type === "radio" ? field.checked : field.value || "",
+                    metadata: Object.fromEntries(Object.entries({
+                        type: field.getAttribute("type") || "",
+                        name: field.name || "",
+                        placeholder: field.getAttribute("placeholder") || "",
+                        "aria-label": field.getAttribute("aria-label") || "",
+                    }).filter(([, value]) => value)),
+                })),
+                submit_controls: Array.from(form.querySelectorAll("button,input[type='submit']")).map(control =>
+                    control.getAttribute("data-action") || control.id || control.name || textOf(control)
+                ).filter(value => value),
+            }));
+            return {regions, controls, forms, indicators, repeated_groups};
         }"""
     )
     return page_structure_from_snapshot(resolved_page, snapshot)
