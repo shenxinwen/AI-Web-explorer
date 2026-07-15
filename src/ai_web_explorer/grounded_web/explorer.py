@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ai_web_explorer.grounded_web.action_ranker import select_unexplored_action
 from ai_web_explorer.grounded_web.automation_backend import AutomationBackend
 from ai_web_explorer.grounded_web.capability_graph import (
     Evidence,
@@ -57,23 +58,6 @@ def _node_from_draft(draft) -> WebKobeNode:
     )
 
 
-def _first_unexplored_action(
-    interactables: list[dict[str, Any]],
-) -> BrowserAction | None:
-    for item in interactables:
-        if item.get("explored"):
-            continue
-        semantic_id = str(item.get("semantic_id") or "unknown_action")
-        return BrowserAction(
-            action_kind=str(item.get("action_kind") or "click"),
-            locator=item.get("locator"),
-            semantic_id=semantic_id,
-            input_values=dict(item.get("input_values") or {}),
-            description=item.get("description"),
-        )
-    return None
-
-
 class WebKobeExplorer:
     def __init__(
         self,
@@ -95,7 +79,7 @@ class WebKobeExplorer:
         source_id = self.manager.identify_or_add_node(_node_from_draft(before_draft))
         source_interactables = self.manager.interactables_for_node(source_id)
 
-        selected = _first_unexplored_action(source_interactables)
+        selected = select_unexplored_action(source_interactables)
         if selected is None:
             return self.manager.to_graph(start_node_id=source_id)
 
