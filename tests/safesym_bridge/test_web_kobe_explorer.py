@@ -271,3 +271,28 @@ async def test_explore_one_step_uses_typed_delta_when_adapter_exposes_facts():
     assert graph.edges[0].observed_delta[0].field == "result_count"
     assert graph.edges[0].observed_delta[0].delta_type == "numeric_changed"
     assert graph.edges[0].observed_delta[0].evidence[0].selector == "#result-count"
+
+
+class NoChangeAdapter(FakeAdapter):
+    async def observe_state(self):
+        return StateSnapshot(
+            page_id="listing",
+            url="https://example.test/listing",
+            title="Listing",
+            signature={"cart_nonempty": False},
+        )
+
+
+@pytest.mark.anyio
+async def test_explore_one_step_marks_success_without_delta_as_no_observed_change():
+    explorer = WebKobeExplorer(
+        adapter=NoChangeAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+    )
+
+    graph = await explorer.explore_one_step()
+
+    edge = graph.edges[0]
+    assert edge.status == "no_observed_change"
+    assert edge.execution_trace.success is True
+    assert edge.observed_delta == []

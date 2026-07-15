@@ -1,22 +1,15 @@
 from __future__ import annotations
 
-from typing import Any
-
+from ai_web_explorer.grounded_web.action_intent import ActionIntent
+from ai_web_explorer.grounded_web.action_loop import execute_action_intent
 from ai_web_explorer.grounded_web.action_ranker import select_unexplored_action
 from ai_web_explorer.grounded_web.automation_backend import AutomationBackend
 from ai_web_explorer.grounded_web.capability_graph import (
     Evidence,
     ExecutionTrace,
-    ObservedDelta,
 )
-from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.grounded_web.state_signature import schema_delta
-from ai_web_explorer.grounded_web.typed_delta import (
-    observed_deltas_from_typed,
-    typed_deltas_from_facts,
-)
 from ai_web_explorer.grounded_web.graph import (
-    BrowserAction,
     ReferenceObservation,
     WebKobeEdge,
     WebKobeGraph,
@@ -24,41 +17,6 @@ from ai_web_explorer.grounded_web.graph import (
 )
 from ai_web_explorer.grounded_web.graph_manager import WebKobeGraphManager
 from ai_web_explorer.grounded_web.semantic_assistor import SemanticAssistor
-
-
-def _observed_delta(
-    before: dict[str, Any],
-    after: dict[str, Any],
-    url: str,
-) -> list[ObservedDelta]:
-    evidence = [Evidence(source="web_kobe_transition_diff", url=url)]
-    deltas: list[ObservedDelta] = []
-    for key, value in (schema_delta(before, after) or {}).items():
-        deltas.append(
-            ObservedDelta(
-                field=key,
-                before=value["before"],
-                after=value["after"],
-                delta_type="state_indicator_change",
-                evidence=evidence,
-            )
-        )
-    return deltas
-
-
-def _observed_delta_from_adapter(
-    adapter: AutomationBackend,
-    *,
-    before_facts,
-    after_facts,
-    before_signature: dict[str, Any],
-    after_signature: dict[str, Any],
-    url: str,
-) -> list[ObservedDelta]:
-    if before_facts is not None and after_facts is not None:
-        typed = typed_deltas_from_facts(before_facts, after_facts)
-        return observed_deltas_from_typed(typed, url=url)
-    return _observed_delta(before_signature, after_signature, url)
 
 
 def _node_from_draft(draft) -> WebKobeNode:
@@ -90,7 +48,6 @@ class WebKobeExplorer:
 
     async def explore_one_step(self) -> WebKobeGraph:
         before = await self.adapter.observe_state()
-        before_facts = getattr(self.adapter, "last_state_facts", None)
         before_interactables = await self.adapter.list_interactables(before)
         before_draft = self.semantic_assistor.describe_state(
             snapshot=before,
@@ -103,9 +60,21 @@ class WebKobeExplorer:
         if selected is None:
             return self.manager.to_graph(start_node_id=source_id)
 
-        success = await self.adapter.execute(selected)
-        after = await self.adapter.observe_state()
-        after_facts = getattr(self.adapter, "last_state_facts", None)
+        result = await execute_action_intent(
+            self.adapter,
+            ActionIntent(
+                action_kind=selected.action_kind,
+                target_semantic_id=selected.semantic_id,
+                target_description=selected.description,
+                input_values=dict(selected.input_values),
+                expectation=None,
+                source="rule_based",
+            ),
+            before=before,
+            available_actions=source_interactables,
+        )
+        concrete_action = result.action or selected
+        after = result.after or before
         after_interactables = await self.adapter.list_interactables(after)
         after_draft = self.semantic_assistor.describe_state(
             snapshot=after,
@@ -120,41 +89,23 @@ class WebKobeExplorer:
         edge = WebKobeEdge(
             source_node_id=source_id,
             target_node_id=target_id,
-            instruction=selected.description or selected.semantic_id,
-            action=selected,
+            instruction=concrete_action.description or concrete_action.semantic_id,
+            action=concrete_action,
             capability=None,
             target_observation=after_draft.page_description,
-            observed_delta=_observed_delta_from_adapter(
-                self.adapter,
-                before_facts=before_facts,
-                after_facts=after_facts,
-                before_signature=before_draft.last_state_snapshot,
-                after_signature=after_draft.last_state_snapshot,
-                url=after.url,
-            ),
+            observed_delta=result.observed_delta,
             schema_delta=delta,
             execution_trace=ExecutionTrace(
-                concrete_action_kind=selected.action_kind,
-                concrete_locator=selected.locator,
-                concrete_target_sample=selected.semantic_id,
-                input_values_used=dict(selected.input_values),
+                concrete_action_kind=concrete_action.action_kind,
+                concrete_locator=concrete_action.locator,
+                concrete_target_sample=concrete_action.semantic_id,
+                input_values_used=dict(concrete_action.input_values),
                 before_observation_id=source_id,
                 after_observation_id=target_id,
-                success=success,
-                error=(
-                    None
-                    if success
-                    else str(
-                        getattr(
-                            self.adapter,
-                            "last_execution_error",
-                            "adapter execution returned false",
-                        )
-                        or "adapter execution returned false"
-                    )
-                ),
+                success=result.execution_success,
+                error=result.execution_error,
             ),
-            status="verified" if success else "failed_execution",
+            status=result.outcome.status,
             evidence=[Evidence(source="web_kobe_explorer", url=before.url)],
         )
         self.manager.add_edge(edge)
