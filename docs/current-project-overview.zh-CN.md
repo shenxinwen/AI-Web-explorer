@@ -50,7 +50,9 @@ docs/current-project-overview.md
 ```text
 当前通用主线：
   DOM-grounded Web-KOBE exploration
-  -> AutomationBackend
+  -> 页面结构观察
+  -> 状态事实和 typed delta
+  -> ActionIntent / ActionExecutionResult / OutcomeEvaluation
   -> WebKobeExplorer
   -> WebKobeGraph
   -> 后续投影到 SafeSym/PDDL
@@ -111,7 +113,7 @@ src/ai_web_explorer/grounded_web/
    最近一次桥接层测试结果：
 
    ```text
-   tests/safesym_bridge: 123 passed, 4 skipped
+   tests/safesym_bridge: 139 passed, 4 skipped
    ```
 
 ## Web-KOBE 风格探索主线
@@ -155,6 +157,20 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-explore \
 ```
 
 LLM/VLM 后续可以参与动作选择、语义标注和验证，但 selector 和基础事实应尽量来自 DOM-grounded candidates，而不是让模型凭空生成。
+
+当前 `grounded_web` 新增了动作闭环边界：
+
+```text
+ActionIntent
+-> BrowserAction
+-> Playwright 执行
+-> before/after state
+-> typed delta
+-> OutcomeEvaluation
+-> ActionExecutionResult
+```
+
+这个边界是正式接入 LLM 前的关键工程层。它会记录上层原本想做什么、最终选中了哪个具体 `BrowserAction`、Playwright 执行是否成功、观察到了哪些 typed state delta，以及结果是否符合预期。未来 LLM planner 应该输出 `ActionIntent`，由 `grounded_web` 负责解析、执行、观察和评估结果；LLM 不应该直接生成 selector，也不应该拥有浏览器执行细节。
 
 ## 当前自动化边界
 

@@ -38,7 +38,9 @@ one active generic mainline and two compatibility/regression routes:
 ```text
 active generic mainline:
   DOM-grounded Web-KOBE exploration
-  -> AutomationBackend
+  -> page structure observation
+  -> state facts and typed deltas
+  -> ActionIntent / ActionExecutionResult / OutcomeEvaluation
   -> WebKobeExplorer
   -> WebKobeGraph
   -> later SafeSym/PDDL projection
@@ -120,6 +122,13 @@ and records before/after state deltas in a Web-KOBE graph. LLM/VLM assistance
 can be added later for action selection and semantic labeling, but selectors
 should come from DOM-grounded candidates rather than being invented by the
 model.
+
+The grounded action loop is the current pre-LLM control boundary. It records
+what the upper layer intended to do, which concrete `BrowserAction` was
+selected, whether Playwright execution succeeded, which typed state deltas were
+observed, and whether the outcome matched the expectation. Future LLM planners
+should produce `ActionIntent` objects; they should not directly produce raw
+selectors or own browser execution.
 
 The intended architecture boundary is now:
 
