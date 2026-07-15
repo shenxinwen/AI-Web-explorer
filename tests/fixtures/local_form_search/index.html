@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Local Form Search</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 24px; }
+      .result-row { border: 1px solid #d9e2ec; margin: 8px 0; padding: 8px; }
+      [hidden] { display: none; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Local Form Search</h1>
+      <form id="search-form">
+        <label>
+          Query
+          <input id="query" name="query" type="search" placeholder="Search records">
+        </label>
+        <label>
+          Type
+          <select id="type-filter" name="type">
+            <option value="all">All</option>
+            <option value="open">Open</option>
+          </select>
+        </label>
+        <button data-action="run-search" type="button">Search</button>
+      </form>
+
+      <section role="status" data-state="status-panel">No search yet.</section>
+      <p>Results: <span data-state="result-count">0</span></p>
+      <section id="results" aria-label="Results"></section>
+    </main>
+
+    <script>
+      const query = document.querySelector("#query");
+      const statusPanel = document.querySelector("[data-state='status-panel']");
+      const resultCount = document.querySelector("[data-state='result-count']");
+      const results = document.querySelector("#results");
+
+      document.querySelector("[data-action='run-search']").addEventListener("click", () => {
+        const count = query.value.trim() ? 3 : 1;
+        statusPanel.textContent = `Search complete for ${query.value || "empty query"}.`;
+        resultCount.textContent = String(count);
+        results.innerHTML = "";
+        for (let index = 0; index < count; index += 1) {
+          const row = document.createElement("article");
+          row.className = "result-row";
+          row.setAttribute("data-entity-type", "result-row");
+          row.textContent = `Result ${index + 1}`;
+          results.appendChild(row);
+        }
+      });
+    </script>
+  </body>
+</html>

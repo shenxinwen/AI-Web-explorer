@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -10,53 +9,21 @@ from ai_web_explorer.grounded_web.action_extractor import (
 from ai_web_explorer.grounded_web.dom_observer import extract_dom_interactables
 from ai_web_explorer.grounded_web.graph import BrowserAction
 from ai_web_explorer.grounded_web.models import StateSnapshot
-from ai_web_explorer.grounded_web.state_signature import (
-    coerce_state_value,
-    slug_identifier,
+from ai_web_explorer.grounded_web.state_facts import (
+    facts_from_structure,
+    state_signature_from_facts,
 )
+from ai_web_explorer.grounded_web.state_signature import slug_identifier
+from ai_web_explorer.grounded_web.structure import observe_page_structure
 
 StateObserver = Callable[[Any], Awaitable[StateSnapshot]]
 ActionProvider = Callable[[StateSnapshot], list[BrowserAction | dict[str, Any]]]
-
-
-async def _optional_inner_text(page, selector: str) -> str | None:
-    locator = page.locator(selector)
-    if await locator.count() == 0:
-        return None
-    return (await locator.first.inner_text()).strip()
 
 
 def _first_input_value(values: dict[str, str]) -> str | None:
     if not values:
         return None
     return next(iter(values.values()))
-
-
-async def _data_state_signature(page) -> dict[str, Any]:
-    signature: dict[str, Any] = {}
-    try:
-        locator = page.locator("[data-state]")
-        count = await locator.count()
-    except Exception:
-        return signature
-
-    for index in range(count):
-        element = locator.nth(index)
-        try:
-            raw_key = await element.get_attribute("data-state")
-        except Exception:
-            raw_key = None
-        if not raw_key:
-            continue
-        key = slug_identifier(raw_key, fallback="state")
-        text = (await element.inner_text()).strip()
-        if text:
-            signature[key] = coerce_state_value(text)
-        try:
-            signature[f"{key}_visible"] = await element.is_visible()
-        except Exception:
-            pass
-    return signature
 
 
 class WebKobePlaywrightAdapter:
@@ -82,9 +49,13 @@ class WebKobePlaywrightAdapter:
         self.state_observer = state_observer
         self.action_provider = action_provider
         self.last_execution_error: str | None = None
+        self.last_structure_observation = None
+        self.last_state_facts = None
 
     async def observe_state(self) -> StateSnapshot:
         if self.state_observer is not None:
+            self.last_structure_observation = None
+            self.last_state_facts = None
             snapshot = await self.state_observer(self.page)
             if self.page_id is not None:
                 return StateSnapshot(
@@ -99,21 +70,11 @@ class WebKobePlaywrightAdapter:
         page_id = self.page_id or slug_identifier(
             title or self.page.url, fallback="page"
         )
-        signature: dict[str, Any] = await _data_state_signature(self.page)
-
-        if "cart_count" not in signature:
-            cart_text = await _optional_inner_text(
-                self.page, '[data-state="cart-count"]'
-            )
-            if cart_text is None:
-                cart_text = await _optional_inner_text(self.page, "#cart-count")
-            if cart_text is not None:
-                match = re.search(r"-?\d+", cart_text)
-                cart_count = int(match.group(0)) if match else 0
-                signature["cart_count"] = cart_count
-
-        if "cart_count" in signature:
-            signature["cart_nonempty"] = int(signature["cart_count"]) > 0
+        structure = await observe_page_structure(self.page, page_id=page_id)
+        facts = facts_from_structure(structure)
+        signature = state_signature_from_facts(facts)
+        self.last_structure_observation = structure
+        self.last_state_facts = facts
 
         return StateSnapshot(
             page_id=page_id,

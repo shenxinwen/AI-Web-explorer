@@ -71,6 +71,27 @@ class FakeActionLocator:
         self.selected.append(value)
 
 
+class FakeBodyLocator:
+    async def evaluate(self, script):
+        return {
+            "regions": [],
+            "controls": [],
+            "forms": [],
+            "indicators": [
+                {
+                    "id": "cart-count",
+                    "indicator_type": "numeric",
+                    "key_hint": "cart-count",
+                    "value": "1",
+                    "visible": True,
+                    "locator": '[data-state="cart-count"]',
+                    "text": "1",
+                }
+            ],
+            "repeated_groups": [],
+        }
+
+
 class FakePage:
     def __init__(self, action_locator=None):
         self.url = "https://example.test/shop"
@@ -82,6 +103,8 @@ class FakePage:
         return "Fixture Shop"
 
     def locator(self, selector):
+        if selector == "body":
+            return FakeBodyLocator()
         if selector == "[data-state]":
             return FakeTextLocator("", count_value=0)
         if selector == '[data-state="cart-count"]':
@@ -110,7 +133,54 @@ async def test_observe_state_reads_title_url_and_cart_count():
     assert snapshot.page_id == "fixture_shop"
     assert snapshot.url == "https://example.test/shop"
     assert snapshot.title == "Fixture Shop"
-    assert snapshot.signature == {"cart_count": 1, "cart_nonempty": True}
+    assert snapshot.signature == {
+        "url_path": "/shop",
+        "cart_count": 1,
+        "cart_count_visible": True,
+    }
+
+
+@pytest.mark.anyio
+async def test_observe_state_uses_generic_structure_pipeline(monkeypatch):
+    from ai_web_explorer.grounded_web.structure import (
+        IndicatorObservation,
+        PageInfo,
+        PageStructureObservation,
+        StructureEvidence,
+    )
+
+    async def fake_observe_page_structure(page, *, page_id=None):
+        evidence = [StructureEvidence(source="dom_indicator", selector="#count")]
+        return PageStructureObservation(
+            page=PageInfo(
+                url=page.url,
+                title="Fixture Shop",
+                page_id=page_id or "fixture_shop",
+            ),
+            indicators=[
+                IndicatorObservation(
+                    id="cart-count",
+                    indicator_type="numeric",
+                    key_hint="cart-count",
+                    value=1,
+                    visible=True,
+                    locator="#count",
+                    evidence=evidence,
+                )
+            ],
+        )
+
+    monkeypatch.setattr(
+        "ai_web_explorer.grounded_web.playwright_backend.observe_page_structure",
+        fake_observe_page_structure,
+    )
+    adapter = WebKobePlaywrightAdapter(FakePage(), page_id="fixture_shop")
+
+    snapshot = await adapter.observe_state()
+
+    assert snapshot.signature["cart_count"] == 1
+    assert adapter.last_structure_observation.page.page_id == "fixture_shop"
+    assert adapter.last_state_facts[0].fact_type == "navigation"
 
 
 @pytest.mark.anyio
