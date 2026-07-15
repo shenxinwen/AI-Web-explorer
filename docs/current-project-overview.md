@@ -130,6 +130,11 @@ observed, and whether the outcome matched the expectation. Future LLM planners
 should produce `ActionIntent` objects; they should not directly produce raw
 selectors or own browser execution.
 
+When an action executes successfully but produces no immediate delta, the loop
+now waits for a bounded observation window and polls state before returning
+`no_observed_change`. This is an observation policy, not an execution retry:
+the browser action is not repeated by default.
+
 The intended architecture boundary is now:
 
 ```text

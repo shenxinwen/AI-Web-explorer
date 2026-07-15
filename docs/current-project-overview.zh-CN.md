@@ -172,6 +172,8 @@ ActionIntent
 
 这个边界是正式接入 LLM 前的关键工程层。它会记录上层原本想做什么、最终选中了哪个具体 `BrowserAction`、Playwright 执行是否成功、观察到了哪些 typed state delta，以及结果是否符合预期。未来 LLM planner 应该输出 `ActionIntent`，由 `grounded_web` 负责解析、执行、观察和评估结果；LLM 不应该直接生成 selector，也不应该拥有浏览器执行细节。
 
+如果动作执行成功但第一次观察没有发现 delta，动作闭环会在有限时间窗口内继续轮询观察状态，然后才返回 `no_observed_change`。这是观察等待策略，不是动作重试；默认不会再次执行浏览器动作。
+
 ## 当前自动化边界
 
 我们希望复用现有 web agent 或浏览器自动化能力，但自己掌控探索目标和数据结构。
