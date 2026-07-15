@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any
 
+from ai_web_explorer.safesym_bridge.automation_backend import AutomationBackend
 from ai_web_explorer.safesym_bridge.capability_graph import (
     Evidence,
     ExecutionTrace,
@@ -17,22 +18,6 @@ from ai_web_explorer.safesym_bridge.web_kobe_graph import (
 )
 from ai_web_explorer.safesym_bridge.web_kobe_graph_manager import WebKobeGraphManager
 from ai_web_explorer.safesym_bridge.web_semantic_assistor import SemanticAssistor
-
-
-class WebKobeAdapter(Protocol):
-    app_name: str
-
-    async def observe_state(self) -> StateSnapshot:
-        ...
-
-    async def list_interactables(
-        self,
-        state: StateSnapshot,
-    ) -> list[dict[str, Any]]:
-        ...
-
-    async def execute(self, action: BrowserAction) -> bool:
-        ...
 
 
 def _schema_delta(
@@ -105,7 +90,7 @@ class WebKobeExplorer:
     def __init__(
         self,
         *,
-        adapter: WebKobeAdapter,
+        adapter: AutomationBackend,
         semantic_assistor: SemanticAssistor,
     ):
         self.adapter = adapter
@@ -166,5 +151,9 @@ class WebKobeExplorer:
             evidence=[Evidence(source="web_kobe_explorer", url=before.url)],
         )
         self.manager.add_edge(edge)
-        self.manager.mark_interactable_explored(source_id, selected.semantic_id)
+        self.manager.mark_interactable_explored(
+            source_id,
+            selected.semantic_id,
+            locator=selected.locator,
+        )
         return self.manager.to_graph(start_node_id=source_id)
