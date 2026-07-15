@@ -126,3 +126,53 @@ def test_compile_web_kobe_graph_to_pddl_rejects_missing_goal_node():
 
     with pytest.raises(ValueError, match="Unknown goal node"):
         compile_web_kobe_graph_to_pddl(graph, goal_node_id="missing")
+
+
+def test_compile_web_kobe_graph_to_pddl_projects_positive_numeric_facts():
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="empty",
+        total_steps_completed=1,
+        nodes=[
+            _node("empty", "listing", {"cart_count": 0}),
+            _node("filled", "listing", {"cart_count": 1}),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="empty",
+                target_node_id="filled",
+                instruction="add to cart",
+                action=BrowserAction("click", "button.add", "add_to_cart"),
+                capability=None,
+                target_observation="filled cart",
+                observed_delta=[
+                    ObservedDelta(
+                        "cart_count",
+                        0,
+                        1,
+                        "state_indicator_change",
+                        evidence=[Evidence(source="unit_test")],
+                    )
+                ],
+                schema_delta={"cart_count": {"before": 0, "after": 1}},
+                execution_trace=ExecutionTrace(
+                    "click",
+                    "button.add",
+                    "add",
+                    {},
+                    "empty",
+                    "filled",
+                    True,
+                ),
+            )
+        ],
+    )
+
+    artifacts = compile_web_kobe_graph_to_pddl(graph, goal_node_id="filled")
+
+    assert "(cart_count_positive)" in artifacts.domain
+    assert (
+        ":effect (and (not (at_empty)) (at_filled) (cart_count_positive))"
+        in artifacts.domain
+    )
+    assert "(cart_count_positive)" not in artifacts.problem

@@ -19,12 +19,33 @@ def _at(node_id: str) -> str:
     return f"at_{_predicate(node_id)}"
 
 
-def _boolean_predicates(graph: WebKobeGraph) -> list[str]:
+def _is_positive_number(value: object) -> bool:
+    return isinstance(value, int | float) and not isinstance(value, bool) and value > 0
+
+
+def _is_zero_or_negative_number(value: object) -> bool:
+    return isinstance(value, int | float) and not isinstance(value, bool) and value <= 0
+
+
+def _positive_predicate(name: str) -> str:
+    return f"{_predicate(name)}_positive"
+
+
+def _state_predicate_for_value(key: str, value: object) -> str | None:
+    if isinstance(value, bool):
+        return _predicate(key)
+    if _is_positive_number(value):
+        return _positive_predicate(key)
+    return None
+
+
+def _state_predicates(graph: WebKobeGraph) -> list[str]:
     names: set[str] = set()
     for node in graph.nodes:
         for key, value in node.last_state_snapshot.items():
-            if isinstance(value, bool):
-                names.add(_predicate(key))
+            predicate = _state_predicate_for_value(key, value)
+            if predicate is not None:
+                names.add(predicate)
     return sorted(names)
 
 
@@ -45,6 +66,8 @@ def _initial_predicates(graph: WebKobeGraph, *, start_node_id: str) -> list[str]
     for key, value in start.last_state_snapshot.items():
         if isinstance(value, bool) and value is True:
             predicates.append(_predicate(key))
+        elif _is_positive_number(value):
+            predicates.append(_positive_predicate(key))
     return sorted(set(predicates))
 
 
@@ -64,6 +87,14 @@ def _effects_for_edge(edge) -> list[str]:
                 effects.append(f"({pred})")
             else:
                 effects.append(f"(not ({pred}))")
+        elif _is_zero_or_negative_number(delta.before) and _is_positive_number(
+            delta.after
+        ):
+            effects.append(f"({_positive_predicate(delta.field)})")
+        elif _is_positive_number(delta.before) and _is_zero_or_negative_number(
+            delta.after
+        ):
+            effects.append(f"(not ({_positive_predicate(delta.field)}))")
     return effects
 
 
@@ -78,7 +109,7 @@ def compile_web_kobe_graph_to_pddl(
     _require_node(graph, goal_node_id, role="goal")
 
     predicates = sorted(
-        set([_at(node.node_id) for node in graph.nodes] + _boolean_predicates(graph))
+        set([_at(node.node_id) for node in graph.nodes] + _state_predicates(graph))
     )
     predicate_text = "\n".join(f"    ({name})" for name in predicates)
 
