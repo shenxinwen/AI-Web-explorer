@@ -65,11 +65,12 @@ def test_candidate_from_element_uses_data_test_without_id():
     assert candidate.metadata["data-test"] == "add-to-cart-sauce-labs-backpack"
 
 
-def test_candidate_from_element_uses_name_fallback():
+def test_candidate_from_element_uses_generated_candidate_id_fallback():
     candidate = candidate_from_element(
         3,
         {
             "tag": "a",
+            "candidate_id": "dom_003",
             "text": "Cart",
             "href": "/cart.html",
             "visible": True,
@@ -78,10 +79,28 @@ def test_candidate_from_element_uses_name_fallback():
     )
 
     assert candidate.kind == "link"
-    assert candidate.locator == 'text="Cart"'
-    assert candidate.locator_strategy == "text"
+    assert candidate.locator == '[data-web-kobe-id="dom_003"]'
+    assert candidate.locator_strategy == "generated-id"
     assert candidate.name == "Cart"
     assert candidate.metadata["href"] == "/cart.html"
+
+
+def test_candidate_from_element_preserves_select_option_values():
+    candidate = candidate_from_element(
+        4,
+        {
+            "tag": "select",
+            "id": "topic",
+            "text": "Topic",
+            "visible": True,
+            "enabled": True,
+            "option_values": ["", "alpha", "beta"],
+        },
+    )
+
+    assert candidate.kind == "select"
+    assert candidate.locator == "#topic"
+    assert candidate.metadata["option-values"] == "alpha,beta"
 
 
 class FakeLocator:

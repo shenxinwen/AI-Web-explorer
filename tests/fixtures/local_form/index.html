@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Local Fixture Form</title>
+    <style>
+      body {
+        color: #1f2933;
+        font-family: Arial, sans-serif;
+        margin: 32px auto;
+        max-width: 640px;
+      }
+
+      label,
+      select,
+      input,
+      button {
+        display: block;
+        margin-top: 12px;
+      }
+
+      button {
+        background: #155e75;
+        border: 0;
+        border-radius: 4px;
+        color: white;
+        cursor: pointer;
+        padding: 8px 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Local Fixture Form</h1>
+
+    <label for="name">Name</label>
+    <input id="name" placeholder="Name" type="text">
+
+    <label for="topic">Topic</label>
+    <select id="topic" aria-label="Topic">
+      <option value="">Choose a topic</option>
+      <option value="alpha">Alpha</option>
+      <option value="beta">Beta</option>
+    </select>
+
+    <button id="submit" type="button">Submit</button>
+
+    <section aria-live="polite">
+      <p>Name value: <span data-state="name-value">empty</span></p>
+      <p>Topic value: <span data-state="topic-value">empty</span></p>
+      <p>Submitted: <span data-state="submitted">false</span></p>
+    </section>
+
+    <script>
+      const nameInput = document.querySelector("#name");
+      const topicSelect = document.querySelector("#topic");
+      const submitButton = document.querySelector("#submit");
+      const nameState = document.querySelector("[data-state='name-value']");
+      const topicState = document.querySelector("[data-state='topic-value']");
+      const submittedState = document.querySelector("[data-state='submitted']");
+
+      nameInput.addEventListener("input", () => {
+        nameState.textContent = nameInput.value || "empty";
+      });
+
+      topicSelect.addEventListener("change", () => {
+        topicState.textContent = topicSelect.value || "empty";
+      });
+
+      submitButton.addEventListener("click", () => {
+        submittedState.textContent = "true";
+      });
+    </script>
+  </body>
+</html>

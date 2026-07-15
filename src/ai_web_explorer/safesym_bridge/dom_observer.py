@@ -73,12 +73,22 @@ def _metadata(element: dict[str, object]) -> dict[str, str]:
         "aria_label": "aria-label",
         "title": "title",
         "href": "href",
+        "candidate_id": "data-web-kobe-id",
     }
     data: dict[str, str] = {}
     for source, target in key_map.items():
         value = _clean(element.get(source))
         if value:
             data[target] = value
+    option_values = element.get("option_values")
+    if isinstance(option_values, list):
+        cleaned_options = [
+            _clean(option)
+            for option in option_values
+            if _clean(option)
+        ]
+        if cleaned_options:
+            data["option-values"] = ",".join(cleaned_options)
     return data
 
 
@@ -92,8 +102,9 @@ def _locator_for(element: dict[str, object], name: str) -> tuple[str, str]:
     aria_label = _clean(element.get("aria_label"))
     if aria_label:
         return f'[aria-label="{aria_label}"]', "aria-label"
-    if name:
-        return f'text="{name}"', "text"
+    candidate_id = _clean(element.get("candidate_id"))
+    if candidate_id:
+        return f'[data-web-kobe-id="{candidate_id}"]', "generated-id"
     tag = _clean(element.get("tag")) or "html"
     return tag.lower(), "css-fallback"
 
@@ -121,7 +132,9 @@ def candidate_from_element(
 
 async def extract_dom_interactables(page) -> list[DomInteractableCandidate]:
     elements = await page.locator(INTERACTABLE_SELECTOR).evaluate_all(
-        """elements => elements.map(element => {
+        """elements => elements.map((element, index) => {
+            const candidateId = `dom_${String(index + 1).padStart(3, "0")}`;
+            element.setAttribute("data-web-kobe-id", candidateId);
             const rect = element.getBoundingClientRect();
             const style = window.getComputedStyle(element);
             const tag = element.tagName.toLowerCase();
@@ -141,6 +154,10 @@ async def extract_dom_interactables(page) -> list[DomInteractableCandidate]:
                 placeholder: element.getAttribute("placeholder") || "",
                 title: element.getAttribute("title") || "",
                 href: element.getAttribute("href") || "",
+                candidate_id: candidateId,
+                option_values: Array.from(element.options || [])
+                    .map(option => option.value || "")
+                    .filter(value => value.trim()),
                 value: element.value || "",
                 text: (element.innerText || element.textContent || "").trim(),
                 visible: !!(rect.width && rect.height) &&
