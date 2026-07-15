@@ -4,11 +4,11 @@ import json
 import pytest
 
 from ai_web_explorer.safesym_bridge.browser_runner import run_web_kobe_exploration
-from ai_web_explorer.safesym_bridge.web_kobe_explorer import WebKobeExplorer
+from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
 from ai_web_explorer.safesym_bridge.web_kobe_playwright_adapter import (
     WebKobePlaywrightAdapter,
 )
-from ai_web_explorer.safesym_bridge.web_semantic_assistor import (
+from ai_web_explorer.grounded_web.semantic_assistor import (
     DeterministicSemanticAssistor,
 )
 

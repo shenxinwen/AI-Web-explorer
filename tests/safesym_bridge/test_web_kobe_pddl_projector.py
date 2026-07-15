@@ -1,10 +1,10 @@
-from ai_web_explorer.safesym_bridge.capability_graph import (
+from ai_web_explorer.grounded_web.capability_graph import (
     Evidence,
     ExecutionTrace,
     ObservedDelta,
     PageFrame,
 )
-from ai_web_explorer.safesym_bridge.web_kobe_graph import (
+from ai_web_explorer.grounded_web.graph import (
     BrowserAction,
     ReferenceObservation,
     WebKobeEdge,

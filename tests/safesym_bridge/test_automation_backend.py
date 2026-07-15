@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import get_origin
 
-from ai_web_explorer.safesym_bridge.automation_backend import (
+from ai_web_explorer.grounded_web.automation_backend import (
     AutomationBackend,
     InteractableRecord,
 )

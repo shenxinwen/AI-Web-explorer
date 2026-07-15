@@ -1,5 +1,5 @@
-from ai_web_explorer.safesym_bridge.models import StateSnapshot
-from ai_web_explorer.safesym_bridge.web_semantic_assistor import (
+from ai_web_explorer.grounded_web.models import StateSnapshot
+from ai_web_explorer.grounded_web.semantic_assistor import (
     DeterministicSemanticAssistor,
 )
 

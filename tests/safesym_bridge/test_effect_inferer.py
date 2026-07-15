@@ -2,7 +2,7 @@ from ai_web_explorer.safesym_bridge.effect_inferer import (
     infer_effects,
     preconditions_for,
 )
-from ai_web_explorer.safesym_bridge.models import StateSnapshot
+from ai_web_explorer.grounded_web.models import StateSnapshot
 
 
 def snapshot(page_id, signature):

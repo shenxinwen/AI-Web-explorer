@@ -1,4 +1,4 @@
-﻿from ai_web_explorer.safesym_bridge.models import StateSnapshot
+from ai_web_explorer.grounded_web.models import StateSnapshot
 
 
 def test_state_snapshot_stores_signature():

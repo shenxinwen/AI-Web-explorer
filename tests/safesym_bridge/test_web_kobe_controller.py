@@ -1,10 +1,10 @@
 import pytest
 
-from ai_web_explorer.safesym_bridge.capability_graph import ExecutionTrace
-from ai_web_explorer.safesym_bridge.web_kobe_controller import (
+from ai_web_explorer.grounded_web.capability_graph import ExecutionTrace
+from ai_web_explorer.grounded_web.controller import (
     WebKobeExplorationController,
 )
-from ai_web_explorer.safesym_bridge.web_kobe_graph import (
+from ai_web_explorer.grounded_web.graph import (
     BrowserAction,
     WebKobeEdge,
     WebKobeGraph,

@@ -1,6 +1,6 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
-from ai_web_explorer.safesym_bridge.dom_observer import DomInteractableCandidate
+from ai_web_explorer.grounded_web.dom_observer import DomInteractableCandidate
 from ai_web_explorer.safesym_bridge.web_observation import (
     ObservedFact,
     ObservationEvidence,

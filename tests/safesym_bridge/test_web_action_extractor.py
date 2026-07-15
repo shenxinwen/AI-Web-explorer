@@ -1,5 +1,5 @@
-from ai_web_explorer.safesym_bridge.dom_observer import DomInteractableCandidate
-from ai_web_explorer.safesym_bridge.web_action_extractor import (
+from ai_web_explorer.grounded_web.dom_observer import DomInteractableCandidate
+from ai_web_explorer.grounded_web.action_extractor import (
     browser_actions_from_candidates,
 )
 

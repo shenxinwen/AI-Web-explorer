@@ -9,7 +9,7 @@ from ai_web_explorer.safesym_bridge.graph_explorer import (
     GraphExplorer,
     choose_next_unexplored_action,
 )
-from ai_web_explorer.safesym_bridge.models import StateSnapshot
+from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.safesym_bridge.observed_graph import build_observed_graph
 from ai_web_explorer.safesym_bridge.task_spec import build_saucedemo_mvp_transitions
 

@@ -1,9 +1,9 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import pytest
 
-from ai_web_explorer.safesym_bridge.dom_observer import DomInteractableCandidate
-from ai_web_explorer.safesym_bridge.models import StateSnapshot
+from ai_web_explorer.grounded_web.dom_observer import DomInteractableCandidate
+from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.safesym_bridge.saucedemo_adapter import SauceDemoAdapter
 
 

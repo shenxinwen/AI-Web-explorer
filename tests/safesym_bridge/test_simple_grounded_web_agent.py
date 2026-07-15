@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from ai_web_explorer.safesym_bridge.models import StateSnapshot
-from ai_web_explorer.safesym_bridge.simple_grounded_web_agent import (
+from ai_web_explorer.grounded_web.models import StateSnapshot
+from ai_web_explorer.grounded_web.simple_agent import (
     SimpleGroundedWebAgent,
 )
-from ai_web_explorer.safesym_bridge.web_kobe_graph import BrowserAction
+from ai_web_explorer.grounded_web.graph import BrowserAction
 
 
 @pytest.fixture

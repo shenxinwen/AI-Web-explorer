@@ -2,14 +2,14 @@ from pathlib import Path
 
 import pytest
 
-from ai_web_explorer.safesym_bridge.web_kobe_controller import (
+from ai_web_explorer.grounded_web.controller import (
     WebKobeExplorationController,
 )
-from ai_web_explorer.safesym_bridge.web_kobe_explorer import WebKobeExplorer
+from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
 from ai_web_explorer.safesym_bridge.web_kobe_playwright_adapter import (
     WebKobePlaywrightAdapter,
 )
-from ai_web_explorer.safesym_bridge.web_semantic_assistor import (
+from ai_web_explorer.grounded_web.semantic_assistor import (
     DeterministicSemanticAssistor,
 )
 

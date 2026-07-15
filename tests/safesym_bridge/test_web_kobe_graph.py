@@ -1,4 +1,4 @@
-from ai_web_explorer.safesym_bridge.capability_graph import (
+from ai_web_explorer.grounded_web.capability_graph import (
     AvailabilityCondition,
     Capability,
     Evidence,
@@ -8,7 +8,7 @@ from ai_web_explorer.safesym_bridge.capability_graph import (
     PageFrame,
     StateIndicator,
 )
-from ai_web_explorer.safesym_bridge.web_kobe_graph import (
+from ai_web_explorer.grounded_web.graph import (
     ActionTarget,
     BrowserAction,
     PddlActionHint,

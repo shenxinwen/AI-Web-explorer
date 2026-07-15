@@ -1,4 +1,4 @@
-﻿import json
+import json
 import os
 
 import pytest
@@ -11,11 +11,11 @@ from ai_web_explorer.safesym_bridge.browser_runner import (
     write_observed_graph,
 )
 from ai_web_explorer.safesym_bridge.task_spec import build_saucedemo_mvp_transitions
-from ai_web_explorer.safesym_bridge.web_kobe_controller import (
+from ai_web_explorer.grounded_web.controller import (
     WebKobeExplorationResult,
     WebKobeExplorationSummary,
 )
-from ai_web_explorer.safesym_bridge.web_kobe_graph import WebKobeGraph
+from ai_web_explorer.grounded_web.graph import WebKobeGraph
 
 
 @pytest.fixture

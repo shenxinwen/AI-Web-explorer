@@ -1,4 +1,4 @@
-from ai_web_explorer.safesym_bridge.capability_graph import (
+from ai_web_explorer.grounded_web.capability_graph import (
     AvailabilityCondition,
     Capability,
     CapabilityTransition,

@@ -1,4 +1,4 @@
-﻿import json
+import json
 
 from ai_web_explorer.safesym_bridge import cli
 from ai_web_explorer.safesym_bridge.cli import main
@@ -126,7 +126,7 @@ def test_main_explore_capability_graph_subcommand_runs_explorer(tmp_path, monkey
 def test_main_web_kobe_graph_subcommand_writes_graph(monkeypatch, tmp_path):
     output = tmp_path / "web_kobe_graph.json"
 
-    from ai_web_explorer.safesym_bridge.web_kobe_graph import WebKobeGraph
+    from ai_web_explorer.grounded_web.graph import WebKobeGraph
 
     def fake_build_debug_web_kobe_graph():
         return WebKobeGraph(
@@ -150,7 +150,7 @@ def test_main_web_kobe_pddl_subcommand_writes_domain_and_problem(
 ):
     output = tmp_path / "web_kobe_pddl"
 
-    from ai_web_explorer.safesym_bridge.web_kobe_graph import WebKobeGraph
+    from ai_web_explorer.grounded_web.graph import WebKobeGraph
 
     def fake_build_debug_web_kobe_graph():
         return WebKobeGraph(

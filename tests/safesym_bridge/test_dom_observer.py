@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from ai_web_explorer.safesym_bridge.dom_observer import (
+from ai_web_explorer.grounded_web.dom_observer import (
     DomInteractableCandidate,
     candidate_from_element,
     extract_dom_interactables,

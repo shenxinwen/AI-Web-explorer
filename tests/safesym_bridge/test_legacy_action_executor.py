@@ -3,7 +3,7 @@ from __future__ import annotations
 from ai_web_explorer.safesym_bridge.legacy_action_executor import (
     LegacyActionExecutor,
 )
-from ai_web_explorer.safesym_bridge.web_kobe_graph import BrowserAction
+from ai_web_explorer.grounded_web.graph import BrowserAction
 
 
 class FakeLocator:

@@ -6,8 +6,8 @@ from ai_web_explorer.safesym_bridge.action_catalog import (
     ActionDefinition,
     DomainActionCatalog,
 )
-from ai_web_explorer.safesym_bridge.dom_observer import DomInteractableCandidate
-from ai_web_explorer.safesym_bridge.models import StateSnapshot
+from ai_web_explorer.grounded_web.dom_observer import DomInteractableCandidate
+from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.safesym_bridge.semantic_resolver import SemanticMatch
 
 

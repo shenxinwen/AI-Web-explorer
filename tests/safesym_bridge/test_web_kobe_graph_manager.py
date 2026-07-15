@@ -1,9 +1,9 @@
-from ai_web_explorer.safesym_bridge.capability_graph import Evidence, PageFrame
-from ai_web_explorer.safesym_bridge.web_kobe_graph import (
+from ai_web_explorer.grounded_web.capability_graph import Evidence, PageFrame
+from ai_web_explorer.grounded_web.graph import (
     ReferenceObservation,
     WebKobeNode,
 )
-from ai_web_explorer.safesym_bridge.web_kobe_graph_manager import WebKobeGraphManager
+from ai_web_explorer.grounded_web.graph_manager import WebKobeGraphManager
 
 
 def _node(node_id: str, values: dict, interactables=None) -> WebKobeNode:

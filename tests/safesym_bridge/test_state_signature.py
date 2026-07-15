@@ -1,4 +1,4 @@
-from ai_web_explorer.safesym_bridge.state_signature import (
+from ai_web_explorer.grounded_web.state_signature import (
     coerce_state_value,
     schema_delta,
     slug_identifier,

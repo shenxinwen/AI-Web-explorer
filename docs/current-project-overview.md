@@ -63,9 +63,9 @@ src/ai_web_explorer/grounded_web/
 
 That package is the stable boundary for DOM-grounded web operation, state
 recording, graph construction, and simple no-LLM baseline agents.
-`safesym_bridge` consumes these graph/data structures and keeps compatibility
-shims for older imports, but generic exploration code should depend on
-`grounded_web` directly.
+`safesym_bridge` consumes these graph/data structures and should stay focused on
+SafeSym/PDDL projection plus app-specific regression adapters. Generic
+exploration code and tests should depend on `grounded_web` directly.
 
 The SauceDemo graph/PDDL route remains important as the SafeSym end-to-end
 regression path:

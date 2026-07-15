@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from ai_web_explorer.safesym_bridge.simple_grounded_web_agent import (
+from ai_web_explorer.grounded_web.simple_agent import (
     SimpleGroundedWebAgent,
 )
 from ai_web_explorer.safesym_bridge.web_kobe_playwright_adapter import (
