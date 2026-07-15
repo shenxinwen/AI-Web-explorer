@@ -81,6 +81,7 @@ class WebKobePlaywrightAdapter:
         self.page_id = page_id
         self.state_observer = state_observer
         self.action_provider = action_provider
+        self.last_execution_error: str | None = None
 
     async def observe_state(self) -> StateSnapshot:
         if self.state_observer is not None:
@@ -137,37 +138,68 @@ class WebKobePlaywrightAdapter:
                 "semantic_id": action.semantic_id,
                 "description": action.description,
                 "locator": action.locator,
+                "locator_strategy": candidate.locator_strategy,
                 "action_kind": action.action_kind,
                 "input_values": dict(action.input_values),
+                "metadata": dict(candidate.metadata),
                 "explored": False,
             }
-            for action in actions
+            for candidate, action in zip(candidates, actions, strict=True)
         ]
 
-    async def execute(self, action: BrowserAction) -> bool:
-        if action.locator is None:
-            return False
-        locator = self.page.locator(action.locator).first
+    def _fail_execution(self, error: str) -> bool:
+        self.last_execution_error = error
+        return False
+
+    async def _settle_page(self) -> None:
         try:
+            await self.page.wait_for_load_state("domcontentloaded", timeout=1000)
+        except Exception:
+            self.last_execution_error = "page_settle_timeout"
+        await self.page.wait_for_timeout(100)
+
+    async def execute(self, action: BrowserAction) -> bool:
+        self.last_execution_error = None
+        if action.locator is None:
+            return self._fail_execution("no_locator")
+        locator = self.page.locator(action.locator)
+        try:
+            if await locator.count() == 0:
+                return self._fail_execution("locator_not_found")
+
+            target = locator.first
+            if hasattr(target, "is_visible") and not await target.is_visible():
+                return self._fail_execution("locator_not_visible")
+            if hasattr(target, "is_enabled") and not await target.is_enabled():
+                return self._fail_execution("locator_disabled")
+            if hasattr(target, "scroll_into_view_if_needed"):
+                await target.scroll_into_view_if_needed()
+
             if action.action_kind == "click":
-                await locator.click()
+                await target.click()
             elif action.action_kind == "fill":
-                await locator.fill(_first_input_value(action.input_values) or "test")
+                await target.fill(_first_input_value(action.input_values) or "test")
             elif action.action_kind == "fill_then_click":
                 for selector, value in action.input_values.items():
-                    await self.page.locator(selector).first.fill(value)
-                await locator.click()
+                    fill_target = self.page.locator(selector).first
+                    if hasattr(fill_target, "scroll_into_view_if_needed"):
+                        await fill_target.scroll_into_view_if_needed()
+                    await fill_target.fill(value)
+                await target.click()
             elif action.action_kind == "select":
                 value = _first_input_value(action.input_values)
                 if value is None:
-                    return False
-                await locator.select_option(value)
+                    return self._fail_execution("missing_select_value")
+                await target.select_option(value)
             else:
-                return False
-            await self.page.wait_for_timeout(100)
-            return True
-        except Exception:
-            return False
+                return self._fail_execution("unsupported_action_kind")
+            await self._settle_page()
+            return (
+                self.last_execution_error is None
+                or self.last_execution_error == "page_settle_timeout"
+            )
+        except Exception as exc:
+            return self._fail_execution(f"playwright_error:{type(exc).__name__}")
 
 
 PlaywrightBackend = WebKobePlaywrightAdapter
@@ -179,15 +211,19 @@ def _interactable_record(action: BrowserAction | dict[str, Any]) -> dict[str, An
             "semantic_id": action.semantic_id,
             "description": action.description,
             "locator": action.locator,
+            "locator_strategy": None,
             "action_kind": action.action_kind,
             "input_values": dict(action.input_values),
+            "metadata": {},
             "explored": False,
         }
     return {
         "semantic_id": action.get("semantic_id"),
         "description": action.get("description"),
         "locator": action.get("locator"),
+        "locator_strategy": action.get("locator_strategy"),
         "action_kind": action.get("action_kind"),
         "input_values": dict(action.get("input_values") or {}),
+        "metadata": dict(action.get("metadata") or {}),
         "explored": bool(action.get("explored", False)),
     }

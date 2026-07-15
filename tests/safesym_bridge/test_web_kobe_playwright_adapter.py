@@ -30,14 +30,36 @@ class FakeTextLocator:
 
 
 class FakeActionLocator:
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        count_value: int = 1,
+        visible: bool = True,
+        enabled: bool = True,
+    ):
         self.clicked = False
         self.filled = []
         self.selected = []
+        self.count_value = count_value
+        self.visible = visible
+        self.enabled = enabled
+        self.scrolled = False
 
     @property
     def first(self):
         return self
+
+    async def count(self):
+        return self.count_value
+
+    async def is_visible(self):
+        return self.visible
+
+    async def is_enabled(self):
+        return self.enabled
+
+    async def scroll_into_view_if_needed(self):
+        self.scrolled = True
 
     async def click(self):
         self.clicked = True
@@ -50,15 +72,18 @@ class FakeActionLocator:
 
 
 class FakePage:
-    def __init__(self):
+    def __init__(self, action_locator=None):
         self.url = "https://example.test/shop"
-        self.action_locator = FakeActionLocator()
+        self.action_locator = action_locator or FakeActionLocator()
         self.waits = []
+        self.load_state_waits = []
 
     async def title(self):
         return "Fixture Shop"
 
     def locator(self, selector):
+        if selector == "[data-state]":
+            return FakeTextLocator("", count_value=0)
         if selector == '[data-state="cart-count"]':
             return FakeTextLocator("1")
         if selector == "#cart-count":
@@ -67,6 +92,9 @@ class FakePage:
 
     async def wait_for_timeout(self, ms):
         self.waits.append(ms)
+
+    async def wait_for_load_state(self, state, timeout=None):
+        self.load_state_waits.append((state, timeout))
 
 
 @pytest.mark.anyio
@@ -115,8 +143,10 @@ async def test_list_interactables_uses_dom_candidates(monkeypatch):
             "semantic_id": "dom_001_button_add_to_cart",
             "description": "Add to cart",
             "locator": 'button[data-test="add-to-cart"]',
+            "locator_strategy": "css",
             "action_kind": "click",
             "input_values": {},
+            "metadata": {"data-test": "add-to-cart"},
             "explored": False,
         }
     ]
@@ -161,11 +191,13 @@ async def test_saucedemo_adapter_uses_static_action_profile():
             "semantic_id": "login_submit",
             "description": "Click the Login button",
             "locator": "#login-button",
+            "locator_strategy": None,
             "action_kind": "fill_then_click",
             "input_values": {
                 "#user-name": "standard_user",
                 "#password": "secret_sauce",
             },
+            "metadata": {},
             "explored": False,
         }
     ]
@@ -207,3 +239,40 @@ async def test_execute_click_fill_and_select_actions():
         is True
     )
     assert page.action_locator.filled[-2:] == ["standard_user", "secret_sauce"]
+
+
+@pytest.mark.anyio
+async def test_execute_scrolls_target_and_waits_for_page_settle():
+    locator = FakeActionLocator()
+    page = FakePage(locator)
+    adapter = WebKobePlaywrightAdapter(page, page_id="fixture_shop")
+
+    result = await adapter.execute(BrowserAction("click", "#add", "add"))
+
+    assert result is True
+    assert locator.scrolled is True
+    assert page.load_state_waits == [("domcontentloaded", 1000)]
+    assert page.waits == [100]
+    assert adapter.last_execution_error is None
+
+
+@pytest.mark.anyio
+async def test_execute_reports_locator_not_found():
+    page = FakePage(FakeActionLocator(count_value=0))
+    adapter = WebKobePlaywrightAdapter(page, page_id="fixture_shop")
+
+    result = await adapter.execute(BrowserAction("click", "#missing", "missing"))
+
+    assert result is False
+    assert adapter.last_execution_error == "locator_not_found"
+
+
+@pytest.mark.anyio
+async def test_execute_reports_locator_not_visible():
+    page = FakePage(FakeActionLocator(visible=False))
+    adapter = WebKobePlaywrightAdapter(page, page_id="fixture_shop")
+
+    result = await adapter.execute(BrowserAction("click", "#hidden", "hidden"))
+
+    assert result is False
+    assert adapter.last_execution_error == "locator_not_visible"
