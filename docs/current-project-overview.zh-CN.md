@@ -55,7 +55,8 @@ docs/current-project-overview.md
   -> ActionIntent / ActionExecutionResult / OutcomeEvaluation
   -> WebKobeExplorer
   -> WebKobeGraph
-  -> 后续投影到 SafeSym/PDDL
+  -> WebKobeGraph-to-PDDL 投影
+  -> 面向 SafeSym/PDDL 的 artifact
 
 SafeSym 回归路线：
   SauceDemoAdapter
@@ -91,6 +92,8 @@ src/ai_web_explorer/grounded_web/
 - 保留必要的历史路线作为参考，但不扩展成新主线。
 
 这个边界很重要。它让我们以后可以替换底层 web agent、Playwright backend、LLM/VLM 辅助模块，而不会推翻 SafeSym 对接层。
+
+当前主线已经收束到 WebKobeGraph-to-PDDL 投影：使用 grounded Web-KOBE 探索得到的状态图，将成功且有观察意义的转移投影成简单 STRIPS `domain.pddl`，并通过显式 start/goal 节点生成具体 `problem.pddl`。这保持了 `grounded_web` 作为网页探索/观察层、`safesym_bridge` 作为面向规划器投影层的边界。
 
 ## 近期已经完成的进展
 
@@ -132,6 +135,10 @@ src/ai_web_explorer/grounded_web/
 ```bash
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-graph --output outputs/web_kobe_graph.json
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-pddl --output outputs/web_kobe_pddl --goal-node start
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-pddl-from-graph \
+  --graph outputs/web_kobe_explored_graph.json \
+  --output outputs/web_kobe_pddl \
+  --goal-node <goal_node_id>
 ```
 
 更重要的是实际探索命令：
@@ -368,7 +375,7 @@ src/ai_web_explorer/grounded_web/graph_manager.py
 - evidence；
 - 后续可用于 PDDL 的 hints。
 
-长期看，未知网页应该优先通过 `WebKobeGraph` 进入 SafeSym/PDDL 投影。
+长期看，未知网页应该优先通过 `WebKobeGraph` 进入 SafeSym/PDDL 投影；当前已经有文件级入口可以把探索得到的 `WebKobeGraph` JSON 转成简单 PDDL。
 
 ### WebObservedGraph
 

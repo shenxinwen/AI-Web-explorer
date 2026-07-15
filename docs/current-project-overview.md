@@ -43,7 +43,8 @@ active generic mainline:
   -> ActionIntent / ActionExecutionResult / OutcomeEvaluation
   -> WebKobeExplorer
   -> WebKobeGraph
-  -> later SafeSym/PDDL projection
+  -> WebKobeGraph-to-PDDL projection
+  -> SafeSym/PDDL-facing artifacts
 
 SafeSym regression route:
   SauceDemoAdapter
@@ -68,6 +69,13 @@ recording, graph construction, and simple no-LLM baseline agents.
 `safesym_bridge` consumes these graph/data structures and should stay focused on
 SafeSym/PDDL projection plus app-specific regression adapters. Generic
 exploration code and tests should depend on `grounded_web` directly.
+
+The current mainline is now WebKobeGraph-to-PDDL projection: take the graph
+produced by grounded Web-KOBE exploration, project successful observed
+transitions into a simple STRIPS `domain.pddl`, and create a concrete
+`problem.pddl` from explicit start/goal node selection. This keeps
+`grounded_web` as the exploration/observation layer and `safesym_bridge` as the
+planner-facing projection layer.
 
 The SauceDemo graph/PDDL route remains important as the SafeSym end-to-end
 regression path:
@@ -108,12 +116,16 @@ generic exploration direction:
 ```bash
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-graph --output outputs/web_kobe_graph.json
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-pddl --output outputs/web_kobe_pddl --goal-node start
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-pddl-from-graph \
+  --graph outputs/web_kobe_explored_graph.json \
+  --output outputs/web_kobe_pddl \
+  --goal-node <goal_node_id>
 ```
 
-This graph is intended to become the main exploration-time representation for
-unknown websites. It records semantic page states, browser-grounded actions,
-observed deltas, and evidence so the project can later project unknown web
-environments into SafeSym-compatible PDDL.
+This graph is the main exploration-time representation for unknown websites. It
+records semantic page states, browser-grounded actions, observed deltas, and
+evidence so the project can project observed web environments into
+SafeSym-compatible PDDL.
 
 The current near-term generic Web-KOBE path is DOM-first grounded exploration.
 The explorer extracts real interactable elements from the page, converts them
