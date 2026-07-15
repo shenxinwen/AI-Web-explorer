@@ -19,6 +19,7 @@ from ai_web_explorer.safesym_bridge.pddl_compiler import write_pddl_artifacts
 from ai_web_explorer.safesym_bridge.task_spec import build_saucedemo_mvp_transitions
 from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
     compile_web_kobe_graph_to_pddl,
+    load_web_kobe_graph_json,
 )
 
 
@@ -114,6 +115,32 @@ def main(argv: list[str] | None = None) -> int:
         "--goal-node",
         required=True,
         help="Goal node ID for the generated Web-KOBE PDDL problem.",
+    )
+    web_kobe_pddl_from_graph_parser = subparsers.add_parser(
+        "web-kobe-pddl-from-graph",
+        help="Write PDDL from an explored Web-KOBE graph JSON.",
+    )
+    web_kobe_pddl_from_graph_parser.add_argument(
+        "--graph",
+        type=Path,
+        required=True,
+        help="Path to an explored Web-KOBE graph JSON.",
+    )
+    web_kobe_pddl_from_graph_parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("outputs/web_kobe_pddl"),
+        help="Directory to write domain.pddl and problem.pddl.",
+    )
+    web_kobe_pddl_from_graph_parser.add_argument(
+        "--goal-node",
+        required=True,
+        help="Goal node ID for the generated Web-KOBE PDDL problem.",
+    )
+    web_kobe_pddl_from_graph_parser.add_argument(
+        "--start-node",
+        default=None,
+        help="Optional start node override. Defaults to graph.start_node_id.",
     )
     explore_graph_parser = subparsers.add_parser(
         "explore-graph",
@@ -217,6 +244,23 @@ def main(argv: list[str] | None = None) -> int:
             graph = build_debug_web_kobe_graph()
             artifacts = compile_web_kobe_graph_to_pddl(
                 graph,
+                goal_node_id=args.goal_node,
+            )
+            args.output.mkdir(parents=True, exist_ok=True)
+            (args.output / "domain.pddl").write_text(
+                artifacts.domain,
+                encoding="utf-8",
+            )
+            (args.output / "problem.pddl").write_text(
+                artifacts.problem,
+                encoding="utf-8",
+            )
+            output_path = args.output
+        elif args.mode == "web-kobe-pddl-from-graph":
+            graph = load_web_kobe_graph_json(args.graph)
+            artifacts = compile_web_kobe_graph_to_pddl(
+                graph,
+                start_node_id=args.start_node,
                 goal_node_id=args.goal_node,
             )
             args.output.mkdir(parents=True, exist_ok=True)

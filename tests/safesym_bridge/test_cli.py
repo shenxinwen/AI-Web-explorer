@@ -1,5 +1,16 @@
 import json
 
+from ai_web_explorer.grounded_web.capability_graph import (
+    ExecutionTrace,
+    ObservedDelta,
+    PageFrame,
+)
+from ai_web_explorer.grounded_web.graph import (
+    BrowserAction,
+    WebKobeEdge,
+    WebKobeGraph,
+    WebKobeNode,
+)
 from ai_web_explorer.safesym_bridge import cli
 from ai_web_explorer.safesym_bridge.cli import main
 
@@ -237,3 +248,87 @@ def test_main_web_kobe_explore_subcommand_runs_playwright_runner(
             False,
         )
     ]
+
+
+def test_main_web_kobe_pddl_from_graph_writes_domain_and_problem(tmp_path):
+    graph_path = tmp_path / "web_kobe_graph.json"
+    output_dir = tmp_path / "web_kobe_pddl"
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="empty",
+        total_steps_completed=1,
+        nodes=[
+            WebKobeNode(
+                node_id="empty",
+                page_description="empty page",
+                page_frame=PageFrame(
+                    page_id="empty",
+                    page_type="listing",
+                    url="https://example.test",
+                    url_pattern="https://example.test",
+                    title="empty",
+                ),
+                state_schema={"cart_count": [0]},
+                last_state_snapshot={"cart_count": 0},
+            ),
+            WebKobeNode(
+                node_id="filled",
+                page_description="filled page",
+                page_frame=PageFrame(
+                    page_id="filled",
+                    page_type="listing",
+                    url="https://example.test",
+                    url_pattern="https://example.test",
+                    title="filled",
+                ),
+                state_schema={"cart_count": [1]},
+                last_state_snapshot={"cart_count": 1},
+            ),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="empty",
+                target_node_id="filled",
+                instruction="add to cart",
+                action=BrowserAction("click", "button.add", "add_to_cart"),
+                capability=None,
+                target_observation="filled cart",
+                observed_delta=[
+                    ObservedDelta("cart_count", 0, 1, "state_indicator_change")
+                ],
+                schema_delta={"cart_count": {"before": 0, "after": 1}},
+                execution_trace=ExecutionTrace(
+                    "click",
+                    "button.add",
+                    "add",
+                    {},
+                    "empty",
+                    "filled",
+                    True,
+                ),
+            )
+        ],
+    )
+    graph_path.write_text(json.dumps(graph.to_dict()), encoding="utf-8")
+
+    exit_code = main(
+        [
+            "web-kobe-pddl-from-graph",
+            "--graph",
+            str(graph_path),
+            "--output",
+            str(output_dir),
+            "--goal-node",
+            "filled",
+        ]
+    )
+
+    assert exit_code == 0
+    assert (
+        "(:action add_to_cart"
+        in (output_dir / "domain.pddl").read_text(encoding="utf-8")
+    )
+    assert (
+        "(:goal (and (at_filled)))"
+        in (output_dir / "problem.pddl").read_text(encoding="utf-8")
+    )
