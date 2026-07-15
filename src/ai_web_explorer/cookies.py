@@ -2,15 +2,38 @@ import openai
 import playwright.sync_api
 import json
 import logging
+import re
 
 from . import promptrepo
 from . import html
 
 
+COOKIE_BANNER_HINTS = (
+    "cookie",
+    "cookies",
+    "cookie consent",
+    "consent",
+    "gdpr",
+    "privacy preferences",
+    "privacy settings",
+    "tracking preferences",
+)
+
+
+def _might_contain_cookie_banner(html_part: str) -> bool:
+    text = re.sub(r"\s+", " ", html_part).lower()
+    return any(hint in text for hint in COOKIE_BANNER_HINTS)
+
+
 def accept_cookies_if_present(client: openai.Client, page: playwright.sync_api.Page):
     prompt_search_cookies = promptrepo.get_prompt("search_cookies")
+    html_parts = list(html.iterate_html(page))
+    if not any(_might_contain_cookie_banner(html_part) for html_part in html_parts):
+        logging.info("No cookie banner hints found")
+        return
+
     has_cookies = False
-    for html_part in html.iterate_html(page):
+    for html_part in html_parts:
         response = prompt_search_cookies.execute_prompt(
             client, image_bytes=page.screenshot(), html_part=html_part
         )

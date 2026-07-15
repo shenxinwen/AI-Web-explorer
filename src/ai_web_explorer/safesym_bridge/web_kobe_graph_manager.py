@@ -28,19 +28,36 @@ def _merge_interactables(
     incoming: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     merged = [dict(item) for item in existing]
-    seen = {
-        (
+    for item in incoming:
+        incoming_locator = item.get("locator")
+        existing_match = next(
+            (
+                existing_item
+                for existing_item in merged
+                if incoming_locator
+                and existing_item.get("locator") == incoming_locator
+            ),
+            None,
+        )
+        if existing_match is not None:
+            if existing_match.get("explored"):
+                existing_match["explored"] = True
+            continue
+
+        key = (
             item.get("semantic_id"),
             item.get("locator"),
             item.get("description"),
         )
-        for item in merged
-    }
-    for item in incoming:
-        key = (item.get("semantic_id"), item.get("locator"), item.get("description"))
-        if key not in seen:
+        if key not in {
+            (
+                merged_item.get("semantic_id"),
+                merged_item.get("locator"),
+                merged_item.get("description"),
+            )
+            for merged_item in merged
+        }:
             merged.append(dict(item))
-            seen.add(key)
     return merged
 
 
@@ -93,12 +110,23 @@ class WebKobeGraphManager:
             )
         self.total_steps_completed += 1
 
-    def mark_interactable_explored(self, node_id: str, semantic_id: str) -> None:
+    def mark_interactable_explored(
+        self,
+        node_id: str,
+        semantic_id: str,
+        locator: str | None = None,
+    ) -> None:
         node = self._nodes[node_id]
         interactables = []
         for item in node.interactable_elements:
             updated = dict(item)
-            if updated.get("semantic_id") == semantic_id:
+            if (
+                locator is not None
+                and updated.get("locator") == locator
+            ) or (
+                locator is None
+                and updated.get("semantic_id") == semantic_id
+            ):
                 updated["explored"] = True
             interactables.append(updated)
         self._nodes[node_id] = replace(node, interactable_elements=interactables)

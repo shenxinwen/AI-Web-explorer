@@ -32,8 +32,43 @@ and compile that graph into a planning model where safety checks can be added?
 
 ## Current Main Pipeline
 
-The recommended path is no longer the older FSM-first path. The current main
-path is graph-first:
+The recommended path is no longer the older FSM-first path. The project now has
+one active generic mainline and two compatibility/regression routes:
+
+```text
+active generic mainline:
+  DOM-grounded Web-KOBE exploration
+  -> AutomationBackend
+  -> WebKobeExplorer
+  -> WebKobeGraph
+  -> later SafeSym/PDDL projection
+
+SafeSym regression route:
+  SauceDemoAdapter
+  -> GraphExplorer
+  -> WebObservedGraph
+  -> graph-derived PDDL
+  -> SafeSym
+
+legacy compatibility route:
+  original ai-web-explorer ExploreLoop
+  -> optional WebKobeCollector sidecar
+```
+
+New generic exploration code should import the active mainline through:
+
+```text
+src/ai_web_explorer/grounded_web/
+```
+
+That package is the stable boundary for DOM-grounded web operation, state
+recording, graph construction, and simple no-LLM baseline agents. During the
+migration it reuses implementation modules that still live under
+`safesym_bridge`, but new code should depend on `grounded_web` rather than
+reaching into SafeSym-specific modules directly.
+
+The SauceDemo graph/PDDL route remains important as the SafeSym end-to-end
+regression path:
 
 ```text
 Playwright browser
@@ -113,7 +148,7 @@ additional backends without replacing the Web-KOBE/SafeSym exploration layer.
 The concrete backend boundary lives in:
 
 ```text
-src/ai_web_explorer/safesym_bridge/automation_backend.py
+src/ai_web_explorer/grounded_web/automation_backend.py
 ```
 
 Current implementations should satisfy `AutomationBackend`. The first concrete
@@ -145,10 +180,11 @@ clear without duplicating the Web-KOBE exploration engine. It observes grounded
 candidates, executes the simple first-unexplored policy, and records
 before/action/after deltas through the existing graph path.
 
-There are still overlapping structures from the original explorer, Web-KOBE
-collector, Playwright adapters, and sync/async action executors. Refactoring
-should happen gradually when a feature touches a boundary, not as a broad
-rewrite.
+There are still compatibility structures from the original explorer,
+Web-KOBE collector, SauceDemo MVP, and sync/async action executors. They should
+not be expanded as generic mainline code. Refactoring should happen gradually
+when a feature touches a boundary, with new generic code going through
+`grounded_web`.
 
 ```bash
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-explore \
@@ -221,9 +257,11 @@ steps such as login, add-to-cart, cart open, and checkout start. Generic pages
 still use local DOM extraction. Real SauceDemo browser verification is gated by
 `RUN_WEB_KOBE_SAUCEDEMO_TEST=1`.
 
-This command is useful as an experimental validation path, but new generic
-exploration work should prefer collector hooks in the original explorer rather
-than expanding a second independent exploration loop.
+The original explorer with `--web-kobe-output` remains useful as a legacy
+comparison and compatibility route. It should not be the place for new generic
+exploration design because it asks the LLM to generate both action descriptions
+and selectors. New generic work should improve the DOM-grounded
+`grounded_web` / `web-kobe-explore` path first.
 
 The debug-only commands are still available:
 

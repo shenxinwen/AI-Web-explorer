@@ -3,6 +3,7 @@ import json
 import logging
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 logging.basicConfig(level=logging.INFO)
 
@@ -62,6 +63,25 @@ parser.add_argument(
     default=None,
 )
 
+parser.add_argument(
+    "--task",
+    type=str,
+    help="Task instruction used to prefer matching candidate actions during exploration",
+    default=None,
+)
+
+
+def _build_start_url(domain_or_url: str) -> str:
+    parsed = urlparse(domain_or_url)
+    if parsed.scheme:
+        return domain_or_url
+    return f"https://{domain_or_url}"
+
+
+def _domain_from_input(domain_or_url: str) -> str:
+    parsed = urlparse(_build_start_url(domain_or_url))
+    return parsed.netloc
+
 
 def main():
     import openai
@@ -74,8 +94,8 @@ def main():
     load_dotenv()
 
     args = parser.parse_args()
-    domain = args.domain
-    url = f"http://{domain}"
+    domain = _domain_from_input(args.domain)
+    url = _build_start_url(args.domain)
     openai_client = openai.Client(
         api_key=os.getenv("OPENAI_API_KEY"),
         base_url=os.getenv("OPENAI_BASE_URL"),
@@ -95,6 +115,7 @@ def main():
         password=credentials[1],
         additional_info=args.additional_info,
         collector=collector,
+        task=args.task,
     )
 
     explore_loop = loop.ExploreLoop(domain, url, openai_client, loop_config)

@@ -16,14 +16,13 @@ def _minify_html(html: str) -> str:
 class PageNotLoadedException(Exception):
     pass
 
-# 标记不可见元素、设置自定义属性（使DOM能看到输入框中的值）
+
 JS_FUNCTIONS = """
     function setValueAsDataAttribute() {
       const inputs = document.querySelectorAll('input, textarea, select');
       inputs.forEach(input => {
         const value = input.value;
         input.setAttribute('data-current-value', value);
-        ## 将当前值设置为自定义属性 data-current-value
       });
     }
 
@@ -42,7 +41,6 @@ JS_FUNCTIONS = """
 
     window.setValueAsDataAttribute = setValueAsDataAttribute;
     window.markInvisibleElements = markInvisibleElements;
-    ## 将函数绑定到 window 对象上，以便在 Playwright 中调用
 """
 
 

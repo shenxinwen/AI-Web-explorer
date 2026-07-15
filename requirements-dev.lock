@@ -163,6 +163,8 @@ pytest==8.2.2
 python-dateutil==2.9.0.post0
     # via matplotlib
     # via pandas
+python-dotenv==1.2.2
+    # via ai-web-explorer
 pytz==2024.1
     # via mlflow
     # via pandas

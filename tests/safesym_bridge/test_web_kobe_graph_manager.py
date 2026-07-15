@@ -68,3 +68,46 @@ def test_mark_interactable_explored_updates_matching_candidate():
 
     graph = manager.to_graph()
     assert graph.nodes[0].interactable_elements[0]["explored"] is True
+
+
+def test_interactable_merge_preserves_explored_by_locator_when_label_changes():
+    manager = WebKobeGraphManager(app="example")
+    manager.identify_or_add_node(
+        _node(
+            "product_listing",
+            {"cart_count": 0},
+            interactables=[
+                {
+                    "semantic_id": "button_cart_0",
+                    "description": "Cart (0)",
+                    "locator": '[data-web-kobe-id="dom_001"]',
+                    "explored": False,
+                }
+            ],
+        )
+    )
+
+    manager.mark_interactable_explored(
+        "product_listing",
+        "button_cart_0",
+        locator='[data-web-kobe-id="dom_001"]',
+    )
+    manager.identify_or_add_node(
+        _node(
+            "product_listing",
+            {"cart_count": 1},
+            interactables=[
+                {
+                    "semantic_id": "button_cart_1",
+                    "description": "Cart (1)",
+                    "locator": '[data-web-kobe-id="dom_001"]',
+                    "explored": False,
+                }
+            ],
+        )
+    )
+
+    graph = manager.to_graph()
+
+    assert len(graph.nodes[0].interactable_elements) == 1
+    assert graph.nodes[0].interactable_elements[0]["explored"] is True

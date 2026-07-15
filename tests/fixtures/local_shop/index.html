@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Local Fixture Shop</title>
+    <style>
+      body {
+        color: #1f2933;
+        font-family: Arial, sans-serif;
+        margin: 0;
+      }
+
+      header,
+      main {
+        margin: 0 auto;
+        max-width: 760px;
+        padding: 24px;
+      }
+
+      header {
+        align-items: center;
+        border-bottom: 1px solid #d9e2ec;
+        display: flex;
+        justify-content: space-between;
+      }
+
+      h1 {
+        font-size: 28px;
+        margin: 0;
+      }
+
+      .product-list {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .product-card,
+      .cart-panel {
+        border: 1px solid #bcccdc;
+        border-radius: 6px;
+        padding: 16px;
+      }
+
+      button {
+        background: #155e75;
+        border: 0;
+        border-radius: 4px;
+        color: white;
+        cursor: pointer;
+        font-size: 14px;
+        padding: 8px 12px;
+      }
+
+      button:focus,
+      button:hover {
+        background: #164e63;
+      }
+
+      .cart-panel {
+        margin-top: 24px;
+      }
+
+      [hidden] {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Local Fixture Shop</h1>
+      <button data-action="open-cart" type="button">
+        Cart (<span data-state="cart-count">0</span>)
+      </button>
+    </header>
+
+    <main>
+      <section aria-label="Product list" class="product-list">
+        <article class="product-card" data-entity-type="product">
+          <h2>Sample Product A</h2>
+          <p>A representative product card for exploration tests.</p>
+          <button data-action="add-to-cart" type="button">Add to cart</button>
+        </article>
+
+        <article class="product-card" data-entity-type="product">
+          <h2>Sample Product B</h2>
+          <p>Another product instance with the same structure.</p>
+          <button data-action="add-to-cart" type="button">Add to cart</button>
+        </article>
+      </section>
+
+      <section
+        aria-live="polite"
+        class="cart-panel"
+        data-state="cart-panel"
+        hidden
+      >
+        Cart contains 0 items.
+      </section>
+    </main>
+
+    <script>
+      let cartCount = 0;
+      const cartCountElement = document.querySelector("[data-state='cart-count']");
+      const cartPanel = document.querySelector("[data-state='cart-panel']");
+
+      function renderCart() {
+        cartCountElement.textContent = String(cartCount);
+        cartPanel.textContent =
+          cartCount === 1 ? "Cart contains 1 item." : `Cart contains ${cartCount} items.`;
+      }
+
+      document.querySelectorAll("[data-action='add-to-cart']").forEach((button) => {
+        button.addEventListener("click", () => {
+          cartCount += 1;
+          renderCart();
+        });
+      });
+
+      document.querySelector("[data-action='open-cart']").addEventListener("click", () => {
+        cartPanel.hidden = false;
+        renderCart();
+      });
+    </script>
+  </body>
+</html>

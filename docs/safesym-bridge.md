@@ -3,7 +3,7 @@
 The SafeSym bridge turns observed SauceDemo browser behavior into planning
 artifacts that can be checked by SafeSym.
 
-The current recommended path is:
+The SafeSym regression path is:
 
 ```text
 real browser exploration
@@ -23,6 +23,11 @@ Older FSM work is kept only as historical design notes and example artifacts.
 The current CLI does not expose the old `fixed` or `observed` FSM commands.
 
 ## Current Recommended Path
+
+For generic unknown-site exploration, the active mainline is now the
+DOM-grounded Web-KOBE path exposed through `ai_web_explorer.grounded_web` and
+the `web-kobe-explore` CLI. The SauceDemo commands in this document remain the
+SafeSym end-to-end regression route.
 
 ### Explore and write graph JSON
 
@@ -108,19 +113,7 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-graph --output outputs/web
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-pddl --output outputs/web_kobe_pddl --goal-node start
 ```
 
-The preferred generic exploration route is to run the original `explore` command
-with the Web-KOBE collector enabled:
-
-```bash
-explore example.com -i 10 --web-kobe-output outputs/example_web_kobe.json
-```
-
-In this mode, the original explorer still drives unknown-site navigation and
-action execution. The Web-KOBE collector records planning-facing page states,
-browser-grounded actions, observed deltas, and evidence as a sidecar graph. This
-is the recommended place to improve data collection for arbitrary websites.
-
-For a real Playwright-backed exploration run against a controlled page:
+The preferred generic exploration route is the DOM-grounded Web-KOBE explorer:
 
 ```bash
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-explore \
@@ -129,6 +122,21 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-explore \
   --page-id fixture_shop \
   --steps 1
 ```
+
+This path extracts real DOM interactables, turns them into grounded browser
+actions, executes them through a replaceable automation backend, and records
+before/after deltas in a Web-KOBE graph. New generic exploration work should
+start here.
+
+The original `explore` command can still write a Web-KOBE sidecar graph:
+
+```bash
+explore example.com -i 10 --web-kobe-output outputs/example_web_kobe.json
+```
+
+That route is compatibility support for the original ai-web-explorer driver. It
+is useful for comparison, but it is not the preferred place to add new generic
+exploration logic.
 
 SauceDemo is the primary real-site smoke target:
 
@@ -146,9 +154,10 @@ recording browser-grounded Web-KOBE graph edges. Generic pages continue to use
 DOM extraction. The optional real SauceDemo verification test is gated by
 `RUN_WEB_KOBE_SAUCEDEMO_TEST=1`.
 
-The `web-kobe-explore` command remains useful for deterministic fixtures and
-smoke tests, but it should not become a second full exploration framework unless
-there is a clear reason to diverge from the original explorer.
+The `web-kobe-explore` command is the current generic operation-and-recording
+mainline. Its policy is intentionally simple today; action selection,
+deduplication, state recovery, and LLM/VLM semantic assistance should be added
+there behind clear interfaces.
 
 ## Debug Commands
 

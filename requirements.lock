@@ -49,6 +49,8 @@ pydantic-core==2.18.4
     # via pydantic
 pyee==11.1.0
     # via playwright
+python-dotenv==1.2.2
+    # via ai-web-explorer
 pyyaml==6.0.1
     # via ai-web-explorer
 setuptools==69.5.1

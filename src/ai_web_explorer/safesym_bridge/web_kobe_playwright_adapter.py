@@ -6,27 +6,15 @@ from typing import Any
 from ai_web_explorer.safesym_bridge.dom_observer import extract_dom_interactables
 from ai_web_explorer.safesym_bridge.models import StateSnapshot
 from ai_web_explorer.safesym_bridge.saucedemo_adapter import static_actions_for_state
+from ai_web_explorer.safesym_bridge.state_signature import (
+    coerce_state_value,
+    slug_identifier,
+)
 from ai_web_explorer.safesym_bridge.state_observer import observe_saucedemo_state
 from ai_web_explorer.safesym_bridge.web_action_extractor import (
     browser_actions_from_candidates,
 )
 from ai_web_explorer.safesym_bridge.web_kobe_graph import BrowserAction
-
-
-def _slug(value: str) -> str:
-    cleaned = re.sub(r"[^a-zA-Z0-9]+", "_", value.strip().lower()).strip("_")
-    return cleaned or "page"
-
-
-def _coerce_state_value(value: str) -> Any:
-    stripped = value.strip()
-    if stripped.lower() == "true":
-        return True
-    if stripped.lower() == "false":
-        return False
-    if re.fullmatch(r"-?\d+", stripped):
-        return int(stripped)
-    return stripped
 
 
 async def _optional_inner_text(page, selector: str) -> str | None:
@@ -58,10 +46,10 @@ async def _data_state_signature(page) -> dict[str, Any]:
             raw_key = None
         if not raw_key:
             continue
-        key = _slug(raw_key)
+        key = slug_identifier(raw_key, fallback="state")
         text = (await element.inner_text()).strip()
         if text:
-            signature[key] = _coerce_state_value(text)
+            signature[key] = coerce_state_value(text)
         try:
             signature[f"{key}_visible"] = await element.is_visible()
         except Exception:
@@ -101,11 +89,15 @@ class WebKobePlaywrightAdapter:
             return snapshot
 
         title = await self.page.title()
-        page_id = self.page_id or _slug(title or self.page.url)
+        page_id = self.page_id or slug_identifier(
+            title or self.page.url, fallback="page"
+        )
         signature: dict[str, Any] = await _data_state_signature(self.page)
 
         if "cart_count" not in signature:
-            cart_text = await _optional_inner_text(self.page, '[data-state="cart-count"]')
+            cart_text = await _optional_inner_text(
+                self.page, '[data-state="cart-count"]'
+            )
             if cart_text is None:
                 cart_text = await _optional_inner_text(self.page, "#cart-count")
             if cart_text is not None:

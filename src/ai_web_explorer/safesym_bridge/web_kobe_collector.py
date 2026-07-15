@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
-from typing import Any
 
 from ai_web_explorer.safesym_bridge.capability_graph import (
     Evidence,
@@ -17,6 +15,10 @@ from ai_web_explorer.safesym_bridge.web_kobe_graph import (
     WebKobeGraph,
     WebKobeNode,
 )
+from ai_web_explorer.safesym_bridge.state_signature import (
+    schema_delta,
+    slug_identifier,
+)
 from ai_web_explorer.safesym_bridge.web_kobe_graph_manager import (
     WebKobeGraphManager,
 )
@@ -24,8 +26,7 @@ from ai_web_explorer.safesym_bridge.web_kobe_observer import WebKobeObservation
 
 
 def _slug(value: str) -> str:
-    cleaned = re.sub(r"[^a-zA-Z0-9]+", "_", value.strip().lower()).strip("_")
-    return cleaned or "unknown"
+    return slug_identifier(value, fallback="unknown")
 
 
 def _node_id(web_state, observation: WebKobeObservation) -> str:
@@ -34,17 +35,6 @@ def _node_id(web_state, observation: WebKobeObservation) -> str:
         or getattr(web_state, "title", "")
         or observation.url_pattern
     )
-
-
-def _schema_delta(
-    before: dict[str, Any],
-    after: dict[str, Any],
-) -> dict[str, Any] | None:
-    delta = {}
-    for key in sorted(set(before) | set(after)):
-        if before.get(key) != after.get(key):
-            delta[key] = {"before": before.get(key), "after": after.get(key)}
-    return delta or None
 
 
 class NoOpWebKobeCollector:
@@ -119,7 +109,7 @@ class WebKobeCollector:
             ),
         )
         semantic_id = _slug(action.description)
-        delta = _schema_delta(
+        delta = schema_delta(
             before_observation.state_indicators,
             after_observation.state_indicators,
         )

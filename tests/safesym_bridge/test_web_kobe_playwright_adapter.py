@@ -112,7 +112,7 @@ async def test_list_interactables_uses_dom_candidates(monkeypatch):
 
     assert interactables == [
         {
-            "semantic_id": "button_add_to_cart",
+            "semantic_id": "dom_001_button_add_to_cart",
             "description": "Add to cart",
             "locator": 'button[data-test="add-to-cart"]',
             "action_kind": "click",

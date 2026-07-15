@@ -9,6 +9,7 @@ from ai_web_explorer.safesym_bridge.capability_graph import (
     ObservedDelta,
 )
 from ai_web_explorer.safesym_bridge.models import StateSnapshot
+from ai_web_explorer.safesym_bridge.state_signature import schema_delta
 from ai_web_explorer.safesym_bridge.web_kobe_graph import (
     BrowserAction,
     ReferenceObservation,
@@ -20,19 +21,6 @@ from ai_web_explorer.safesym_bridge.web_kobe_graph_manager import WebKobeGraphMa
 from ai_web_explorer.safesym_bridge.web_semantic_assistor import SemanticAssistor
 
 
-def _schema_delta(
-    before: dict[str, Any],
-    after: dict[str, Any],
-) -> dict[str, Any] | None:
-    delta: dict[str, Any] = {}
-    for key in sorted(set(before) | set(after)):
-        before_value = before.get(key)
-        after_value = after.get(key)
-        if before_value != after_value:
-            delta[key] = {"before": before_value, "after": after_value}
-    return delta or None
-
-
 def _observed_delta(
     before: dict[str, Any],
     after: dict[str, Any],
@@ -40,7 +28,7 @@ def _observed_delta(
 ) -> list[ObservedDelta]:
     evidence = [Evidence(source="web_kobe_transition_diff", url=url)]
     deltas: list[ObservedDelta] = []
-    for key, value in (_schema_delta(before, after) or {}).items():
+    for key, value in (schema_delta(before, after) or {}).items():
         deltas.append(
             ObservedDelta(
                 field=key,
@@ -120,7 +108,7 @@ class WebKobeExplorer:
         )
         target_id = self.manager.identify_or_add_node(_node_from_draft(after_draft))
 
-        delta = _schema_delta(
+        delta = schema_delta(
             before_draft.last_state_snapshot,
             after_draft.last_state_snapshot,
         )

@@ -18,6 +18,7 @@ def test_explore_cli_writes_web_kobe_collector_output(
             created["domain"] = domain
             created["url"] = url
             created["collector"] = config.collector
+            created["task"] = config.task
 
         def start(self):
             return None
@@ -48,14 +49,17 @@ def test_explore_cli_writes_web_kobe_collector_output(
             "1",
             "--web-kobe-output",
             str(output_path),
+            "--task",
+            "add a product to cart",
         ],
     )
 
     ai_web_explorer.main()
 
     assert created["domain"] == "example.test"
-    assert created["url"] == "http://example.test"
+    assert created["url"] == "https://example.test"
     assert created["collector"] is not None
+    assert created["task"] == "add a product to cart"
     data = json.loads(output_path.read_text(encoding="utf-8"))
     assert data["meta"]["schema_version"] == "web-kobe-graph-v1"
     assert data["meta"]["app"] == "example.test"

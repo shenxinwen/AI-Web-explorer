@@ -5,6 +5,10 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from ai_web_explorer.safesym_bridge.capability_graph import Evidence
+from ai_web_explorer.safesym_bridge.state_signature import (
+    coerce_state_value,
+    slug_identifier,
+)
 
 
 @dataclass(frozen=True)
@@ -41,6 +45,39 @@ def _optional_inner_text(page, selector: str) -> str | None:
         return None
 
 
+def _data_state_indicators(page) -> dict[str, Any]:
+    indicators: dict[str, Any] = {}
+    try:
+        locator = page.locator("[data-state]")
+        count = locator.count()
+    except Exception:
+        return indicators
+
+    for index in range(count):
+        element = locator.nth(index)
+        try:
+            raw_key = element.get_attribute("data-state")
+        except Exception:
+            raw_key = None
+        if not raw_key:
+            continue
+
+        key = slug_identifier(raw_key, fallback="state")
+        try:
+            text = element.inner_text().strip()
+        except Exception:
+            text = ""
+        if text:
+            indicators[key] = coerce_state_value(text)
+
+        try:
+            indicators[f"{key}_visible"] = element.is_visible()
+        except Exception:
+            pass
+
+    return indicators
+
+
 def observe_web_kobe_page(
     page,
     *,
@@ -56,5 +93,6 @@ def observe_web_kobe_page(
         heading=heading,
         web_state_id=web_state_id,
         llm_title=llm_title,
+        state_indicators=_data_state_indicators(page),
         evidence=[Evidence(source="browser", url=url, confidence=1.0)],
     )

@@ -1,6 +1,7 @@
 import dataclasses
 import json
 import logging
+import re
 import time
 from urllib.parse import urlparse
 
@@ -27,6 +28,7 @@ class LoopConfig:
     password: str | None = dataclasses.field(default=None)
     additional_info: str | None = dataclasses.field(default=None)
     collector: object | None = dataclasses.field(default=None)
+    task: str | None = dataclasses.field(default=None)
 
 
 WebStateBacktrack = tuple[
@@ -125,7 +127,7 @@ class ExploreLoop:
             return
 
         self._webstate_current = ws
-        self._action_current = ws.random_action
+        self._action_current = self._select_action(ws)
 
         if not self._action_current:
             logging.info("No more actions to take on this page")
@@ -160,6 +162,28 @@ class ExploreLoop:
         )
         self._web_kobe_previous_observation = observation
         logging.info(f"Action result: {self._action_current.status}")
+
+    def _select_action(self, ws: webstate.WebState) -> webstate.Action | None:
+        task = (getattr(self._config, "task", None) or "").strip()
+        if not task:
+            return ws.random_action
+
+        candidates = [action for action in ws.actions if action.status == "none"]
+        if not candidates:
+            return None
+
+        task_tokens = _tokens(task)
+        if not task_tokens:
+            return ws.random_action
+
+        def score(action: webstate.Action) -> tuple[int, int]:
+            action_tokens = _tokens(action.description)
+            return (len(task_tokens & action_tokens), action.priority)
+
+        best = max(candidates, key=score)
+        if score(best)[0] == 0:
+            return ws.random_action
+        return best
 
     def _get_webstate(self) -> webstate.WebState:
         self._ensure_page_loaded()
@@ -308,3 +332,11 @@ class ExploreLoop:
         for transition in transitions:
             self._executor.replicate_tool_calls(transition.action.function_calls)
             self._webstate_current = transition.state_new
+
+
+def _tokens(value: str) -> set[str]:
+    return {
+        token
+        for token in re.findall(r"[a-zA-Z0-9]+", value.lower())
+        if token not in {"a", "an", "the", "to", "on", "in", "of", "and", "or"}
+    }
