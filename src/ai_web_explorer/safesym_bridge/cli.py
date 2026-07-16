@@ -21,6 +21,9 @@ from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
     compile_web_kobe_graph_to_pddl,
     load_web_kobe_graph_json,
 )
+from ai_web_explorer.safesym_bridge.web_kobe_pddl_smoke import (
+    write_web_kobe_pddl_smoke,
+)
 
 
 def write_saucedemo_pddl(output_dir: Path) -> Path:
@@ -138,6 +141,32 @@ def main(argv: list[str] | None = None) -> int:
         help="Goal node ID for the generated Web-KOBE PDDL problem.",
     )
     web_kobe_pddl_from_graph_parser.add_argument(
+        "--start-node",
+        default=None,
+        help="Optional start node override. Defaults to graph.start_node_id.",
+    )
+    web_kobe_pddl_smoke_parser = subparsers.add_parser(
+        "web-kobe-pddl-smoke",
+        help="Write Web-KOBE PDDL plus planning-readiness smoke report.",
+    )
+    web_kobe_pddl_smoke_parser.add_argument(
+        "--graph",
+        type=Path,
+        required=True,
+        help="Path to an explored Web-KOBE graph JSON.",
+    )
+    web_kobe_pddl_smoke_parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("outputs/web_kobe_pddl_smoke"),
+        help="Directory to write domain.pddl, problem.pddl, and smoke_report.json.",
+    )
+    web_kobe_pddl_smoke_parser.add_argument(
+        "--goal-node",
+        required=True,
+        help="Goal node ID for the generated Web-KOBE PDDL problem.",
+    )
+    web_kobe_pddl_smoke_parser.add_argument(
         "--start-node",
         default=None,
         help="Optional start node override. Defaults to graph.start_node_id.",
@@ -273,6 +302,15 @@ def main(argv: list[str] | None = None) -> int:
                 encoding="utf-8",
             )
             output_path = args.output
+        elif args.mode == "web-kobe-pddl-smoke":
+            graph = load_web_kobe_graph_json(args.graph)
+            result = write_web_kobe_pddl_smoke(
+                graph,
+                args.output,
+                start_node_id=args.start_node,
+                goal_node_id=args.goal_node,
+            )
+            output_path = result.output_dir
         else:
             parser.print_help()
             return 2
