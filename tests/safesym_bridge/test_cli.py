@@ -30,6 +30,7 @@ def test_main_help_lists_only_web_kobe_mainline_commands(capsys):
     assert "web-kobe-pddl-smoke" in help_output
     assert "web-kobe-safesym-smoke" in help_output
     assert "web-kobe-openai-selector-smoke" in help_output
+    assert "web-kobe-saucedemo-llm-step-smoke" in help_output
     assert "capability-graph" not in help_output
     assert "explore-capability-graph" not in help_output
     assert "explore-graph" not in help_output
@@ -412,3 +413,63 @@ def test_main_web_kobe_openai_selector_smoke_writes_report(monkeypatch, tmp_path
     assert exit_code == 0
     assert calls == [(output, "gpt-test", None)]
     assert output.exists()
+
+
+def test_main_web_kobe_saucedemo_llm_step_smoke_runs_browser_step(
+    monkeypatch,
+    tmp_path,
+):
+    output = tmp_path / "saucedemo_step_graph.json"
+    trace = tmp_path / "saucedemo_step_trace.json"
+    calls = []
+
+    async def fake_run_saucedemo_openai_selector_step(
+        output_path,
+        *,
+        selector_trace_path=None,
+        headless=True,
+        model=None,
+    ):
+        calls.append((output_path, selector_trace_path, headless, model))
+        output_path.write_text(
+            json.dumps({"meta": {"app": "saucedemo"}}),
+            encoding="utf-8",
+        )
+        selector_trace_path.write_text(
+            json.dumps(
+                [
+                    {
+                        "status": "selected",
+                        "llm_response": {
+                            "selected_action_id": "product_add_to_cart",
+                        },
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        return output_path
+
+    monkeypatch.setattr(
+        cli,
+        "run_saucedemo_openai_selector_step",
+        fake_run_saucedemo_openai_selector_step,
+    )
+
+    exit_code = main(
+        [
+            "web-kobe-saucedemo-llm-step-smoke",
+            "--output",
+            str(output),
+            "--selector-trace",
+            str(trace),
+            "--model",
+            "gpt-test",
+            "--headed",
+        ]
+    )
+
+    assert exit_code == 0
+    assert calls == [(output, trace, False, "gpt-test")]
+    assert output.exists()
+    assert trace.exists()

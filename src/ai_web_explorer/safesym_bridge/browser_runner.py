@@ -23,6 +23,10 @@ from ai_web_explorer.grounded_web.semantic_assistor import (
 from ai_web_explorer.grounded_web.llm_action_selector import (
     LlmActionSelectionRequest,
     LlmActionSelectionResult,
+    select_action_with_llm,
+)
+from ai_web_explorer.grounded_web.openai_action_selector import (
+    create_openai_chat_selection_provider_from_env,
 )
 
 
@@ -112,3 +116,78 @@ async def run_web_kobe_exploration(
             return output_path
         finally:
             await browser.close()
+
+
+async def _bootstrap_saucedemo_login(page) -> None:
+    await page.goto("https://www.saucedemo.com/")
+    await page.fill("#user-name", "standard_user")
+    await page.fill("#password", "secret_sauce")
+    await page.click("#login-button")
+    await page.wait_for_url("**/inventory.html")
+
+
+async def run_saucedemo_llm_selector_step(
+    output_path: Path,
+    *,
+    selector_trace_path: Path | None = None,
+    headless: bool = True,
+    action_selector: Callable[
+        [LlmActionSelectionRequest],
+        LlmActionSelectionResult,
+    ],
+) -> Path:
+    from playwright.async_api import async_playwright
+
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(headless=headless)
+        page = await browser.new_page()
+        try:
+            await _bootstrap_saucedemo_login(page)
+            adapter = WebKobePlaywrightAdapter(
+                page,
+                app_name="saucedemo",
+            )
+            explorer = WebKobeExplorer(
+                adapter=adapter,
+                semantic_assistor=DeterministicSemanticAssistor(app="saucedemo"),
+                goal="Complete a SauceDemo checkout order.",
+                action_selector=action_selector,
+            )
+            controller = WebKobeExplorationController(explorer)
+            result = await controller.run(max_steps=1)
+            write_web_kobe_graph(result.graph, output_path)
+            if selector_trace_path is not None:
+                selector_trace_path.parent.mkdir(parents=True, exist_ok=True)
+                selector_trace_path.write_text(
+                    json.dumps(
+                        explorer.selection_traces,
+                        indent=2,
+                        ensure_ascii=False,
+                    ),
+                    encoding="utf-8",
+                )
+            return output_path
+        finally:
+            await browser.close()
+
+
+async def run_saucedemo_openai_selector_step(
+    output_path: Path,
+    *,
+    selector_trace_path: Path | None = None,
+    headless: bool = True,
+    model: str | None = None,
+) -> Path:
+    provider = create_openai_chat_selection_provider_from_env(model=model)
+
+    def action_selector(
+        request: LlmActionSelectionRequest,
+    ) -> LlmActionSelectionResult:
+        return select_action_with_llm(request, provider=provider)
+
+    return await run_saucedemo_llm_selector_step(
+        output_path,
+        selector_trace_path=selector_trace_path,
+        headless=headless,
+        action_selector=action_selector,
+    )

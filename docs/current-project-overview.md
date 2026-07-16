@@ -122,7 +122,7 @@ suite so test failures better reflect current project direction.
 Latest retained bridge-suite verification:
 
 ```text
-tests/safesym_bridge: 151 passed, 2 skipped
+tests/safesym_bridge: 154 passed, 2 skipped
 ```
 
 `WebKobeGraph` is the main exploration-time representation for unknown websites.
@@ -157,6 +157,19 @@ It tests the current concrete SauceDemo selection problem without opening a
 browser: given `inventory`, `cart_count=0`, and candidates
 `product_add_to_cart` / `cart_open`, the expected choice is
 `product_add_to_cart`.
+
+A browser-backed one-step SauceDemo LLM smoke is also available:
+
+```bash
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-saucedemo-llm-step-smoke \
+  --output outputs/saucedemo_llm_step_graph.json \
+  --selector-trace outputs/saucedemo_llm_step_trace.json
+```
+
+This smoke treats login as a deterministic test bootstrap, then starts the agent
+on the inventory page. In the first live run, the LLM selected
+`product_add_to_cart`, Playwright executed the grounded action, and the
+WebKobeGraph edge recorded `cart_count: 0 -> 1`.
 
 The grounded action loop is the current pre-LLM control boundary. It records
 what the upper layer intended to do, which concrete `BrowserAction` was
@@ -611,9 +624,10 @@ The current system has several important limits:
   see both `product_add_to_cart` and `cart_open`, but deterministic ranking may
   open the cart before adding a product.
 - Real LLM selector smoke has been run after explicit user approval to use this
-  workspace's non-OpenAI `OPENAI_BASE_URL`. For the concrete SauceDemo
-  `inventory/cart_count=0` case, the model selected `product_add_to_cart` with a
-  task-aware reason. Default automated coverage still uses fake providers to
+  workspace's non-OpenAI `OPENAI_BASE_URL`. The offline selector smoke chose
+  `product_add_to_cart` for the concrete SauceDemo `inventory/cart_count=0`
+  case, and the browser-backed one-step smoke executed that action and observed
+  `cart_count: 0 -> 1`. Default automated coverage still uses fake providers to
   validate selector boundaries and traceability without consuming API quota.
 - Safety guarantees only apply to the model that was observed and compiled.
 

@@ -7,6 +7,7 @@ from pathlib import Path
 from ai_web_explorer.safesym_bridge.browser_runner import (
     build_debug_web_kobe_graph,
     run_web_kobe_exploration,
+    run_saucedemo_openai_selector_step,
     write_web_kobe_graph,
 )
 from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
@@ -177,6 +178,35 @@ def main(argv: list[str] | None = None) -> int:
             "OPENAI_ACTION_SELECTOR_MODEL or the project default."
         ),
     )
+    saucedemo_llm_step_parser = subparsers.add_parser(
+        "web-kobe-saucedemo-llm-step-smoke",
+        help=(
+            "Bootstrap SauceDemo login, run one OpenAI-guided Web-KOBE "
+            "browser step, and write graph plus selector trace."
+        ),
+    )
+    saucedemo_llm_step_parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("outputs/saucedemo_llm_step_graph.json"),
+        help="Path to write the one-step Web-KOBE graph JSON.",
+    )
+    saucedemo_llm_step_parser.add_argument(
+        "--selector-trace",
+        type=Path,
+        default=Path("outputs/saucedemo_llm_step_trace.json"),
+        help="Path to write selector trace JSON.",
+    )
+    saucedemo_llm_step_parser.add_argument(
+        "--model",
+        default=None,
+        help="Optional OpenAI model override.",
+    )
+    saucedemo_llm_step_parser.add_argument(
+        "--headed",
+        action="store_true",
+        help="Show the browser window while running the smoke.",
+    )
 
     args = parser.parse_args(argv)
 
@@ -253,6 +283,15 @@ def main(argv: list[str] | None = None) -> int:
                 model=args.model,
             )
             output_path = result.report_path
+        elif args.mode == "web-kobe-saucedemo-llm-step-smoke":
+            output_path = asyncio.run(
+                run_saucedemo_openai_selector_step(
+                    args.output,
+                    selector_trace_path=args.selector_trace,
+                    model=args.model,
+                    headless=not args.headed,
+                )
+            )
         else:
             parser.print_help()
             return 2
