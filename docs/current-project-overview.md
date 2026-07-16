@@ -13,15 +13,18 @@ The current project extends that idea toward safety-aware web planning:
 ```text
 real website
   -> browser observation
-  -> WebObservedGraph
-  -> graph-derived PDDL
-  -> SafeSym safety injection
+  -> DOM-grounded Web-KOBE exploration
+  -> WebKobeGraph
+  -> WebKobeGraph-to-PDDL projection
+  -> SafeSym/planner-facing artifacts
+  -> later SafeSym safety injection
   -> planner
   -> safe action plan
 ```
 
-The current milestone uses SauceDemo as the target website. SauceDemo is not the
-final goal; it is a controlled web app used to prove the end-to-end chain.
+The current milestone uses local fixtures and SauceDemo as controlled targets.
+They are not the final goal; they are stable web apps used to prove the
+end-to-end chain.
 
 The important research question is:
 
@@ -33,7 +36,7 @@ and compile that graph into a planning model where safety checks can be added?
 ## Current Main Pipeline
 
 The recommended path is no longer the older FSM-first path. The project now has
-one active generic mainline and two compatibility/regression routes:
+one active generic mainline and one app-specific regression route:
 
 ```text
 active generic mainline:
@@ -52,10 +55,6 @@ SafeSym regression route:
   -> WebObservedGraph
   -> graph-derived PDDL
   -> SafeSym
-
-legacy compatibility route:
-  original ai-web-explorer ExploreLoop
-  -> optional WebKobeCollector sidecar
 ```
 
 New generic exploration code should import the active mainline through:
@@ -65,7 +64,7 @@ src/ai_web_explorer/grounded_web/
 ```
 
 That package is the stable boundary for DOM-grounded web operation, state
-recording, graph construction, and simple no-LLM baseline agents.
+recording, action execution, and graph construction.
 `safesym_bridge` consumes these graph/data structures and should stay focused on
 SafeSym/PDDL projection plus app-specific regression adapters. Generic
 exploration code and tests should depend on `grounded_web` directly.
@@ -77,8 +76,8 @@ transitions into a simple STRIPS `domain.pddl`, and create a concrete
 `grounded_web` as the exploration/observation layer and `safesym_bridge` as the
 planner-facing projection layer.
 
-The SauceDemo graph/PDDL route remains important as the SafeSym end-to-end
-regression path:
+The SauceDemo graph/PDDL route remains as an app-specific SafeSym regression
+path, especially for future safety-trigger scenarios:
 
 ```text
 Playwright browser
@@ -92,26 +91,7 @@ Playwright browser
   -> SafeSym
 ```
 
-In CLI form:
-
-```bash
-python -m ai_web_explorer.safesym_bridge.cli explore-graph --output outputs/saucedemo_explored_graph.json
-python -m ai_web_explorer.safesym_bridge.cli explore-pddl --output outputs/safesym_e2e/explored_graph_pddl
-```
-
-An experimental capability-graph sidecar is also available:
-
-```bash
-python -m ai_web_explorer.safesym_bridge.cli capability-graph --output outputs/saucedemo_capability_graph.json
-python -m ai_web_explorer.safesym_bridge.cli explore-capability-graph --output outputs/saucedemo_explored_capability_graph.json
-```
-
-This sidecar does not replace `WebObservedGraph -> PDDL -> SafeSym`. It projects
-the same observed transitions into a capability-first artifact that focuses on
-semantic page states, abstract capabilities, and observed state deltas.
-
-An early Web-KOBE-style exploration graph is being introduced as the next
-generic exploration direction:
+The active CLI smoke path is now Web-KOBE/PDDL-first:
 
 ```bash
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-graph --output outputs/web_kobe_graph.json
@@ -129,6 +109,18 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-pddl-smoke \
 The next short-term validation is `web-kobe-pddl-smoke`, which checks whether
 an explored WebKobeGraph yields non-empty, graph-reachable PDDL artifacts. This
 is planning-readiness validation, not SafeSym safety-trigger validation.
+
+The retained regression suite is intentionally focused on this mainline plus
+the SauceDemo app-specific adapter/resolver/catalog path. Older
+WebObservedGraph compiler unit tests, capability-graph sidecar tests, legacy
+executor tests, and simple-agent facade tests were removed from the default
+suite so test failures better reflect current project direction.
+
+Latest retained bridge-suite verification:
+
+```text
+tests/safesym_bridge: 122 passed, 2 skipped
+```
 
 This graph is the main exploration-time representation for unknown websites. It
 records semantic page states, browser-grounded actions, observed deltas, and

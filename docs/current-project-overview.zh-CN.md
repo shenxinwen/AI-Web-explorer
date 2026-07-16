@@ -45,7 +45,7 @@ docs/current-project-overview.md
 
 ## 当前主线 Pipeline
 
-项目已经不再以旧的 FSM 路线为主。当前有一条新主线，以及两条兼容/回归路线。
+项目已经不再以旧的 FSM 路线为主。当前有一条新主线，以及一条应用级回归路线。
 
 ```text
 当前通用主线：
@@ -64,10 +64,6 @@ SafeSym 回归路线：
   -> WebObservedGraph
   -> graph-derived PDDL
   -> SafeSym
-
-旧兼容路线：
-  original ai-web-explorer ExploreLoop
-  -> optional WebKobeCollector sidecar
 ```
 
 新的通用探索代码应该通过下面这个包进入：
@@ -82,7 +78,7 @@ src/ai_web_explorer/grounded_web/
 - 浏览器动作抽象；
 - 状态记录；
 - WebKobeGraph 构建；
-- 不依赖 LLM 的 baseline agent。
+- ActionIntent 到具体浏览器动作的执行边界。
 
 `safesym_bridge` 不应该再承载通用探索逻辑。它现在应该专注于：
 
@@ -116,8 +112,13 @@ src/ai_web_explorer/grounded_web/
    最近一次桥接层测试结果：
 
    ```text
-   tests/safesym_bridge: 139 passed, 4 skipped
+   tests/safesym_bridge: 122 passed, 2 skipped
    ```
+
+   当前测试套件已经做过一次主线收束：删除旧 `WebObservedGraph -> PDDL`
+   单元测试、experimental capability graph sidecar 测试、legacy executor
+   测试和 simple-agent facade 测试。默认保留 Web-KOBE/PDDL 主线测试，以及
+   仍可能服务后续安全规则场景的 SauceDemo adapter/resolver/catalog 回归测试。
 
 ## Web-KOBE 风格探索主线
 
