@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Local Checkout Fixture</title>
+    <style>
+      :root {
+        color: #1f2933;
+        font-family: Arial, sans-serif;
+      }
+
+      body {
+        margin: 0;
+      }
+
+      header,
+      main,
+      footer {
+        margin: 0 auto;
+        max-width: 880px;
+        padding: 20px 24px;
+      }
+
+      header {
+        align-items: center;
+        border-bottom: 1px solid #d9e2ec;
+        display: flex;
+        justify-content: space-between;
+      }
+
+      nav {
+        color: #52606d;
+        font-size: 14px;
+      }
+
+      .grid {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .card,
+      .panel {
+        border: 1px solid #bcccdc;
+        border-radius: 8px;
+        padding: 16px;
+      }
+
+      .muted {
+        color: #52606d;
+      }
+
+      .state-bar {
+        background: #f0f4f8;
+        border-radius: 8px;
+        display: grid;
+        gap: 8px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        margin-bottom: 20px;
+        padding: 12px;
+      }
+
+      label {
+        display: block;
+        font-weight: 700;
+        margin-top: 12px;
+      }
+
+      input {
+        border: 1px solid #9fb3c8;
+        border-radius: 4px;
+        box-sizing: border-box;
+        display: block;
+        font-size: 14px;
+        margin-top: 4px;
+        padding: 8px;
+        width: 100%;
+      }
+
+      button {
+        background: #155e75;
+        border: 0;
+        border-radius: 4px;
+        color: white;
+        cursor: pointer;
+        font-size: 14px;
+        margin-top: 12px;
+        padding: 8px 12px;
+      }
+
+      button:disabled {
+        background: #9fb3c8;
+        cursor: not-allowed;
+      }
+
+      [hidden] {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>Local Checkout Fixture</h1>
+        <p class="muted">A deterministic mini-shop for Web-KOBE exploration.</p>
+      </div>
+      <nav aria-label="Store navigation">Home · Cart · Help</nav>
+    </header>
+
+    <main>
+      <section aria-label="Observable checkout state" class="state-bar">
+        <div>Cart: <span data-state="cart_count">0</span></div>
+        <div>Step: <span data-state="checkout_step">0</span></div>
+        <div>Info complete: <span data-state="checkout_info_complete">0</span></div>
+        <div>Order created: <span data-state="order_created">0</span></div>
+        <div>Name: <span data-state="name_filled">0</span></div>
+        <div>Email: <span data-state="email_filled">0</span></div>
+        <div>Address: <span data-state="address_filled">0</span></div>
+      </section>
+
+      <section id="listing" aria-label="Product listing">
+        <h2>Products</h2>
+        <div class="grid">
+          <article class="card" data-entity-type="product">
+            <h3>Everyday Backpack</h3>
+            <p class="muted">A representative item with stable copy.</p>
+            <p>$32.00 · In stock</p>
+            <button data-action="add-to-cart" data-test="add-backpack" type="button">
+              Add to cart
+            </button>
+          </article>
+
+          <article class="card" data-entity-type="product">
+            <h3>Travel Mug</h3>
+            <p class="muted">A second repeated product card.</p>
+            <p>$14.00 · In stock</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="cart" aria-label="Shopping cart" class="panel" hidden>
+        <h2>Cart</h2>
+        <p data-state="cart_summary">Cart contains 1 item.</p>
+        <button data-action="begin-checkout" data-test="begin-checkout" type="button">
+          Begin checkout
+        </button>
+      </section>
+
+      <section id="checkout" aria-label="Checkout information" class="panel" hidden>
+        <h2>Checkout information</h2>
+        <form id="checkout-form">
+          <label for="customer-name">Name</label>
+          <input
+            id="customer-name"
+            name="customer-name"
+            placeholder="Full name"
+            type="text"
+          >
+
+          <label for="customer-email">Email</label>
+          <input
+            id="customer-email"
+            name="customer-email"
+            placeholder="Email address"
+            type="email"
+          >
+
+          <label for="shipping-address">Address</label>
+          <input
+            id="shipping-address"
+            name="shipping-address"
+            placeholder="Shipping address"
+            type="text"
+          >
+
+          <button
+            data-action="place-order"
+            data-test="place-order"
+            disabled
+            type="button"
+          >
+            Place order
+          </button>
+        </form>
+      </section>
+
+      <section id="complete" aria-label="Order complete" class="panel" hidden>
+        <h2>Order complete</h2>
+        <p>Thank you. Your order has been created.</p>
+      </section>
+    </main>
+
+    <footer class="muted">
+      Static footer copy is intentionally present but should not drive state.
+    </footer>
+
+    <script>
+      const state = {
+        cartCount: 0,
+        checkoutStep: 0,
+        checkoutInfoComplete: 0,
+        orderCreated: 0,
+        nameFilled: 0,
+        emailFilled: 0,
+        addressFilled: 0,
+      };
+
+      const listing = document.querySelector("#listing");
+      const cart = document.querySelector("#cart");
+      const checkout = document.querySelector("#checkout");
+      const complete = document.querySelector("#complete");
+      const fields = [
+        document.querySelector("#customer-name"),
+        document.querySelector("#customer-email"),
+        document.querySelector("#shipping-address"),
+      ];
+      const placeOrder = document.querySelector("[data-action='place-order']");
+
+      function setStateText(key, value) {
+        document.querySelector(`[data-state='${key}']`).textContent = String(value);
+      }
+
+      function render() {
+        setStateText("cart_count", state.cartCount);
+        setStateText("checkout_step", state.checkoutStep);
+        setStateText("checkout_info_complete", state.checkoutInfoComplete);
+        setStateText("order_created", state.orderCreated);
+        setStateText("name_filled", state.nameFilled);
+        setStateText("email_filled", state.emailFilled);
+        setStateText("address_filled", state.addressFilled);
+        placeOrder.disabled = state.checkoutInfoComplete !== 1;
+      }
+
+      function updateInfoComplete() {
+        state.nameFilled = fields[0].value.trim() ? 1 : 0;
+        state.emailFilled = fields[1].value.trim() ? 1 : 0;
+        state.addressFilled = fields[2].value.trim() ? 1 : 0;
+        state.checkoutInfoComplete = fields.every((field) => field.value.trim()) ? 1 : 0;
+        render();
+      }
+
+      document.querySelector("[data-action='add-to-cart']").addEventListener("click", () => {
+        state.cartCount = 1;
+        state.checkoutStep = 1;
+        listing.hidden = true;
+        cart.hidden = false;
+        render();
+      });
+
+      document.querySelector("[data-action='begin-checkout']").addEventListener("click", () => {
+        state.checkoutStep = 2;
+        cart.hidden = true;
+        checkout.hidden = false;
+        render();
+      });
+
+      fields.forEach((field) => {
+        field.addEventListener("input", updateInfoComplete);
+      });
+
+      placeOrder.addEventListener("click", () => {
+        state.checkoutStep = 3;
+        state.orderCreated = 1;
+        checkout.hidden = true;
+        complete.hidden = false;
+        render();
+      });
+
+      render();
+    </script>
+  </body>
+</html>

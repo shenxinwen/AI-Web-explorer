@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
 from typing import Any, Protocol
 from urllib.parse import urlsplit, urlunsplit
@@ -12,6 +14,14 @@ def _url_pattern_for(url: str) -> str:
     parts = urlsplit(url)
     path = parts.path.rstrip("/") or "/"
     return urlunsplit((parts.scheme, parts.netloc, path, "", ""))
+
+
+def _state_node_id(page_id: str, signature: dict[str, Any]) -> str:
+    if not signature:
+        return page_id
+    payload = json.dumps(signature, sort_keys=True, separators=(",", ":"), default=str)
+    digest = hashlib.sha1(payload.encode("utf-8")).hexdigest()[:10]
+    return f"{page_id}__{digest}"
 
 
 @dataclass(frozen=True)
@@ -52,6 +62,7 @@ class DeterministicSemanticAssistor:
             )
         ]
         last_state = dict(snapshot.signature)
+        node_id = _state_node_id(snapshot.page_id, last_state)
         page_frame = PageFrame(
             page_id=f"{self.app}:{snapshot.page_id}",
             page_type=snapshot.page_id,
@@ -63,7 +74,7 @@ class DeterministicSemanticAssistor:
             evidence=evidence,
         )
         return SemanticStateDraft(
-            node_id=snapshot.page_id,
+            node_id=node_id,
             page_description=f"{snapshot.page_id} page",
             page_frame=page_frame,
             state_schema={key: [value] for key, value in last_state.items()},

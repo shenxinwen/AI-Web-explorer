@@ -119,7 +119,7 @@ suite so test failures better reflect current project direction.
 Latest retained bridge-suite verification:
 
 ```text
-tests/safesym_bridge: 126 passed, 2 skipped
+tests/safesym_bridge: 130 passed, 2 skipped
 ```
 
 This graph is the main exploration-time representation for unknown websites. It
@@ -146,6 +146,11 @@ When an action executes successfully but produces no immediate delta, the loop
 now waits for a bounded observation window and polls state before returning
 `no_observed_change`. This is an observation policy, not an execution retry:
 the browser action is not repeated by default.
+
+The deterministic semantic assistor now includes a stable state-signature digest
+in generated node IDs. This lets single-page applications produce distinct graph
+nodes for distinct observed states while still merging repeated observations of
+the same state.
 
 The intended architecture boundary is now:
 
@@ -215,10 +220,10 @@ when a feature touches a boundary, with new generic code going through
 ```bash
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-explore \
   --url http://127.0.0.1:8000/index.html \
-  --output outputs/local_shop_web_kobe.json \
-  --app-name local_shop \
-  --page-id local_shop \
-  --steps 3
+  --output outputs/local_checkout_web_kobe.json \
+  --app-name local_checkout \
+  --page-id local_checkout \
+  --steps 6
 ```
 
 This route is the main place to improve generic unknown-site operation because
@@ -227,29 +232,30 @@ record the resulting state changes. The older original-explorer sidecar path is
 still useful as a comparison point, but it is less stable because it asks the
 LLM to generate both action descriptions and selectors.
 
-The preferred first smoke target is a local no-login fixture page:
+The preferred first golden-path target is a local no-login checkout fixture:
 
 ```bash
-python -m http.server 8000 --directory tests/fixtures/local_shop
+python -m http.server 8000 --directory tests/fixtures/local_checkout
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-explore \
   --url http://127.0.0.1:8000/index.html \
-  --output outputs/local_shop_web_kobe.json \
-  --app-name local_shop \
-  --page-id local_shop \
-  --steps 3
+  --output outputs/local_checkout_web_kobe.json \
+  --app-name local_checkout \
+  --page-id local_checkout \
+  --steps 6
 ```
 
 This fixture avoids login, cookie banners, and third-party website changes. It
-contains repeated product-card entities and simple cart state changes, so it is
-the fastest way to check whether DOM candidate extraction, Playwright execution,
-state observation, and Web-KOBE graph recording are connected correctly.
+contains a small product/cart/checkout/order-complete flow, so it is the fastest
+way to check whether DOM candidate extraction, Playwright execution, form
+filling, state observation, state-specific graph nodes, and Web-KOBE PDDL smoke
+are connected correctly.
 SauceDemo should be used after this local smoke path works, because SauceDemo
 requires a login state before `/inventory.html` is accessible.
 
-The fixture currently verifies click-based grounded operation. The expected
-recorded deltas include cart count changes and cart panel visibility changes.
-Complex state recovery, deduplication, and full PDDL projection are intentionally
-deferred until this operation-and-recording loop is reliable.
+The fixture verifies click and fill grounded operation. The expected recorded
+deltas include cart count, checkout step, form-completion, and order-created
+changes. It is not a site-specific adapter; it is a low-noise shopping benchmark
+that exercises the generic DOM-grounded pipeline.
 
 The fixture uses `[data-state]` attributes for lightweight generic state
 observation. The Web-KOBE observer currently records each `[data-state]`

@@ -10,6 +10,11 @@ def _truthy_metadata(item: dict[str, Any], key: str) -> bool:
     return bool(metadata.get(key))
 
 
+def _metadata_value(item: dict[str, Any], key: str) -> str:
+    metadata = item.get("metadata") or {}
+    return str(metadata.get(key) or "")
+
+
 def _rank_score(item: dict[str, Any]) -> tuple[int, int, str]:
     action_kind = str(item.get("action_kind") or "click")
     description = str(item.get("description") or "")
@@ -27,7 +32,8 @@ def _rank_score(item: dict[str, Any]) -> tuple[int, int, str]:
     if action_kind == "select":
         return (3, 0, semantic_id)
     if action_kind in {"fill", "fill_then_click"}:
-        return (4, 0, semantic_id)
+        already_has_value = bool(_metadata_value(item, "value").strip())
+        return (4, 1 if already_has_value else 0, semantic_id)
     if locator:
         return (5, 0, semantic_id)
     return (6, 0, semantic_id)

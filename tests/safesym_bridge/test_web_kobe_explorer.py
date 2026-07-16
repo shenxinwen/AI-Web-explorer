@@ -65,7 +65,7 @@ class RepeatedStateAdapter:
             page_id="listing",
             url="https://example.test/listing",
             title="Listing",
-            signature={"cart_count": len(self.executed)},
+            signature={"cart_count": 0},
         )
 
     async def list_interactables(self, state):
@@ -102,11 +102,12 @@ async def test_explore_one_step_records_self_loop_delta():
     graph = await explorer.explore_one_step()
 
     assert graph.total_steps_completed == 1
-    assert len(graph.nodes) == 1
+    assert len(graph.nodes) == 2
     assert len(graph.edges) == 1
     edge = graph.edges[0]
-    assert edge.source_node_id == "listing"
-    assert edge.target_node_id == "listing"
+    assert edge.source_node_id.startswith("listing__")
+    assert edge.target_node_id.startswith("listing__")
+    assert edge.source_node_id != edge.target_node_id
     assert edge.action.semantic_id == "add_to_cart_product"
     assert edge.schema_delta == {
         "cart_nonempty": {"before": False, "after": True}

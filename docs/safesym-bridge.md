@@ -22,7 +22,7 @@ projection lives here.
 Run a deterministic local fixture first:
 
 ```bash
-python -m http.server 8000 --directory tests/fixtures/local_shop
+python -m http.server 8000 --directory tests/fixtures/local_checkout
 ```
 
 Explore the page and write a WebKobeGraph:
@@ -30,18 +30,18 @@ Explore the page and write a WebKobeGraph:
 ```bash
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-explore \
   --url http://127.0.0.1:8000/index.html \
-  --output outputs/local_shop_web_kobe.json \
-  --app-name local_shop \
-  --page-id local_shop \
-  --steps 3
+  --output outputs/local_checkout_web_kobe.json \
+  --app-name local_checkout \
+  --page-id local_checkout \
+  --steps 6
 ```
 
 Then check whether the graph can produce planner-facing artifacts:
 
 ```bash
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-pddl-smoke \
-  --graph outputs/local_shop_web_kobe.json \
-  --output outputs/local_shop_pddl_smoke \
+  --graph outputs/local_checkout_web_kobe.json \
+  --output outputs/local_checkout_pddl_smoke \
   --goal-node <goal_node_id>
 ```
 
@@ -56,6 +56,12 @@ smoke_report.json
 It validates planning readiness only. Missing SafeSym safety injection is not a
 failure unless the graph contains a safety-relevant action and rule model that
 should trigger it.
+
+`local_checkout` is the current golden-path fixture. It is a deterministic
+mini-shopping flow with product, cart, checkout form, and order-complete states.
+It avoids login, third-party scripts, random content, and network noise while
+still exercising click, fill, state-delta recording, state-specific graph nodes,
+and PDDL smoke generation.
 
 ## CLI Commands
 

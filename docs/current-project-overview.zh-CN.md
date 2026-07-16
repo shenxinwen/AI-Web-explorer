@@ -112,7 +112,7 @@ src/ai_web_explorer/grounded_web/
    最近一次桥接层测试结果：
 
    ```text
-   tests/safesym_bridge: 126 passed, 2 skipped
+   tests/safesym_bridge: 130 passed, 2 skipped
    ```
 
    当前测试套件已经做过一次主线收束：删除旧 `WebObservedGraph -> PDDL`
@@ -153,10 +153,10 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-pddl-smoke \
 ```bash
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-explore \
   --url http://127.0.0.1:8000/index.html \
-  --output outputs/local_shop_web_kobe.json \
-  --app-name local_shop \
-  --page-id local_shop \
-  --steps 3
+  --output outputs/local_checkout_web_kobe.json \
+  --app-name local_checkout \
+  --page-id local_checkout \
+  --steps 6
 ```
 
 这条路线会：
@@ -253,16 +253,16 @@ src/ai_web_explorer/grounded_web/simple_agent.py
 
 ## 本地测试页面
 
-当前推荐的第一个 smoke target 是本地 fixture：
+当前推荐的第一个 golden-path target 是本地 checkout fixture：
 
 ```bash
-python -m http.server 8000 --directory tests/fixtures/local_shop
+python -m http.server 8000 --directory tests/fixtures/local_checkout
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-explore \
   --url http://127.0.0.1:8000/index.html \
-  --output outputs/local_shop_web_kobe.json \
-  --app-name local_shop \
-  --page-id local_shop \
-  --steps 3
+  --output outputs/local_checkout_web_kobe.json \
+  --app-name local_checkout \
+  --page-id local_checkout \
+  --steps 6
 ```
 
 选择本地 fixture 的原因：
@@ -270,8 +270,10 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-explore \
 - 不需要登录；
 - 不受第三方网站变化影响；
 - 没有 cookie banner 等干扰；
-- 可以稳定测试商品卡片、购物车状态、弹窗显示等状态变化；
-- 便于验证 DOM 提取、Playwright 执行、状态观察、图记录是否连通。
+- 可以稳定测试商品、购物车、结账表单、订单完成等状态变化；
+- 便于验证 DOM 提取、Playwright 执行、表单填写、状态观察、状态节点区分、PDDL smoke 是否连通。
+
+这个 fixture 不是站点专用适配器，而是低噪音 shopping benchmark。它提供清楚的 DOM 和 `data-state` 证据，但 explorer 仍然走通用 grounded Web-KOBE 路径。
 
 SauceDemo 仍然是重要的真实网站 smoke target，但它有登录门槛，所以应该在本地 fixture 稳定后再使用。
 
@@ -602,4 +604,3 @@ docs/current-project-overview.zh-CN.md
 省 token
 不要使用 subagent / 多智能体，除非用户明确允许
 ```
-

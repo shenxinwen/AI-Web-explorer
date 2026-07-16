@@ -58,18 +58,18 @@ python -m ai_web_explorer.safesym_bridge.cli --help
 Recommended flow:
 
 ```bash
-python -m http.server 8000 --directory tests/fixtures/local_shop
+python -m http.server 8000 --directory tests/fixtures/local_checkout
 
 web-kobe web-kobe-explore \
   --url http://127.0.0.1:8000/index.html \
-  --output outputs/local_shop_web_kobe.json \
-  --app-name local_shop \
-  --page-id local_shop \
-  --steps 3
+  --output outputs/local_checkout_web_kobe.json \
+  --app-name local_checkout \
+  --page-id local_checkout \
+  --steps 6
 
 web-kobe web-kobe-pddl-smoke \
-  --graph outputs/local_shop_web_kobe.json \
-  --output outputs/local_shop_pddl_smoke \
+  --graph outputs/local_checkout_web_kobe.json \
+  --output outputs/local_checkout_pddl_smoke \
   --goal-node <goal_node_id>
 ```
 

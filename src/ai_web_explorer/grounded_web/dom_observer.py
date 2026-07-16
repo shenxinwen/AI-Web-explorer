@@ -74,6 +74,7 @@ def _metadata(element: dict[str, object]) -> dict[str, str]:
         "aria_label": "aria-label",
         "title": "title",
         "href": "href",
+        "value": "value",
         "candidate_id": "data-web-kobe-id",
     }
     data: dict[str, str] = {}

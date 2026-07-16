@@ -66,11 +66,12 @@ async def test_playwright_web_kobe_explorer_records_real_self_loop_delta():
 
             graph = await explorer.explore_one_step()
 
-            assert graph.start_node_id == "fixture_shop"
+            assert graph.start_node_id.startswith("fixture_shop__")
             assert len(graph.edges) == 1
             edge = graph.edges[0]
-            assert edge.source_node_id == "fixture_shop"
-            assert edge.target_node_id == "fixture_shop"
+            assert edge.source_node_id.startswith("fixture_shop__")
+            assert edge.target_node_id.startswith("fixture_shop__")
+            assert edge.source_node_id != edge.target_node_id
             assert edge.schema_delta == {
                 "cart_count": {"before": 0, "after": 1},
                 "cart_nonempty": {"before": False, "after": True},
