@@ -131,6 +131,7 @@ async def run_saucedemo_llm_selector_step(
     *,
     selector_trace_path: Path | None = None,
     headless: bool = True,
+    steps: int = 1,
     action_selector: Callable[
         [LlmActionSelectionRequest],
         LlmActionSelectionResult,
@@ -154,7 +155,7 @@ async def run_saucedemo_llm_selector_step(
                 action_selector=action_selector,
             )
             controller = WebKobeExplorationController(explorer)
-            result = await controller.run(max_steps=1)
+            result = await controller.run(max_steps=max(steps, 1))
             write_web_kobe_graph(result.graph, output_path)
             if selector_trace_path is not None:
                 selector_trace_path.parent.mkdir(parents=True, exist_ok=True)
@@ -177,6 +178,7 @@ async def run_saucedemo_openai_selector_step(
     selector_trace_path: Path | None = None,
     headless: bool = True,
     model: str | None = None,
+    steps: int = 1,
 ) -> Path:
     provider = create_openai_chat_selection_provider_from_env(model=model)
 
@@ -189,5 +191,6 @@ async def run_saucedemo_openai_selector_step(
         output_path,
         selector_trace_path=selector_trace_path,
         headless=headless,
+        steps=steps,
         action_selector=action_selector,
     )

@@ -280,16 +280,16 @@ async def test_run_saucedemo_llm_selector_step_bootstraps_login_and_writes_trace
             )
 
         async def run(self, *, max_steps=1):
-            assert max_steps == 1
+            assert max_steps == 3
             return WebKobeExplorationResult(
                 graph=WebKobeGraph(
                     app="saucedemo",
                     start_node_id="inventory",
-                    total_steps_completed=1,
+                    total_steps_completed=3,
                 ),
                 summary=WebKobeExplorationSummary(
-                    requested_steps=1,
-                    steps_completed=1,
+                    requested_steps=3,
+                    steps_completed=3,
                     stop_reason="max_steps",
                     node_count=0,
                     edge_count=0,
@@ -313,6 +313,7 @@ async def test_run_saucedemo_llm_selector_step_bootstraps_login_and_writes_trace
         output_path,
         selector_trace_path=trace_path,
         action_selector=fake_selector,
+        steps=3,
     )
 
     assert result_path == output_path
@@ -354,6 +355,7 @@ async def test_run_saucedemo_openai_selector_step_wraps_provider(
         calls.append((output_path_arg, kwargs))
         assert kwargs["selector_trace_path"] == trace_path
         assert kwargs["headless"] is False
+        assert kwargs["steps"] == 3
         selector_result = kwargs["action_selector"](
             browser_runner.LlmActionSelectionRequest(
                 goal="Complete a SauceDemo checkout order.",
@@ -397,6 +399,7 @@ async def test_run_saucedemo_openai_selector_step_wraps_provider(
         selector_trace_path=trace_path,
         model="gpt-test",
         headless=False,
+        steps=3,
     )
 
     assert result_path == output_path

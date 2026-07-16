@@ -429,8 +429,9 @@ def test_main_web_kobe_saucedemo_llm_step_smoke_runs_browser_step(
         selector_trace_path=None,
         headless=True,
         model=None,
+        steps=1,
     ):
-        calls.append((output_path, selector_trace_path, headless, model))
+        calls.append((output_path, selector_trace_path, headless, model, steps))
         output_path.write_text(
             json.dumps({"meta": {"app": "saucedemo"}}),
             encoding="utf-8",
@@ -465,11 +466,13 @@ def test_main_web_kobe_saucedemo_llm_step_smoke_runs_browser_step(
             str(trace),
             "--model",
             "gpt-test",
+            "--steps",
+            "3",
             "--headed",
         ]
     )
 
     assert exit_code == 0
-    assert calls == [(output, trace, False, "gpt-test")]
+    assert calls == [(output, trace, False, "gpt-test", 3)]
     assert output.exists()
     assert trace.exists()

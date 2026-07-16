@@ -112,7 +112,7 @@ src/ai_web_explorer/grounded_web/
    最近一次桥接层测试结果：
 
    ```text
-tests/safesym_bridge: 154 passed, 2 skipped
+tests/safesym_bridge: 155 passed, 2 skipped
 ```
 
    当前测试套件已经做过一次主线收束：删除旧 `WebObservedGraph -> PDDL`
@@ -194,12 +194,20 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-openai-selector-smoke \
 ```bash
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-saucedemo-llm-step-smoke \
   --output outputs/saucedemo_llm_step_graph.json \
-  --selector-trace outputs/saucedemo_llm_step_trace.json
+  --selector-trace outputs/saucedemo_llm_step_trace.json \
+  --steps 3
 ```
 
 这个 smoke 把登录视作确定性的测试 bootstrap，然后从 inventory 页面开始让 agent
-执行一步。第一次 live run 中，LLM 选择了 `product_add_to_cart`，Playwright 执行了
-grounded action，WebKobeGraph edge 记录到 `cart_count: 0 -> 1`。
+执行。使用 `--steps 3` 时，live run 产生了：
+
+```text
+product_add_to_cart -> cart_open -> cart_checkout_start
+```
+
+最终图到达 `saucedemo:checkout_info`。第一条 edge 记录 `cart_count: 0 -> 1`；
+导航到 cart 的 edge 现在被视为 `succeeded_with_navigation`；checkout edge 记录
+`checkout_started: false -> true`。
 
 当前 `grounded_web` 新增了动作闭环边界：
 
@@ -534,7 +542,7 @@ observed transitions -> FSM JSON -> SafeSym loader compatibility
 - `web-kobe-safesym-smoke` 已经可以把生成的 Web-KOBE PDDL 交给外部 SafeSym parser、安全注入和可选 Fast Downward base/safe solve；
 - 当前 `local_checkout` smoke 已经能通过 SafeSym 和 Fast Downward，但还不会插入安全检查动作，因为 `dom_006_button_place_order` 这类投影 action 名还无法匹配 SafeSym 的安全规则模式；
 - 浏览器探索能力还比较窄，主要围绕 checkout-style 路径；真实 SauceDemo smoke 已经暴露出下一个具体问题：explorer 能看到 `product_add_to_cart` 和 `cart_open`，但确定性 ranking 可能会在加商品前先打开购物车；
-- 真实 LLM selector smoke 已经在用户明确授权使用当前非 OpenAI 官方 `OPENAI_BASE_URL` 后跑通；离线 selector smoke 在 SauceDemo 的 `inventory/cart_count=0` 场景中选择了 `product_add_to_cart`，真实浏览器单步 smoke 进一步执行了这个 grounded action，并观察到 `cart_count: 0 -> 1`。默认自动化测试仍使用 fake provider 验证 selector 边界和 traceability，避免消耗 API 额度；
+- 真实 LLM selector smoke 已经在用户明确授权使用当前非 OpenAI 官方 `OPENAI_BASE_URL` 后跑通；离线 selector smoke 在 SauceDemo 的 `inventory/cart_count=0` 场景中选择了 `product_add_to_cart`，真实浏览器 smoke 现在能跑通三步前缀 `product_add_to_cart -> cart_open -> cart_checkout_start`，并观察到 `cart_count: 0 -> 1` 与 `checkout_started: false -> true`。默认自动化测试仍使用 fake provider 验证 selector 边界和 traceability，避免消耗 API 额度；
 - 状态去重、恢复、泛化能力还没有成熟；
 - 安全保证只适用于已观察并编译出的模型。
 

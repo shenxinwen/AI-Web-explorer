@@ -103,6 +103,13 @@ class WebKobeExplorer:
             before_draft.last_state_snapshot,
             after_draft.last_state_snapshot,
         )
+        edge_status = result.outcome.status
+        if (
+            result.execution_success
+            and source_id != target_id
+            and edge_status == "no_observed_change"
+        ):
+            edge_status = "succeeded_with_navigation"
         edge = WebKobeEdge(
             source_node_id=source_id,
             target_node_id=target_id,
@@ -122,7 +129,7 @@ class WebKobeExplorer:
                 success=result.execution_success,
                 error=result.execution_error,
             ),
-            status=result.outcome.status,
+            status=edge_status,
             evidence=[Evidence(source="web_kobe_explorer", url=before.url)],
         )
         self.manager.add_edge(edge)

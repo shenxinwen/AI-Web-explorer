@@ -316,6 +316,61 @@ async def test_explore_one_step_marks_success_without_delta_as_no_observed_chang
     assert edge.observed_delta == []
 
 
+class NavigationOnlyAdapter:
+    app_name = "fake"
+
+    def __init__(self):
+        self.executed = []
+
+    async def observe_state(self):
+        if not self.executed:
+            return StateSnapshot(
+                page_id="inventory",
+                url="https://example.test/inventory",
+                title="Inventory",
+                signature={"cart_count": 1},
+            )
+        return StateSnapshot(
+            page_id="cart",
+            url="https://example.test/cart",
+            title="Cart",
+            signature={"cart_count": 1},
+        )
+
+    async def list_interactables(self, state):
+        return [
+            {
+                "semantic_id": "cart_open",
+                "description": "Open cart",
+                "locator": ".cart",
+                "action_kind": "click",
+                "explored": False,
+            }
+        ]
+
+    async def execute(self, action: BrowserAction):
+        self.executed.append(action)
+        return True
+
+
+@pytest.mark.anyio
+async def test_explore_one_step_marks_navigation_without_schema_delta_as_success():
+    explorer = WebKobeExplorer(
+        adapter=NavigationOnlyAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+    )
+
+    graph = await explorer.explore_one_step()
+
+    edge = graph.edges[0]
+    assert edge.action.semantic_id == "cart_open"
+    assert edge.source_node_id.startswith("inventory__")
+    assert edge.target_node_id.startswith("cart__")
+    assert edge.schema_delta is None
+    assert edge.observed_delta == []
+    assert edge.status == "succeeded_with_navigation"
+
+
 class CartBeforeProductAdapter:
     app_name = "saucedemo"
 

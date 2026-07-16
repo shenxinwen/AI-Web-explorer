@@ -92,15 +92,16 @@ async def test_controller_treats_action_loop_success_status_as_success():
     explorer = FakeExplorer(
         [
             _graph(completed=1, edge_status="succeeded_with_observed_change"),
-            _graph(completed=2, edge_status="succeeded"),
+            _graph(completed=2, edge_status="succeeded_with_navigation"),
+            _graph(completed=3, edge_status="succeeded"),
         ]
     )
     controller = WebKobeExplorationController(explorer)
 
-    result = await controller.run(max_steps=2)
+    result = await controller.run(max_steps=3)
 
-    assert explorer.calls == 2
-    assert result.summary.steps_completed == 2
+    assert explorer.calls == 3
+    assert result.summary.steps_completed == 3
     assert result.summary.stop_reason == "max_steps"
     assert result.summary.failed_edge_count == 0
 

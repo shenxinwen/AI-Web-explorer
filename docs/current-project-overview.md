@@ -122,7 +122,7 @@ suite so test failures better reflect current project direction.
 Latest retained bridge-suite verification:
 
 ```text
-tests/safesym_bridge: 154 passed, 2 skipped
+tests/safesym_bridge: 155 passed, 2 skipped
 ```
 
 `WebKobeGraph` is the main exploration-time representation for unknown websites.
@@ -163,13 +163,21 @@ A browser-backed one-step SauceDemo LLM smoke is also available:
 ```bash
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-saucedemo-llm-step-smoke \
   --output outputs/saucedemo_llm_step_graph.json \
-  --selector-trace outputs/saucedemo_llm_step_trace.json
+  --selector-trace outputs/saucedemo_llm_step_trace.json \
+  --steps 3
 ```
 
 This smoke treats login as a deterministic test bootstrap, then starts the agent
-on the inventory page. In the first live run, the LLM selected
-`product_add_to_cart`, Playwright executed the grounded action, and the
-WebKobeGraph edge recorded `cart_count: 0 -> 1`.
+on the inventory page. With `--steps 3`, the live run produced:
+
+```text
+product_add_to_cart -> cart_open -> cart_checkout_start
+```
+
+The resulting graph reached `saucedemo:checkout_info`. The first edge recorded
+`cart_count: 0 -> 1`, the navigation edge to cart is now treated as
+`succeeded_with_navigation`, and the checkout edge recorded
+`checkout_started: false -> true`.
 
 The grounded action loop is the current pre-LLM control boundary. It records
 what the upper layer intended to do, which concrete `BrowserAction` was
@@ -626,9 +634,11 @@ The current system has several important limits:
 - Real LLM selector smoke has been run after explicit user approval to use this
   workspace's non-OpenAI `OPENAI_BASE_URL`. The offline selector smoke chose
   `product_add_to_cart` for the concrete SauceDemo `inventory/cart_count=0`
-  case, and the browser-backed one-step smoke executed that action and observed
-  `cart_count: 0 -> 1`. Default automated coverage still uses fake providers to
-  validate selector boundaries and traceability without consuming API quota.
+  case. The browser-backed smoke now reaches the three-step prefix
+  `product_add_to_cart -> cart_open -> cart_checkout_start` and observes
+  `cart_count: 0 -> 1` plus `checkout_started: false -> true`. Default
+  automated coverage still uses fake providers to validate selector boundaries
+  and traceability without consuming API quota.
 - Safety guarantees only apply to the model that was observed and compiled.
 
 These are not failures. They define the next research and engineering steps.
@@ -658,6 +668,8 @@ The most important design questions are:
   browser execution or state-observation issues?
 - Once the real SauceDemo checkout prefix is stable, does the resulting
   WebKobeGraph still project cleanly to PDDL and pass SafeSym smoke?
+- Can the same LLM-guided runner complete the checkout form and reach order
+  completion without letting the LLM generate selectors?
 
 A conservative approach is recommended:
 

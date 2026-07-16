@@ -203,6 +203,12 @@ def main(argv: list[str] | None = None) -> int:
         help="Optional OpenAI model override.",
     )
     saucedemo_llm_step_parser.add_argument(
+        "--steps",
+        type=int,
+        default=1,
+        help="Number of Web-KOBE exploration steps to run after login bootstrap.",
+    )
+    saucedemo_llm_step_parser.add_argument(
         "--headed",
         action="store_true",
         help="Show the browser window while running the smoke.",
@@ -289,6 +295,7 @@ def main(argv: list[str] | None = None) -> int:
                     args.output,
                     selector_trace_path=args.selector_trace,
                     model=args.model,
+                    steps=args.steps,
                     headless=not args.headed,
                 )
             )
