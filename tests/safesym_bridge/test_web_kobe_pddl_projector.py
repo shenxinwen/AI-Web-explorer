@@ -236,6 +236,46 @@ def test_compile_web_kobe_graph_to_pddl_declares_predicates_from_effect_deltas()
     )
 
 
+def test_compile_web_kobe_graph_to_pddl_projects_successful_navigation_edges():
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="inventory",
+        total_steps_completed=1,
+        nodes=[
+            _node("inventory", "inventory", {"cart_count": 1}),
+            _node("cart", "cart", {"cart_count": 1}),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="inventory",
+                target_node_id="cart",
+                instruction="open cart",
+                action=BrowserAction("click", ".cart", "cart_open"),
+                capability=None,
+                target_observation="cart page",
+                observed_delta=[],
+                schema_delta={},
+                execution_trace=ExecutionTrace(
+                    "click",
+                    ".cart",
+                    "cart",
+                    {},
+                    "inventory",
+                    "cart",
+                    True,
+                ),
+                status="succeeded_with_navigation",
+            )
+        ],
+    )
+
+    artifacts = compile_web_kobe_graph_to_pddl(graph, goal_node_id="cart")
+
+    assert "(:action cart_open" in artifacts.domain
+    assert ":precondition (and (at_inventory))" in artifacts.domain
+    assert ":effect (and (not (at_inventory)) (at_cart))" in artifacts.domain
+
+
 def test_compile_web_kobe_graph_to_pddl_excludes_non_projectable_edges():
     nodes = [
         _node("start", "start", {}),

@@ -23,6 +23,7 @@ PROJECTABLE_EDGE_STATUSES = {
     "verified",
     "succeeded",
     "succeeded_with_observed_change",
+    "succeeded_with_navigation",
 }
 
 

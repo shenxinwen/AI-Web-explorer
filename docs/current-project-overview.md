@@ -122,7 +122,7 @@ suite so test failures better reflect current project direction.
 Latest retained bridge-suite verification:
 
 ```text
-tests/safesym_bridge: 155 passed, 2 skipped
+tests/safesym_bridge: 156 passed, 2 skipped
 ```
 
 `WebKobeGraph` is the main exploration-time representation for unknown websites.
@@ -158,26 +158,44 @@ browser: given `inventory`, `cart_count=0`, and candidates
 `product_add_to_cart` / `cart_open`, the expected choice is
 `product_add_to_cart`.
 
-A browser-backed one-step SauceDemo LLM smoke is also available:
+A browser-backed SauceDemo LLM smoke is also available:
 
 ```bash
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-saucedemo-llm-step-smoke \
-  --output outputs/saucedemo_llm_step_graph.json \
-  --selector-trace outputs/saucedemo_llm_step_trace.json \
-  --steps 3
+  --output outputs/saucedemo_llm_5step_graph.json \
+  --selector-trace outputs/saucedemo_llm_5step_trace.json \
+  --steps 5
 ```
 
 This smoke treats login as a deterministic test bootstrap, then starts the agent
-on the inventory page. With `--steps 3`, the live run produced:
+on the inventory page. With `--steps 5`, the live run produced:
 
 ```text
-product_add_to_cart -> cart_open -> cart_checkout_start
+product_add_to_cart
+  -> cart_open
+  -> cart_checkout_start
+  -> checkout_info_submit
+  -> order_place_confirm
 ```
 
-The resulting graph reached `saucedemo:checkout_info`. The first edge recorded
-`cart_count: 0 -> 1`, the navigation edge to cart is now treated as
-`succeeded_with_navigation`, and the checkout edge recorded
-`checkout_started: false -> true`.
+The resulting graph reached `saucedemo:checkout_complete`. It recorded
+`cart_count: 0 -> 1`, treated the cart navigation edge as
+`succeeded_with_navigation`, recorded `checkout_started: false -> true`,
+recorded `order_review_ready: false -> true`, and finally recorded
+`order_created: false -> true` plus `cart_count: 1 -> 0`.
+
+That complete graph can now be projected into PDDL and solved by Fast Downward.
+The generated base plan is the same five-step checkout path. Running
+`web-kobe-safesym-smoke` over the generated PDDL with SafeSym's
+`configs/constraint_rules.json` succeeds end to end and inserts:
+
+```text
+check_information_verification_checkout_info_submit
+check_human_confirmation_order_place_confirm
+```
+
+The corresponding safe plan places these checks before
+`checkout_info_submit` and `order_place_confirm`.
 
 The grounded action loop is the current pre-LLM control boundary. It records
 what the upper layer intended to do, which concrete `BrowserAction` was
@@ -627,18 +645,19 @@ The current system has several important limits:
 - The current `local_checkout` smoke reaches SafeSym and Fast Downward, but it
   does not insert safety check actions yet because projected action names such as
   `dom_006_button_place_order` do not match SafeSym's safety-rule patterns.
-- Browser exploration is still narrow and follows checkout-style paths. A real
-  SauceDemo smoke currently shows the next concrete weakness: the explorer can
-  see both `product_add_to_cart` and `cart_open`, but deterministic ranking may
-  open the cart before adding a product.
+- Browser exploration is still narrow and follows checkout-style paths. The
+  current SauceDemo LLM smoke proves the bounded selector can complete a
+  checkout path when the app-specific candidate actions are available, but it
+  does not yet prove arbitrary-site or arbitrary-goal generality.
 - Real LLM selector smoke has been run after explicit user approval to use this
   workspace's non-OpenAI `OPENAI_BASE_URL`. The offline selector smoke chose
   `product_add_to_cart` for the concrete SauceDemo `inventory/cart_count=0`
-  case. The browser-backed smoke now reaches the three-step prefix
-  `product_add_to_cart -> cart_open -> cart_checkout_start` and observes
-  `cart_count: 0 -> 1` plus `checkout_started: false -> true`. Default
-  automated coverage still uses fake providers to validate selector boundaries
-  and traceability without consuming API quota.
+  case. The browser-backed smoke now completes the five-step SauceDemo checkout
+  path, reaches `checkout_complete`, and produces a graph/PDDL model that
+  Fast Downward and SafeSym can consume. SafeSym inserts checks for
+  `checkout_info_submit` and `order_place_confirm`. Default automated coverage
+  still uses fake providers to validate selector boundaries and traceability
+  without consuming API quota.
 - Safety guarantees only apply to the model that was observed and compiled.
 
 These are not failures. They define the next research and engineering steps.

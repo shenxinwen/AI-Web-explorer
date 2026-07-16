@@ -112,7 +112,7 @@ src/ai_web_explorer/grounded_web/
    最近一次桥接层测试结果：
 
    ```text
-tests/safesym_bridge: 155 passed, 2 skipped
+tests/safesym_bridge: 156 passed, 2 skipped
 ```
 
    当前测试套件已经做过一次主线收束：删除旧 `WebObservedGraph -> PDDL`
@@ -189,25 +189,41 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-openai-selector-smoke \
 `cart_count=0`、候选动作为 `product_add_to_cart` / `cart_open` 时，期望选择
 `product_add_to_cart`。
 
-当前也提供真实浏览器单步 SauceDemo LLM smoke：
+当前也提供真实浏览器 SauceDemo LLM smoke：
 
 ```bash
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-saucedemo-llm-step-smoke \
-  --output outputs/saucedemo_llm_step_graph.json \
-  --selector-trace outputs/saucedemo_llm_step_trace.json \
-  --steps 3
+  --output outputs/saucedemo_llm_5step_graph.json \
+  --selector-trace outputs/saucedemo_llm_5step_trace.json \
+  --steps 5
 ```
 
 这个 smoke 把登录视作确定性的测试 bootstrap，然后从 inventory 页面开始让 agent
-执行。使用 `--steps 3` 时，live run 产生了：
+执行。使用 `--steps 5` 时，live run 产生了：
 
 ```text
-product_add_to_cart -> cart_open -> cart_checkout_start
+product_add_to_cart
+  -> cart_open
+  -> cart_checkout_start
+  -> checkout_info_submit
+  -> order_place_confirm
 ```
 
-最终图到达 `saucedemo:checkout_info`。第一条 edge 记录 `cart_count: 0 -> 1`；
-导航到 cart 的 edge 现在被视为 `succeeded_with_navigation`；checkout edge 记录
-`checkout_started: false -> true`。
+最终图到达 `saucedemo:checkout_complete`。图中记录了 `cart_count: 0 -> 1`；
+导航到 cart 的 edge 现在被视为 `succeeded_with_navigation`；随后记录
+`checkout_started: false -> true`、`order_review_ready: false -> true`，最后记录
+`order_created: false -> true` 和 `cart_count: 1 -> 0`。
+
+这个完整图现在可以投影成 PDDL，并由 Fast Downward 求解。base plan 是同一条五步
+checkout 路径。把生成的 PDDL 交给 `web-kobe-safesym-smoke` 并使用 SafeSym 的
+`configs/constraint_rules.json` 后，SafeSym 端到端通过并插入了：
+
+```text
+check_information_verification_checkout_info_submit
+check_human_confirmation_order_place_confirm
+```
+
+对应的 safe plan 会在 `checkout_info_submit` 和 `order_place_confirm` 前插入这些检查。
 
 当前 `grounded_web` 新增了动作闭环边界：
 
@@ -541,8 +557,8 @@ observed transitions -> FSM JSON -> SafeSym loader compatibility
 - `web-kobe-pddl-smoke` 已经检查图上可达性和基础 PDDL 静态一致性，但还不是完整 PDDL parser，也没有真正调用外部 planner；
 - `web-kobe-safesym-smoke` 已经可以把生成的 Web-KOBE PDDL 交给外部 SafeSym parser、安全注入和可选 Fast Downward base/safe solve；
 - 当前 `local_checkout` smoke 已经能通过 SafeSym 和 Fast Downward，但还不会插入安全检查动作，因为 `dom_006_button_place_order` 这类投影 action 名还无法匹配 SafeSym 的安全规则模式；
-- 浏览器探索能力还比较窄，主要围绕 checkout-style 路径；真实 SauceDemo smoke 已经暴露出下一个具体问题：explorer 能看到 `product_add_to_cart` 和 `cart_open`，但确定性 ranking 可能会在加商品前先打开购物车；
-- 真实 LLM selector smoke 已经在用户明确授权使用当前非 OpenAI 官方 `OPENAI_BASE_URL` 后跑通；离线 selector smoke 在 SauceDemo 的 `inventory/cart_count=0` 场景中选择了 `product_add_to_cart`，真实浏览器 smoke 现在能跑通三步前缀 `product_add_to_cart -> cart_open -> cart_checkout_start`，并观察到 `cart_count: 0 -> 1` 与 `checkout_started: false -> true`。默认自动化测试仍使用 fake provider 验证 selector 边界和 traceability，避免消耗 API 额度；
+- 浏览器探索能力还比较窄，主要围绕 checkout-style 路径；当前 SauceDemo LLM smoke 证明了在应用级候选动作可用时，bounded selector 能完成 checkout 路径，但这还不等于已经证明任意网站或任意任务的泛化能力；
+- 真实 LLM selector smoke 已经在用户明确授权使用当前非 OpenAI 官方 `OPENAI_BASE_URL` 后跑通；离线 selector smoke 在 SauceDemo 的 `inventory/cart_count=0` 场景中选择了 `product_add_to_cart`，真实浏览器 smoke 现在能完成五步 SauceDemo checkout 路径，到达 `checkout_complete`，并生成 Fast Downward 与 SafeSym 都能消费的 graph/PDDL 模型。SafeSym 会为 `checkout_info_submit` 和 `order_place_confirm` 插入安全检查。默认自动化测试仍使用 fake provider 验证 selector 边界和 traceability，避免消耗 API 额度；
 - 状态去重、恢复、泛化能力还没有成熟；
 - 安全保证只适用于已观察并编译出的模型。
 
