@@ -122,7 +122,7 @@ suite so test failures better reflect current project direction.
 Latest retained bridge-suite verification:
 
 ```text
-tests/safesym_bridge: 143 passed, 2 skipped
+tests/safesym_bridge: 151 passed, 2 skipped
 ```
 
 `WebKobeGraph` is the main exploration-time representation for unknown websites.
@@ -145,6 +145,18 @@ be written as a trace sidecar containing the goal, state, candidates, prompt,
 raw response, parsed response, status, and error category. This makes failures
 attributable to parse errors, invalid action ids, poor choice, execution
 failure, or observation/delta problems.
+
+An offline OpenAI-backed selector smoke is now exposed as:
+
+```bash
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-openai-selector-smoke \
+  --output outputs/openai_selector_smoke.json
+```
+
+It tests the current concrete SauceDemo selection problem without opening a
+browser: given `inventory`, `cart_count=0`, and candidates
+`product_add_to_cart` / `cart_open`, the expected choice is
+`product_add_to_cart`.
 
 The grounded action loop is the current pre-LLM control boundary. It records
 what the upper layer intended to do, which concrete `BrowserAction` was
@@ -598,9 +610,11 @@ The current system has several important limits:
   SauceDemo smoke currently shows the next concrete weakness: the explorer can
   see both `product_add_to_cart` and `cart_open`, but deterministic ranking may
   open the cart before adding a product.
-- Real LLM calls have not been run in this workspace because `OPENAI_API_KEY`
-  is not set; current coverage uses fake providers to validate selector
-  boundaries and traceability.
+- Real LLM selector smoke has been run after explicit user approval to use this
+  workspace's non-OpenAI `OPENAI_BASE_URL`. For the concrete SauceDemo
+  `inventory/cart_count=0` case, the model selected `product_add_to_cart` with a
+  task-aware reason. Default automated coverage still uses fake providers to
+  validate selector boundaries and traceability without consuming API quota.
 - Safety guarantees only apply to the model that was observed and compiled.
 
 These are not failures. They define the next research and engineering steps.
@@ -657,6 +671,13 @@ src/ai_web_explorer/grounded_web/dom_observer.py
 src/ai_web_explorer/grounded_web/llm_action_selector.py
   Experimental selector boundary for choosing one grounded action id and
   recording traceable LLM decision diagnostics.
+
+src/ai_web_explorer/grounded_web/openai_action_selector.py
+  OpenAI Chat Completions-backed provider for the selector boundary.
+
+src/ai_web_explorer/safesym_bridge/openai_selector_smoke.py
+  Offline SauceDemo action-selection smoke for the current `cart_count=0`
+  problem.
 
 src/ai_web_explorer/safesym_bridge/semantic_resolver.py
   Resolver interface for mapping candidates to semantic actions.

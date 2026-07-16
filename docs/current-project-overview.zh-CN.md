@@ -112,7 +112,7 @@ src/ai_web_explorer/grounded_web/
    最近一次桥接层测试结果：
 
    ```text
-tests/safesym_bridge: 143 passed, 2 skipped
+tests/safesym_bridge: 151 passed, 2 skipped
 ```
 
    当前测试套件已经做过一次主线收束：删除旧 `WebObservedGraph -> PDDL`
@@ -177,6 +177,17 @@ LLM/VLM 后续可以参与动作选择、语义标注和验证，但 selector �
 每次选择都可以写入 trace sidecar，记录 goal、state、candidates、prompt、raw
 response、parsed response、status 和 error category。这样失败时可以区分是
 parse error、invalid action id、选择质量问题、浏览器执行失败，还是状态观察/delta 问题。
+
+当前已经提供离线 OpenAI-backed selector smoke：
+
+```bash
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-openai-selector-smoke \
+  --output outputs/openai_selector_smoke.json
+```
+
+它不打开浏览器，只测试当前具体 SauceDemo 选择问题：在 `inventory` 页面、
+`cart_count=0`、候选动作为 `product_add_to_cart` / `cart_open` 时，期望选择
+`product_add_to_cart`。
 
 当前 `grounded_web` 新增了动作闭环边界：
 
@@ -511,7 +522,7 @@ observed transitions -> FSM JSON -> SafeSym loader compatibility
 - `web-kobe-safesym-smoke` 已经可以把生成的 Web-KOBE PDDL 交给外部 SafeSym parser、安全注入和可选 Fast Downward base/safe solve；
 - 当前 `local_checkout` smoke 已经能通过 SafeSym 和 Fast Downward，但还不会插入安全检查动作，因为 `dom_006_button_place_order` 这类投影 action 名还无法匹配 SafeSym 的安全规则模式；
 - 浏览器探索能力还比较窄，主要围绕 checkout-style 路径；真实 SauceDemo smoke 已经暴露出下一个具体问题：explorer 能看到 `product_add_to_cart` 和 `cart_open`，但确定性 ranking 可能会在加商品前先打开购物车；
-- 当前 workspace 没有设置 `OPENAI_API_KEY`，所以还没有运行真实 LLM 调用；当前覆盖使用 fake provider 验证 selector 边界和 traceability；
+- 真实 LLM selector smoke 已经在用户明确授权使用当前非 OpenAI 官方 `OPENAI_BASE_URL` 后跑通；对于 SauceDemo 的 `inventory/cart_count=0` 场景，模型选择了 `product_add_to_cart`，并给出了符合任务目标的理由。默认自动化测试仍使用 fake provider 验证 selector 边界和 traceability，避免消耗 API 额度；
 - 状态去重、恢复、泛化能力还没有成熟；
 - 安全保证只适用于已观察并编译出的模型。
 
@@ -570,6 +581,12 @@ src/ai_web_explorer/grounded_web/dom_observer.py
 
 src/ai_web_explorer/grounded_web/llm_action_selector.py
   实验性 LLM selector 边界：只从 grounded action id 中选择，并记录可诊断的决策 trace。
+
+src/ai_web_explorer/grounded_web/openai_action_selector.py
+  OpenAI Chat Completions-backed selector provider。
+
+src/ai_web_explorer/safesym_bridge/openai_selector_smoke.py
+  针对当前 `cart_count=0` 问题的离线 SauceDemo action-selection smoke。
 
 src/ai_web_explorer/grounded_web/graph.py
   WebKobeGraph 数据结构。

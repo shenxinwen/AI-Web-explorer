@@ -19,6 +19,9 @@ from ai_web_explorer.safesym_bridge.web_kobe_pddl_smoke import (
 from ai_web_explorer.safesym_bridge.web_kobe_safesym_smoke import (
     write_web_kobe_safesym_smoke,
 )
+from ai_web_explorer.safesym_bridge.openai_selector_smoke import (
+    write_openai_selector_smoke,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -154,6 +157,26 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Optional path to fast-downward.py for base/safe plan solves.",
     )
+    openai_selector_smoke_parser = subparsers.add_parser(
+        "web-kobe-openai-selector-smoke",
+        help=(
+            "Run a real OpenAI-backed offline SauceDemo action-selection smoke."
+        ),
+    )
+    openai_selector_smoke_parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("outputs/openai_selector_smoke.json"),
+        help="Path to write the selector smoke report JSON.",
+    )
+    openai_selector_smoke_parser.add_argument(
+        "--model",
+        default=None,
+        help=(
+            "Optional OpenAI model override. Defaults to "
+            "OPENAI_ACTION_SELECTOR_MODEL or the project default."
+        ),
+    )
 
     args = parser.parse_args(argv)
 
@@ -222,6 +245,12 @@ def main(argv: list[str] | None = None) -> int:
                 safesym_root=args.safesym_root,
                 rules=args.rules,
                 fast_downward=args.fast_downward,
+            )
+            output_path = result.report_path
+        elif args.mode == "web-kobe-openai-selector-smoke":
+            result = write_openai_selector_smoke(
+                args.output,
+                model=args.model,
             )
             output_path = result.report_path
         else:

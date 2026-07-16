@@ -29,6 +29,7 @@ def test_main_help_lists_only_web_kobe_mainline_commands(capsys):
     assert "web-kobe-pddl-from-graph" in help_output
     assert "web-kobe-pddl-smoke" in help_output
     assert "web-kobe-safesym-smoke" in help_output
+    assert "web-kobe-openai-selector-smoke" in help_output
     assert "capability-graph" not in help_output
     assert "explore-capability-graph" not in help_output
     assert "explore-graph" not in help_output
@@ -375,3 +376,39 @@ def test_main_web_kobe_safesym_smoke_writes_report(monkeypatch, tmp_path):
     assert exit_code == 0
     assert calls == [(task_dir, safesym_root, rules, None)]
     assert FakeResult.report_path.exists()
+
+
+def test_main_web_kobe_openai_selector_smoke_writes_report(monkeypatch, tmp_path):
+    output = tmp_path / "openai_selector_smoke.json"
+    calls = []
+
+    class FakeResult:
+        report_path = output
+
+    def fake_write_openai_selector_smoke(output_path, *, model=None, provider=None):
+        calls.append((output_path, model, provider))
+        output_path.write_text(
+            json.dumps({"selection_ready": True}),
+            encoding="utf-8",
+        )
+        return FakeResult()
+
+    monkeypatch.setattr(
+        cli,
+        "write_openai_selector_smoke",
+        fake_write_openai_selector_smoke,
+    )
+
+    exit_code = main(
+        [
+            "web-kobe-openai-selector-smoke",
+            "--output",
+            str(output),
+            "--model",
+            "gpt-test",
+        ]
+    )
+
+    assert exit_code == 0
+    assert calls == [(output, "gpt-test", None)]
+    assert output.exists()
