@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from ai_web_explorer.grounded_web.capability_graph import (
     ExecutionTrace,
     ObservedDelta,
@@ -17,6 +19,27 @@ from ai_web_explorer.safesym_bridge.cli import main
 
 def test_main_without_subcommand_prints_help():
     assert main([]) == 2
+
+
+def test_main_help_lists_only_web_kobe_mainline_commands(capsys):
+    assert main([]) == 2
+
+    help_output = capsys.readouterr().out
+    assert "web-kobe-explore" in help_output
+    assert "web-kobe-pddl-from-graph" in help_output
+    assert "web-kobe-pddl-smoke" in help_output
+    assert "capability-graph" not in help_output
+    assert "explore-capability-graph" not in help_output
+    assert "explore-graph" not in help_output
+    assert "explore-pddl" not in help_output
+
+
+@pytest.mark.parametrize("legacy_command", ["graph", "pddl", "capability-graph"])
+def test_main_rejects_legacy_fixed_graph_commands(legacy_command, tmp_path):
+    with pytest.raises(SystemExit) as error:
+        main([legacy_command, "--output", str(tmp_path / "out")])
+
+    assert error.value.code == 2
 
 
 def test_main_web_kobe_graph_subcommand_writes_graph(monkeypatch, tmp_path):

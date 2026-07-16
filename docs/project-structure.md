@@ -1,37 +1,38 @@
 # Project Structure
 
-This repository keeps source code, tests, examples, and documentation in separate folders.
+This repository currently contains both the original `ai-web-explorer` code and
+the newer SafeSym-oriented Web-KOBE mainline. New development should treat the
+Web-KOBE/SafeSym path as the active project direction.
 
 ```text
 src/ai_web_explorer/
-  Core Python package for the web explorer.
+  Original package root and legacy `explore` entry point.
+
+src/ai_web_explorer/grounded_web/
+  Active generic exploration mainline: DOM observation, grounded browser action
+  execution, state facts, typed deltas, WebKobeGraph construction, and
+  exploration control.
 
 src/ai_web_explorer/safesym_bridge/
-  SauceDemo -> SafeSym graph/PDDL bridge MVP.
-
-tests/
-  Automated tests.
+  Planner-facing bridge: WebKobeGraph-to-PDDL projection, planning-readiness
+  smoke reports, Web-KOBE CLI, and app-specific SauceDemo regression helpers.
 
 tests/safesym_bridge/
-  Tests for the SafeSym bridge.
+  Retained tests for the active Web-KOBE/PDDL mainline plus SauceDemo
+  app-specific regression helpers.
+
+tests/fixtures/
+  Stable local browser fixtures used for deterministic Web-KOBE exploration
+  smoke tests.
 
 docs/
-  Human-facing documentation.
-
-docs/images/
-  Images used by README and docs.
-
-docs/notes/
-  Project notes and design-direction documents.
+  Human-facing architecture and usage documentation.
 
 docs/superpowers/
-  Design specs and implementation plans created during guided development.
+  Development specs and implementation plans created during guided work.
 
 examples/
-  Committed example artifacts.
-
-examples/safesym/
-  Historical SafeSym FSM JSON example files.
+  Historical sample artifacts.
 
 outputs/
   Local generated outputs. This directory is ignored by git.
@@ -40,13 +41,25 @@ data/
   Local exploration data and tracked sample fixtures.
 
 resources/
-  Prompt templates and other runtime resources.
+  Prompt templates and other runtime resources used by the original explorer.
 ```
 
-Root-level files are kept for project configuration and entry-point documentation:
+Important entry points:
 
-- `README.md`
-- `pyproject.toml`
-- `.gitignore`
-- `.python-version`
-- lock files
+- `web-kobe` -> `ai_web_explorer.safesym_bridge.cli:main`
+- `explore` -> original upstream LLM explorer, kept as legacy functionality
+
+Current recommended command surface:
+
+```text
+web-kobe-explore
+web-kobe-pddl-from-graph
+web-kobe-pddl-smoke
+```
+
+Debug helpers:
+
+```text
+web-kobe-graph
+web-kobe-pddl
+```

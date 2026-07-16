@@ -112,7 +112,7 @@ src/ai_web_explorer/grounded_web/
    最近一次桥接层测试结果：
 
    ```text
-   tests/safesym_bridge: 122 passed, 2 skipped
+   tests/safesym_bridge: 126 passed, 2 skipped
    ```
 
    当前测试套件已经做过一次主线收束：删除旧 `WebObservedGraph -> PDDL`

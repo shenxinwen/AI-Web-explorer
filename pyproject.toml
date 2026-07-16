@@ -24,6 +24,7 @@ build-backend = "hatchling.build"
 
 [project.scripts]
 explore = "ai_web_explorer:main"
+web-kobe = "ai_web_explorer.safesym_bridge.cli:main"
 
 [tool.rye]
 managed = true

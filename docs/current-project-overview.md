@@ -119,7 +119,7 @@ suite so test failures better reflect current project direction.
 Latest retained bridge-suite verification:
 
 ```text
-tests/safesym_bridge: 122 passed, 2 skipped
+tests/safesym_bridge: 126 passed, 2 skipped
 ```
 
 This graph is the main exploration-time representation for unknown websites. It
@@ -284,20 +284,11 @@ still use local DOM extraction. Real SauceDemo browser verification is gated by
 `RUN_WEB_KOBE_SAUCEDEMO_TEST=1`.
 
 The original explorer with `--web-kobe-output` remains useful as a legacy
-comparison and compatibility route. It should not be the place for new generic
-exploration design because it asks the LLM to generate both action descriptions
-and selectors. New generic work should improve the DOM-grounded
-`grounded_web` / `web-kobe-explore` path first.
-
-The debug-only commands are still available:
-
-```bash
-python -m ai_web_explorer.safesym_bridge.cli graph --output outputs/saucedemo_observed_graph.json
-python -m ai_web_explorer.safesym_bridge.cli pddl --output outputs/safesym_e2e/graph_pddl
-```
-
-The `graph` and `pddl` commands use fixed MVP transitions. They are useful for
-fast regression tests, but they are not the long-term main path.
+comparison route, but it is no longer part of the default SafeSym bridge CLI
+surface. It should not be the place for new generic exploration design because
+it asks the LLM to generate both action descriptions and selectors. New generic
+work should improve the DOM-grounded `grounded_web` / `web-kobe-explore` path
+first.
 
 ## Core Concepts
 
