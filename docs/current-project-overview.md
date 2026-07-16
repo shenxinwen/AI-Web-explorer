@@ -122,7 +122,7 @@ suite so test failures better reflect current project direction.
 Latest retained bridge-suite verification:
 
 ```text
-tests/safesym_bridge: 133 passed, 2 skipped
+tests/safesym_bridge: 137 passed, 2 skipped
 ```
 
 `WebKobeGraph` is the main exploration-time representation for unknown websites.
@@ -579,8 +579,12 @@ The current system has several important limits:
 - The WebKobeGraph-to-PDDL projector emits a deliberately small STRIPS subset.
 - `web-kobe-pddl-smoke` now checks graph reachability and basic static PDDL
   consistency, but it is not a full PDDL parser or external planner run.
-- The project has not yet run a minimal end-to-end SafeSym planning smoke on the
-  generated Web-KOBE PDDL artifacts.
+- `web-kobe-safesym-smoke` can now run the generated Web-KOBE PDDL through the
+  external SafeSym parser, safety injection, and optional Fast Downward base/safe
+  solves.
+- The current `local_checkout` smoke reaches SafeSym and Fast Downward, but it
+  does not insert safety check actions yet because projected action names such as
+  `dom_006_button_place_order` do not match SafeSym's safety-rule patterns.
 - Browser exploration is still narrow and follows checkout-style paths.
 - Safety guarantees only apply to the model that was observed and compiled.
 
@@ -597,7 +601,7 @@ local_checkout / controlled page
   -> WebKobeGraph
   -> PDDL projector
   -> PDDL smoke report
-  -> minimal SafeSym/planner smoke
+  -> SafeSym parser / safety injection / planner smoke
 ```
 
 The most important design questions are:
@@ -606,6 +610,8 @@ The most important design questions are:
 - Can the generated `domain.pddl` and `problem.pddl` be consumed by the chosen
   SafeSym/planner path without manual edits?
 - Which smoke checks should run before we hand artifacts to SafeSym?
+- How should projected action names become semantic enough to trigger SafeSym
+  safety rules when appropriate?
 - Which fixture complexity should be added next without overfitting to one site?
 - Where would LLM/VLM assistance improve action selection or semantic labeling
   without taking over browser execution or fact truth?

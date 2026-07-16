@@ -73,6 +73,17 @@ web-kobe web-kobe-pddl-smoke \
   --goal-node <goal_node_id>
 ```
 
+If SafeSym is checked out locally, validate that SafeSym can parse, inject, and
+optionally solve the generated PDDL:
+
+```bash
+web-kobe web-kobe-safesym-smoke \
+  --task-dir outputs/local_checkout_pddl_smoke \
+  --safesym-root C:\Users\moon\Desktop\Projects\SafeSym \
+  --rules C:\Users\moon\Desktop\Projects\SafeSym\configs\constraint_rules.json \
+  --fast-downward C:\Users\moon\Desktop\Projects\AutoWebWorld\downward\fast-downward.py
+```
+
 The smoke command writes:
 
 ```text
@@ -91,6 +102,7 @@ not triggering is expected.
 web-kobe web-kobe-explore --url <url> --output outputs/web_kobe_graph.json
 web-kobe web-kobe-pddl-from-graph --graph outputs/web_kobe_graph.json --goal-node <node>
 web-kobe web-kobe-pddl-smoke --graph outputs/web_kobe_graph.json --goal-node <node>
+web-kobe web-kobe-safesym-smoke --task-dir outputs/web_kobe_pddl_smoke --safesym-root <path> --rules <rules.json>
 ```
 
 Debug-only helpers are still available:

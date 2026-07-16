@@ -28,6 +28,7 @@ def test_main_help_lists_only_web_kobe_mainline_commands(capsys):
     assert "web-kobe-explore" in help_output
     assert "web-kobe-pddl-from-graph" in help_output
     assert "web-kobe-pddl-smoke" in help_output
+    assert "web-kobe-safesym-smoke" in help_output
     assert "capability-graph" not in help_output
     assert "explore-capability-graph" not in help_output
     assert "explore-graph" not in help_output
@@ -322,3 +323,55 @@ def test_main_web_kobe_pddl_smoke_writes_report(tmp_path):
     report = json.loads((output_dir / "smoke_report.json").read_text(encoding="utf-8"))
     assert report["planning_ready"] is True
     assert report["safety_trigger_expected"] is False
+
+
+def test_main_web_kobe_safesym_smoke_writes_report(monkeypatch, tmp_path):
+    task_dir = tmp_path / "task"
+    task_dir.mkdir()
+    rules = tmp_path / "rules.json"
+    rules.write_text("[]", encoding="utf-8")
+    safesym_root = tmp_path / "SafeSym"
+    calls = []
+
+    class FakeReport:
+        safety_injection_ready = True
+
+    class FakeResult:
+        report = FakeReport()
+        report_path = task_dir / "safesym_smoke_report.json"
+
+    def fake_write_web_kobe_safesym_smoke(
+        task_dir_arg,
+        *,
+        safesym_root,
+        rules,
+        fast_downward=None,
+    ):
+        calls.append((task_dir_arg, safesym_root, rules, fast_downward))
+        FakeResult.report_path.write_text(
+            json.dumps({"safety_injection_ready": True}),
+            encoding="utf-8",
+        )
+        return FakeResult()
+
+    monkeypatch.setattr(
+        cli,
+        "write_web_kobe_safesym_smoke",
+        fake_write_web_kobe_safesym_smoke,
+    )
+
+    exit_code = main(
+        [
+            "web-kobe-safesym-smoke",
+            "--task-dir",
+            str(task_dir),
+            "--safesym-root",
+            str(safesym_root),
+            "--rules",
+            str(rules),
+        ]
+    )
+
+    assert exit_code == 0
+    assert calls == [(task_dir, safesym_root, rules, None)]
+    assert FakeResult.report_path.exists()

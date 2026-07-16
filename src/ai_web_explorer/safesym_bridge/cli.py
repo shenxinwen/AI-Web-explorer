@@ -16,6 +16,9 @@ from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
 from ai_web_explorer.safesym_bridge.web_kobe_pddl_smoke import (
     write_web_kobe_pddl_smoke,
 )
+from ai_web_explorer.safesym_bridge.web_kobe_safesym_smoke import (
+    write_web_kobe_safesym_smoke,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -123,6 +126,34 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Optional start node override. Defaults to graph.start_node_id.",
     )
+    web_kobe_safesym_smoke_parser = subparsers.add_parser(
+        "web-kobe-safesym-smoke",
+        help="Run SafeSym parser/injection/planner smoke over PDDL artifacts.",
+    )
+    web_kobe_safesym_smoke_parser.add_argument(
+        "--task-dir",
+        type=Path,
+        required=True,
+        help="Directory containing domain.pddl and problem.pddl.",
+    )
+    web_kobe_safesym_smoke_parser.add_argument(
+        "--safesym-root",
+        type=Path,
+        required=True,
+        help="Path to the SafeSym repository root.",
+    )
+    web_kobe_safesym_smoke_parser.add_argument(
+        "--rules",
+        type=Path,
+        required=True,
+        help="SafeSym safety rules JSON file.",
+    )
+    web_kobe_safesym_smoke_parser.add_argument(
+        "--fast-downward",
+        type=Path,
+        default=None,
+        help="Optional path to fast-downward.py for base/safe plan solves.",
+    )
 
     args = parser.parse_args(argv)
 
@@ -185,6 +216,14 @@ def main(argv: list[str] | None = None) -> int:
                 goal_node_id=args.goal_node,
             )
             output_path = result.output_dir
+        elif args.mode == "web-kobe-safesym-smoke":
+            result = write_web_kobe_safesym_smoke(
+                args.task_dir,
+                safesym_root=args.safesym_root,
+                rules=args.rules,
+                fast_downward=args.fast_downward,
+            )
+            output_path = result.report_path
         else:
             parser.print_help()
             return 2

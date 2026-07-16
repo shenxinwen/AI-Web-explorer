@@ -112,7 +112,7 @@ src/ai_web_explorer/grounded_web/
    最近一次桥接层测试结果：
 
    ```text
-   tests/safesym_bridge: 133 passed, 2 skipped
+   tests/safesym_bridge: 137 passed, 2 skipped
    ```
 
    当前测试套件已经做过一次主线收束：删除旧 `WebObservedGraph -> PDDL`
@@ -502,7 +502,8 @@ observed transitions -> FSM JSON -> SafeSym loader compatibility
 - DOM candidate extraction 已经比较通用，但动作选择和语义命名仍然偏规则；
 - WebKobeGraph-to-PDDL projector 目前只输出很小的 STRIPS 子集；
 - `web-kobe-pddl-smoke` 已经检查图上可达性和基础 PDDL 静态一致性，但还不是完整 PDDL parser，也没有真正调用外部 planner；
-- 还没有对生成的 Web-KOBE PDDL artifact 跑最小 SafeSym planning smoke；
+- `web-kobe-safesym-smoke` 已经可以把生成的 Web-KOBE PDDL 交给外部 SafeSym parser、安全注入和可选 Fast Downward base/safe solve；
+- 当前 `local_checkout` smoke 已经能通过 SafeSym 和 Fast Downward，但还不会插入安全检查动作，因为 `dom_006_button_place_order` 这类投影 action 名还无法匹配 SafeSym 的安全规则模式；
 - 浏览器探索能力还比较窄，主要围绕 checkout-style 路径；
 - 状态去重、恢复、泛化能力还没有成熟；
 - 安全保证只适用于已观察并编译出的模型。
@@ -525,7 +526,7 @@ local_checkout / 受控页面
 -> WebKobeGraph
 -> PDDL projector
 -> PDDL smoke report
--> 最小 SafeSym / planner smoke
+-> SafeSym parser / safety injection / planner smoke
 ```
 
 不要急着把它扩成能力全面的 web agent。当前更重要的是让“观察到的状态图 → PDDL artifact → SafeSym/planner 消费”这条主线站稳。更复杂的状态去重、恢复、PDDL 完整泛化和真实网站复杂度可以后置。

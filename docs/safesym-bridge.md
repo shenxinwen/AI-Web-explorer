@@ -45,6 +45,17 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-pddl-smoke \
   --goal-node <goal_node_id>
 ```
 
+Then, when a local SafeSym checkout and optional Fast Downward executable are
+available, run the real SafeSym consumption smoke:
+
+```bash
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-safesym-smoke \
+  --task-dir outputs/local_checkout_pddl_smoke \
+  --safesym-root C:\Users\moon\Desktop\Projects\SafeSym \
+  --rules C:\Users\moon\Desktop\Projects\SafeSym\configs\constraint_rules.json \
+  --fast-downward C:\Users\moon\Desktop\Projects\AutoWebWorld\downward\fast-downward.py
+```
+
 The smoke command writes:
 
 ```text
@@ -62,6 +73,12 @@ false because the generated domain uses predicates that were not declared.
 Missing SafeSym safety injection is not a failure unless the graph contains a
 safety-relevant action and rule model that should trigger it.
 
+The SafeSym smoke writes `safesym_smoke_report.json`. For the current
+`local_checkout` fixture, SafeSym parsing, safety injection, and base/safe
+planning can succeed while `safety_actions_inserted` remains false. That is
+expected until projected action names become semantic enough to match SafeSym
+rules.
+
 `local_checkout` is the current golden-path fixture. It is a deterministic
 mini-shopping flow with product, cart, checkout form, and order-complete states.
 It avoids login, third-party scripts, random content, and network noise while
@@ -76,6 +93,7 @@ Current mainline commands:
 web-kobe-explore
 web-kobe-pddl-from-graph
 web-kobe-pddl-smoke
+web-kobe-safesym-smoke
 ```
 
 Debug helpers:
