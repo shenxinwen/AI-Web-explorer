@@ -120,7 +120,15 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-pddl-from-graph \
   --graph outputs/web_kobe_explored_graph.json \
   --output outputs/web_kobe_pddl \
   --goal-node <goal_node_id>
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-pddl-smoke \
+  --graph outputs/web_kobe_explored_graph.json \
+  --output outputs/web_kobe_pddl_smoke \
+  --goal-node <goal_node_id>
 ```
+
+The next short-term validation is `web-kobe-pddl-smoke`, which checks whether
+an explored WebKobeGraph yields non-empty, graph-reachable PDDL artifacts. This
+is planning-readiness validation, not SafeSym safety-trigger validation.
 
 This graph is the main exploration-time representation for unknown websites. It
 records semantic page states, browser-grounded actions, observed deltas, and

@@ -113,6 +113,30 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-graph --output outputs/web
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-pddl --output outputs/web_kobe_pddl --goal-node start
 ```
 
+### Planning-readiness smoke
+
+Before requiring SafeSym safety injection, use the planning smoke to check that
+an explored `WebKobeGraph` produces non-empty, connected PDDL artifacts:
+
+```bash
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-pddl-smoke \
+  --graph outputs/web_kobe_explored_graph.json \
+  --output outputs/web_kobe_pddl_smoke \
+  --goal-node <goal_node_id>
+```
+
+This writes:
+
+```text
+domain.pddl
+problem.pddl
+smoke_report.json
+```
+
+This smoke validates planning-readiness only. If the graph does not contain a
+safety-relevant action such as `order_place_confirm`, SafeSym safety injection
+not triggering is expected and should not be treated as a failure.
+
 The preferred generic exploration route is the DOM-grounded Web-KOBE explorer:
 
 ```bash

@@ -139,7 +139,13 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-pddl-from-graph \
   --graph outputs/web_kobe_explored_graph.json \
   --output outputs/web_kobe_pddl \
   --goal-node <goal_node_id>
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-pddl-smoke \
+  --graph outputs/web_kobe_explored_graph.json \
+  --output outputs/web_kobe_pddl_smoke \
+  --goal-node <goal_node_id>
 ```
+
+下一步短期验证是 `web-kobe-pddl-smoke`：检查探索得到的 WebKobeGraph 是否能生成非空、图上可达的 PDDL artifact。这是 planning-readiness 验证，不是 SafeSym 安全规则触发验证。
 
 更重要的是实际探索命令：
 
