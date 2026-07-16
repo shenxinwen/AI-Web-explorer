@@ -112,8 +112,8 @@ src/ai_web_explorer/grounded_web/
    最近一次桥接层测试结果：
 
    ```text
-   tests/safesym_bridge: 137 passed, 2 skipped
-   ```
+tests/safesym_bridge: 143 passed, 2 skipped
+```
 
    当前测试套件已经做过一次主线收束：删除旧 `WebObservedGraph -> PDDL`
    单元测试、experimental capability graph sidecar 测试、legacy executor
@@ -171,6 +171,12 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-explore \
 ```
 
 LLM/VLM 后续可以参与动作选择、语义标注和验证，但 selector 和基础事实应尽量来自 DOM-grounded candidates，而不是让模型凭空生成。
+
+当前实验性的 LLM 路径遵守这个边界：LLM selector 只能从已经 grounded 的
+`BrowserAction` 候选里选择一个 action id，不能生成 selector，也不能直接执行浏览器。
+每次选择都可以写入 trace sidecar，记录 goal、state、candidates、prompt、raw
+response、parsed response、status 和 error category。这样失败时可以区分是
+parse error、invalid action id、选择质量问题、浏览器执行失败，还是状态观察/delta 问题。
 
 当前 `grounded_web` 新增了动作闭环边界：
 
@@ -499,12 +505,13 @@ observed transitions -> FSM JSON -> SafeSym loader compatibility
 目前系统还有一些明确限制：
 
 - 通用状态事实仍然有意保持简单，本地 fixture 依赖 `[data-state]` 降低早期验证噪音；
-- DOM candidate extraction 已经比较通用，但动作选择和语义命名仍然偏规则；
+- DOM candidate extraction 已经比较通用，但动作选择和语义命名仍然偏规则；当前新增了实验性的 LLM action selector 可选 hook，但它不是默认策略；
 - WebKobeGraph-to-PDDL projector 目前只输出很小的 STRIPS 子集；
 - `web-kobe-pddl-smoke` 已经检查图上可达性和基础 PDDL 静态一致性，但还不是完整 PDDL parser，也没有真正调用外部 planner；
 - `web-kobe-safesym-smoke` 已经可以把生成的 Web-KOBE PDDL 交给外部 SafeSym parser、安全注入和可选 Fast Downward base/safe solve；
 - 当前 `local_checkout` smoke 已经能通过 SafeSym 和 Fast Downward，但还不会插入安全检查动作，因为 `dom_006_button_place_order` 这类投影 action 名还无法匹配 SafeSym 的安全规则模式；
-- 浏览器探索能力还比较窄，主要围绕 checkout-style 路径；
+- 浏览器探索能力还比较窄，主要围绕 checkout-style 路径；真实 SauceDemo smoke 已经暴露出下一个具体问题：explorer 能看到 `product_add_to_cart` 和 `cart_open`，但确定性 ranking 可能会在加商品前先打开购物车；
+- 当前 workspace 没有设置 `OPENAI_API_KEY`，所以还没有运行真实 LLM 调用；当前覆盖使用 fake provider 验证 selector 边界和 traceability；
 - 状态去重、恢复、泛化能力还没有成熟；
 - 安全保证只适用于已观察并编译出的模型。
 
@@ -515,21 +522,22 @@ observed transitions -> FSM JSON -> SafeSym loader compatibility
 短期目标应该聚焦：
 
 ```text
-让 PDDL artifact 更稳定地被 SafeSym / planner 消费
+提升真实网页探索质量，但不把项目扩成能力全面的 web agent
 ```
 
 具体闭环是：
 
 ```text
-local_checkout / 受控页面
+SauceDemo / 受控真实网页目标
 -> grounded Web-KOBE 探索
+-> 可选、可追踪的 LLM action selection
 -> WebKobeGraph
 -> PDDL projector
 -> PDDL smoke report
 -> SafeSym parser / safety injection / planner smoke
 ```
 
-不要急着把它扩成能力全面的 web agent。当前更重要的是让“观察到的状态图 → PDDL artifact → SafeSym/planner 消费”这条主线站稳。更复杂的状态去重、恢复、PDDL 完整泛化和真实网站复杂度可以后置。
+不要急着把它扩成能力全面的 web agent。当前更重要的是让真实 SauceDemo checkout prefix 暴露 exploration/action-selection 问题，并在可回放 trace 中定位错误。PDDL/SafeSym 链路已经能消费本地 checkout 产物，下一步要让真实网页探索产出的图更有价值。
 
 LLM/VLM 的建议使用位置：
 
@@ -559,6 +567,9 @@ src/ai_web_explorer/grounded_web/playwright_backend.py
 
 src/ai_web_explorer/grounded_web/dom_observer.py
   DOM 可交互候选元素提取。
+
+src/ai_web_explorer/grounded_web/llm_action_selector.py
+  实验性 LLM selector 边界：只从 grounded action id 中选择，并记录可诊断的决策 trace。
 
 src/ai_web_explorer/grounded_web/graph.py
   WebKobeGraph 数据结构。

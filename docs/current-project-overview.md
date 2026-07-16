@@ -122,7 +122,7 @@ suite so test failures better reflect current project direction.
 Latest retained bridge-suite verification:
 
 ```text
-tests/safesym_bridge: 137 passed, 2 skipped
+tests/safesym_bridge: 143 passed, 2 skipped
 ```
 
 `WebKobeGraph` is the main exploration-time representation for unknown websites.
@@ -137,6 +137,14 @@ and records before/after state deltas in a Web-KOBE graph. LLM/VLM assistance
 can be added later for action selection and semantic labeling, but selectors
 should come from DOM-grounded candidates rather than being invented by the
 model.
+
+The current experimental LLM path follows that boundary: an LLM selector may
+choose one action id from already-grounded `BrowserAction` candidates, but it
+must not generate selectors or execute the browser directly. Each selection can
+be written as a trace sidecar containing the goal, state, candidates, prompt,
+raw response, parsed response, status, and error category. This makes failures
+attributable to parse errors, invalid action ids, poor choice, execution
+failure, or observation/delta problems.
 
 The grounded action loop is the current pre-LLM control boundary. It records
 what the upper layer intended to do, which concrete `BrowserAction` was
@@ -575,7 +583,8 @@ The current system has several important limits:
 - Generic state facts are still intentionally simple; local fixtures use
   `[data-state]` to make early validation low-noise.
 - DOM candidate extraction is generic, but action selection and semantic naming
-  are still mostly rule-based.
+  are still mostly rule-based. An experimental LLM action selector now exists
+  behind an explicit optional hook; it is not the default policy.
 - The WebKobeGraph-to-PDDL projector emits a deliberately small STRIPS subset.
 - `web-kobe-pddl-smoke` now checks graph reachability and basic static PDDL
   consistency, but it is not a full PDDL parser or external planner run.
@@ -585,19 +594,26 @@ The current system has several important limits:
 - The current `local_checkout` smoke reaches SafeSym and Fast Downward, but it
   does not insert safety check actions yet because projected action names such as
   `dom_006_button_place_order` do not match SafeSym's safety-rule patterns.
-- Browser exploration is still narrow and follows checkout-style paths.
+- Browser exploration is still narrow and follows checkout-style paths. A real
+  SauceDemo smoke currently shows the next concrete weakness: the explorer can
+  see both `product_add_to_cart` and `cart_open`, but deterministic ranking may
+  open the cart before adding a product.
+- Real LLM calls have not been run in this workspace because `OPENAI_API_KEY`
+  is not set; current coverage uses fake providers to validate selector
+  boundaries and traceability.
 - Safety guarantees only apply to the model that was observed and compiled.
 
 These are not failures. They define the next research and engineering steps.
 
 ## Next Direction
 
-The next stage should focus on SafeSym/PDDL consumption readiness rather than on
-building a fully capable web agent. The most useful short-term chain is:
+The next stage should focus on real-web exploration quality without turning the
+project into a fully capable web agent. The most useful short-term chain is:
 
 ```text
-local_checkout / controlled page
+SauceDemo / controlled real web target
   -> grounded Web-KOBE exploration
+  -> optional traceable LLM action selection from grounded candidates
   -> WebKobeGraph
   -> PDDL projector
   -> PDDL smoke report
@@ -606,22 +622,21 @@ local_checkout / controlled page
 
 The most important design questions are:
 
-- What exact PDDL subset does SafeSym need for this project stage?
-- Can the generated `domain.pddl` and `problem.pddl` be consumed by the chosen
-  SafeSym/planner path without manual edits?
-- Which smoke checks should run before we hand artifacts to SafeSym?
-- How should projected action names become semantic enough to trigger SafeSym
-  safety rules when appropriate?
-- Which fixture complexity should be added next without overfitting to one site?
-- Where would LLM/VLM assistance improve action selection or semantic labeling
-  without taking over browser execution or fact truth?
+- Can the explorer reliably choose `product_add_to_cart` before `cart_open`
+  when the checkout goal requires a non-empty cart?
+- Does an LLM selector make better goal-aware choices than the deterministic
+  ranker when constrained to grounded candidates?
+- Are selector failures traceable enough to distinguish prompt/LLM issues from
+  browser execution or state-observation issues?
+- Once the real SauceDemo checkout prefix is stable, does the resulting
+  WebKobeGraph still project cleanly to PDDL and pass SafeSym smoke?
 
 A conservative approach is recommended:
 
 ```text
 local DOM/rule observation first
-PDDL/SafeSym consumption checks second
-LLM/VLM as resolver or verifier later
+traceable LLM action selection experiment second
+PDDL/SafeSym consumption checks after the real-web graph is useful
 ```
 
 This keeps the pipeline debuggable while leaving a clear path toward more
@@ -638,6 +653,10 @@ src/ai_web_explorer/safesym_bridge/state_observer.py
 
 src/ai_web_explorer/grounded_web/dom_observer.py
   DOM interactable candidate extraction.
+
+src/ai_web_explorer/grounded_web/llm_action_selector.py
+  Experimental selector boundary for choosing one grounded action id and
+  recording traceable LLM decision diagnostics.
 
 src/ai_web_explorer/safesym_bridge/semantic_resolver.py
   Resolver interface for mapping candidates to semantic actions.

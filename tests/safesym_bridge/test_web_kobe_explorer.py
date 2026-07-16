@@ -6,6 +6,10 @@ from ai_web_explorer.grounded_web.graph import BrowserAction
 from ai_web_explorer.grounded_web.semantic_assistor import (
     DeterministicSemanticAssistor,
 )
+from ai_web_explorer.grounded_web.llm_action_selector import (
+    LlmActionSelectionResult,
+    LlmActionSelectionTrace,
+)
 from ai_web_explorer.grounded_web.state_facts import AbstractStateFact
 from ai_web_explorer.grounded_web.structure import StructureEvidence
 
@@ -310,3 +314,90 @@ async def test_explore_one_step_marks_success_without_delta_as_no_observed_chang
     assert edge.status == "no_observed_change"
     assert edge.execution_trace.success is True
     assert edge.observed_delta == []
+
+
+class CartBeforeProductAdapter:
+    app_name = "saucedemo"
+
+    def __init__(self):
+        self.executed = []
+
+    async def observe_state(self):
+        return StateSnapshot(
+            page_id="inventory",
+            url="https://www.saucedemo.com/inventory.html",
+            title="Swag Labs",
+            signature={"cart_count": len(self.executed), "is_logged_in": True},
+        )
+
+    async def list_interactables(self, state):
+        return [
+            {
+                "semantic_id": "cart_open",
+                "description": "Click the shopping cart link",
+                "locator": ".shopping_cart_link",
+                "action_kind": "click",
+                "input_values": {},
+                "explored": False,
+                "metadata": {"data-action": "open-cart"},
+            },
+            {
+                "semantic_id": "product_add_to_cart",
+                "description": "Click Add to cart",
+                "locator": '[data-test="add-to-cart-sauce-labs-backpack"]',
+                "action_kind": "click",
+                "input_values": {},
+                "explored": False,
+            },
+        ]
+
+    async def execute(self, action: BrowserAction):
+        self.executed.append(action)
+        return True
+
+
+@pytest.mark.anyio
+async def test_explore_one_step_can_use_selector_to_choose_goal_relevant_action():
+    adapter = CartBeforeProductAdapter()
+    seen_requests = []
+
+    def selector(request):
+        seen_requests.append(request)
+        selected = next(
+            action
+            for action in request.candidate_actions
+            if action.semantic_id == "product_add_to_cart"
+        )
+        return LlmActionSelectionResult(
+            selected_action=selected,
+            trace=LlmActionSelectionTrace(
+                goal=request.goal,
+                state={"page_id": request.state.page_id},
+                candidate_actions=[
+                    {"id": action.semantic_id}
+                    for action in request.candidate_actions
+                ],
+                prompt="fake prompt",
+                raw_response='{"selected_action_id":"product_add_to_cart"}',
+                llm_response={"selected_action_id": "product_add_to_cart"},
+                status="selected",
+            ),
+        )
+
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=DeterministicSemanticAssistor(app="saucedemo"),
+        goal="Complete a checkout order.",
+        action_selector=selector,
+    )
+
+    graph = await explorer.explore_one_step()
+
+    assert seen_requests[0].goal == "Complete a checkout order."
+    assert [action.semantic_id for action in seen_requests[0].candidate_actions] == [
+        "cart_open",
+        "product_add_to_cart",
+    ]
+    assert adapter.executed[0].semantic_id == "product_add_to_cart"
+    assert graph.edges[0].action.semantic_id == "product_add_to_cart"
+    assert explorer.selection_traces[0]["status"] == "selected"

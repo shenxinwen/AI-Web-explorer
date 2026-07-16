@@ -10,13 +10,20 @@ from ai_web_explorer.grounded_web.capability_graph import (
 )
 from ai_web_explorer.grounded_web.state_signature import schema_delta
 from ai_web_explorer.grounded_web.graph import (
+    BrowserAction,
     ReferenceObservation,
     WebKobeEdge,
     WebKobeGraph,
     WebKobeNode,
 )
+from ai_web_explorer.grounded_web.llm_action_selector import (
+    LlmActionSelectionRequest,
+    LlmActionSelectionResult,
+)
 from ai_web_explorer.grounded_web.graph_manager import WebKobeGraphManager
 from ai_web_explorer.grounded_web.semantic_assistor import SemanticAssistor
+
+from typing import Callable
 
 
 def _node_from_draft(draft) -> WebKobeNode:
@@ -41,9 +48,16 @@ class WebKobeExplorer:
         *,
         adapter: AutomationBackend,
         semantic_assistor: SemanticAssistor,
+        goal: str = "Explore the web task.",
+        action_selector: (
+            Callable[[LlmActionSelectionRequest], LlmActionSelectionResult] | None
+        ) = None,
     ):
         self.adapter = adapter
         self.semantic_assistor = semantic_assistor
+        self.goal = goal
+        self.action_selector = action_selector
+        self.selection_traces: list[dict] = []
         self.manager = WebKobeGraphManager(app=adapter.app_name)
         self._start_node_id: str | None = None
 
@@ -59,7 +73,7 @@ class WebKobeExplorer:
             self._start_node_id = source_id
         source_interactables = self.manager.interactables_for_node(source_id)
 
-        selected = select_unexplored_action(source_interactables)
+        selected = self._select_action(before, source_interactables)
         if selected is None:
             return self.manager.to_graph(start_node_id=self._start_node_id)
 
@@ -118,3 +132,37 @@ class WebKobeExplorer:
             locator=selected.locator,
         )
         return self.manager.to_graph(start_node_id=self._start_node_id)
+
+    def _select_action(
+        self,
+        state,
+        interactables: list[dict],
+    ) -> BrowserAction | None:
+        if self.action_selector is None:
+            return select_unexplored_action(interactables)
+
+        candidate_actions = [
+            BrowserAction(
+                action_kind=str(item.get("action_kind") or "click"),
+                locator=item.get("locator"),
+                semantic_id=str(item.get("semantic_id") or "unknown_action"),
+                input_values=dict(item.get("input_values") or {}),
+                description=item.get("description"),
+            )
+            for item in interactables
+            if not item.get("explored")
+        ]
+        if not candidate_actions:
+            return None
+
+        result = self.action_selector(
+            LlmActionSelectionRequest(
+                goal=self.goal,
+                state=state,
+                candidate_actions=candidate_actions,
+            )
+        )
+        self.selection_traces.append(result.trace.to_dict())
+        if result.selected_action is not None:
+            return result.selected_action
+        return select_unexplored_action(interactables)

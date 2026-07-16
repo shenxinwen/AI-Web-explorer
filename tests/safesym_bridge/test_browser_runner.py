@@ -109,3 +109,103 @@ async def test_run_web_kobe_exploration_uses_controller(tmp_path, monkeypatch):
     ]
     data = json.loads(output_path.read_text(encoding="utf-8"))
     assert data["meta"]["total_steps_completed"] == 3
+
+
+@pytest.mark.anyio
+async def test_run_web_kobe_exploration_writes_selector_trace(
+    tmp_path, monkeypatch
+):
+    import playwright.async_api as playwright_async_api
+
+    output_path = tmp_path / "web_kobe_graph.json"
+    trace_path = tmp_path / "selector_trace.json"
+    calls = []
+
+    class FakePage:
+        async def goto(self, url):
+            calls.append(("goto", url))
+
+    class FakeBrowser:
+        async def new_page(self):
+            return FakePage()
+
+        async def close(self):
+            calls.append(("close", None))
+
+    class FakeChromium:
+        async def launch(self, *, headless=True):
+            return FakeBrowser()
+
+    class FakePlaywright:
+        chromium = FakeChromium()
+
+    class FakePlaywrightContext:
+        async def __aenter__(self):
+            return FakePlaywright()
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+    def fake_selector(request):
+        raise AssertionError("controller fake should not call selector directly")
+
+    class FakeController:
+        def __init__(self, explorer):
+            assert explorer.action_selector is fake_selector
+            explorer.selection_traces.append(
+                {
+                    "status": "selected",
+                    "llm_response": {
+                        "selected_action_id": "product_add_to_cart",
+                    },
+                }
+            )
+            self.explorer = explorer
+
+        async def run(self, *, max_steps=1):
+            return WebKobeExplorationResult(
+                graph=WebKobeGraph(
+                    app="fixture",
+                    start_node_id="fixture_shop",
+                    total_steps_completed=max_steps,
+                ),
+                summary=WebKobeExplorationSummary(
+                    requested_steps=max_steps,
+                    steps_completed=max_steps,
+                    stop_reason="max_steps",
+                    node_count=0,
+                    edge_count=0,
+                    failed_edge_count=0,
+                ),
+            )
+
+    monkeypatch.setattr(
+        playwright_async_api,
+        "async_playwright",
+        lambda: FakePlaywrightContext(),
+    )
+    monkeypatch.setattr(
+        browser_runner,
+        "WebKobeExplorationController",
+        FakeController,
+        raising=False,
+    )
+
+    await run_web_kobe_exploration(
+        "https://example.test/shop",
+        output_path,
+        app_name="fixture",
+        steps=1,
+        action_selector=fake_selector,
+        selector_trace_path=trace_path,
+    )
+
+    trace = json.loads(trace_path.read_text(encoding="utf-8"))
+    assert trace == [
+        {
+            "status": "selected",
+            "llm_response": {
+                "selected_action_id": "product_add_to_cart",
+            },
+        }
+    ]

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Callable
 
 from ai_web_explorer.grounded_web.capability_graph import Evidence, PageFrame
 from ai_web_explorer.grounded_web.graph import (
@@ -18,6 +19,10 @@ from ai_web_explorer.safesym_bridge.web_kobe_playwright_adapter import (
 )
 from ai_web_explorer.grounded_web.semantic_assistor import (
     DeterministicSemanticAssistor,
+)
+from ai_web_explorer.grounded_web.llm_action_selector import (
+    LlmActionSelectionRequest,
+    LlmActionSelectionResult,
 )
 
 
@@ -67,6 +72,11 @@ async def run_web_kobe_exploration(
     page_id: str | None = None,
     steps: int = 1,
     headless: bool = True,
+    goal: str = "Explore the web task.",
+    action_selector: (
+        Callable[[LlmActionSelectionRequest], LlmActionSelectionResult] | None
+    ) = None,
+    selector_trace_path: Path | None = None,
 ) -> Path:
     from playwright.async_api import async_playwright
 
@@ -83,10 +93,22 @@ async def run_web_kobe_exploration(
             explorer = WebKobeExplorer(
                 adapter=adapter,
                 semantic_assistor=DeterministicSemanticAssistor(app=app_name),
+                goal=goal,
+                action_selector=action_selector,
             )
             controller = WebKobeExplorationController(explorer)
             result = await controller.run(max_steps=max(steps, 1))
             write_web_kobe_graph(result.graph, output_path)
+            if selector_trace_path is not None:
+                selector_trace_path.parent.mkdir(parents=True, exist_ok=True)
+                selector_trace_path.write_text(
+                    json.dumps(
+                        explorer.selection_traces,
+                        indent=2,
+                        ensure_ascii=False,
+                    ),
+                    encoding="utf-8",
+                )
             return output_path
         finally:
             await browser.close()
