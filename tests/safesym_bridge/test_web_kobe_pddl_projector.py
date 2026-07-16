@@ -181,6 +181,61 @@ def test_compile_web_kobe_graph_to_pddl_projects_positive_numeric_facts():
     assert "(cart_count_positive)" not in artifacts.problem
 
 
+def test_compile_web_kobe_graph_to_pddl_declares_predicates_from_effect_deltas():
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="cart",
+        total_steps_completed=1,
+        nodes=[
+            _node("cart", "cart", {"cart_visible": True}),
+            _node("checkout", "checkout", {"cart_visible": False}),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="cart",
+                target_node_id="checkout",
+                instruction="begin checkout",
+                action=BrowserAction("click", "#checkout", "begin_checkout"),
+                capability=None,
+                target_observation="checkout page",
+                observed_delta=[
+                    ObservedDelta(
+                        "control_place_order_enabled",
+                        None,
+                        True,
+                        "control_availability_changed",
+                        evidence=[Evidence(source="unit_test")],
+                    )
+                ],
+                schema_delta={},
+                execution_trace=ExecutionTrace(
+                    "click",
+                    "#checkout",
+                    "checkout",
+                    {},
+                    "cart",
+                    "checkout",
+                    True,
+                ),
+                status="succeeded_with_observed_change",
+            )
+        ],
+    )
+
+    artifacts = compile_web_kobe_graph_to_pddl(graph, goal_node_id="checkout")
+    predicate_block = artifacts.domain.split("  (:predicates", 1)[1].split(
+        "  (:action",
+        1,
+    )[0]
+
+    assert "\n    (control_place_order_enabled)\n" in predicate_block
+    assert (
+        ":effect (and (not (at_cart)) (at_checkout) "
+        "(control_place_order_enabled))"
+        in artifacts.domain
+    )
+
+
 def test_compile_web_kobe_graph_to_pddl_excludes_non_projectable_edges():
     nodes = [
         _node("start", "start", {}),

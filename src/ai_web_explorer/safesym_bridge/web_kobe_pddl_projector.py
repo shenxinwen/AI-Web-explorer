@@ -228,26 +228,43 @@ def _action_name(raw: str) -> str:
     return _predicate(raw)
 
 
+def _delta_predicate_change(delta) -> tuple[str, bool] | None:
+    if isinstance(delta.after, bool):
+        return _predicate(delta.field), delta.after
+    if _is_zero_or_negative_number(delta.before) and _is_positive_number(
+        delta.after
+    ):
+        return _positive_predicate(delta.field), True
+    if _is_positive_number(delta.before) and _is_zero_or_negative_number(
+        delta.after
+    ):
+        return _positive_predicate(delta.field), False
+    return None
+
+
+def _effect_predicates_for_edge(edge) -> list[str]:
+    predicates = []
+    for delta in edge.observed_delta:
+        change = _delta_predicate_change(delta)
+        if change is not None:
+            predicates.append(change[0])
+    return predicates
+
+
 def _effects_for_edge(edge) -> list[str]:
     effects = [
         f"(not ({_at(edge.source_node_id)}))",
         f"({_at(edge.target_node_id)})",
     ]
     for delta in edge.observed_delta:
-        if isinstance(delta.after, bool):
-            pred = _predicate(delta.field)
-            if delta.after:
-                effects.append(f"({pred})")
-            else:
-                effects.append(f"(not ({pred}))")
-        elif _is_zero_or_negative_number(delta.before) and _is_positive_number(
-            delta.after
-        ):
-            effects.append(f"({_positive_predicate(delta.field)})")
-        elif _is_positive_number(delta.before) and _is_zero_or_negative_number(
-            delta.after
-        ):
-            effects.append(f"(not ({_positive_predicate(delta.field)}))")
+        change = _delta_predicate_change(delta)
+        if change is None:
+            continue
+        pred, becomes_true = change
+        if becomes_true:
+            effects.append(f"({pred})")
+        else:
+            effects.append(f"(not ({pred}))")
     return effects
 
 
@@ -265,9 +282,13 @@ def compile_web_kobe_graph_to_pddl(
     _require_node(graph, selected_start_node_id, role="start")
     _require_node(graph, goal_node_id, role="goal")
 
-    predicates = sorted(
-        set([_at(node.node_id) for node in graph.nodes] + _state_predicates(graph))
+    predicate_names = set(
+        [_at(node.node_id) for node in graph.nodes] + _state_predicates(graph)
     )
+    for edge in graph.edges:
+        if _is_projectable_edge(edge):
+            predicate_names.update(_effect_predicates_for_edge(edge))
+    predicates = sorted(predicate_names)
     predicate_text = "\n".join(f"    ({name})" for name in predicates)
 
     action_blocks = []
