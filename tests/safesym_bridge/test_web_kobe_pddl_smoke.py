@@ -144,10 +144,68 @@ def test_analyze_web_kobe_pddl_smoke_reports_planning_ready_graph():
     assert data["projectable_edge_count"] == 1
     assert data["projected_action_count"] == 1
     assert data["projected_predicate_count"] >= 3
+    assert data["pddl_static_consistency_ready"] is True
+    assert data["undeclared_predicates"] == []
     assert data["planning_ready"] is True
     assert data["failure_reasons"] == []
     assert data["safety_trigger_expected"] is False
     assert "planning-readiness smoke" in data["safety_trigger_reason"]
+
+
+def test_analyze_web_kobe_pddl_smoke_reports_undeclared_effect_predicates(
+    monkeypatch,
+):
+    from ai_web_explorer.safesym_bridge import web_kobe_pddl_smoke
+    from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
+        WebKobePddlArtifacts,
+    )
+
+    def fake_compile(*args, **kwargs):
+        return WebKobePddlArtifacts(
+            domain="\n".join(
+                [
+                    "(define (domain web-kobe)",
+                    "  (:requirements :strips)",
+                    "  (:predicates",
+                    "    (at_empty)",
+                    "    (at_filled)",
+                    "  )",
+                    "  (:action add_to_cart",
+                    "    :precondition (and (at_empty))",
+                    "    :effect (and (not (at_empty)) (at_filled) "
+                    "(cart_count_positive))",
+                    "  )",
+                    ")",
+                ]
+            ),
+            problem="\n".join(
+                [
+                    "(define (problem web-kobe-problem)",
+                    "  (:domain web-kobe)",
+                    "  (:init (at_empty))",
+                    "  (:goal (and (at_filled)))",
+                    ")",
+                ]
+            ),
+        )
+
+    monkeypatch.setattr(
+        web_kobe_pddl_smoke,
+        "compile_web_kobe_graph_to_pddl",
+        fake_compile,
+    )
+
+    graph = _graph([_edge("empty", "filled", "add_to_cart")])
+
+    report = analyze_web_kobe_pddl_smoke(graph, goal_node_id="filled")
+
+    data = report.to_dict()
+    assert data["pddl_static_consistency_ready"] is False
+    assert data["undeclared_predicates"] == ["cart_count_positive"]
+    assert data["planning_ready"] is False
+    assert "domain uses undeclared predicates: cart_count_positive" in data[
+        "failure_reasons"
+    ]
 
 
 def test_analyze_web_kobe_pddl_smoke_reports_unreachable_goal():

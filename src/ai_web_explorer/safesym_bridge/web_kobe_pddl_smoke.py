@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -28,6 +29,8 @@ class WebKobePddlSmokeReport:
     projectable_edge_count: int
     projected_action_count: int
     projected_predicate_count: int
+    pddl_static_consistency_ready: bool
+    undeclared_predicates: list[str] = field(default_factory=list)
     domain_path: str | None = None
     problem_path: str | None = None
     safety_trigger_expected: bool = False
@@ -45,6 +48,8 @@ class WebKobePddlSmokeReport:
             "projectable_edge_count": self.projectable_edge_count,
             "projected_action_count": self.projected_action_count,
             "projected_predicate_count": self.projected_predicate_count,
+            "pddl_static_consistency_ready": self.pddl_static_consistency_ready,
+            "undeclared_predicates": list(self.undeclared_predicates),
             "domain_path": self.domain_path,
             "problem_path": self.problem_path,
             "safety_trigger_expected": self.safety_trigger_expected,
@@ -125,12 +130,39 @@ def _count_projected_predicates(domain: str) -> int:
     return count
 
 
+def _predicate_names_in_text(text: str) -> set[str]:
+    return set(re.findall(r"\(([a-zA-Z][a-zA-Z0-9_]*)\)", text))
+
+
+def _declared_predicates(domain: str) -> set[str]:
+    if "  (:predicates" not in domain:
+        return set()
+    block = domain.split("  (:predicates", 1)[1]
+    if "  (:action" in block:
+        block = block.split("  (:action", 1)[0]
+    return _predicate_names_in_text(block)
+
+
+def _used_predicates(domain: str, problem: str) -> set[str]:
+    used: set[str] = set()
+    if "  (:action" in domain:
+        used.update(_predicate_names_in_text("  (:action" + domain.split("  (:action", 1)[1]))
+    if "  (:init" in problem:
+        used.update(_predicate_names_in_text("  (:init" + problem.split("  (:init", 1)[1]))
+    return used - {"and", "not"}
+
+
+def _undeclared_predicates(domain: str, problem: str) -> list[str]:
+    return sorted(_used_predicates(domain, problem) - _declared_predicates(domain))
+
+
 def _failure_reasons(
     *,
     goal_reachable: bool,
     projectable_edge_count: int,
     projected_action_count: int,
     projected_predicate_count: int,
+    undeclared_predicates: list[str],
     domain: str,
     problem: str,
 ) -> list[str]:
@@ -141,6 +173,11 @@ def _failure_reasons(
         reasons.append("no PDDL actions were projected")
     if projected_predicate_count == 0:
         reasons.append("no PDDL predicates were projected")
+    if undeclared_predicates:
+        reasons.append(
+            "domain uses undeclared predicates: "
+            + ", ".join(undeclared_predicates)
+        )
     if "(:init" not in problem:
         reasons.append("problem is missing init section")
     if "(:goal" not in problem:
@@ -176,11 +213,16 @@ def analyze_web_kobe_pddl_smoke(
     )
     projected_action_count = _count_projected_actions(artifacts.domain)
     projected_predicate_count = _count_projected_predicates(artifacts.domain)
+    undeclared_predicates = _undeclared_predicates(
+        artifacts.domain,
+        artifacts.problem,
+    )
     reasons = _failure_reasons(
         goal_reachable=goal_reachable,
         projectable_edge_count=projectable_edge_count,
         projected_action_count=projected_action_count,
         projected_predicate_count=projected_predicate_count,
+        undeclared_predicates=undeclared_predicates,
         domain=artifacts.domain,
         problem=artifacts.problem,
     )
@@ -194,6 +236,8 @@ def analyze_web_kobe_pddl_smoke(
         projectable_edge_count=projectable_edge_count,
         projected_action_count=projected_action_count,
         projected_predicate_count=projected_predicate_count,
+        pddl_static_consistency_ready=not undeclared_predicates,
+        undeclared_predicates=undeclared_predicates,
         domain_path=str(domain_path) if domain_path is not None else None,
         problem_path=str(problem_path) if problem_path is not None else None,
         planning_ready=not reasons,
