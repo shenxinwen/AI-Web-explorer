@@ -87,8 +87,8 @@ Playwright browser
   -> semantic action resolution
   -> GraphExplorer
   -> WebObservedGraph
-  -> PDDL compiler
-  -> SafeSym
+  -> graph-derived PDDL/regression support
+  -> SafeSym scenarios
 ```
 
 The active CLI smoke path is now Web-KOBE/PDDL-first:
@@ -125,10 +125,10 @@ Latest retained bridge-suite verification:
 tests/safesym_bridge: 133 passed, 2 skipped
 ```
 
-This graph is the main exploration-time representation for unknown websites. It
-records semantic page states, browser-grounded actions, observed deltas, and
+`WebKobeGraph` is the main exploration-time representation for unknown websites.
+It records semantic page states, browser-grounded actions, observed deltas, and
 evidence so the project can project observed web environments into
-SafeSym-compatible PDDL.
+planner-facing PDDL artifacts for SafeSym.
 
 The current near-term generic Web-KOBE path is DOM-first grounded exploration.
 The explorer extracts real interactable elements from the page, converts them
@@ -547,10 +547,16 @@ Earlier work produced SafeSym-compatible FSM outputs. Those pieces are still
 visible in older design documents and example artifacts, but they are no longer
 the current implementation path.
 
-Current main path:
+Current generic main path:
 
 ```text
-WebObservedGraph -> PDDL -> SafeSym
+WebKobeGraph -> PDDL artifacts -> SafeSym/planner-facing consumption
+```
+
+Retained app-specific regression path:
+
+```text
+WebObservedGraph -> SauceDemo PDDL/regression support -> SafeSym scenarios
 ```
 
 Older historical path:
@@ -566,43 +572,49 @@ The graph is now the important project data structure.
 
 The current system has several important limits:
 
-- Fact modeling is still hand-designed for SauceDemo.
-- DOM candidate extraction is generic, but semantic resolution is mostly rules.
-- Action preconditions are currently defined by local code.
-- The PDDL compiler silently ignores unsupported predicates in some cases.
-- The compiler is not yet generic across websites.
-- Browser exploration is still narrow and follows the checkout-style path.
+- Generic state facts are still intentionally simple; local fixtures use
+  `[data-state]` to make early validation low-noise.
+- DOM candidate extraction is generic, but action selection and semantic naming
+  are still mostly rule-based.
+- The WebKobeGraph-to-PDDL projector emits a deliberately small STRIPS subset.
+- `web-kobe-pddl-smoke` now checks graph reachability and basic static PDDL
+  consistency, but it is not a full PDDL parser or external planner run.
+- The project has not yet run a minimal end-to-end SafeSym planning smoke on the
+  generated Web-KOBE PDDL artifacts.
+- Browser exploration is still narrow and follows checkout-style paths.
 - Safety guarantees only apply to the model that was observed and compiled.
 
 These are not failures. They define the next research and engineering steps.
 
 ## Next Direction
 
-The next stage should focus on a more general web abstraction layer:
+The next stage should focus on SafeSym/PDDL consumption readiness rather than on
+building a fully capable web agent. The most useful short-term chain is:
 
 ```text
-raw browser data
-  -> observed facts with evidence
-  -> state signature
-  -> graph nodes and edges
-  -> inferred preconditions/effects
-  -> PDDL facts and actions
+local_checkout / controlled page
+  -> grounded Web-KOBE exploration
+  -> WebKobeGraph
+  -> PDDL projector
+  -> PDDL smoke report
+  -> minimal SafeSym/planner smoke
 ```
 
 The most important design questions are:
 
-- Which page facts should be stored?
-- How should different kinds of facts be classified?
-- How should state signatures avoid both missing important state and storing too
-  much DOM noise?
-- Which decisions should use local rules?
-- Which decisions should use LLM or VLM assistance?
-- How should graph changes be converted into reliable PDDL?
+- What exact PDDL subset does SafeSym need for this project stage?
+- Can the generated `domain.pddl` and `problem.pddl` be consumed by the chosen
+  SafeSym/planner path without manual edits?
+- Which smoke checks should run before we hand artifacts to SafeSym?
+- Which fixture complexity should be added next without overfitting to one site?
+- Where would LLM/VLM assistance improve action selection or semantic labeling
+  without taking over browser execution or fact truth?
 
 A conservative approach is recommended:
 
 ```text
 local DOM/rule observation first
+PDDL/SafeSym consumption checks second
 LLM/VLM as resolver or verifier later
 ```
 
@@ -628,7 +640,7 @@ src/ai_web_explorer/safesym_bridge/saucedemo_adapter.py
   SauceDemo adapter connecting observation, resolution, and execution.
 
 src/ai_web_explorer/safesym_bridge/graph_explorer.py
-  Generic graph-guided exploration loop.
+  SauceDemo/regression graph-guided exploration loop.
 
 src/ai_web_explorer/safesym_bridge/observed_graph.py
   WebObservedGraph data structure and builder.
@@ -640,7 +652,8 @@ src/ai_web_explorer/safesym_bridge/web_kobe_pddl_projector.py
   Active WebKobeGraph-to-PDDL projector.
 
 src/ai_web_explorer/safesym_bridge/web_kobe_pddl_smoke.py
-  Planning-readiness smoke report for WebKobeGraph PDDL artifacts.
+  Planning-readiness and static-consistency smoke report for WebKobeGraph PDDL
+  artifacts.
 
 docs/safesym-bridge.md
   Practical SafeSym bridge usage and command reference.

@@ -33,7 +33,7 @@ docs/current-project-overview.md
 
 更具体地说，我们不是要从零实现一个通用 web agent，而是要让 SafeSym 能理解未知网页环境：网页现在处于什么状态、有哪些动作可以做、动作会导致什么状态变化、哪些动作后续需要安全检查。
 
-当前阶段使用 SauceDemo 作为受控测试网站。SauceDemo 不是最终目标，只是一个稳定的端到端验证对象。
+当前阶段优先使用 `local_checkout` 作为低噪音 golden-path fixture，并保留 SauceDemo 作为应用级回归和未来安全规则场景。它们都不是最终目标，而是用于证明端到端链路的受控目标。
 
 核心研究问题是：
 
@@ -122,7 +122,7 @@ src/ai_web_explorer/grounded_web/
 
 ## Web-KOBE 风格探索主线
 
-下一阶段的通用探索方向是 Web-KOBE 风格图结构。
+当前通用探索方向已经收束到 Web-KOBE 风格图结构。
 
 它的目标不是记录网页里“有什么内容”，而是记录：
 
@@ -365,7 +365,7 @@ select
 
 ### WebKobeGraph
 
-`WebKobeGraph` 是下一阶段通用探索的核心图结构。
+`WebKobeGraph` 是当前通用探索主线的核心图结构。
 
 相关文件：
 
@@ -409,7 +409,7 @@ src/ai_web_explorer/safesym_bridge/observed_graph.py
 
 ### Effects
 
-Effects 通过比较动作前后的 state signature 推断。
+Effects 的历史 SauceDemo 路线通过比较动作前后的 state signature 推断；当前 Web-KOBE 主线则把观察到的 typed delta 和 schema delta 直接记录在 `WebKobeGraph` edge 上，再由 PDDL projector 投影成动作 effect。
 
 文件：
 
@@ -477,7 +477,13 @@ check_human_confirmation_order_place_confirm
 当前主线：
 
 ```text
-WebKobeGraph / WebObservedGraph -> PDDL -> SafeSym
+WebKobeGraph -> PDDL artifact -> SafeSym / planner 消费
+```
+
+保留的应用级回归路线：
+
+```text
+WebObservedGraph -> SauceDemo PDDL / 回归支持 -> SafeSym 场景
 ```
 
 历史路线：
@@ -492,11 +498,12 @@ observed transitions -> FSM JSON -> SafeSym loader compatibility
 
 目前系统还有一些明确限制：
 
-- fact modeling 仍然大量依赖 SauceDemo 手工设计；
-- DOM candidate extraction 已经比较通用，但 semantic resolution 仍然偏规则；
-- action preconditions 目前由本地代码定义；
-- PDDL compiler 仍然偏 SauceDemo；
-- 浏览器探索能力还比较窄；
+- 通用状态事实仍然有意保持简单，本地 fixture 依赖 `[data-state]` 降低早期验证噪音；
+- DOM candidate extraction 已经比较通用，但动作选择和语义命名仍然偏规则；
+- WebKobeGraph-to-PDDL projector 目前只输出很小的 STRIPS 子集；
+- `web-kobe-pddl-smoke` 已经检查图上可达性和基础 PDDL 静态一致性，但还不是完整 PDDL parser，也没有真正调用外部 planner；
+- 还没有对生成的 Web-KOBE PDDL artifact 跑最小 SafeSym planning smoke；
+- 浏览器探索能力还比较窄，主要围绕 checkout-style 路径；
 - 状态去重、恢复、泛化能力还没有成熟；
 - 安全保证只适用于已观察并编译出的模型。
 
@@ -507,21 +514,21 @@ observed transitions -> FSM JSON -> SafeSym loader compatibility
 短期目标应该聚焦：
 
 ```text
-让 agent 能正确操作网页并记录状态变化
+让 PDDL artifact 更稳定地被 SafeSym / planner 消费
 ```
 
 具体闭环是：
 
 ```text
-读取页面
--> 提取可交互元素
--> 执行 click / fill / select / scroll 等动作
--> 等待页面稳定
--> 记录动作前后状态变化
--> 写入 WebKobeGraph
+local_checkout / 受控页面
+-> grounded Web-KOBE 探索
+-> WebKobeGraph
+-> PDDL projector
+-> PDDL smoke report
+-> 最小 SafeSym / planner smoke
 ```
 
-状态去重、复杂恢复、PDDL 完整泛化可以后置。当前最重要的是先让探索和记录链路稳定工作。
+不要急着把它扩成能力全面的 web agent。当前更重要的是让“观察到的状态图 → PDDL artifact → SafeSym/planner 消费”这条主线站稳。更复杂的状态去重、恢复、PDDL 完整泛化和真实网站复杂度可以后置。
 
 LLM/VLM 的建议使用位置：
 
@@ -574,7 +581,7 @@ src/ai_web_explorer/safesym_bridge/web_kobe_pddl_projector.py
   当前主线的 WebKobeGraph 到 PDDL 投影器。
 
 src/ai_web_explorer/safesym_bridge/web_kobe_pddl_smoke.py
-  WebKobeGraph PDDL artifact 的 planning-readiness smoke report。
+  WebKobeGraph PDDL artifact 的 planning-readiness 和静态一致性 smoke report。
 
 docs/safesym-bridge.md
   SafeSym bridge 使用说明和命令参考。
