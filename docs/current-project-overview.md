@@ -106,8 +106,11 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-pddl-smoke \
   --goal-node <goal_node_id>
 ```
 
-The next short-term validation is `web-kobe-pddl-smoke`, which checks whether
-an explored WebKobeGraph yields non-empty, graph-reachable PDDL artifacts. This
+`web-kobe-pddl-smoke` checks whether an explored WebKobeGraph yields non-empty,
+graph-reachable, internally consistent PDDL artifacts. The smoke report now
+includes static PDDL consistency fields such as
+`pddl_static_consistency_ready` and `undeclared_predicates`, so action effects
+cannot silently reference predicates that were not declared in the domain. This
 is planning-readiness validation, not SafeSym safety-trigger validation.
 
 The retained regression suite is intentionally focused on this mainline plus
@@ -119,7 +122,7 @@ suite so test failures better reflect current project direction.
 Latest retained bridge-suite verification:
 
 ```text
-tests/safesym_bridge: 130 passed, 2 skipped
+tests/safesym_bridge: 133 passed, 2 skipped
 ```
 
 This graph is the main exploration-time representation for unknown websites. It

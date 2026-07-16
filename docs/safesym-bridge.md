@@ -53,9 +53,14 @@ problem.pddl
 smoke_report.json
 ```
 
-It validates planning readiness only. Missing SafeSym safety injection is not a
-failure unless the graph contains a safety-relevant action and rule model that
-should trigger it.
+It validates planning readiness only. The report checks graph reachability,
+projected action/predicate counts, and basic static PDDL consistency. In
+particular, `pddl_static_consistency_ready` must be true and
+`undeclared_predicates` should be empty; otherwise `planning_ready` becomes
+false because the generated domain uses predicates that were not declared.
+
+Missing SafeSym safety injection is not a failure unless the graph contains a
+safety-relevant action and rule model that should trigger it.
 
 `local_checkout` is the current golden-path fixture. It is a deterministic
 mini-shopping flow with product, cart, checkout form, and order-complete states.

@@ -112,7 +112,7 @@ src/ai_web_explorer/grounded_web/
    最近一次桥接层测试结果：
 
    ```text
-   tests/safesym_bridge: 130 passed, 2 skipped
+   tests/safesym_bridge: 133 passed, 2 skipped
    ```
 
    当前测试套件已经做过一次主线收束：删除旧 `WebObservedGraph -> PDDL`
@@ -146,7 +146,7 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-pddl-smoke \
   --goal-node <goal_node_id>
 ```
 
-下一步短期验证是 `web-kobe-pddl-smoke`：检查探索得到的 WebKobeGraph 是否能生成非空、图上可达的 PDDL artifact。这是 planning-readiness 验证，不是 SafeSym 安全规则触发验证。
+`web-kobe-pddl-smoke` 现在会检查探索得到的 WebKobeGraph 是否能生成非空、图上可达、内部一致的 PDDL artifact。smoke report 会包含 `pddl_static_consistency_ready` 和 `undeclared_predicates` 等字段，避免 action effect 静默引用 domain 中未声明的 predicate。这是 planning-readiness 验证，不是 SafeSym 安全规则触发验证。
 
 更重要的是实际探索命令：
 
