@@ -45,6 +45,7 @@ class WebKobeExplorer:
         self.adapter = adapter
         self.semantic_assistor = semantic_assistor
         self.manager = WebKobeGraphManager(app=adapter.app_name)
+        self._start_node_id: str | None = None
 
     async def explore_one_step(self) -> WebKobeGraph:
         before = await self.adapter.observe_state()
@@ -54,11 +55,13 @@ class WebKobeExplorer:
             interactables=before_interactables,
         )
         source_id = self.manager.identify_or_add_node(_node_from_draft(before_draft))
+        if self._start_node_id is None:
+            self._start_node_id = source_id
         source_interactables = self.manager.interactables_for_node(source_id)
 
         selected = select_unexplored_action(source_interactables)
         if selected is None:
-            return self.manager.to_graph(start_node_id=source_id)
+            return self.manager.to_graph(start_node_id=self._start_node_id)
 
         result = await execute_action_intent(
             self.adapter,
@@ -114,4 +117,4 @@ class WebKobeExplorer:
             selected.semantic_id,
             locator=selected.locator,
         )
-        return self.manager.to_graph(start_node_id=source_id)
+        return self.manager.to_graph(start_node_id=self._start_node_id)

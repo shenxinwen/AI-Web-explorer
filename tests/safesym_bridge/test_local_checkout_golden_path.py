@@ -56,6 +56,11 @@ async def test_local_checkout_explores_order_flow_and_writes_planning_smoke(
             assert graph.total_steps_completed == 6
             assert len(graph.nodes) >= 4
             assert len(graph.edges) >= 4
+            assert graph.start_node_id == graph.edges[0].source_node_id
+
+            start = _node_with_state(graph, "cart_count", 0)
+            assert start is not None
+            assert graph.start_node_id == start.node_id
 
             delta_fields = {
                 delta.field

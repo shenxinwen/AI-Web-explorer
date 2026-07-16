@@ -116,6 +116,19 @@ async def test_explore_one_step_records_self_loop_delta():
 
 
 @pytest.mark.anyio
+async def test_explore_one_step_preserves_initial_start_node_across_steps():
+    explorer = WebKobeExplorer(
+        adapter=FakeAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+    )
+
+    first_graph = await explorer.explore_one_step()
+    second_graph = await explorer.explore_one_step()
+
+    assert second_graph.start_node_id == first_graph.edges[0].source_node_id
+
+
+@pytest.mark.anyio
 async def test_explore_one_step_skips_previously_explored_self_loop_action():
     adapter = RepeatedStateAdapter()
     explorer = WebKobeExplorer(
