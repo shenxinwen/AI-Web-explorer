@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from ai_web_explorer.grounded_web.capability_graph import (
@@ -160,3 +161,33 @@ def test_analyze_web_kobe_pddl_smoke_reports_unreachable_goal():
     assert "goal is not reachable from start through projectable edges" in data[
         "failure_reasons"
     ]
+
+
+def test_write_web_kobe_pddl_smoke_writes_pddl_and_report(tmp_path):
+    from ai_web_explorer.safesym_bridge.web_kobe_pddl_smoke import (
+        write_web_kobe_pddl_smoke,
+    )
+
+    graph = _graph([_edge("empty", "filled", "add_to_cart")])
+
+    result = write_web_kobe_pddl_smoke(
+        graph,
+        tmp_path,
+        goal_node_id="filled",
+    )
+
+    domain_path = tmp_path / "domain.pddl"
+    problem_path = tmp_path / "problem.pddl"
+    report_path = tmp_path / "smoke_report.json"
+
+    assert domain_path.exists()
+    assert problem_path.exists()
+    assert report_path.exists()
+    assert "(:action add_to_cart" in domain_path.read_text(encoding="utf-8")
+    assert "(:goal (and (at_filled)))" in problem_path.read_text(encoding="utf-8")
+    data = json.loads(report_path.read_text(encoding="utf-8"))
+    assert data["planning_ready"] is True
+    assert data["domain_path"] == str(domain_path)
+    assert data["problem_path"] == str(problem_path)
+    assert result.report.planning_ready is True
+    assert result.artifacts.domain == domain_path.read_text(encoding="utf-8")

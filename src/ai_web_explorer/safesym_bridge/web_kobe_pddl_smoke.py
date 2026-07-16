@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -7,6 +8,7 @@ from pathlib import Path
 from ai_web_explorer.grounded_web.graph import WebKobeGraph
 from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
     PROJECTABLE_EDGE_STATUSES,
+    WebKobePddlArtifacts,
     compile_web_kobe_graph_to_pddl,
 )
 
@@ -50,6 +52,13 @@ class WebKobePddlSmokeReport:
             "planning_ready": self.planning_ready,
             "failure_reasons": list(self.failure_reasons),
         }
+
+
+@dataclass(frozen=True)
+class WebKobePddlSmokeResult:
+    artifacts: WebKobePddlArtifacts
+    report: WebKobePddlSmokeReport
+    output_dir: Path
 
 
 def _node_ids(graph: WebKobeGraph) -> set[str]:
@@ -189,4 +198,43 @@ def analyze_web_kobe_pddl_smoke(
         problem_path=str(problem_path) if problem_path is not None else None,
         planning_ready=not reasons,
         failure_reasons=reasons,
+    )
+
+
+def write_web_kobe_pddl_smoke(
+    graph: WebKobeGraph,
+    output_dir: Path,
+    *,
+    goal_node_id: str,
+    start_node_id: str | None = None,
+) -> WebKobePddlSmokeResult:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    domain_path = output_dir / "domain.pddl"
+    problem_path = output_dir / "problem.pddl"
+    report_path = output_dir / "smoke_report.json"
+
+    artifacts = compile_web_kobe_graph_to_pddl(
+        graph,
+        start_node_id=start_node_id,
+        goal_node_id=goal_node_id,
+    )
+    report = analyze_web_kobe_pddl_smoke(
+        graph,
+        start_node_id=start_node_id,
+        goal_node_id=goal_node_id,
+        domain_path=domain_path,
+        problem_path=problem_path,
+    )
+
+    domain_path.write_text(artifacts.domain, encoding="utf-8")
+    problem_path.write_text(artifacts.problem, encoding="utf-8")
+    report_path.write_text(
+        json.dumps(report.to_dict(), indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+
+    return WebKobePddlSmokeResult(
+        artifacts=artifacts,
+        report=report,
+        output_dir=output_dir,
     )
