@@ -187,17 +187,9 @@ implementation is `WebKobePlaywrightAdapter`, which wraps Playwright browser
 operation while leaving exploration policy and graph recording in
 `WebKobeExplorer`.
 
-A small reusable operation executor is also available at:
-
-```text
-src/ai_web_explorer/safesym_bridge/legacy_action_executor.py
-```
-
-`LegacyActionExecutor` reuses the original project's basic operation pattern:
-scroll a grounded locator into view, then perform click/fill/select. It is not a
-ReAct loop, does not call an LLM, and does not own exploration policy. Its role
-is to make old-operation reuse explicit before a future `AiWebExplorerBackend`
-is designed.
+Earlier legacy operation-executor experiments have been removed from the active
+bridge package. Browser operation should now go through the `AutomationBackend`
+boundary and the Playwright-backed Web-KOBE adapter.
 
 The explicit no-LLM baseline agent facade lives in:
 
@@ -410,7 +402,8 @@ is the natural place to add LLM or VLM assistance.
 
 ### WebObservedGraph
 
-`WebObservedGraph` is the central graph structure.
+`WebObservedGraph` is now a SauceDemo regression structure, not the active
+generic graph. New unknown-site work should use `WebKobeGraph`.
 
 Relevant file:
 
@@ -435,11 +428,13 @@ before state
 after state
 ```
 
-The graph is intended to become the main source for later PDDL generation.
+This graph remains useful for SauceDemo-specific safety/regression history, but
+it is no longer the default source for new PDDL generation.
 
 ### Effects
 
-Effects are inferred by comparing the before and after state signatures.
+The older SauceDemo regression route infers effects by comparing before and
+after state signatures.
 
 Relevant file:
 
@@ -455,17 +450,18 @@ after:  cart_count = 1
 effect: set cart_count to 1
 ```
 
-This matters because the system should not rely only on hand-written action
-effects. The long-term goal is to learn effects from observed transitions.
+This remains useful as historical regression support. The active generic path
+records observed deltas directly on `WebKobeGraph` edges and projects those
+deltas through `web_kobe_pddl_projector.py`.
 
 ### PDDL Artifacts
 
-The PDDL compiler turns the observed graph into planning files.
+The active PDDL projector turns a `WebKobeGraph` into planning files.
 
 Relevant file:
 
 ```text
-src/ai_web_explorer/safesym_bridge/pddl_compiler.py
+src/ai_web_explorer/safesym_bridge/web_kobe_pddl_projector.py
 ```
 
 It outputs:
@@ -475,17 +471,17 @@ domain.pddl
 problem.pddl
 ```
 
-The current compiler is SauceDemo-specific. It maps graph facts into PDDL
-predicates such as:
+The current projector is intentionally simple. It maps observed Web-KOBE graph
+nodes and successful state-changing edges into STRIPS predicates and actions
+such as:
 
 ```text
-(at inventory)
-(state_is_logged_in)
-(state_cart_count_positive)
-(state_order_created)
+(at_<node_id>)
+(cart_count_positive)
+(order_created_positive)
 ```
 
-The current goal is:
+The current golden-path validation goal is:
 
 ```text
 (at checkout_complete)
@@ -637,8 +633,11 @@ src/ai_web_explorer/safesym_bridge/observed_graph.py
 src/ai_web_explorer/safesym_bridge/effect_inferer.py
   Effect inference from before/after state signatures.
 
-src/ai_web_explorer/safesym_bridge/pddl_compiler.py
-  Graph-to-PDDL compiler for the current SauceDemo MVP.
+src/ai_web_explorer/safesym_bridge/web_kobe_pddl_projector.py
+  Active WebKobeGraph-to-PDDL projector.
+
+src/ai_web_explorer/safesym_bridge/web_kobe_pddl_smoke.py
+  Planning-readiness smoke report for WebKobeGraph PDDL artifacts.
 
 docs/safesym-bridge.md
   Practical SafeSym bridge usage and command reference.

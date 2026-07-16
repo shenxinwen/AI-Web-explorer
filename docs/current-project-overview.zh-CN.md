@@ -570,11 +570,11 @@ src/ai_web_explorer/safesym_bridge/state_observer.py
 src/ai_web_explorer/safesym_bridge/observed_graph.py
   SauceDemo 回归路线中的 WebObservedGraph。
 
-src/ai_web_explorer/safesym_bridge/pddl_compiler.py
-  当前 SauceDemo MVP 的 graph-to-PDDL compiler。
-
 src/ai_web_explorer/safesym_bridge/web_kobe_pddl_projector.py
-  WebKobeGraph 到 PDDL 的早期投影器。
+  当前主线的 WebKobeGraph 到 PDDL 投影器。
+
+src/ai_web_explorer/safesym_bridge/web_kobe_pddl_smoke.py
+  WebKobeGraph PDDL artifact 的 planning-readiness smoke report。
 
 docs/safesym-bridge.md
   SafeSym bridge 使用说明和命令参考。
