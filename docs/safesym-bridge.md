@@ -107,6 +107,18 @@ Older fixed `WebObservedGraph` and capability-graph commands are no longer part
 of the default CLI surface. Their source modules may remain temporarily as
 legacy/reference code, but new work should not extend them as the mainline.
 
+### Stagehand-Backed SauceDemo Graph Smoke
+
+```bash
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-saucedemo-stagehand-smoke \
+  --output outputs/saucedemo_stagehand_graph.json \
+  --stagehand-trace outputs/saucedemo_stagehand_trace.json \
+  --steps 8
+```
+
+This command is opt-in because real Stagehand runs require external credentials
+and browser/model access. Default tests use fake providers.
+
 ## SauceDemo Role
 
 SauceDemo remains useful as an app-specific regression target, especially for

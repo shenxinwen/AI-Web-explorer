@@ -628,6 +628,18 @@ observe before state
 docs/superpowers/specs/2026-07-17-stagehand-backed-webkobegraph-exploration-design.md
 ```
 
+计划中的 Stagehand-backed smoke 命令：
+
+```bash
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-saucedemo-stagehand-smoke \
+  --output outputs/saucedemo_stagehand_graph.json \
+  --stagehand-trace outputs/saucedemo_stagehand_trace.json \
+  --steps 8
+```
+
+它从 SauceDemo 登录页开始，目标是在 `checkout_overview` 停止，不能点击
+`Finish`。
+
 暂缓事项包括节点去重、商品卡片重复结构抽象、参数化动作、最终下单安全规则触发，以及把 Stagehand `agent()` 作为外部 baseline。
 
 ## 重要文件

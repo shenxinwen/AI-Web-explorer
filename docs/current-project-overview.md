@@ -718,6 +718,18 @@ The main design document for this stage is:
 docs/superpowers/specs/2026-07-17-stagehand-backed-webkobegraph-exploration-design.md
 ```
 
+The planned Stagehand-backed smoke command is:
+
+```bash
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-saucedemo-stagehand-smoke \
+  --output outputs/saucedemo_stagehand_graph.json \
+  --stagehand-trace outputs/saucedemo_stagehand_trace.json \
+  --steps 8
+```
+
+It starts at the SauceDemo login page and should stop at `checkout_overview`.
+It must not click `Finish`.
+
 Deferred work includes node deduplication, repeated product-card abstraction,
 parameterized actions, final order-placement safety triggers, and using
 Stagehand `agent()` only as an external baseline.
