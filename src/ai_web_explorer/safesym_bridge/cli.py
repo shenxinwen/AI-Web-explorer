@@ -8,6 +8,7 @@ from ai_web_explorer.safesym_bridge.browser_runner import (
     build_debug_web_kobe_graph,
     run_web_kobe_exploration,
     run_saucedemo_openai_selector_step,
+    run_saucedemo_stagehand_step,
     write_web_kobe_graph,
 )
 from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
@@ -213,6 +214,41 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Show the browser window while running the smoke.",
     )
+    saucedemo_stagehand_parser = subparsers.add_parser(
+        "web-kobe-saucedemo-stagehand-smoke",
+        help=(
+            "Run Stagehand-backed single-step SauceDemo Web-KOBE exploration "
+            "and write graph plus Stagehand trace."
+        ),
+    )
+    saucedemo_stagehand_parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("outputs/saucedemo_stagehand_graph.json"),
+        help="Path to write the Web-KOBE graph JSON.",
+    )
+    saucedemo_stagehand_parser.add_argument(
+        "--stagehand-trace",
+        type=Path,
+        default=Path("outputs/saucedemo_stagehand_trace.json"),
+        help="Path to write Stagehand execution trace JSON.",
+    )
+    saucedemo_stagehand_parser.add_argument(
+        "--model",
+        default=None,
+        help="Optional Stagehand model override.",
+    )
+    saucedemo_stagehand_parser.add_argument(
+        "--steps",
+        type=int,
+        default=8,
+        help="Maximum number of Stagehand-backed graph steps.",
+    )
+    saucedemo_stagehand_parser.add_argument(
+        "--headed",
+        action="store_true",
+        help="Show the browser window while running the smoke.",
+    )
 
     args = parser.parse_args(argv)
 
@@ -294,6 +330,16 @@ def main(argv: list[str] | None = None) -> int:
                 run_saucedemo_openai_selector_step(
                     args.output,
                     selector_trace_path=args.selector_trace,
+                    model=args.model,
+                    steps=args.steps,
+                    headless=not args.headed,
+                )
+            )
+        elif args.mode == "web-kobe-saucedemo-stagehand-smoke":
+            output_path = asyncio.run(
+                run_saucedemo_stagehand_step(
+                    args.output,
+                    stagehand_trace_path=args.stagehand_trace,
                     model=args.model,
                     steps=args.steps,
                     headless=not args.headed,

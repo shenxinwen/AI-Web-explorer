@@ -31,6 +31,7 @@ def test_main_help_lists_only_web_kobe_mainline_commands(capsys):
     assert "web-kobe-safesym-smoke" in help_output
     assert "web-kobe-openai-selector-smoke" in help_output
     assert "web-kobe-saucedemo-llm-step-smoke" in help_output
+    assert "web-kobe-saucedemo-stagehand-smoke" in help_output
     assert "capability-graph" not in help_output
     assert "explore-capability-graph" not in help_output
     assert "explore-graph" not in help_output
@@ -476,3 +477,51 @@ def test_main_web_kobe_saucedemo_llm_step_smoke_runs_browser_step(
     assert calls == [(output, trace, False, "gpt-test", 3)]
     assert output.exists()
     assert trace.exists()
+
+
+def test_main_web_kobe_saucedemo_stagehand_smoke_wires_runner(
+    monkeypatch,
+    tmp_path,
+):
+    output = tmp_path / "graph.json"
+    trace = tmp_path / "trace.json"
+    calls = []
+
+    async def fake_run_saucedemo_stagehand_step(
+        output_path,
+        *,
+        stagehand_trace_path=None,
+        headless=True,
+        model=None,
+        steps=8,
+    ):
+        calls.append((output_path, stagehand_trace_path, headless, model, steps))
+        output_path.write_text(
+            json.dumps({"meta": {"app": "saucedemo"}}),
+            encoding="utf-8",
+        )
+        return output_path
+
+    monkeypatch.setattr(
+        cli,
+        "run_saucedemo_stagehand_step",
+        fake_run_saucedemo_stagehand_step,
+        raising=False,
+    )
+
+    exit_code = main(
+        [
+            "web-kobe-saucedemo-stagehand-smoke",
+            "--output",
+            str(output),
+            "--stagehand-trace",
+            str(trace),
+            "--steps",
+            "6",
+            "--model",
+            "openai/gpt-5-nano",
+        ]
+    )
+
+    assert exit_code == 0
+    assert calls == [(output, trace, True, "openai/gpt-5-nano", 6)]

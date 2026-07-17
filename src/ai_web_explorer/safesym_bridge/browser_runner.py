@@ -28,6 +28,12 @@ from ai_web_explorer.grounded_web.llm_action_selector import (
 from ai_web_explorer.grounded_web.openai_action_selector import (
     create_openai_chat_selection_provider_from_env,
 )
+from ai_web_explorer.grounded_web.stagehand_backend import (
+    StagehandAutomationBackend,
+)
+from ai_web_explorer.grounded_web.stagehand_sdk_provider import (
+    create_async_stagehand_provider_from_env,
+)
 
 
 def build_debug_web_kobe_graph() -> WebKobeGraph:
@@ -194,3 +200,66 @@ async def run_saucedemo_openai_selector_step(
         steps=steps,
         action_selector=action_selector,
     )
+
+
+async def run_saucedemo_stagehand_step(
+    output_path: Path,
+    *,
+    stagehand_trace_path: Path | None = None,
+    headless: bool = True,
+    steps: int = 8,
+    provider=None,
+    model: str | None = None,
+) -> Path:
+    from playwright.async_api import async_playwright
+
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(headless=headless)
+        page = await browser.new_page()
+        try:
+            await page.goto("https://www.saucedemo.com/")
+            resolved_provider = provider
+            if resolved_provider is None:
+                resolved_provider = await create_async_stagehand_provider_from_env(
+                    model_name=model,
+                )
+            base_adapter = WebKobePlaywrightAdapter(
+                page,
+                app_name="saucedemo",
+            )
+            adapter = StagehandAutomationBackend(
+                base_backend=base_adapter,
+                provider=resolved_provider,
+                goal=(
+                    "Log in to SauceDemo as standard_user, add one item to the "
+                    "cart, open the cart, start checkout, fill checkout "
+                    "information, and stop on checkout overview. Do not click "
+                    "Finish."
+                ),
+            )
+            explorer = WebKobeExplorer(
+                adapter=adapter,
+                semantic_assistor=DeterministicSemanticAssistor(app="saucedemo"),
+                goal="Reach SauceDemo checkout overview without placing the order.",
+            )
+            controller = WebKobeExplorationController(explorer)
+            result = await controller.run(max_steps=max(steps, 1))
+            graph = result.graph
+            write_web_kobe_graph(graph, output_path)
+            if stagehand_trace_path is not None:
+                traces = graph.meta.get("stagehand_traces")
+                if traces is None:
+                    traces = [
+                        edge.execution_trace.metadata
+                        for edge in graph.edges
+                        if edge.execution_trace.metadata.get("action_source")
+                        == "stagehand"
+                    ]
+                stagehand_trace_path.parent.mkdir(parents=True, exist_ok=True)
+                stagehand_trace_path.write_text(
+                    json.dumps(traces, indent=2, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+            return output_path
+        finally:
+            await browser.close()
