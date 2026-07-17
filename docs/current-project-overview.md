@@ -117,12 +117,16 @@ The retained regression suite is intentionally focused on this mainline plus
 the SauceDemo app-specific adapter/resolver/catalog path. Older
 WebObservedGraph compiler unit tests, capability-graph sidecar tests, legacy
 executor tests, and simple-agent facade tests were removed from the default
-suite so test failures better reflect current project direction.
+suite so test failures better reflect current project direction. The old
+prompt-evaluation tests and fixture corpus under `tests/ai/` and `tests/data/`
+have also been removed because they depended on live OpenAI/MLflow evaluation
+workflows and did not validate the SafeSym-oriented mainline.
 
 Latest retained bridge-suite verification:
 
 ```text
 tests/safesym_bridge: 156 passed, 2 skipped
+all retained tests: 169 passed, 2 skipped
 ```
 
 `WebKobeGraph` is the main exploration-time representation for unknown websites.
