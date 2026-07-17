@@ -632,18 +632,20 @@ docs/superpowers/specs/2026-07-17-stagehand-backed-webkobegraph-exploration-desi
 
 ```powershell
 $env:STAGEHAND_SERVER = "local"
-$env:DEEPSEEK_API_KEY = "<your-deepseek-key>"
+$env:STAGEHAND_MODEL = "deepseek/<your-model-name>"
+$env:MODEL_API_KEY = "<your-deepseek-key>"
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-saucedemo-stagehand-smoke `
   --output outputs/saucedemo_stagehand_graph.json `
   --stagehand-trace outputs/saucedemo_stagehand_trace.json `
-  --steps 8 `
-  --model deepseek/<your-model-name>
+  --steps 8
 ```
 
-如果使用自带模型 key，`MODEL_API_KEY` 是通用入口；项目也会根据
-`deepseek/...` 模型名自动读取 `DEEPSEEK_API_KEY`。当前这个 runner 推荐使用
-`STAGEHAND_SERVER=local`，这样 Stagehand 执行动作和 Web-KOBE 做 before/after
-observation 的页面是同一个 Playwright page。
+如果使用自带模型 key，`MODEL_API_KEY` 是推荐的 Python SDK 入口。这个 runner
+会自动加载 `.env`，读取 `STAGEHAND_MODEL`，也会根据 `deepseek/...` 模型名自动读取
+`DEEPSEEK_API_KEY` 作为兼容别名。当前推荐使用 `STAGEHAND_SERVER=local`，这样
+Stagehand 执行动作和 Web-KOBE 做 before/after observation 的页面是同一个
+Playwright page。`STAGEHAND_API_URL` 可以用于自定义 Stagehand service endpoint；
+它不是 DeepSeek/OpenAI-compatible 的模型 provider base URL。
 
 它从 SauceDemo 登录页开始，目标是在 `checkout_overview` 停止，不能点击
 `Finish`。

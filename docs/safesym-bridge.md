@@ -111,22 +111,24 @@ legacy/reference code, but new work should not extend them as the mainline.
 
 ```powershell
 $env:STAGEHAND_SERVER = "local"
-$env:DEEPSEEK_API_KEY = "<your-deepseek-key>"
+$env:STAGEHAND_MODEL = "deepseek/<your-model-name>"
+$env:MODEL_API_KEY = "<your-deepseek-key>"
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-saucedemo-stagehand-smoke `
   --output outputs/saucedemo_stagehand_graph.json `
   --stagehand-trace outputs/saucedemo_stagehand_trace.json `
-  --steps 8 `
-  --model deepseek/<your-model-name>
+  --steps 8
 ```
 
 This command is opt-in because real Stagehand runs require external credentials
 and browser/model access. Default tests use fake providers.
 
-For BYO model-key runs, set either the generic `MODEL_API_KEY` or the
-provider-specific key for the model prefix. For example, `deepseek/...` models
-can use `DEEPSEEK_API_KEY`. The recommended runner mode is
-`STAGEHAND_SERVER=local`, which lets Stagehand operate on the same Playwright
-page that Web-KOBE observes.
+For BYO model-key runs, set the generic `MODEL_API_KEY`, which is the
+recommended Python SDK input. This runner loads `.env`, reads `STAGEHAND_MODEL`,
+and also accepts provider-specific aliases such as `DEEPSEEK_API_KEY` for
+`deepseek/...` models. The recommended runner mode is `STAGEHAND_SERVER=local`,
+which lets Stagehand operate on the same Playwright page that Web-KOBE observes.
+`STAGEHAND_API_URL` may be set for a custom Stagehand service endpoint; it is
+not the DeepSeek/OpenAI-compatible model provider base URL.
 
 ## SauceDemo Role
 

@@ -90,6 +90,96 @@ async def test_create_stagehand_provider_uses_deepseek_key_and_local_page(
     ]
 
 
+@pytest.mark.anyio
+async def test_create_stagehand_provider_loads_dotenv_and_model_api_key(
+    monkeypatch,
+):
+    calls = []
+
+    class FakeSessions:
+        async def start(self, **kwargs):
+            calls.append(("start", kwargs))
+            return FakeSession()
+
+    class FakeAsyncStagehand:
+        def __init__(self, **kwargs):
+            calls.append(("client", kwargs))
+            self.sessions = FakeSessions()
+
+    monkeypatch.setitem(
+        sys.modules,
+        "stagehand",
+        SimpleNamespace(AsyncStagehand=FakeAsyncStagehand),
+    )
+
+    loaded = []
+    provider = await create_async_stagehand_provider_from_env(
+        load_dotenv=lambda: loaded.append("dotenv"),
+        environ={
+            "STAGEHAND_SERVER": "local",
+            "STAGEHAND_MODEL": "deepseek/deepseek-v4-pro",
+            "MODEL_API_KEY": "model-test-key",
+        },
+    )
+
+    assert provider.session is not None
+    assert loaded == ["dotenv"]
+    assert calls == [
+        (
+            "client",
+            {
+                "model_api_key": "model-test-key",
+                "server": "local",
+            },
+        ),
+        (
+            "start",
+            {
+                "model_name": "deepseek/deepseek-v4-pro",
+                "browser": {"type": "local"},
+            },
+        ),
+    ]
+
+
+@pytest.mark.anyio
+async def test_create_stagehand_provider_passes_stagehand_api_url(monkeypatch):
+    calls = []
+
+    class FakeSessions:
+        async def start(self, **kwargs):
+            return FakeSession()
+
+    class FakeAsyncStagehand:
+        def __init__(self, **kwargs):
+            calls.append(kwargs)
+            self.sessions = FakeSessions()
+
+    monkeypatch.setitem(
+        sys.modules,
+        "stagehand",
+        SimpleNamespace(AsyncStagehand=FakeAsyncStagehand),
+    )
+
+    await create_async_stagehand_provider_from_env(
+        load_dotenv=lambda: None,
+        environ={
+            "STAGEHAND_SERVER": "remote",
+            "STAGEHAND_MODEL": "openai/gpt-5-nano",
+            "MODEL_API_KEY": "model-test-key",
+            "STAGEHAND_API_URL": "https://stagehand.example.test",
+        },
+    )
+
+    assert calls == [
+        {
+            "model_api_key": "model-test-key",
+            "server": "remote",
+            "base_url": "https://stagehand.example.test",
+        }
+    ]
+
+
 class FakeAction:
     def __init__(self, data):
         self.data = data

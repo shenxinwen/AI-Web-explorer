@@ -722,19 +722,21 @@ The planned Stagehand-backed smoke command is:
 
 ```powershell
 $env:STAGEHAND_SERVER = "local"
-$env:DEEPSEEK_API_KEY = "<your-deepseek-key>"
+$env:STAGEHAND_MODEL = "deepseek/<your-model-name>"
+$env:MODEL_API_KEY = "<your-deepseek-key>"
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-saucedemo-stagehand-smoke `
   --output outputs/saucedemo_stagehand_graph.json `
   --stagehand-trace outputs/saucedemo_stagehand_trace.json `
-  --steps 8 `
-  --model deepseek/<your-model-name>
+  --steps 8
 ```
 
-For BYO model-key runs, `MODEL_API_KEY` is the generic Stagehand key input. The
-project also maps provider-specific keys such as `DEEPSEEK_API_KEY` for
-`deepseek/...` models. `STAGEHAND_SERVER=local` is the recommended default for
-this runner because Stagehand then acts on the same Playwright page that
-Web-KOBE observes before and after each step.
+For BYO model-key runs, `MODEL_API_KEY` is the recommended Python SDK key input.
+The project loads `.env` for this runner, reads `STAGEHAND_MODEL`, and also maps
+provider-specific keys such as `DEEPSEEK_API_KEY` for `deepseek/...` models.
+`STAGEHAND_SERVER=local` is the recommended default because Stagehand then acts
+on the same Playwright page that Web-KOBE observes before and after each step.
+`STAGEHAND_API_URL` may be set for a custom Stagehand service endpoint; it is
+not the DeepSeek/OpenAI-compatible model provider base URL.
 
 It starts at the SauceDemo login page and should stop at `checkout_overview`.
 It must not click `Finish`.

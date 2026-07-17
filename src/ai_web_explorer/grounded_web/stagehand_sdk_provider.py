@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import Any, Callable, Mapping
 
 from ai_web_explorer.grounded_web.stagehand_actions import (
     StagehandActResult,
@@ -100,8 +100,12 @@ _PROVIDER_KEY_ENV_BY_MODEL_PREFIX = {
 }
 
 
-def _resolve_model_name(model_name: str | None) -> str:
-    resolved_model_name = model_name or os.environ.get("STAGEHAND_MODEL")
+def _resolve_model_name(
+    model_name: str | None,
+    *,
+    env: Mapping[str, str],
+) -> str:
+    resolved_model_name = model_name or env.get("STAGEHAND_MODEL")
     if not resolved_model_name:
         raise ValueError(
             "Stagehand model is required. Pass --model or set STAGEHAND_MODEL."
@@ -109,14 +113,14 @@ def _resolve_model_name(model_name: str | None) -> str:
     return resolved_model_name
 
 
-def _resolve_model_api_key(*, model_name: str) -> str | None:
-    explicit_key = os.environ.get("MODEL_API_KEY")
+def _resolve_model_api_key(*, model_name: str, env: Mapping[str, str]) -> str | None:
+    explicit_key = env.get("MODEL_API_KEY")
     if explicit_key:
         return explicit_key
     provider = model_name.split("/", 1)[0].lower()
     provider_key_env = _PROVIDER_KEY_ENV_BY_MODEL_PREFIX.get(provider)
     if provider_key_env:
-        return os.environ.get(provider_key_env)
+        return env.get(provider_key_env)
     return None
 
 
@@ -124,7 +128,14 @@ async def create_async_stagehand_provider_from_env(
     *,
     model_name: str | None = None,
     page: Any | None = None,
+    load_dotenv: Callable[[], Any] | None = None,
+    environ: Mapping[str, str] | None = None,
 ) -> StagehandSdkProvider:
+    if load_dotenv is None:
+        from dotenv import load_dotenv as load_dotenv
+    load_dotenv()
+    env = os.environ if environ is None else environ
+
     try:
         from stagehand import AsyncStagehand
     except Exception as error:
@@ -132,15 +143,22 @@ async def create_async_stagehand_provider_from_env(
             "stagehand Python SDK is required for real Stagehand-backed runs."
         ) from error
 
-    resolved_model_name = _resolve_model_name(model_name)
-    server = os.environ.get("STAGEHAND_SERVER", "local").lower()
+    resolved_model_name = _resolve_model_name(model_name, env=env)
+    server = env.get("STAGEHAND_SERVER", "local").lower()
     if server not in {"local", "remote"}:
         raise ValueError("STAGEHAND_SERVER must be either 'local' or 'remote'.")
 
-    client = AsyncStagehand(
-        model_api_key=_resolve_model_api_key(model_name=resolved_model_name),
-        server=server,
-    )
+    client_options: dict[str, Any] = {
+        "model_api_key": _resolve_model_api_key(
+            model_name=resolved_model_name,
+            env=env,
+        ),
+        "server": server,
+    }
+    stagehand_api_url = env.get("STAGEHAND_API_URL")
+    if stagehand_api_url:
+        client_options["base_url"] = stagehand_api_url
+    client = AsyncStagehand(**client_options)
     session_options: dict[str, Any] = {"model_name": resolved_model_name}
     if server == "local":
         session_options["browser"] = {"type": "local"}
