@@ -15,15 +15,6 @@ wheels/
 # env
 .env
 
-# data
-data/*.jsonl
-data/*.txt
-data/*.json
-data/htmls/*.html
-data/screenshots/*.png
-data/actions_screenshots/*.png
-data/actions_htmls/*.html
-
 # generated bridge outputs
 outputs/
 
@@ -32,7 +23,3 @@ outputs/
 
 # isolated Codex worktrees
 .worktrees/
-
-# mlflow
-mlruns/
-mlartifacts/

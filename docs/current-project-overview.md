@@ -126,7 +126,7 @@ Latest retained bridge-suite verification:
 
 ```text
 tests/safesym_bridge: 156 passed, 2 skipped
-all retained tests: 169 passed, 2 skipped
+all retained tests: 160 passed, 2 skipped
 ```
 
 `WebKobeGraph` is the main exploration-time representation for unknown websites.
@@ -239,8 +239,11 @@ should reuse existing browser automation capability where possible while keeping
 the exploration goal, data model, state recording, graph construction, and
 SafeSym bridge under project control. The current Playwright-backed adapter is
 the first concrete automation backend. Later work can wrap useful operation
-pieces from the original `ai-web-explorer` agent, or other web-agent tools, as
-additional backends without replacing the Web-KOBE/SafeSym exploration layer.
+pieces from other web-agent tools as additional backends without replacing the
+Web-KOBE/SafeSym exploration layer. The old upstream `explore` runtime has been
+removed from the active package because it asked the LLM to generate both action
+descriptions and selectors, which conflicts with the current DOM-grounded
+candidate boundary.
 
 The concrete backend boundary lives in:
 
@@ -269,11 +272,10 @@ clear without duplicating the Web-KOBE exploration engine. It observes grounded
 candidates, executes the simple first-unexplored policy, and records
 before/action/after deltas through the existing graph path.
 
-There are still compatibility structures from the original explorer,
-Web-KOBE collector, SauceDemo MVP, and sync/async action executors. They should
-not be expanded as generic mainline code. Refactoring should happen gradually
-when a feature touches a boundary, with new generic code going through
-`grounded_web`.
+There are still compatibility structures from the Web-KOBE collector and the
+SauceDemo MVP route. They should not be expanded as generic mainline code.
+Refactoring should happen gradually when a feature touches a boundary, with new
+generic code going through `grounded_web`.
 
 ```bash
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-explore \
@@ -286,9 +288,7 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-explore \
 
 This route is the main place to improve generic unknown-site operation because
 it directly tests whether the agent can correctly operate real page controls and
-record the resulting state changes. The older original-explorer sidecar path is
-still useful as a comparison point, but it is less stable because it asks the
-LLM to generate both action descriptions and selectors.
+record the resulting state changes.
 
 The preferred first golden-path target is a local no-login checkout fixture:
 
@@ -346,13 +346,6 @@ observer and action profile so the Web-KOBE graph can record meaningful browser
 steps such as login, add-to-cart, cart open, and checkout start. Generic pages
 still use local DOM extraction. Real SauceDemo browser verification is gated by
 `RUN_WEB_KOBE_SAUCEDEMO_TEST=1`.
-
-The original explorer with `--web-kobe-output` remains useful as a legacy
-comparison route, but it is no longer part of the default SafeSym bridge CLI
-surface. It should not be the place for new generic exploration design because
-it asks the LLM to generate both action descriptions and selectors. New generic
-work should improve the DOM-grounded `grounded_web` / `web-kobe-explore` path
-first.
 
 ## Core Concepts
 

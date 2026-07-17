@@ -13,8 +13,8 @@ real webpage
   -> SafeSym/planner-facing artifacts
 ```
 
-The original LLM-driven `explore` command is still present as legacy upstream
-functionality, but new project work should use the Web-KOBE/SafeSym path.
+The old upstream `explore` runtime has been removed from the active package.
+New work should use the Web-KOBE/SafeSym path.
 
 ## Current Mainline
 
@@ -122,14 +122,3 @@ pytest tests/safesym_bridge -q
 
 Some browser tests launch Playwright Chromium and may require local execution
 permissions outside restricted sandboxes.
-
-## Legacy Upstream Explorer
-
-The original project entry point remains:
-
-```bash
-explore example.com -i 10
-```
-
-That route is useful as historical upstream functionality and comparison data,
-but it is not the preferred place to add new SafeSym-oriented exploration logic.

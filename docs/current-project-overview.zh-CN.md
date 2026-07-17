@@ -113,7 +113,7 @@ src/ai_web_explorer/grounded_web/
 
    ```text
 tests/safesym_bridge: 156 passed, 2 skipped
-all retained tests: 169 passed, 2 skipped
+all retained tests: 160 passed, 2 skipped
 ```
 
    当前测试套件已经做过一次主线收束：删除旧 `WebObservedGraph -> PDDL`
@@ -122,6 +122,11 @@ all retained tests: 169 passed, 2 skipped
    仍可能服务后续安全规则场景的 SauceDemo adapter/resolver/catalog 回归测试。
    旧的 `tests/ai/` prompt-eval 测试和 `tests/data/` 大型截图/HTML 语料也已删除；
    它们依赖 live OpenAI/MLflow 评估流程，不验证当前 SafeSym-oriented 主线。
+
+补充清理：旧 upstream `explore` runtime、对应 root-level modules、旧 `data/`
+样本/输出目录以及 `explore` console script 已从 active package 移除。保留的
+LLM 能力应继续遵守当前边界：LLM 只在 DOM-grounded candidates 中选择动作，
+不直接生成 selector 或接管浏览器执行。
 
 ## Web-KOBE 风格探索主线
 

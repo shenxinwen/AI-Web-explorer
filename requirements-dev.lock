@@ -15,8 +15,6 @@ annotated-types==0.6.0
 anyio==4.3.0
     # via httpx
     # via openai
-beautifulsoup4==4.12.3
-    # via ai-web-explorer
 black==24.4.2
 certifi==2024.2.2
     # via httpcore
@@ -33,8 +31,6 @@ greenlet==3.0.3
     # via playwright
 h11==0.14.0
     # via httpcore
-htmlmin==0.1.12
-    # via ai-web-explorer
 httpcore==1.0.5
     # via httpx
 httpx==0.27.0
@@ -46,8 +42,6 @@ iniconfig==2.0.0
     # via pytest
 mypy-extensions==1.0.0
     # via black
-numpy==1.26.4
-    # via ai-web-explorer
 openai==1.29.0
     # via ai-web-explorer
 packaging==24.0
@@ -70,16 +64,10 @@ pyee==11.1.0
 pytest==8.2.2
 python-dotenv==1.2.2
     # via ai-web-explorer
-pyyaml==6.0.1
-    # via ai-web-explorer
-setuptools==69.5.1
-    # via ai-web-explorer
 sniffio==1.3.1
     # via anyio
     # via httpx
     # via openai
-soupsieve==2.5
-    # via beautifulsoup4
 tqdm==4.66.4
     # via openai
 typing-extensions==4.11.0

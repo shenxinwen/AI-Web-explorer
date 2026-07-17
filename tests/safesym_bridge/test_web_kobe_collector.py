@@ -1,20 +1,22 @@
-import uuid
+from dataclasses import dataclass
 
-from ai_web_explorer import webstate
 from ai_web_explorer.safesym_bridge.web_kobe_collector import WebKobeCollector
 from ai_web_explorer.safesym_bridge.web_kobe_observer import WebKobeObservation
 
 
-def _state(title: str) -> webstate.WebState:
-    return webstate.WebState(
-        title=title,
-        title_embedding=[],
-        urls=[f"https://example.test/{title.lower().replace(' ', '-')}"],
-        description=[],
-        actions=[],
-        transitions=[],
-        ws_id=uuid.uuid5(uuid.NAMESPACE_DNS, title),
-    )
+@dataclass
+class _State:
+    title: str
+
+
+@dataclass
+class _Action:
+    description: str
+    status: str
+
+
+def _state(title: str) -> _State:
+    return _State(title=title)
 
 
 def _observation(url: str, title: str, **state_indicators):
@@ -33,12 +35,9 @@ def test_collector_records_state_and_transition_delta():
     collector = WebKobeCollector(app="example")
     source = _state("Products")
     target = _state("Products")
-    action = webstate.Action(
+    action = _Action(
         description="Add a product to the cart",
-        part=0,
-        priority=10,
         status="success",
-        function_calls=[],
     )
     before = _observation(
         "https://example.test/products",
