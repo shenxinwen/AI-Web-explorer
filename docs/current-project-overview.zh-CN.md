@@ -637,7 +637,7 @@ $env:MODEL_API_KEY = "<your-deepseek-key>"
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-saucedemo-stagehand-smoke `
   --output outputs/saucedemo_stagehand_graph.json `
   --stagehand-trace outputs/saucedemo_stagehand_trace.json `
-  --steps 8
+  --steps 10
 ```
 
 如果使用自带模型 key，`MODEL_API_KEY` 是推荐的 Python SDK 入口。这个 runner
@@ -649,6 +649,28 @@ Playwright page。`STAGEHAND_API_URL` 可以用于自定义 Stagehand service en
 
 它从 SauceDemo 登录页开始，目标是在 `checkout_overview` 停止，不能点击
 `Finish`。
+
+使用 `.env` 中的 `STAGEHAND_SERVER=local`、`STAGEHAND_MODEL=deepseek/deepseek-v4-pro`
+和 `MODEL_API_KEY` 后，真实运行已经能用 10 个 Stagehand-backed 低层动作到达
+`checkout_overview__0e208d5cb9`：
+
+```text
+fill username
+-> fill password
+-> click Login
+-> add Sauce Labs Backpack to cart
+-> open cart
+-> click Checkout
+-> fill first name
+-> fill last name
+-> fill postal code
+-> click Continue
+```
+
+该 WebKobeGraph 包含 11 个节点和 10 条边，随后对该图运行
+`web-kobe-pddl-smoke` 得到 `planning_ready=True`，且没有 undeclared predicates。
+Stagehand/AI SDK 会提示 DeepSeek 模型不支持当前 `responseFormat` 设置，但本次
+observe/act 调用仍然成功。
 
 暂缓事项包括节点去重、商品卡片重复结构抽象、参数化动作、最终下单安全规则触发，以及把 Stagehand `agent()` 作为外部 baseline。
 

@@ -101,3 +101,52 @@ async def test_stagehand_backend_execute_calls_provider_and_records_metadata():
     assert backend.last_execution_metadata["action_source"] == "stagehand"
     assert backend.last_execution_metadata["stagehand_selector"] == "#login-button"
     assert backend.last_execution_metadata["stagehand_act_result"]["success"] is True
+
+
+@pytest.mark.anyio
+async def test_stagehand_backend_retains_previous_observed_actions_for_cached_nodes():
+    class SwitchingProvider:
+        def __init__(self):
+            self.actions = [
+                StagehandObservedAction(
+                    description="Click Login",
+                    method="click",
+                    selector="#login-button",
+                    arguments=[],
+                )
+            ]
+            self.acted = []
+
+        async def observe_next_action(self, *, instruction, state):
+            return list(self.actions)
+
+        async def act(self, action):
+            self.acted.append(action)
+            return StagehandActResult(success=True)
+
+    provider = SwitchingProvider()
+    backend = StagehandAutomationBackend(
+        base_backend=FakeBaseBackend(),
+        provider=provider,
+        goal="log in",
+    )
+    state = StateSnapshot(
+        page_id="login",
+        url="https://example.test",
+        title="Login",
+        signature={},
+    )
+
+    first_actions = await backend.list_interactables(state)
+    provider.actions = [
+        StagehandObservedAction(
+            description="Fill password",
+            method="fill",
+            selector="#password",
+            arguments=["secret_sauce"],
+        )
+    ]
+    await backend.list_interactables(state)
+
+    assert await backend.execute(first_actions[0]) is True
+    assert provider.acted[0].description == "Click Login"

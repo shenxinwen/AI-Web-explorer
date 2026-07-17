@@ -37,7 +37,10 @@ async def test_create_stagehand_provider_from_env_requires_model(monkeypatch):
     monkeypatch.delenv("STAGEHAND_MODEL", raising=False)
 
     with pytest.raises(ValueError, match="Stagehand model is required"):
-        await create_async_stagehand_provider_from_env()
+        await create_async_stagehand_provider_from_env(
+            load_dotenv=lambda: None,
+            environ={},
+        )
 
 
 @pytest.mark.anyio
@@ -69,6 +72,11 @@ async def test_create_stagehand_provider_uses_deepseek_key_and_local_page(
     provider = await create_async_stagehand_provider_from_env(
         model_name="deepseek/deepseek-v4-pro",
         page=fake_page,
+        load_dotenv=lambda: None,
+        environ={
+            "DEEPSEEK_API_KEY": "deepseek-test-key",
+            "STAGEHAND_SERVER": "local",
+        },
     )
 
     assert provider.page is fake_page
@@ -88,6 +96,48 @@ async def test_create_stagehand_provider_uses_deepseek_key_and_local_page(
             },
         ),
     ]
+
+
+@pytest.mark.anyio
+async def test_create_stagehand_provider_passes_local_cdp_url(monkeypatch):
+    calls = []
+
+    class FakeSessions:
+        async def start(self, **kwargs):
+            calls.append(("start", kwargs))
+            return FakeSession()
+
+    class FakeAsyncStagehand:
+        def __init__(self, **kwargs):
+            calls.append(("client", kwargs))
+            self.sessions = FakeSessions()
+
+    monkeypatch.setitem(
+        sys.modules,
+        "stagehand",
+        SimpleNamespace(AsyncStagehand=FakeAsyncStagehand),
+    )
+
+    await create_async_stagehand_provider_from_env(
+        load_dotenv=lambda: None,
+        environ={
+            "STAGEHAND_SERVER": "local",
+            "STAGEHAND_MODEL": "deepseek/deepseek-v4-pro",
+            "MODEL_API_KEY": "model-test-key",
+        },
+        local_cdp_url="http://127.0.0.1:9222",
+    )
+
+    assert calls[-1] == (
+        "start",
+        {
+            "model_name": "deepseek/deepseek-v4-pro",
+            "browser": {
+                "type": "local",
+                "cdp_url": "http://127.0.0.1:9222",
+            },
+        },
+    )
 
 
 @pytest.mark.anyio

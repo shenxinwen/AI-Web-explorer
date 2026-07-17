@@ -727,7 +727,7 @@ $env:MODEL_API_KEY = "<your-deepseek-key>"
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-saucedemo-stagehand-smoke `
   --output outputs/saucedemo_stagehand_graph.json `
   --stagehand-trace outputs/saucedemo_stagehand_trace.json `
-  --steps 8
+  --steps 10
 ```
 
 For BYO model-key runs, `MODEL_API_KEY` is the recommended Python SDK key input.
@@ -740,6 +740,29 @@ not the DeepSeek/OpenAI-compatible model provider base URL.
 
 It starts at the SauceDemo login page and should stop at `checkout_overview`.
 It must not click `Finish`.
+
+With `STAGEHAND_SERVER=local`, `STAGEHAND_MODEL=deepseek/deepseek-v4-pro`, and
+`MODEL_API_KEY` configured in `.env`, a live run reached
+`checkout_overview__0e208d5cb9` in 10 low-level Stagehand-backed steps:
+
+```text
+fill username
+  -> fill password
+  -> click Login
+  -> add Sauce Labs Backpack to cart
+  -> open cart
+  -> click Checkout
+  -> fill first name
+  -> fill last name
+  -> fill postal code
+  -> click Continue
+```
+
+The resulting WebKobeGraph had 11 nodes and 10 edges, and
+`web-kobe-pddl-smoke` over the graph reported `planning_ready=True` with no
+undeclared predicates. Stagehand/AI SDK logged warnings that the DeepSeek model
+does not support its current `responseFormat` setting, but the observe/act calls
+still succeeded.
 
 Deferred work includes node deduplication, repeated product-card abstraction,
 parameterized actions, final order-placement safety triggers, and using

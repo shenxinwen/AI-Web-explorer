@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import socket
+import time
+import urllib.request
 from pathlib import Path
 from typing import Callable
 
@@ -72,6 +75,31 @@ def write_web_kobe_graph(graph: WebKobeGraph, output_path: Path) -> Path:
         encoding="utf-8",
     )
     return output_path
+
+
+def _pick_free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+def _read_cdp_websocket_url(port: int, *, timeout_seconds: float = 5.0) -> str:
+    url = f"http://127.0.0.1:{port}/json/version"
+    deadline = time.monotonic() + timeout_seconds
+    last_error: Exception | None = None
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen(url, timeout=1.0) as response:
+                data = json.loads(response.read().decode("utf-8"))
+            websocket_url = data.get("webSocketDebuggerUrl")
+            if websocket_url:
+                return str(websocket_url)
+        except Exception as error:
+            last_error = error
+        time.sleep(0.1)
+    raise RuntimeError(
+        f"Chromium CDP websocket URL was not available at {url}."
+    ) from last_error
 
 
 async def run_web_kobe_exploration(
@@ -213,8 +241,20 @@ async def run_saucedemo_stagehand_step(
 ) -> Path:
     from playwright.async_api import async_playwright
 
+    cdp_port = _pick_free_port() if provider is None else None
+    launch_args = (
+        [f"--remote-debugging-port={cdp_port}"]
+        if cdp_port is not None
+        else None
+    )
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=headless)
+        browser = await playwright.chromium.launch(
+            headless=headless,
+            args=launch_args,
+        )
+        local_cdp_url = (
+            _read_cdp_websocket_url(cdp_port) if cdp_port is not None else None
+        )
         page = await browser.new_page()
         try:
             await page.goto("https://www.saucedemo.com/")
@@ -223,6 +263,7 @@ async def run_saucedemo_stagehand_step(
                 resolved_provider = await create_async_stagehand_provider_from_env(
                     model_name=model,
                     page=page,
+                    local_cdp_url=local_cdp_url,
                 )
             base_adapter = WebKobePlaywrightAdapter(
                 page,
@@ -232,10 +273,14 @@ async def run_saucedemo_stagehand_step(
                 base_backend=base_adapter,
                 provider=resolved_provider,
                 goal=(
-                    "Log in to SauceDemo as standard_user, add one item to the "
-                    "cart, open the cart, start checkout, fill checkout "
-                    "information, and stop on checkout overview. Do not click "
-                    "Finish."
+                    "Choose exactly one next low-level browser action for the "
+                    "SauceDemo checkout task. If the username field is empty, "
+                    "fill it with standard_user. If the username is filled and "
+                    "the password field is empty, fill it with secret_sauce. "
+                    "If both login fields are filled, click Login. After "
+                    "login, add one item to the cart, open the cart, start "
+                    "checkout, fill checkout information, and stop on checkout "
+                    "overview. Do not click Finish."
                 ),
             )
             explorer = WebKobeExplorer(

@@ -46,7 +46,6 @@ class StagehandAutomationBackend:
             instruction=self.goal,
             state=state,
         )
-        self._observed_actions_by_id = {}
         records: list[dict[str, Any]] = []
         for index, stagehand_action in enumerate(observed):
             action = stagehand_action_to_browser_action(

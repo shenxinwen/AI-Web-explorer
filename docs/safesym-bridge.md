@@ -116,7 +116,7 @@ $env:MODEL_API_KEY = "<your-deepseek-key>"
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-saucedemo-stagehand-smoke `
   --output outputs/saucedemo_stagehand_graph.json `
   --stagehand-trace outputs/saucedemo_stagehand_trace.json `
-  --steps 8
+  --steps 10
 ```
 
 This command is opt-in because real Stagehand runs require external credentials
@@ -129,6 +129,11 @@ and also accepts provider-specific aliases such as `DEEPSEEK_API_KEY` for
 which lets Stagehand operate on the same Playwright page that Web-KOBE observes.
 `STAGEHAND_API_URL` may be set for a custom Stagehand service endpoint; it is
 not the DeepSeek/OpenAI-compatible model provider base URL.
+
+The current verified DeepSeek-backed local run reached `checkout_overview` in
+10 low-level Stagehand steps and did not click `Finish`. A follow-up
+`web-kobe-pddl-smoke` over `outputs/saucedemo_stagehand_graph.json` reported
+`planning_ready=True` and no undeclared predicates.
 
 ## SauceDemo Role
 

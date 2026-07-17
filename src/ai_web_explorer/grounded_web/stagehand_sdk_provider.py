@@ -128,6 +128,7 @@ async def create_async_stagehand_provider_from_env(
     *,
     model_name: str | None = None,
     page: Any | None = None,
+    local_cdp_url: str | None = None,
     load_dotenv: Callable[[], Any] | None = None,
     environ: Mapping[str, str] | None = None,
 ) -> StagehandSdkProvider:
@@ -161,7 +162,10 @@ async def create_async_stagehand_provider_from_env(
     client = AsyncStagehand(**client_options)
     session_options: dict[str, Any] = {"model_name": resolved_model_name}
     if server == "local":
-        session_options["browser"] = {"type": "local"}
+        browser_options: dict[str, Any] = {"type": "local"}
+        if local_cdp_url:
+            browser_options["cdp_url"] = local_cdp_url
+        session_options["browser"] = browser_options
     session = await client.sessions.start(**session_options)
     return StagehandSdkProvider(
         session=session,

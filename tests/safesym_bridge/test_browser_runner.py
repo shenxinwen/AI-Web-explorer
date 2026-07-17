@@ -430,8 +430,8 @@ async def test_run_saucedemo_stagehand_step_wires_stagehand_backend(
             calls.append(("close", None))
 
     class FakeChromium:
-        async def launch(self, *, headless=True):
-            calls.append(("launch", headless))
+        async def launch(self, *, headless=True, args=None):
+            calls.append(("launch", headless, args))
             return FakeBrowser()
 
     class FakePlaywright:
@@ -488,6 +488,7 @@ async def test_run_saucedemo_stagehand_step_wires_stagehand_backend(
         FakeController,
         raising=False,
     )
+    monkeypatch.setattr(browser_runner, "_pick_free_port", lambda: 9444, raising=False)
 
     result_path = await browser_runner.run_saucedemo_stagehand_step(
         output_path,
@@ -498,7 +499,7 @@ async def test_run_saucedemo_stagehand_step_wires_stagehand_backend(
 
     assert result_path == output_path
     assert calls == [
-        ("launch", True),
+        ("launch", True, None),
         ("new_page", None),
         ("goto", "https://www.saucedemo.com/"),
         ("controller", "saucedemo"),
@@ -513,3 +514,132 @@ async def test_run_saucedemo_stagehand_step_wires_stagehand_backend(
             "stagehand_selector": "#login-button",
         }
     ]
+
+
+@pytest.mark.anyio
+async def test_run_saucedemo_stagehand_step_passes_cdp_url_to_provider(
+    tmp_path,
+    monkeypatch,
+):
+    import playwright.async_api as playwright_async_api
+
+    output_path = tmp_path / "stagehand_graph.json"
+    calls = []
+
+    class FakePage:
+        async def goto(self, url):
+            calls.append(("goto", url))
+
+    fake_page = FakePage()
+
+    class FakeBrowser:
+        async def new_page(self):
+            calls.append(("new_page", None))
+            return fake_page
+
+        async def close(self):
+            calls.append(("close", None))
+
+    class FakeChromium:
+        async def launch(self, *, headless=True, args=None):
+            calls.append(("launch", headless, args))
+            return FakeBrowser()
+
+    class FakePlaywright:
+        chromium = FakeChromium()
+
+    class FakePlaywrightContext:
+        async def __aenter__(self):
+            return FakePlaywright()
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+    async def fake_create_provider(**kwargs):
+        calls.append(("provider", kwargs))
+        return object()
+
+    class FakeBaseAdapter:
+        def __init__(self, page, *, app_name, page_id=None):
+            calls.append(("adapter", page, app_name))
+            self.app_name = app_name
+
+        async def observe_state(self):
+            return StateSnapshot(
+                page_id="login",
+                url="https://www.saucedemo.com/",
+                title="Swag Labs",
+                signature={},
+            )
+
+    class FakeController:
+        def __init__(self, explorer):
+            calls.append(("controller", explorer.adapter.app_name))
+
+        async def run(self, *, max_steps=1):
+            return WebKobeExplorationResult(
+                graph=WebKobeGraph(
+                    app="saucedemo",
+                    start_node_id="login",
+                    total_steps_completed=max_steps,
+                ),
+                summary=WebKobeExplorationSummary(
+                    requested_steps=max_steps,
+                    steps_completed=max_steps,
+                    stop_reason="max_steps",
+                    node_count=0,
+                    edge_count=0,
+                    failed_edge_count=0,
+                ),
+            )
+
+    monkeypatch.setattr(
+        playwright_async_api,
+        "async_playwright",
+        lambda: FakePlaywrightContext(),
+    )
+    monkeypatch.setattr(browser_runner, "_pick_free_port", lambda: 9333, raising=False)
+    monkeypatch.setattr(
+        browser_runner,
+        "_read_cdp_websocket_url",
+        lambda port: "ws://127.0.0.1:9333/devtools/browser/test",
+        raising=False,
+    )
+    monkeypatch.setattr(
+        browser_runner,
+        "create_async_stagehand_provider_from_env",
+        fake_create_provider,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        browser_runner,
+        "WebKobePlaywrightAdapter",
+        FakeBaseAdapter,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        browser_runner,
+        "WebKobeExplorationController",
+        FakeController,
+        raising=False,
+    )
+
+    await browser_runner.run_saucedemo_stagehand_step(
+        output_path,
+        steps=1,
+        model="deepseek/test",
+    )
+
+    assert calls[0] == (
+        "launch",
+        True,
+        ["--remote-debugging-port=9333"],
+    )
+    assert ("goto", "https://www.saucedemo.com/") in calls
+    provider_call = next(call for call in calls if call[0] == "provider")
+    assert provider_call[1]["model_name"] == "deepseek/test"
+    assert provider_call[1]["page"] is fake_page
+    assert (
+        provider_call[1]["local_cdp_url"]
+        == "ws://127.0.0.1:9333/devtools/browser/test"
+    )

@@ -62,6 +62,25 @@ def test_signature_from_observed_values_for_checkout_complete():
     assert signature["order_created"] is True
 
 
+def test_signature_tracks_individual_checkout_info_fields():
+    signature = signature_from_observed_values(
+        "checkout_info",
+        {
+            "username_value": "",
+            "password_value": "",
+            "cart_count": 1,
+            "checkout_first_name": "Safe",
+            "checkout_last_name": "",
+            "checkout_postal_code": "",
+        },
+    )
+
+    assert signature["checkout_first_name_filled"] is True
+    assert signature["checkout_last_name_filled"] is False
+    assert signature["checkout_postal_code_filled"] is False
+    assert signature["checkout_info_filled"] is False
+
+
 def test_saucedemo_web_observation_exports_existing_signature():
     observation = web_observation_from_saucedemo_values(
         page_id="checkout_overview",
@@ -85,6 +104,9 @@ def test_saucedemo_web_observation_exports_existing_signature():
         "is_logged_in": True,
         "cart_count": 1,
         "checkout_started": True,
+        "checkout_first_name_filled": True,
+        "checkout_last_name_filled": True,
+        "checkout_postal_code_filled": True,
         "checkout_info_filled": True,
         "order_review_ready": True,
         "order_created": False,

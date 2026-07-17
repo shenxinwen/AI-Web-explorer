@@ -66,6 +66,9 @@ def signature_from_observed_values(
         },
         "cart_count": cart_count,
         "checkout_started": checkout_started,
+        "checkout_first_name_filled": bool(first_name),
+        "checkout_last_name_filled": bool(last_name),
+        "checkout_postal_code_filled": bool(postal_code),
         "checkout_info_filled": bool(first_name and last_name and postal_code),
         "order_review_ready": order_review_ready,
         "order_created": order_created,
@@ -129,6 +132,42 @@ def web_observation_from_saucedemo_values(
             value=signature["checkout_started"],
             evidence=[url_evidence],
             derived=True,
+        ),
+        "checkout_first_name_filled": ObservedFact(
+            path="checkout_first_name_filled",
+            value=signature["checkout_first_name_filled"],
+            evidence=[
+                ObservationEvidence(
+                    source="input",
+                    selector="#first-name",
+                    attribute="value",
+                    raw_value=str(values.get("checkout_first_name") or ""),
+                )
+            ],
+        ),
+        "checkout_last_name_filled": ObservedFact(
+            path="checkout_last_name_filled",
+            value=signature["checkout_last_name_filled"],
+            evidence=[
+                ObservationEvidence(
+                    source="input",
+                    selector="#last-name",
+                    attribute="value",
+                    raw_value=str(values.get("checkout_last_name") or ""),
+                )
+            ],
+        ),
+        "checkout_postal_code_filled": ObservedFact(
+            path="checkout_postal_code_filled",
+            value=signature["checkout_postal_code_filled"],
+            evidence=[
+                ObservationEvidence(
+                    source="input",
+                    selector="#postal-code",
+                    attribute="value",
+                    raw_value=str(values.get("checkout_postal_code") or ""),
+                )
+            ],
         ),
         "checkout_info_filled": ObservedFact(
             path="checkout_info_filled",
