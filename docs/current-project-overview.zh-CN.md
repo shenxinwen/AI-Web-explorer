@@ -584,7 +584,7 @@ SauceDemo / 受控真实网页目标
 -> SafeSym parser / safety injection / planner smoke
 ```
 
-不要急着把它扩成能力全面的 web agent。当前更重要的是让真实 SauceDemo checkout prefix 暴露 exploration/action-selection 问题，并在可回放 trace 中定位错误。PDDL/SafeSym 链路已经能消费本地 checkout 产物，下一步要让真实网页探索产出的图更有价值。
+不要急着把它扩成能力全面的 web agent。当前五步 SauceDemo checkout 已经能完成，并且可以进入 PDDL / SafeSym / safe plan。下一步更重要的是提高候选动作生成和任务驱动选择的通用性：让 DOM-derived candidates 更有语义，让 `--goal` 能影响动作选择，并让评估模式在 LLM 失败时 fail closed，而不是被 fallback 掩盖。
 
 LLM/VLM 的建议使用位置：
 

@@ -181,15 +181,15 @@ def main(argv: list[str] | None = None) -> int:
     saucedemo_llm_step_parser = subparsers.add_parser(
         "web-kobe-saucedemo-llm-step-smoke",
         help=(
-            "Bootstrap SauceDemo login, run one OpenAI-guided Web-KOBE "
-            "browser step, and write graph plus selector trace."
+            "Bootstrap SauceDemo login, run OpenAI-guided Web-KOBE "
+            "browser exploration steps, and write graph plus selector trace."
         ),
     )
     saucedemo_llm_step_parser.add_argument(
         "--output",
         type=Path,
         default=Path("outputs/saucedemo_llm_step_graph.json"),
-        help="Path to write the one-step Web-KOBE graph JSON.",
+        help="Path to write the Web-KOBE graph JSON.",
     )
     saucedemo_llm_step_parser.add_argument(
         "--selector-trace",

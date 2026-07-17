@@ -679,23 +679,23 @@ SauceDemo / controlled real web target
 
 The most important design questions are:
 
-- Can the explorer reliably choose `product_add_to_cart` before `cart_open`
-  when the checkout goal requires a non-empty cart?
-- Does an LLM selector make better goal-aware choices than the deterministic
-  ranker when constrained to grounded candidates?
-- Are selector failures traceable enough to distinguish prompt/LLM issues from
-  browser execution or state-observation issues?
-- Once the real SauceDemo checkout prefix is stable, does the resulting
-  WebKobeGraph still project cleanly to PDDL and pass SafeSym smoke?
-- Can the same LLM-guided runner complete the checkout form and reach order
-  completion without letting the LLM generate selectors?
+- Can the generic DOM-derived candidate path produce action summaries that are
+  good enough for LLM selection without relying on a SauceDemo action profile?
+- Can the browser-backed LLM smoke accept a user-supplied `--goal` and show that
+  different goals produce different choices over the same grounded candidates?
+- Should selector fallback be configurable so evaluation runs can fail closed
+  when the LLM returns invalid JSON or a non-candidate action?
+- Which parts of the SauceDemo profile are true regression scaffolding, and
+  which concepts should be migrated into reusable ecommerce-style abstractions?
+- How much state abstraction is needed before the generated PDDL stays useful
+  beyond one observed checkout path?
 
 A conservative approach is recommended:
 
 ```text
 local DOM/rule observation first
 traceable LLM action selection experiment second
-PDDL/SafeSym consumption checks after the real-web graph is useful
+PDDL/SafeSym consumption checks after every meaningful graph change
 ```
 
 This keeps the pipeline debuggable while leaving a clear path toward more
