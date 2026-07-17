@@ -236,7 +236,7 @@ def main(argv: list[str] | None = None) -> int:
     saucedemo_stagehand_parser.add_argument(
         "--model",
         default=None,
-        help="Optional Stagehand model override.",
+        help="Stagehand model name, or set STAGEHAND_MODEL.",
     )
     saucedemo_stagehand_parser.add_argument(
         "--steps",

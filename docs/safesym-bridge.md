@@ -109,15 +109,24 @@ legacy/reference code, but new work should not extend them as the mainline.
 
 ### Stagehand-Backed SauceDemo Graph Smoke
 
-```bash
-python -m ai_web_explorer.safesym_bridge.cli web-kobe-saucedemo-stagehand-smoke \
-  --output outputs/saucedemo_stagehand_graph.json \
-  --stagehand-trace outputs/saucedemo_stagehand_trace.json \
-  --steps 8
+```powershell
+$env:STAGEHAND_SERVER = "local"
+$env:DEEPSEEK_API_KEY = "<your-deepseek-key>"
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-saucedemo-stagehand-smoke `
+  --output outputs/saucedemo_stagehand_graph.json `
+  --stagehand-trace outputs/saucedemo_stagehand_trace.json `
+  --steps 8 `
+  --model deepseek/<your-model-name>
 ```
 
 This command is opt-in because real Stagehand runs require external credentials
 and browser/model access. Default tests use fake providers.
+
+For BYO model-key runs, set either the generic `MODEL_API_KEY` or the
+provider-specific key for the model prefix. For example, `deepseek/...` models
+can use `DEEPSEEK_API_KEY`. The recommended runner mode is
+`STAGEHAND_SERVER=local`, which lets Stagehand operate on the same Playwright
+page that Web-KOBE observes.
 
 ## SauceDemo Role
 

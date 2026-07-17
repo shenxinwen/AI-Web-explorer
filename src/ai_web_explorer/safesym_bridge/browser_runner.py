@@ -222,6 +222,7 @@ async def run_saucedemo_stagehand_step(
             if resolved_provider is None:
                 resolved_provider = await create_async_stagehand_provider_from_env(
                     model_name=model,
+                    page=page,
                 )
             base_adapter = WebKobePlaywrightAdapter(
                 page,

@@ -720,12 +720,21 @@ docs/superpowers/specs/2026-07-17-stagehand-backed-webkobegraph-exploration-desi
 
 The planned Stagehand-backed smoke command is:
 
-```bash
-python -m ai_web_explorer.safesym_bridge.cli web-kobe-saucedemo-stagehand-smoke \
-  --output outputs/saucedemo_stagehand_graph.json \
-  --stagehand-trace outputs/saucedemo_stagehand_trace.json \
-  --steps 8
+```powershell
+$env:STAGEHAND_SERVER = "local"
+$env:DEEPSEEK_API_KEY = "<your-deepseek-key>"
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-saucedemo-stagehand-smoke `
+  --output outputs/saucedemo_stagehand_graph.json `
+  --stagehand-trace outputs/saucedemo_stagehand_trace.json `
+  --steps 8 `
+  --model deepseek/<your-model-name>
 ```
+
+For BYO model-key runs, `MODEL_API_KEY` is the generic Stagehand key input. The
+project also maps provider-specific keys such as `DEEPSEEK_API_KEY` for
+`deepseek/...` models. `STAGEHAND_SERVER=local` is the recommended default for
+this runner because Stagehand then acts on the same Playwright page that
+Web-KOBE observes before and after each step.
 
 It starts at the SauceDemo login page and should stop at `checkout_overview`.
 It must not click `Finish`.
