@@ -661,42 +661,66 @@ These are not failures. They define the next research and engineering steps.
 
 ## Next Direction
 
-The next stage should focus on real-web exploration quality without turning the
-project into a fully capable web agent. The most useful short-term chain is:
+The next stage should focus on real-web state-transition extraction without
+turning the project into a competing general-purpose web agent. The current
+recommended design is:
 
 ```text
-SauceDemo / controlled real web target
-  -> grounded Web-KOBE exploration
-  -> optional traceable LLM action selection from grounded candidates
-  -> WebKobeGraph
-  -> PDDL projector
+Stagehand-backed WebKobeGraph Exploration MVP
+```
+
+The goal is to use Stagehand as a capable browser operation backend while this
+project owns the SafeSym-facing modeling layer:
+
+```text
+SauceDemo real page
+  -> Stagehand single-step observe/act
+  -> project-owned before/after observation
+  -> schema_delta / typed_delta
+  -> WebKobeGraph edge with Stagehand evidence
+  -> WebKobeGraph-to-PDDL projection
   -> PDDL smoke report
   -> SafeSym parser / safety injection / planner smoke
 ```
 
-The most important design questions are:
+This changes the short-term focus from building a better web agent to reusing a
+web-agent-like operation backend for graph construction. Stagehand may discover
+and execute one next browser action, but the project still decides what state
+transition was observed and what enters WebKobeGraph, PDDL, and SafeSym.
 
-- Can the generic DOM-derived candidate path produce action summaries that are
-  good enough for LLM selection without relying on a SauceDemo action profile?
-- Can the browser-backed LLM smoke accept a user-supplied `--goal` and show that
-  different goals produce different choices over the same grounded candidates?
-- Should selector fallback be configurable so evaluation runs can fail closed
-  when the LLM returns invalid JSON or a non-candidate action?
-- Which parts of the SauceDemo profile are true regression scaffolding, and
-  which concepts should be migrated into reusable ecommerce-style abstractions?
-- How much state abstraction is needed before the generated PDDL stays useful
-  beyond one observed checkout path?
-
-A conservative approach is recommended:
+The first target task should start from the SauceDemo login page and reach
+`checkout_overview` after adding one item to the cart:
 
 ```text
-local DOM/rule observation first
-traceable LLM action selection experiment second
-PDDL/SafeSym consumption checks after every meaningful graph change
+login
+  -> inventory
+  -> inventory/cart_nonempty
+  -> cart
+  -> checkout_info
+  -> checkout_overview
 ```
 
-This keeps the pipeline debuggable while leaving a clear path toward more
-semantic understanding.
+The MVP should not click `Finish` / place the order. It should also avoid using
+Stagehand's full autonomous `agent()` as one opaque task run. The graph loop
+should remain one transition at a time:
+
+```text
+observe before state
+  -> Stagehand observe/act one scoped action
+  -> observe after state
+  -> compute observed deltas
+  -> append graph edge
+```
+
+The main design document for this stage is:
+
+```text
+docs/superpowers/specs/2026-07-17-stagehand-backed-webkobegraph-exploration-design.md
+```
+
+Deferred work includes node deduplication, repeated product-card abstraction,
+parameterized actions, final order-placement safety triggers, and using
+Stagehand `agent()` only as an external baseline.
 
 ## Important Files
 

@@ -577,36 +577,58 @@ observed transitions -> FSM JSON -> SafeSym loader compatibility
 短期目标应该聚焦：
 
 ```text
-提升真实网页探索质量，但不把项目扩成能力全面的 web agent
+从真实网页交互中抽取状态转移图，而不是自己实现一个能力全面的 web agent
 ```
 
-具体闭环是：
+当前推荐的下一阶段设计是：
 
 ```text
-SauceDemo / 受控真实网页目标
--> grounded Web-KOBE 探索
--> 可选、可追踪的 LLM action selection
--> WebKobeGraph
--> PDDL projector
+Stagehand-backed WebKobeGraph Exploration MVP
+```
+
+也就是说，复用 Stagehand 作为浏览器动作后端，但项目仍然掌控 SafeSym 需要的建模层：
+
+```text
+SauceDemo 真实页面
+-> Stagehand 单步 observe/act
+-> 项目自己的 before/after observation
+-> schema_delta / typed_delta
+-> 带 Stagehand evidence 的 WebKobeGraph edge
+-> WebKobeGraph-to-PDDL projection
 -> PDDL smoke report
 -> SafeSym parser / safety injection / planner smoke
 ```
 
-不要急着把它扩成能力全面的 web agent。当前五步 SauceDemo checkout 已经能完成，并且可以进入 PDDL / SafeSym / safe plan。下一步更重要的是提高候选动作生成和任务驱动选择的通用性：让 DOM-derived candidates 更有语义，让 `--goal` 能影响动作选择，并让评估模式在 LLM 失败时 fail closed，而不是被 fallback 掩盖。
+这会把短期重点从“自己写更强的 web agent”调整为“复用成熟网页操作能力来构建状态转移图”。Stagehand 可以发现并执行下一步浏览器动作，但项目仍然决定观察到了什么状态变化，以及哪些内容进入 WebKobeGraph、PDDL 和 SafeSym。
 
-LLM/VLM 的建议使用位置：
+第一阶段目标任务从 SauceDemo 登录页开始，到 `checkout_overview` 为止：
 
-- 用于动作语义理解；
-- 用于从 DOM 候选中选择更有意义的动作；
-- 用于给页面状态和能力命名；
-- 用于辅助判断两个状态是否语义相近。
+```text
+login
+-> inventory
+-> inventory/cart_nonempty
+-> cart
+-> checkout_info
+-> checkout_overview
+```
 
-不建议让 LLM/VLM：
+MVP 暂时不点击 `Finish` / 最终下单，也不把 Stagehand 的完整 `agent()` 当作一次不透明的整任务执行。图构建循环仍然应保持单步 transition：
 
-- 凭空生成 selector；
-- 单独决定事实真值；
-- 隐式掌控图结构；
-- 替代可验证的浏览器观察。
+```text
+observe before state
+-> Stagehand observe/act 一个受约束动作
+-> observe after state
+-> compute observed deltas
+-> append graph edge
+```
+
+本阶段主设计文档：
+
+```text
+docs/superpowers/specs/2026-07-17-stagehand-backed-webkobegraph-exploration-design.md
+```
+
+暂缓事项包括节点去重、商品卡片重复结构抽象、参数化动作、最终下单安全规则触发，以及把 Stagehand `agent()` 作为外部 baseline。
 
 ## 重要文件
 
