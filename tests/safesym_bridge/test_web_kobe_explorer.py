@@ -236,6 +236,35 @@ async def test_explore_one_step_records_backend_execution_error():
     assert edge.execution_trace.error == "locator_not_visible"
 
 
+class StagehandMetadataAdapter(FakeAdapter):
+    def __init__(self):
+        super().__init__()
+        self.last_execution_metadata = {}
+
+    async def execute(self, action: BrowserAction):
+        self.executed.append(action)
+        self.last_execution_metadata = {
+            "action_source": "stagehand",
+            "stagehand_selector": action.locator,
+        }
+        return True
+
+
+@pytest.mark.anyio
+async def test_explore_one_step_preserves_backend_execution_metadata():
+    explorer = WebKobeExplorer(
+        adapter=StagehandMetadataAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+    )
+
+    graph = await explorer.explore_one_step()
+
+    assert graph.edges[0].execution_trace.metadata == {
+        "action_source": "stagehand",
+        "stagehand_selector": "button.add",
+    }
+
+
 class TypedFactsAdapter(FakeAdapter):
     def __init__(self):
         super().__init__()

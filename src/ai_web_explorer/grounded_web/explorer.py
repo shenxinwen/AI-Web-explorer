@@ -128,6 +128,9 @@ class WebKobeExplorer:
                 after_observation_id=target_id,
                 success=result.execution_success,
                 error=result.execution_error,
+                metadata=dict(
+                    getattr(self.adapter, "last_execution_metadata", {}) or {}
+                ),
             ),
             status=edge_status,
             evidence=[Evidence(source="web_kobe_explorer", url=before.url)],
