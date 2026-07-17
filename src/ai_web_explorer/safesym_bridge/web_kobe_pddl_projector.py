@@ -121,6 +121,7 @@ def _execution_trace_from_dict(data: dict[str, Any]) -> ExecutionTrace:
         after_observation_id=str(data.get("after_observation_id", "")),
         success=bool(data.get("success", False)),
         error=data.get("error"),
+        metadata=dict(data.get("metadata", {})),
     )
 
 

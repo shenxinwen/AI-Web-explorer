@@ -184,6 +184,7 @@ class ExecutionTrace:
     after_observation_id: str
     success: bool
     error: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -195,6 +196,7 @@ class ExecutionTrace:
             "after_observation_id": self.after_observation_id,
             "success": self.success,
             "error": self.error,
+            "metadata": dict(self.metadata),
         }
 
 

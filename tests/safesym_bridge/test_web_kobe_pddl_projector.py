@@ -377,3 +377,53 @@ def test_load_web_kobe_graph_json_reads_to_dict_output(tmp_path):
     assert loaded.nodes[1].last_state_snapshot == {"cart_count": 1}
     assert loaded.edges[0].action.semantic_id == "add_to_cart"
     assert loaded.edges[0].execution_trace.success is True
+
+
+def test_load_web_kobe_graph_json_preserves_execution_trace_metadata(tmp_path):
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="login",
+        total_steps_completed=1,
+        nodes=[
+            _node("login", "login", {"is_logged_in": False}),
+            _node("inventory", "inventory", {"is_logged_in": True}),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="login",
+                target_node_id="inventory",
+                instruction="log in",
+                action=BrowserAction("click", "#login-button", "stagehand_login"),
+                capability=None,
+                target_observation="inventory page",
+                observed_delta=[
+                    ObservedDelta(
+                        "is_logged_in",
+                        False,
+                        True,
+                        "state_indicator_change",
+                        evidence=[Evidence(source="unit_test")],
+                    )
+                ],
+                schema_delta={"is_logged_in": {"before": False, "after": True}},
+                execution_trace=ExecutionTrace(
+                    "click",
+                    "#login-button",
+                    "stagehand_login",
+                    {},
+                    "login",
+                    "inventory",
+                    True,
+                    metadata={"action_source": "stagehand"},
+                ),
+            )
+        ],
+    )
+    path = tmp_path / "graph.json"
+    path.write_text(json.dumps(graph.to_dict()), encoding="utf-8")
+
+    loaded = load_web_kobe_graph_json(path)
+
+    assert loaded.edges[0].execution_trace.metadata == {
+        "action_source": "stagehand"
+    }
