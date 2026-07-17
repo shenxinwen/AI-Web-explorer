@@ -760,13 +760,52 @@ fill username
 
 The resulting WebKobeGraph had 11 nodes and 10 edges, and
 `web-kobe-pddl-smoke` over the graph reported `planning_ready=True` with no
-undeclared predicates. Stagehand/AI SDK logged warnings that the DeepSeek model
-does not support its current `responseFormat` setting, but the observe/act calls
-still succeeded.
+undeclared predicates. A follow-up Fast Downward run solved the projected PDDL
+with a 10-step plan matching the observed Stagehand action sequence. This means
+the Stagehand-backed route is now validated through real browser operation,
+graph construction, PDDL projection, and external planner consumption up to
+`checkout_overview`.
+
+Stagehand/AI SDK logged warnings that the DeepSeek model does not support its
+current `responseFormat` setting, but the observe/act calls still succeeded.
+
+The important architecture interpretation is:
+
+```text
+Stagehand = action discovery/execution evidence
+Web-KOBE observer = state facts and before/after deltas
+WebKobeGraph/PDDL/SafeSym = project-owned planning model
+```
+
+Stagehand descriptions are useful evidence for what was attempted, but they are
+not the source of truth for state identity, state deltas, safety triggers, or
+PDDL semantics. The project must keep those responsibilities in
+`grounded_web`/`safesym_bridge`; otherwise the work collapses back into an
+opaque web-agent run instead of a SafeSym-facing web-state model.
+
+The weakest remaining part of the Stagehand path is state observation. The
+current SauceDemo observer still reads known URLs and selectors such as
+checkout fields and cart badges. That is acceptable as a real-site regression
+benchmark, but it is not generic web-state understanding. The next engineering
+step should generalize observation signals while keeping app-specific observers
+isolated in `safesym_bridge`.
 
 Deferred work includes node deduplication, repeated product-card abstraction,
 parameterized actions, final order-placement safety triggers, and using
 Stagehand `agent()` only as an external baseline.
+
+Near-term Stagehand-backed priorities are:
+
+- introduce generic state-signal extraction beyond `[data-state]` and
+  SauceDemo selectors;
+- add a semantic action-labeling layer that maps low-level Stagehand operations
+  to stable domain-level actions when enough evidence exists;
+- represent sensitive or pending actions such as `Finish` / order placement
+  without blindly executing them during graph exploration;
+- improve Stagehand trace diagnostics around invalid choices, parse/model
+  warnings, failed execution, navigation, and no observed delta;
+- keep CDP/session wiring reusable without moving SauceDemo task prompts into
+  the generic exploration layer.
 
 ## Important Files
 
@@ -786,6 +825,17 @@ src/ai_web_explorer/grounded_web/llm_action_selector.py
 
 src/ai_web_explorer/grounded_web/openai_action_selector.py
   OpenAI Chat Completions-backed provider for the selector boundary.
+
+src/ai_web_explorer/grounded_web/stagehand_actions.py
+  Stagehand action/trace contracts and conversion into BrowserAction records.
+
+src/ai_web_explorer/grounded_web/stagehand_backend.py
+  AutomationBackend wrapper that exposes Stagehand-observed actions to the
+  Web-KOBE explorer while preserving project-owned graph recording.
+
+src/ai_web_explorer/grounded_web/stagehand_sdk_provider.py
+  Optional Stagehand SDK provider, model-key loading, local/remote server setup,
+  and local CDP browser attachment.
 
 src/ai_web_explorer/safesym_bridge/openai_selector_smoke.py
   Offline SauceDemo action-selection smoke for the current `cart_count=0`

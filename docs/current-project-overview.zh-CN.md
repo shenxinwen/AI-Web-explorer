@@ -669,10 +669,41 @@ fill username
 
 该 WebKobeGraph 包含 11 个节点和 10 条边，随后对该图运行
 `web-kobe-pddl-smoke` 得到 `planning_ready=True`，且没有 undeclared predicates。
+进一步用 Fast Downward 求解投影出的 PDDL 时，可以得到一条 10 步计划，且计划
+顺序与真实观察到的 Stagehand 动作序列一致。这说明 Stagehand-backed 路线目前
+已经跑通到真实浏览器操作、图构建、PDDL 投影和外部 planner 消费，目标节点为
+`checkout_overview`。
+
 Stagehand/AI SDK 会提示 DeepSeek 模型不支持当前 `responseFormat` 设置，但本次
 observe/act 调用仍然成功。
 
+这里最重要的架构解释是：
+
+```text
+Stagehand = 动作发现 / 动作执行证据
+Web-KOBE observer = 状态事实和 before/after delta
+WebKobeGraph/PDDL/SafeSym = 项目自己掌控的规划模型
+```
+
+Stagehand 的描述可以作为“它尝试做了什么”的证据，但它不是状态身份、状态变化、
+安全触发规则或 PDDL 语义的真相来源。这些责任必须继续留在
+`grounded_web` / `safesym_bridge` 里；否则项目就会退化成一次不透明的
+web-agent run，而不是 SafeSym 可以消费的网页状态模型。
+
+Stagehand 路线目前最薄弱的部分仍然是状态观察。当前 SauceDemo observer 还是会
+读取已知 URL 和 selector，比如 checkout 表单字段和购物车 badge。这作为真实站点
+回归 benchmark 是可以接受的，但不能把它当成通用网页状态理解。下一步工程重点
+应该是在保持站点专用 observer 隔离于 `safesym_bridge` 的前提下，泛化状态观察信号。
+
 暂缓事项包括节点去重、商品卡片重复结构抽象、参数化动作、最终下单安全规则触发，以及把 Stagehand `agent()` 作为外部 baseline。
+
+近期 Stagehand-backed 优先事项是：
+
+- 引入比 `[data-state]` 和 SauceDemo selector 更通用的状态信号提取；
+- 增加语义 action-labeling 层，在证据足够时把低层 Stagehand 操作映射成稳定的领域动作；
+- 表示 `Finish` / 最终下单这类敏感或 pending action，而不是在探索阶段盲目执行；
+- 改进 Stagehand trace 诊断，覆盖 invalid choice、parse/model warning、execution failure、navigation 和 no observed delta；
+- 保持 CDP/session 接线可复用，但不要把 SauceDemo 任务 prompt 移进通用探索层。
 
 ## 重要文件
 
@@ -694,6 +725,15 @@ src/ai_web_explorer/grounded_web/llm_action_selector.py
 
 src/ai_web_explorer/grounded_web/openai_action_selector.py
   OpenAI Chat Completions-backed selector provider。
+
+src/ai_web_explorer/grounded_web/stagehand_actions.py
+  Stagehand action/trace 契约，以及到 BrowserAction 记录的转换。
+
+src/ai_web_explorer/grounded_web/stagehand_backend.py
+  AutomationBackend wrapper，把 Stagehand 观察到的动作暴露给 Web-KOBE explorer，同时保留项目自己的图记录。
+
+src/ai_web_explorer/grounded_web/stagehand_sdk_provider.py
+  可选 Stagehand SDK provider、模型 key 加载、local/remote server 设置，以及本地 CDP browser attach。
 
 src/ai_web_explorer/safesym_bridge/openai_selector_smoke.py
   针对当前 `cart_count=0` 问题的离线 SauceDemo action-selection smoke。
@@ -732,8 +772,10 @@ docs/safesym-bridge.md
 
 ```text
 docs/current-project-overview.md
-docs/current-project-overview.zh-CN.md
 ```
+
+中文版主要供人工审阅项目方向；AI 接力时默认读英文版即可。但每次更新进展时，
+英文版和中文版都需要同步更新。
 
 然后要求它复述：
 
