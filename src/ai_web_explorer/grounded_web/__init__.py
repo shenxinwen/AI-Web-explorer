@@ -16,12 +16,10 @@ from ai_web_explorer.grounded_web.controller import (
 from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
 from ai_web_explorer.grounded_web.graph import BrowserAction, WebKobeGraph
 from ai_web_explorer.grounded_web.playwright_backend import WebKobePlaywrightAdapter
-from ai_web_explorer.grounded_web.simple_agent import SimpleGroundedWebAgent
 
 __all__ = [
     "AutomationBackend",
     "BrowserAction",
-    "SimpleGroundedWebAgent",
     "WebKobeExplorationController",
     "WebKobeExplorationResult",
     "WebKobeExplorationSummary",

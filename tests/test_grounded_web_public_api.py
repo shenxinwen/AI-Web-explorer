@@ -1,7 +1,6 @@
 from ai_web_explorer.grounded_web import (
     AutomationBackend,
     BrowserAction,
-    SimpleGroundedWebAgent,
     WebKobeExplorationController,
     WebKobeExplorer,
     WebKobeGraph,
@@ -18,7 +17,6 @@ from ai_web_explorer.grounded_web.state_signature import schema_delta
 def test_grounded_web_package_exposes_mainline_api():
     assert AutomationBackend.__name__ == "AutomationBackend"
     assert BrowserAction.__name__ == "BrowserAction"
-    assert SimpleGroundedWebAgent.__name__ == "SimpleGroundedWebAgent"
     assert WebKobeExplorationController.__name__ == "WebKobeExplorationController"
     assert WebKobeExplorer.__name__ == "WebKobeExplorer"
     assert WebKobeGraph.__name__ == "WebKobeGraph"

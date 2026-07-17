@@ -4,6 +4,10 @@ import pytest
 
 from ai_web_explorer.grounded_web.controller import WebKobeExplorationController
 from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
+from ai_web_explorer.grounded_web.llm_action_selector import (
+    LlmActionSelectionResult,
+    LlmActionSelectionTrace,
+)
 from ai_web_explorer.grounded_web.playwright_backend import WebKobePlaywrightAdapter
 from ai_web_explorer.grounded_web.semantic_assistor import (
     DeterministicSemanticAssistor,
@@ -23,6 +27,48 @@ def _node_with_state(graph, key: str, value: object):
         if node.last_state_snapshot.get(key) == value:
             return node
     return None
+
+
+def _local_checkout_selector(request):
+    state = request.state.signature
+    target_locator_fragment = None
+    if state.get("cart_count") == 0:
+        target_locator_fragment = "add-to-cart"
+    elif state.get("checkout_step") == 1:
+        target_locator_fragment = "begin-checkout"
+    elif state.get("name_filled") == 0:
+        target_locator_fragment = "customer-name"
+    elif state.get("email_filled") == 0:
+        target_locator_fragment = "customer-email"
+    elif state.get("address_filled") == 0:
+        target_locator_fragment = "shipping-address"
+    elif state.get("checkout_info_complete") == 1:
+        target_locator_fragment = "place-order"
+
+    selected = next(
+        (
+            action
+            for action in request.candidate_actions
+            if target_locator_fragment
+            and target_locator_fragment in str(action.locator)
+        ),
+        request.candidate_actions[0],
+    )
+    return LlmActionSelectionResult(
+        selected_action=selected,
+        trace=LlmActionSelectionTrace(
+            goal=request.goal,
+            state={"page_id": request.state.page_id},
+            candidate_actions=[
+                {"id": action.semantic_id}
+                for action in request.candidate_actions
+            ],
+            prompt="deterministic local_checkout selector",
+            raw_response=f'{{"selected_action_id":"{selected.semantic_id}"}}',
+            llm_response={"selected_action_id": selected.semantic_id},
+            status="selected",
+        ),
+    )
 
 
 @pytest.mark.anyio
@@ -47,6 +93,8 @@ async def test_local_checkout_explores_order_flow_and_writes_planning_smoke(
                 semantic_assistor=DeterministicSemanticAssistor(
                     app="local_checkout"
                 ),
+                goal="Complete the local checkout flow.",
+                action_selector=_local_checkout_selector,
             )
             controller = WebKobeExplorationController(explorer)
 

@@ -88,7 +88,7 @@ async def test_controller_runs_until_max_steps():
 
 
 @pytest.mark.anyio
-async def test_controller_treats_action_loop_success_status_as_success():
+async def test_controller_treats_explorer_success_status_as_success():
     explorer = FakeExplorer(
         [
             _graph(completed=1, edge_status="succeeded_with_observed_change"),

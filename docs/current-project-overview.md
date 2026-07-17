@@ -43,7 +43,8 @@ active generic mainline:
   DOM-grounded Web-KOBE exploration
   -> page structure observation
   -> state facts and typed deltas
-  -> ActionIntent / ActionExecutionResult / OutcomeEvaluation
+  -> selected BrowserAction execution through an AutomationBackend
+  -> before/after observation and observed deltas
   -> WebKobeExplorer
   -> WebKobeGraph
   -> WebKobeGraph-to-PDDL projection
@@ -201,15 +202,14 @@ check_human_confirmation_order_place_confirm
 The corresponding safe plan places these checks before
 `checkout_info_submit` and `order_place_confirm`.
 
-The grounded action loop is the current pre-LLM control boundary. It records
-what the upper layer intended to do, which concrete `BrowserAction` was
-selected, whether Playwright execution succeeded, which typed state deltas were
-observed, and whether the outcome matched the expectation. Future LLM planners
-should produce `ActionIntent` objects; they should not directly produce raw
-selectors or own browser execution.
+The old intent-resolution action loop has been removed from the active
+mainline. `WebKobeExplorer` now executes the already-selected `BrowserAction`
+through an `AutomationBackend`, observes the page before and after execution,
+records typed/schema deltas, and writes the graph edge. This keeps the modeling
+boundary without expanding a project-owned web-agent execution layer.
 
-When an action executes successfully but produces no immediate delta, the loop
-now waits for a bounded observation window and polls state before returning
+When an action executes successfully but produces no immediate delta, the
+explorer waits for a bounded observation window and polls state before recording
 `no_observed_change`. This is an observation policy, not an execution retry:
 the browser action is not repeated by default.
 
@@ -251,26 +251,22 @@ The concrete backend boundary lives in:
 src/ai_web_explorer/grounded_web/automation_backend.py
 ```
 
-Current implementations should satisfy `AutomationBackend`. The first concrete
-implementation is `WebKobePlaywrightAdapter`, which wraps Playwright browser
-operation while leaving exploration policy and graph recording in
-`WebKobeExplorer`.
+Current implementations should satisfy `AutomationBackend`. The retained
+concrete implementations are the Playwright-backed adapter for controlled
+fixtures/fallback operation and the Stagehand-backed wrapper for real-site
+single-step action discovery/execution. Both leave exploration policy and graph
+recording in `WebKobeExplorer`.
 
 Earlier legacy operation-executor experiments have been removed from the active
 bridge package. Browser operation should now go through the `AutomationBackend`
 boundary and the Playwright-backed Web-KOBE adapter.
 
-The explicit no-LLM baseline agent facade lives in:
-
-```text
-src/ai_web_explorer/grounded_web/simple_agent.py
-```
-
-`SimpleGroundedWebAgent` composes `AutomationBackend`, `WebKobeExplorer`, and
-`WebKobeExplorationController`. It exists to make the baseline agent concept
-clear without duplicating the Web-KOBE exploration engine. It observes grounded
-candidates, executes the simple first-unexplored policy, and records
-before/action/after deltas through the existing graph path.
+The earlier explicit no-LLM `SimpleGroundedWebAgent`, `ActionIntent`,
+`ActionExecutionResult`, and ranking/action-loop helpers have been removed.
+They encouraged the project to grow its own generic web-agent layer. The active
+surface is now smaller: action candidates are selected externally or by the
+minimal explorer fallback, executed through an `AutomationBackend`, and modeled
+by Web-KOBE.
 
 There are still compatibility structures from the Web-KOBE collector and the
 SauceDemo MVP route. They should not be expanded as generic mainline code.

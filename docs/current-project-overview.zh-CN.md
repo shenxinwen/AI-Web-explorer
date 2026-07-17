@@ -52,7 +52,8 @@ docs/current-project-overview.md
   DOM-grounded Web-KOBE exploration
   -> 页面结构观察
   -> 状态事实和 typed delta
-  -> ActionIntent / ActionExecutionResult / OutcomeEvaluation
+  -> 通过 AutomationBackend 执行已选 BrowserAction
+  -> before/after observation 和 observed delta
   -> WebKobeExplorer
   -> WebKobeGraph
   -> WebKobeGraph-to-PDDL 投影
@@ -78,7 +79,7 @@ src/ai_web_explorer/grounded_web/
 - 浏览器动作抽象；
 - 状态记录；
 - WebKobeGraph 构建；
-- ActionIntent 到具体浏览器动作的执行边界。
+- 已选 BrowserAction 到具体浏览器后端执行的边界。
 
 `safesym_bridge` 不应该再承载通用探索逻辑。它现在应该专注于：
 
@@ -233,21 +234,19 @@ check_human_confirmation_order_place_confirm
 
 对应的 safe plan 会在 `checkout_info_submit` 和 `order_place_confirm` 前插入这些检查。
 
-当前 `grounded_web` 新增了动作闭环边界：
+旧的 intent-resolution 动作闭环已经从 active mainline 移除。现在的边界是：
 
 ```text
-ActionIntent
--> BrowserAction
--> Playwright 执行
--> before/after state
--> typed delta
--> OutcomeEvaluation
--> ActionExecutionResult
+selected BrowserAction
+-> AutomationBackend 执行
+-> before/after observation
+-> typed/schema delta
+-> WebKobeGraph edge
 ```
 
-这个边界是正式接入 LLM 前的关键工程层。它会记录上层原本想做什么、最终选中了哪个具体 `BrowserAction`、Playwright 执行是否成功、观察到了哪些 typed state delta，以及结果是否符合预期。未来 LLM planner 应该输出 `ActionIntent`，由 `grounded_web` 负责解析、执行、观察和评估结果；LLM 不应该直接生成 selector，也不应该拥有浏览器执行细节。
+也就是说，`WebKobeExplorer` 直接执行已经选定的 `BrowserAction`，然后观察动作前后状态、记录 typed/schema delta，并写入图边。这样保留了 SafeSym 需要的建模边界，但不再扩展项目自有的通用 web-agent 执行层。
 
-如果动作执行成功但第一次观察没有发现 delta，动作闭环会在有限时间窗口内继续轮询观察状态，然后才返回 `no_observed_change`。这是观察等待策略，不是动作重试；默认不会再次执行浏览器动作。
+如果动作执行成功但第一次观察没有发现 delta，explorer 会在有限时间窗口内继续轮询观察状态，然后才记录 `no_observed_change`。这是观察等待策略，不是动作重试；默认不会再次执行浏览器动作。
 
 ## 当前自动化边界
 
@@ -276,41 +275,21 @@ Web-KOBE / SafeSym explorer
 src/ai_web_explorer/grounded_web/automation_backend.py
 ```
 
-当前具体实现是：
+当前保留的具体实现是：
 
 ```text
 src/ai_web_explorer/grounded_web/playwright_backend.py
+src/ai_web_explorer/grounded_web/stagehand_backend.py
 ```
 
-它提供 Playwright-backed 浏览器操作能力，但不拥有探索策略。探索策略属于 `WebKobeExplorer`。
+Playwright-backed adapter 用于受控 fixture / fallback 操作；Stagehand-backed wrapper 用于真实站点单步动作发现和执行。二者都不拥有探索策略。探索策略和图记录属于 `WebKobeExplorer`。
 
 这样设计的好处是：以后如果我们接入现成 web agent，只需要把它封装成新的 `AutomationBackend`，不需要重写图结构和 SafeSym 对接。
 
-## SimpleGroundedWebAgent
-
-当前不依赖 LLM 的 baseline agent 位于：
-
-```text
-src/ai_web_explorer/grounded_web/simple_agent.py
-```
-
-它组合了：
-
-- `AutomationBackend`
-- `WebKobeExplorer`
-- `WebKobeExplorationController`
-
-它的作用是跑通最小闭环：
-
-```text
-观察页面
--> 找到 grounded candidates
--> 按简单策略执行尚未探索的动作
--> 记录 before/action/after delta
--> 写入 WebKobeGraph
-```
-
-它不是最终智能体，而是一个可测试的 baseline。后续 LLM/VLM 或现成 web agent 可以替换它的动作选择部分。
+旧的 no-LLM `SimpleGroundedWebAgent`、`ActionIntent`、`ActionExecutionResult`
+和 ranking/action-loop helper 已经移除。它们容易诱导项目继续生长自己的通用
+web-agent 执行层。当前 active surface 更小：动作候选由外部 selector 或 explorer
+最小 fallback 选择，通过 `AutomationBackend` 执行，再由 Web-KOBE 建模。
 
 ## 本地测试页面
 
@@ -743,9 +722,6 @@ src/ai_web_explorer/grounded_web/graph.py
 
 src/ai_web_explorer/grounded_web/explorer.py
   Web-KOBE 风格探索器。
-
-src/ai_web_explorer/grounded_web/simple_agent.py
-  当前无 LLM baseline agent facade。
 
 src/ai_web_explorer/safesym_bridge/web_observation.py
   观察数据模型：facts、evidence、page identity。

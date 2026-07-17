@@ -154,63 +154,6 @@ async def test_explore_one_step_skips_previously_explored_self_loop_action():
     ]
 
 
-class RankedActionAdapter:
-    app_name = "fake"
-
-    def __init__(self):
-        self.executed = []
-
-    async def observe_state(self):
-        return StateSnapshot(
-            page_id="shop",
-            url="https://example.test/shop",
-            title="Shop",
-            signature={"executed_count": len(self.executed)},
-        )
-
-    async def list_interactables(self, state):
-        return [
-            {
-                "semantic_id": "name_input",
-                "description": "Name",
-                "locator": "#name",
-                "action_kind": "fill",
-                "input_values": {"#name": "test"},
-                "explored": False,
-                "metadata": {"type": "text"},
-                "locator_strategy": "id",
-            },
-            {
-                "semantic_id": "open_cart",
-                "description": "Cart",
-                "locator": '[data-action="open-cart"]',
-                "action_kind": "click",
-                "input_values": {},
-                "explored": False,
-                "metadata": {"data-action": "open-cart"},
-                "locator_strategy": "data-action",
-            },
-        ]
-
-    async def execute(self, action: BrowserAction):
-        self.executed.append(action)
-        return True
-
-
-@pytest.mark.anyio
-async def test_explore_one_step_prefers_explicit_action_button_over_input():
-    adapter = RankedActionAdapter()
-    explorer = WebKobeExplorer(
-        adapter=adapter,
-        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
-    )
-
-    graph = await explorer.explore_one_step()
-
-    assert adapter.executed[0].semantic_id == "open_cart"
-    assert graph.edges[0].action.semantic_id == "open_cart"
-
-
 class FailingDiagnosticAdapter(FakeAdapter):
     def __init__(self):
         super().__init__()
