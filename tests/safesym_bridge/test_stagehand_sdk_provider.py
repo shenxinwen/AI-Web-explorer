@@ -1,3 +1,4 @@
+import os
 import sys
 from types import SimpleNamespace
 
@@ -19,9 +20,7 @@ async def test_create_stagehand_provider_from_env_reports_missing_sdk(monkeypatc
     monkeypatch.setitem(sys.modules, "stagehand", None)
 
     with pytest.raises(ValueError, match="stagehand Python SDK is required"):
-        await create_async_stagehand_provider_from_env(
-            model_name="openai/gpt-5-nano"
-        )
+        await create_async_stagehand_provider_from_env(model_name="openai/gpt-5-nano")
 
 
 @pytest.mark.anyio
@@ -138,6 +137,49 @@ async def test_create_stagehand_provider_passes_local_cdp_url(monkeypatch):
             },
         },
     )
+
+
+@pytest.mark.anyio
+async def test_create_stagehand_provider_configures_local_no_proxy_and_timeout(
+    monkeypatch,
+):
+    calls = []
+
+    class FakeSessions:
+        async def start(self, **kwargs):
+            return FakeSession()
+
+    class FakeAsyncStagehand:
+        def __init__(self, **kwargs):
+            calls.append(kwargs)
+            self.sessions = FakeSessions()
+
+    monkeypatch.setitem(
+        sys.modules,
+        "stagehand",
+        SimpleNamespace(AsyncStagehand=FakeAsyncStagehand),
+    )
+    monkeypatch.setenv("NO_PROXY", "example.test")
+
+    await create_async_stagehand_provider_from_env(
+        load_dotenv=lambda: None,
+        environ={
+            "STAGEHAND_SERVER": "local",
+            "STAGEHAND_MODEL": "deepseek/deepseek-v4-pro",
+            "MODEL_API_KEY": "model-test-key",
+            "STAGEHAND_LOCAL_READY_TIMEOUT_S": "45",
+        },
+    )
+
+    assert calls == [
+        {
+            "model_api_key": "model-test-key",
+            "server": "local",
+            "local_ready_timeout_s": 45.0,
+        }
+    ]
+    no_proxy = {item.strip() for item in os.environ["NO_PROXY"].split(",")}
+    assert {"example.test", "localhost", "127.0.0.1", "::1"}.issubset(no_proxy)
 
 
 @pytest.mark.anyio

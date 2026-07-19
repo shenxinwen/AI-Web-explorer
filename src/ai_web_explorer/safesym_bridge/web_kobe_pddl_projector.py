@@ -13,6 +13,7 @@ from ai_web_explorer.grounded_web.capability_graph import (
 )
 from ai_web_explorer.grounded_web.graph import (
     BrowserAction,
+    PddlActionHint,
     ReferenceObservation,
     WebKobeEdge,
     WebKobeGraph,
@@ -140,6 +141,17 @@ def _planning_delta_from_dict(data: dict[str, Any] | None) -> PlanningDelta | No
     )
 
 
+def _pddl_action_hint_from_dict(data: dict[str, Any] | None) -> PddlActionHint | None:
+    if data is None:
+        return None
+    return PddlActionHint(
+        action_name=str(data["action_name"]),
+        preconditions=list(data.get("preconditions", [])),
+        add_effects=list(data.get("add_effects", [])),
+        del_effects=list(data.get("del_effects", [])),
+    )
+
+
 def _edge_from_dict(data: dict[str, Any]) -> WebKobeEdge:
     return WebKobeEdge(
         source_node_id=str(data["source_node_id"]),
@@ -155,6 +167,7 @@ def _edge_from_dict(data: dict[str, Any]) -> WebKobeEdge:
         execution_trace=_execution_trace_from_dict(
             dict(data.get("execution_trace", {}))
         ),
+        pddl_hint=_pddl_action_hint_from_dict(data.get("pddl_hint")),
         planning_delta=_planning_delta_from_dict(data.get("planning_delta")),
         visit_count=int(data.get("visit_count", 1)),
         status=str(data.get("status", "verified")),
@@ -210,6 +223,14 @@ def _unique_facts(*fact_lists: list[str]) -> list[str]:
     return facts
 
 
+def _unique_items(items: list[str]) -> list[str]:
+    unique: list[str] = []
+    for item in items:
+        if item not in unique:
+            unique.append(item)
+    return unique
+
+
 def _trusted_added_planning_facts(delta: PlanningDelta) -> list[str]:
     return _unique_facts(delta.candidate_added_facts, delta.verified_added_facts)
 
@@ -262,6 +283,23 @@ def _action_name(raw: str) -> str:
     return _predicate(raw)
 
 
+def _is_order_completion_edge(edge) -> bool:
+    effect_predicates = set(_effect_predicates_for_edge(edge))
+    if "order_created" in effect_predicates or "order_completed" in effect_predicates:
+        return True
+    return "checkout_complete" in _predicate(
+        edge.target_node_id
+    ) and "finish" in _predicate(edge.action.semantic_id)
+
+
+def _pddl_action_name_for_edge(edge) -> str:
+    if edge.pddl_hint is not None:
+        return _action_name(edge.pddl_hint.action_name)
+    if _is_order_completion_edge(edge):
+        return "order_place_confirm"
+    return _action_name(edge.action.semantic_id)
+
+
 def _delta_predicate_change(delta) -> tuple[str, bool] | None:
     if isinstance(delta.after, bool):
         return _predicate(delta.field), delta.after
@@ -309,7 +347,7 @@ def _effects_for_edge(edge) -> list[str]:
             effects.append(f"({_predicate(fact)})")
         for fact in _trusted_removed_planning_facts(edge.planning_delta):
             effects.append(f"(not ({_predicate(fact)}))")
-    return effects
+    return _unique_items(effects)
 
 
 def _is_projectable_edge(edge) -> bool:
@@ -339,7 +377,7 @@ def compile_web_kobe_graph_to_pddl(
     for edge in graph.edges:
         if not _is_projectable_edge(edge):
             continue
-        action_name = _action_name(edge.action.semantic_id)
+        action_name = _pddl_action_name_for_edge(edge)
         preconditions = [f"({_at(edge.source_node_id)})"]
         effects = _effects_for_edge(edge)
         action_blocks.append(

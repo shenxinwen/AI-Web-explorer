@@ -147,6 +147,10 @@ Completed and validated:
 - WebKobeGraph can be projected into PDDL.
 - PDDL projection currently treats candidate and verified planning-delta facts
   as trusted effects so the VLM/LLM-to-PDDL chain can be validated end to end.
+- PDDL projection can translate low-level browser action names into
+  SafeSym-facing business action names when transition evidence supports it;
+  for example, an edge that creates `order_created` projects as
+  `order_place_confirm`.
 - Generated PDDL can be checked for graph reachability and static consistency.
 - Fast Downward can solve the generated base plan.
 - SafeSym can parse, inject safety actions, and solve the safe plan in smoke
@@ -155,7 +159,7 @@ Completed and validated:
 Latest retained test status:
 
 ```text
-all retained tests: 182 passed, 2 skipped
+all retained tests: 183 passed, 2 skipped
 ```
 
 Playwright browser tests may still fail inside a restricted sandbox with browser
@@ -217,6 +221,23 @@ The resulting WebKobeGraph had 11 nodes and 10 edges. PDDL smoke reported
 `planning_ready=True` with no undeclared predicates, and Fast Downward produced
 a plan matching the observed action sequence.
 
+For the SauceDemo test site, the Stagehand smoke also has an explicit
+`--allow-final-order` mode. That mode lets the runner click `Finish` and reach
+`checkout_complete` so the full order-confirmation safety path can be tested.
+The default remains safer and stops at checkout overview.
+
+The current verified final-order run reached `checkout_complete` in 11
+Stagehand-backed transitions. The generated PDDL projected the final low-level
+click as `order_place_confirm`; SafeSym with `configs/constraint_rules.json`
+inserted:
+
+```text
+check_human_confirmation_order_place_confirm
+```
+
+Use `constraint_rules.json` for injection smoke runs. `safety_rules.json` is
+for risk labeling and does not contain the check-action injection config.
+
 This validates the real-site chain up to graph construction, PDDL projection,
 and external planner consumption. It does not yet validate robust generic state
 understanding.
@@ -240,6 +261,12 @@ not the source of truth for:
 - PDDL predicates or effects;
 - node merging;
 - task success.
+
+Likewise, Stagehand's low-level action label is not necessarily the
+planner-facing action name. The PDDL projection layer may map a transition such
+as "click Finish and `order_created` becomes true" to the business action
+`order_place_confirm`, because SafeSym rules operate on planning semantics, not
+tool-specific click labels.
 
 The project currently uses Stagehand in a one-transition-at-a-time loop:
 

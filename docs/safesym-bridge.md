@@ -73,6 +73,10 @@ false because the generated domain uses predicates that were not declared.
 Missing SafeSym safety injection is not a failure unless the graph contains a
 safety-relevant action and rule model that should trigger it.
 
+Use `configs/constraint_rules.json` when the goal is to inject check actions
+into PDDL. `configs/safety_rules.json` is useful for risk labeling, but it does
+not contain the injection configuration used by the SafeSym smoke.
+
 The SafeSym smoke writes `safesym_smoke_report.json`. For the current
 `local_checkout` fixture, SafeSym parsing, safety injection, and base/safe
 planning can succeed while `safety_actions_inserted` remains false. That is
@@ -135,6 +139,35 @@ The current verified DeepSeek-backed local run reached `checkout_overview` in
 `web-kobe-pddl-smoke` over `outputs/saucedemo_stagehand_graph.json` reported
 `planning_ready=True` and no undeclared predicates.
 
+For the SauceDemo test site only, the runner can explicitly continue through
+the final confirmation action:
+
+```powershell
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-saucedemo-stagehand-smoke `
+  --output outputs/saucedemo_stagehand_final_order_graph.json `
+  --stagehand-trace outputs/saucedemo_stagehand_final_order_trace.json `
+  --screenshot-dir outputs/saucedemo_stagehand_final_order_screenshots `
+  --openai-visual-delta `
+  --visual-delta-model gpt-4o `
+  --steps 12 `
+  --allow-final-order
+```
+
+Without `--allow-final-order`, the Stagehand smoke intentionally stops at
+checkout overview, so no final order safety action is expected. With the flag,
+the projected PDDL should contain a SafeSym-facing order confirmation action,
+`order_place_confirm`, even if the low-level Stagehand action description is
+something like `click Finish`.
+
+The current verified final-order run reached `checkout_complete` in 11
+Stagehand-backed transitions. PDDL smoke reported `planning_ready=True`,
+projected `order_place_confirm`, and SafeSym with `constraint_rules.json`
+inserted:
+
+```text
+check_human_confirmation_order_place_confirm
+```
+
 ## SauceDemo Role
 
 SauceDemo remains useful as an app-specific regression target, especially for
@@ -153,6 +186,12 @@ order_place_confirm
 SafeSym can only inject checks for actions and predicates represented in the
 exported model. If a WebKobeGraph does not contain a safety-relevant action, the
 planner not triggering a safety rule is expected.
+
+The PDDL projection layer may translate low-level browser action names into
+planning-level action names when the transition evidence supports it. For
+example, an edge that creates `order_created` is projected as
+`order_place_confirm` so SafeSym rules can match the business action rather
+than a tool-specific click label.
 
 ## Run Tests
 

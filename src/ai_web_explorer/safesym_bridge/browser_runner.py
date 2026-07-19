@@ -43,6 +43,31 @@ from ai_web_explorer.grounded_web.stagehand_sdk_provider import (
 )
 
 
+SAUCEDEMO_CHECKOUT_OVERVIEW_STAGEHAND_GOAL = (
+    "Choose exactly one next low-level browser action for the SauceDemo "
+    "checkout task. If the username field is empty, fill it with standard_user. "
+    "If the username is filled and the password field is empty, fill it with "
+    "secret_sauce. If both login fields are filled, click Login. After login, "
+    "add one item to the cart, open the cart, start checkout, fill checkout "
+    "information, and stop on checkout overview. Do not click Finish."
+)
+SAUCEDEMO_CHECKOUT_COMPLETE_STAGEHAND_GOAL = (
+    "Choose exactly one next low-level browser action for the SauceDemo "
+    "checkout task. If the username field is empty, fill it with standard_user. "
+    "If the username is filled and the password field is empty, fill it with "
+    "secret_sauce. If both login fields are filled, click Login. After login, "
+    "add one item to the cart, open the cart, start checkout, fill checkout "
+    "information, continue to checkout overview, click Finish, and stop when "
+    "the checkout complete confirmation page is visible."
+)
+SAUCEDEMO_CHECKOUT_OVERVIEW_EXPLORER_GOAL = (
+    "Reach SauceDemo checkout overview without placing the order."
+)
+SAUCEDEMO_CHECKOUT_COMPLETE_EXPLORER_GOAL = (
+    "Complete the SauceDemo checkout flow through the confirmation page."
+)
+
+
 def build_debug_web_kobe_graph() -> WebKobeGraph:
     evidence = [Evidence(source="debug_builder")]
     start_node = WebKobeNode(
@@ -249,6 +274,7 @@ async def run_saucedemo_stagehand_step(
     visual_delta_provider=None,
     use_openai_visual_delta: bool = False,
     visual_delta_model: str | None = None,
+    allow_final_order: bool = False,
 ) -> Path:
     from playwright.async_api import async_playwright
 
@@ -293,20 +319,19 @@ async def run_saucedemo_stagehand_step(
                 base_backend=base_adapter,
                 provider=resolved_provider,
                 goal=(
-                    "Choose exactly one next low-level browser action for the "
-                    "SauceDemo checkout task. If the username field is empty, "
-                    "fill it with standard_user. If the username is filled and "
-                    "the password field is empty, fill it with secret_sauce. "
-                    "If both login fields are filled, click Login. After "
-                    "login, add one item to the cart, open the cart, start "
-                    "checkout, fill checkout information, and stop on checkout "
-                    "overview. Do not click Finish."
+                    SAUCEDEMO_CHECKOUT_COMPLETE_STAGEHAND_GOAL
+                    if allow_final_order
+                    else SAUCEDEMO_CHECKOUT_OVERVIEW_STAGEHAND_GOAL
                 ),
             )
             explorer = WebKobeExplorer(
                 adapter=adapter,
                 semantic_assistor=DeterministicSemanticAssistor(app="saucedemo"),
-                goal="Reach SauceDemo checkout overview without placing the order.",
+                goal=(
+                    SAUCEDEMO_CHECKOUT_COMPLETE_EXPLORER_GOAL
+                    if allow_final_order
+                    else SAUCEDEMO_CHECKOUT_OVERVIEW_EXPLORER_GOAL
+                ),
                 capture_screenshots=screenshot_dir is not None,
                 business_profile=(
                     ecommerce_checkout_profile()

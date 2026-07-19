@@ -139,6 +139,8 @@ backend 负责操作浏览器。Web-KOBE 层负责图，以及这次状态转移
 - WebKobeGraph 可以投影成 PDDL；
 - PDDL 投影当前会把 candidate 和 verified planning-delta facts 都视作可信 effects，
   用于先跑通 VLM/LLM-to-PDDL 端到端链路；
+- 当状态转移证据支持时，PDDL 投影层可以把低层浏览器动作名翻译成 SafeSym-facing
+  业务动作名；例如，产生 `order_created` 的边会投影成 `order_place_confirm`。
 - 生成的 PDDL 可以做图可达性和静态一致性检查；
 - Fast Downward 可以求解生成的 base plan；
 - SafeSym 可以在 smoke 场景中 parse、注入安全动作，并求解 safe plan。
@@ -146,7 +148,7 @@ backend 负责操作浏览器。Web-KOBE 层负责图，以及这次状态转移
 最近一次保留测试的状态：
 
 ```text
-all retained tests: 182 passed, 2 skipped
+all retained tests: 183 passed, 2 skipped
 ```
 
 Playwright browser tests 在 restricted sandbox 中可能因为浏览器 spawn 权限失败。
@@ -206,6 +208,21 @@ fill username
 `planning_ready=True`，没有 undeclared predicates；Fast Downward 能求出与真实动作
 序列一致的计划。
 
+对于 SauceDemo 测试站点，Stagehand smoke 现在还有显式的 `--allow-final-order`
+模式。该模式允许 runner 点击 `Finish` 并到达 `checkout_complete`，用于验证完整的
+订单确认安全注入链路。默认模式仍停在 checkout overview。
+
+当前已验证的 final-order run 用 11 个 Stagehand-backed 状态转移到达
+`checkout_complete`。生成的 PDDL 会把最后的低层点击投影成 `order_place_confirm`；
+SafeSym 使用 `configs/constraint_rules.json` 时会插入：
+
+```text
+check_human_confirmation_order_place_confirm
+```
+
+注入 smoke 应使用 `constraint_rules.json`。`safety_rules.json` 主要用于风险标注，
+不包含 check action 注入配置。
+
 这说明真实站点链路已经验证到图构建、PDDL 投影和外部 planner 消费。但它还不能证明
 我们已经有鲁棒的通用网页状态理解能力。
 
@@ -227,6 +244,11 @@ Stagehand 的描述可以作为“它尝试做了什么”的证据，但它不�
 - PDDL predicates 或 effects；
 - 节点合并；
 - 任务是否成功。
+
+同样，Stagehand 的低层动作标签不一定是 planner-facing action name。PDDL 投影层可以
+把类似“点击 Finish 且 `order_created` 变为 true”的状态转移映射为业务动作
+`order_place_confirm`，因为 SafeSym 规则匹配的是规划语义，而不是某个工具自己的
+click 标签。
 
 当前使用 Stagehand 的方式是单步 transition loop：
 
