@@ -116,9 +116,7 @@ async def test_run_web_kobe_exploration_uses_controller(tmp_path, monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_run_web_kobe_exploration_writes_selector_trace(
-    tmp_path, monkeypatch
-):
+async def test_run_web_kobe_exploration_writes_selector_trace(tmp_path, monkeypatch):
     import playwright.async_api as playwright_async_api
 
     output_path = tmp_path / "web_kobe_graph.json"
@@ -212,6 +210,87 @@ async def test_run_web_kobe_exploration_writes_selector_trace(
                 "selected_action_id": "product_add_to_cart",
             },
         }
+    ]
+
+
+@pytest.mark.anyio
+async def test_run_web_kobe_exploration_wires_screenshot_capture(tmp_path, monkeypatch):
+    import playwright.async_api as playwright_async_api
+
+    output_path = tmp_path / "web_kobe_graph.json"
+    screenshot_dir = tmp_path / "screenshots"
+    calls = []
+
+    class FakePage:
+        async def goto(self, url):
+            pass
+
+    class FakeBrowser:
+        async def new_page(self):
+            return FakePage()
+
+        async def close(self):
+            pass
+
+    class FakeChromium:
+        async def launch(self, *, headless=True):
+            return FakeBrowser()
+
+    class FakePlaywright:
+        chromium = FakeChromium()
+
+    class FakePlaywrightContext:
+        async def __aenter__(self):
+            return FakePlaywright()
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+    class FakeAdapter:
+        def __init__(self, page, *, app_name, page_id=None, screenshot_dir=None):
+            calls.append(("adapter", app_name, page_id, screenshot_dir))
+            self.app_name = app_name
+
+    class FakeController:
+        def __init__(self, explorer):
+            calls.append(("capture", explorer.capture_screenshots))
+
+        async def run(self, *, max_steps=1):
+            return WebKobeExplorationResult(
+                graph=WebKobeGraph(
+                    app="fixture",
+                    start_node_id="fixture_shop",
+                    total_steps_completed=max_steps,
+                ),
+                summary=WebKobeExplorationSummary(
+                    requested_steps=max_steps,
+                    steps_completed=max_steps,
+                    stop_reason="max_steps",
+                    node_count=0,
+                    edge_count=0,
+                    failed_edge_count=0,
+                ),
+            )
+
+    monkeypatch.setattr(
+        playwright_async_api,
+        "async_playwright",
+        lambda: FakePlaywrightContext(),
+    )
+    monkeypatch.setattr(browser_runner, "WebKobePlaywrightAdapter", FakeAdapter)
+    monkeypatch.setattr(browser_runner, "WebKobeExplorationController", FakeController)
+
+    await run_web_kobe_exploration(
+        "https://example.test/shop",
+        output_path,
+        app_name="fixture",
+        page_id="fixture_shop",
+        screenshot_dir=screenshot_dir,
+    )
+
+    assert calls == [
+        ("adapter", "fixture", "fixture_shop", screenshot_dir),
+        ("capture", True),
     ]
 
 
@@ -330,9 +409,12 @@ async def test_run_saucedemo_llm_selector_step_bootstraps_login_and_writes_trace
     assert json.loads(output_path.read_text(encoding="utf-8"))["meta"]["app"] == (
         "saucedemo"
     )
-    assert json.loads(trace_path.read_text(encoding="utf-8"))[0]["llm_response"][
-        "selected_action_id"
-    ] == "product_add_to_cart"
+    assert (
+        json.loads(trace_path.read_text(encoding="utf-8"))[0]["llm_response"][
+            "selected_action_id"
+        ]
+        == "product_add_to_cart"
+    )
 
 
 @pytest.mark.anyio
@@ -560,7 +642,7 @@ async def test_run_saucedemo_stagehand_step_passes_cdp_url_to_provider(
         return object()
 
     class FakeBaseAdapter:
-        def __init__(self, page, *, app_name, page_id=None):
+        def __init__(self, page, *, app_name, page_id=None, screenshot_dir=None):
             calls.append(("adapter", page, app_name))
             self.app_name = app_name
 
@@ -640,6 +722,277 @@ async def test_run_saucedemo_stagehand_step_passes_cdp_url_to_provider(
     assert provider_call[1]["model_name"] == "deepseek/test"
     assert provider_call[1]["page"] is fake_page
     assert (
-        provider_call[1]["local_cdp_url"]
-        == "ws://127.0.0.1:9333/devtools/browser/test"
+        provider_call[1]["local_cdp_url"] == "ws://127.0.0.1:9333/devtools/browser/test"
     )
+
+
+@pytest.mark.anyio
+async def test_run_saucedemo_stagehand_step_wires_screenshot_capture(
+    tmp_path,
+    monkeypatch,
+):
+    import playwright.async_api as playwright_async_api
+
+    output_path = tmp_path / "stagehand_graph.json"
+    screenshot_dir = tmp_path / "stagehand_screenshots"
+    calls = []
+
+    class FakePage:
+        async def goto(self, url):
+            pass
+
+    class FakeBrowser:
+        async def new_page(self):
+            return FakePage()
+
+        async def close(self):
+            pass
+
+    class FakeChromium:
+        async def launch(self, *, headless=True, args=None):
+            return FakeBrowser()
+
+    class FakePlaywright:
+        chromium = FakeChromium()
+
+    class FakePlaywrightContext:
+        async def __aenter__(self):
+            return FakePlaywright()
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+    class FakeBaseAdapter:
+        def __init__(self, page, *, app_name, page_id=None, screenshot_dir=None):
+            calls.append(("adapter", screenshot_dir))
+            self.app_name = app_name
+
+    class FakeController:
+        def __init__(self, explorer):
+            calls.append(("capture", explorer.capture_screenshots))
+
+        async def run(self, *, max_steps=1):
+            return WebKobeExplorationResult(
+                graph=WebKobeGraph(
+                    app="saucedemo",
+                    start_node_id="login",
+                    total_steps_completed=max_steps,
+                ),
+                summary=WebKobeExplorationSummary(
+                    requested_steps=max_steps,
+                    steps_completed=max_steps,
+                    stop_reason="max_steps",
+                    node_count=0,
+                    edge_count=0,
+                    failed_edge_count=0,
+                ),
+            )
+
+    monkeypatch.setattr(
+        playwright_async_api,
+        "async_playwright",
+        lambda: FakePlaywrightContext(),
+    )
+    monkeypatch.setattr(
+        browser_runner,
+        "WebKobePlaywrightAdapter",
+        FakeBaseAdapter,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        browser_runner,
+        "WebKobeExplorationController",
+        FakeController,
+        raising=False,
+    )
+
+    await browser_runner.run_saucedemo_stagehand_step(
+        output_path,
+        provider=object(),
+        screenshot_dir=screenshot_dir,
+    )
+
+    assert calls == [
+        ("adapter", screenshot_dir),
+        ("capture", True),
+    ]
+
+
+@pytest.mark.anyio
+async def test_run_saucedemo_stagehand_step_wires_visual_delta_provider(
+    tmp_path,
+    monkeypatch,
+):
+    import playwright.async_api as playwright_async_api
+
+    output_path = tmp_path / "stagehand_graph.json"
+    screenshot_dir = tmp_path / "stagehand_screenshots"
+    visual_provider = object()
+    calls = []
+
+    class FakePage:
+        async def goto(self, url):
+            pass
+
+    class FakeBrowser:
+        async def new_page(self):
+            return FakePage()
+
+        async def close(self):
+            pass
+
+    class FakeChromium:
+        async def launch(self, *, headless=True, args=None):
+            return FakeBrowser()
+
+    class FakePlaywright:
+        chromium = FakeChromium()
+
+    class FakePlaywrightContext:
+        async def __aenter__(self):
+            return FakePlaywright()
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+    class FakeBaseAdapter:
+        def __init__(self, page, *, app_name, page_id=None, screenshot_dir=None):
+            self.app_name = app_name
+
+    class FakeController:
+        def __init__(self, explorer):
+            calls.append(("visual_provider", explorer.visual_delta_provider))
+            calls.append(("profile", explorer.business_profile.site_type))
+            calls.append(("capture", explorer.capture_screenshots))
+
+        async def run(self, *, max_steps=1):
+            return WebKobeExplorationResult(
+                graph=WebKobeGraph(
+                    app="saucedemo",
+                    start_node_id="login",
+                    total_steps_completed=max_steps,
+                ),
+                summary=WebKobeExplorationSummary(
+                    requested_steps=max_steps,
+                    steps_completed=max_steps,
+                    stop_reason="max_steps",
+                    node_count=0,
+                    edge_count=0,
+                    failed_edge_count=0,
+                ),
+            )
+
+    monkeypatch.setattr(
+        playwright_async_api,
+        "async_playwright",
+        lambda: FakePlaywrightContext(),
+    )
+    monkeypatch.setattr(browser_runner, "WebKobePlaywrightAdapter", FakeBaseAdapter)
+    monkeypatch.setattr(browser_runner, "WebKobeExplorationController", FakeController)
+
+    await browser_runner.run_saucedemo_stagehand_step(
+        output_path,
+        provider=object(),
+        screenshot_dir=screenshot_dir,
+        visual_delta_provider=visual_provider,
+    )
+
+    assert calls == [
+        ("visual_provider", visual_provider),
+        ("profile", "ecommerce_checkout"),
+        ("capture", True),
+    ]
+
+
+@pytest.mark.anyio
+async def test_run_saucedemo_stagehand_step_creates_openai_visual_delta_provider(
+    tmp_path,
+    monkeypatch,
+):
+    import playwright.async_api as playwright_async_api
+
+    output_path = tmp_path / "stagehand_graph.json"
+    screenshot_dir = tmp_path / "stagehand_screenshots"
+    created_provider = object()
+    calls = []
+
+    class FakePage:
+        async def goto(self, url):
+            pass
+
+    class FakeBrowser:
+        async def new_page(self):
+            return FakePage()
+
+        async def close(self):
+            pass
+
+    class FakeChromium:
+        async def launch(self, *, headless=True, args=None):
+            return FakeBrowser()
+
+    class FakePlaywright:
+        chromium = FakeChromium()
+
+    class FakePlaywrightContext:
+        async def __aenter__(self):
+            return FakePlaywright()
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+    class FakeBaseAdapter:
+        def __init__(self, page, *, app_name, page_id=None, screenshot_dir=None):
+            self.app_name = app_name
+
+    class FakeController:
+        def __init__(self, explorer):
+            calls.append(("visual_provider", explorer.visual_delta_provider))
+
+        async def run(self, *, max_steps=1):
+            return WebKobeExplorationResult(
+                graph=WebKobeGraph(
+                    app="saucedemo",
+                    start_node_id="login",
+                    total_steps_completed=max_steps,
+                ),
+                summary=WebKobeExplorationSummary(
+                    requested_steps=max_steps,
+                    steps_completed=max_steps,
+                    stop_reason="max_steps",
+                    node_count=0,
+                    edge_count=0,
+                    failed_edge_count=0,
+                ),
+            )
+
+    def fake_create_openai_visual_delta_provider_from_env(*, model=None):
+        calls.append(("create_openai_visual_delta", model))
+        return created_provider
+
+    monkeypatch.setattr(
+        playwright_async_api,
+        "async_playwright",
+        lambda: FakePlaywrightContext(),
+    )
+    monkeypatch.setattr(browser_runner, "WebKobePlaywrightAdapter", FakeBaseAdapter)
+    monkeypatch.setattr(browser_runner, "WebKobeExplorationController", FakeController)
+    monkeypatch.setattr(
+        browser_runner,
+        "create_openai_visual_delta_provider_from_env",
+        fake_create_openai_visual_delta_provider_from_env,
+        raising=False,
+    )
+
+    await browser_runner.run_saucedemo_stagehand_step(
+        output_path,
+        provider=object(),
+        screenshot_dir=screenshot_dir,
+        use_openai_visual_delta=True,
+        visual_delta_model="gpt-4o-mini",
+    )
+
+    assert calls == [
+        ("create_openai_visual_delta", "gpt-4o-mini"),
+        ("visual_provider", created_provider),
+    ]

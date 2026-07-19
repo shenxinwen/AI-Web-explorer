@@ -11,6 +11,7 @@ from ai_web_explorer.grounded_web.capability_graph import (
     PageFrame,
     StateIndicator,
 )
+from ai_web_explorer.grounded_web.business_profile import PlanningDelta
 
 WEB_KOBE_SCHEMA_VERSION = "web-kobe-graph-v1"
 
@@ -151,6 +152,7 @@ class WebKobeEdge:
     schema_delta: dict[str, Any] | None
     execution_trace: ExecutionTrace
     pddl_hint: PddlActionHint | None = None
+    planning_delta: PlanningDelta | None = None
     visit_count: int = 1
     status: str = "verified"
     evidence: list[Evidence] = field(default_factory=list)
@@ -175,6 +177,11 @@ class WebKobeEdge:
             "schema_delta": self.schema_delta,
             "execution_trace": self.execution_trace.to_dict(),
             "pddl_hint": self.pddl_hint.to_dict() if self.pddl_hint else None,
+            "planning_delta": (
+                self.planning_delta.to_dict()
+                if self.planning_delta is not None
+                else None
+            ),
             "visit_count": self.visit_count,
             "status": self.status,
             "evidence": _list_to_dict(self.evidence),

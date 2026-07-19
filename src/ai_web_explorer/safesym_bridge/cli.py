@@ -60,6 +60,15 @@ def main(argv: list[str] | None = None) -> int:
     web_kobe_explore_parser.add_argument("--page-id", default=None)
     web_kobe_explore_parser.add_argument("--steps", type=int, default=1)
     web_kobe_explore_parser.add_argument(
+        "--screenshot-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Optional directory for before/after screenshots. This only "
+            "captures local evidence; it does not call a VLM."
+        ),
+    )
+    web_kobe_explore_parser.add_argument(
         "--headed",
         action="store_true",
         help="Show the browser window while running exploration.",
@@ -161,9 +170,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     openai_selector_smoke_parser = subparsers.add_parser(
         "web-kobe-openai-selector-smoke",
-        help=(
-            "Run a real OpenAI-backed offline SauceDemo action-selection smoke."
-        ),
+        help=("Run a real OpenAI-backed offline SauceDemo action-selection smoke."),
     )
     openai_selector_smoke_parser.add_argument(
         "--output",
@@ -245,6 +252,32 @@ def main(argv: list[str] | None = None) -> int:
         help="Maximum number of Stagehand-backed graph steps.",
     )
     saucedemo_stagehand_parser.add_argument(
+        "--screenshot-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Optional directory for before/after screenshots. This only "
+            "captures local evidence; VLM analysis requires separate config."
+        ),
+    )
+    saucedemo_stagehand_parser.add_argument(
+        "--openai-visual-delta",
+        action="store_true",
+        help=(
+            "Enable observation-side OpenAI vision comparison over captured "
+            "before/after screenshots. Requires --screenshot-dir."
+        ),
+    )
+    saucedemo_stagehand_parser.add_argument(
+        "--visual-delta-model",
+        default=None,
+        help=(
+            "Optional OpenAI vision model override for --openai-visual-delta. "
+            "Defaults to OPENAI_VISUAL_DELTA_MODEL, OPENAI_VISION_MODEL, or "
+            "the project default."
+        ),
+    )
+    saucedemo_stagehand_parser.add_argument(
         "--headed",
         action="store_true",
         help="Show the browser window while running the smoke.",
@@ -262,6 +295,7 @@ def main(argv: list[str] | None = None) -> int:
                     page_id=args.page_id,
                     steps=args.steps,
                     headless=not args.headed,
+                    screenshot_dir=args.screenshot_dir,
                 )
             )
         elif args.mode == "web-kobe-graph":
@@ -343,6 +377,9 @@ def main(argv: list[str] | None = None) -> int:
                     model=args.model,
                     steps=args.steps,
                     headless=not args.headed,
+                    screenshot_dir=args.screenshot_dir,
+                    use_openai_visual_delta=args.openai_visual_delta,
+                    visual_delta_model=args.visual_delta_model,
                 )
             )
         else:

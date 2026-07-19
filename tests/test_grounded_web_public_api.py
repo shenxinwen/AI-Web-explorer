@@ -1,10 +1,19 @@
 from ai_web_explorer.grounded_web import (
     AutomationBackend,
     BrowserAction,
+    BusinessFlowProfile,
+    OpenAIVisualDeltaProvider,
+    PlanningDelta,
+    VisualDeltaProvider,
+    VisualDeltaRequest,
     WebKobeExplorationController,
     WebKobeExplorer,
     WebKobeGraph,
     WebKobePlaywrightAdapter,
+    create_openai_visual_delta_provider_from_env,
+    ecommerce_checkout_profile,
+    summarize_visual_delta,
+    verify_planning_delta,
 )
 from ai_web_explorer.grounded_web.action_extractor import (
     browser_actions_from_candidates,
@@ -17,11 +26,20 @@ from ai_web_explorer.grounded_web.state_signature import schema_delta
 def test_grounded_web_package_exposes_mainline_api():
     assert AutomationBackend.__name__ == "AutomationBackend"
     assert BrowserAction.__name__ == "BrowserAction"
+    assert BusinessFlowProfile.__name__ == "BusinessFlowProfile"
+    assert OpenAIVisualDeltaProvider.__name__ == "OpenAIVisualDeltaProvider"
+    assert PlanningDelta.__name__ == "PlanningDelta"
+    assert VisualDeltaProvider is not None
+    assert VisualDeltaRequest.__name__ == "VisualDeltaRequest"
     assert WebKobeExplorationController.__name__ == "WebKobeExplorationController"
     assert WebKobeExplorer.__name__ == "WebKobeExplorer"
     assert WebKobeGraph.__name__ == "WebKobeGraph"
     assert WebKobePlaywrightAdapter.__name__ == "WebKobePlaywrightAdapter"
     assert PlaywrightBackend is WebKobePlaywrightAdapter
+    assert callable(create_openai_visual_delta_provider_from_env)
+    assert ecommerce_checkout_profile().site_type == "ecommerce_checkout"
+    assert callable(summarize_visual_delta)
+    assert callable(verify_planning_delta)
 
 
 def test_grounded_web_imports_can_build_grounded_action():

@@ -3,6 +3,7 @@ import pytest
 from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
 from ai_web_explorer.grounded_web.graph import BrowserAction
+from ai_web_explorer.grounded_web.business_profile import ecommerce_checkout_profile
 from ai_web_explorer.grounded_web.semantic_assistor import (
     DeterministicSemanticAssistor,
 )
@@ -113,10 +114,23 @@ async def test_explore_one_step_records_self_loop_delta():
     assert edge.target_node_id.startswith("listing__")
     assert edge.source_node_id != edge.target_node_id
     assert edge.action.semantic_id == "add_to_cart_product"
-    assert edge.schema_delta == {
-        "cart_nonempty": {"before": False, "after": True}
-    }
+    assert edge.schema_delta == {"cart_nonempty": {"before": False, "after": True}}
     assert edge.observed_delta[0].field == "cart_nonempty"
+
+
+@pytest.mark.anyio
+async def test_explore_one_step_records_profile_verified_planning_delta():
+    explorer = WebKobeExplorer(
+        adapter=FakeAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        business_profile=ecommerce_checkout_profile(),
+    )
+
+    graph = await explorer.explore_one_step()
+
+    edge = graph.edges[0]
+    assert edge.planning_delta is not None
+    assert edge.planning_delta.verified_added_facts == ["cart_nonempty"]
 
 
 @pytest.mark.anyio
@@ -206,6 +220,67 @@ async def test_explore_one_step_preserves_backend_execution_metadata():
         "action_source": "stagehand",
         "stagehand_selector": "button.add",
     }
+
+
+class ScreenshotAdapter(FakeAdapter):
+    def __init__(self):
+        super().__init__()
+        self.captured_labels = []
+
+    async def capture_screenshot(self, label: str):
+        self.captured_labels.append(label)
+        return f"outputs/{label}.png"
+
+
+@pytest.mark.anyio
+async def test_explore_one_step_records_optional_before_after_screenshots():
+    adapter = ScreenshotAdapter()
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        capture_screenshots=True,
+    )
+
+    graph = await explorer.explore_one_step()
+
+    metadata = graph.edges[0].execution_trace.metadata
+    assert adapter.captured_labels == ["before_0001", "after_0001"]
+    assert metadata["before_screenshot_path"] == "outputs/before_0001.png"
+    assert metadata["after_screenshot_path"] == "outputs/after_0001.png"
+
+
+@pytest.mark.anyio
+async def test_explore_one_step_records_visual_delta_candidates_without_verifying_them():
+    adapter = ScreenshotAdapter()
+    provider_calls = []
+
+    def visual_provider(prompt, *, before_screenshot_path, after_screenshot_path):
+        provider_calls.append((before_screenshot_path, after_screenshot_path))
+        return (
+            '{"candidate_added_facts":["order_place_pending_sensitive"],'
+            '"candidate_removed_facts":[],'
+            '"evidence":["final confirmation control appears visible"],'
+            '"confidence":0.7}'
+        )
+
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        business_profile=ecommerce_checkout_profile(),
+        capture_screenshots=True,
+        visual_delta_provider=visual_provider,
+    )
+
+    graph = await explorer.explore_one_step()
+
+    edge = graph.edges[0]
+    assert provider_calls == [("outputs/before_0001.png", "outputs/after_0001.png")]
+    assert edge.planning_delta.candidate_added_facts == [
+        "order_place_pending_sensitive",
+        "cart_nonempty",
+    ]
+    assert edge.planning_delta.verified_added_facts == ["cart_nonempty"]
+    assert edge.execution_trace.metadata["visual_delta_trace"]["status"] == "summarized"
 
 
 class TypedFactsAdapter(FakeAdapter):
@@ -401,8 +476,7 @@ async def test_explore_one_step_can_use_selector_to_choose_goal_relevant_action(
                 goal=request.goal,
                 state={"page_id": request.state.page_id},
                 candidate_actions=[
-                    {"id": action.semantic_id}
-                    for action in request.candidate_actions
+                    {"id": action.semantic_id} for action in request.candidate_actions
                 ],
                 prompt="fake prompt",
                 raw_response='{"selected_action_id":"product_add_to_cart"}',

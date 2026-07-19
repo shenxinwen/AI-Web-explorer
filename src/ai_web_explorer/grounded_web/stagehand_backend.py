@@ -103,3 +103,9 @@ class StagehandAutomationBackend:
         self.last_execution_metadata = stagehand_trace_metadata(trace)
         self.last_execution_error = None if result.success else result.message
         return result.success
+
+    async def capture_screenshot(self, label: str) -> str | None:
+        capture = getattr(self.base_backend, "capture_screenshot", None)
+        if capture is None:
+            return None
+        return await capture(label)

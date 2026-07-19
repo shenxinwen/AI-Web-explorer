@@ -8,6 +8,11 @@ not the other way around.
 """
 
 from ai_web_explorer.grounded_web.automation_backend import AutomationBackend
+from ai_web_explorer.grounded_web.business_profile import (
+    BusinessFlowProfile,
+    PlanningDelta,
+    ecommerce_checkout_profile,
+)
 from ai_web_explorer.grounded_web.controller import (
     WebKobeExplorationController,
     WebKobeExplorationResult,
@@ -15,15 +20,36 @@ from ai_web_explorer.grounded_web.controller import (
 )
 from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
 from ai_web_explorer.grounded_web.graph import BrowserAction, WebKobeGraph
+from ai_web_explorer.grounded_web.openai_visual_delta import (
+    OpenAIVisualDeltaProvider,
+    create_openai_visual_delta_provider_from_env,
+)
+from ai_web_explorer.grounded_web.planning_fact_verifier import (
+    verify_planning_delta,
+)
 from ai_web_explorer.grounded_web.playwright_backend import WebKobePlaywrightAdapter
+from ai_web_explorer.grounded_web.visual_delta import (
+    VisualDeltaProvider,
+    VisualDeltaRequest,
+    summarize_visual_delta,
+)
 
 __all__ = [
     "AutomationBackend",
     "BrowserAction",
+    "BusinessFlowProfile",
+    "OpenAIVisualDeltaProvider",
+    "PlanningDelta",
+    "VisualDeltaProvider",
+    "VisualDeltaRequest",
     "WebKobeExplorationController",
     "WebKobeExplorationResult",
     "WebKobeExplorationSummary",
     "WebKobeExplorer",
     "WebKobeGraph",
     "WebKobePlaywrightAdapter",
+    "create_openai_visual_delta_provider_from_env",
+    "ecommerce_checkout_profile",
+    "summarize_visual_delta",
+    "verify_planning_delta",
 ]

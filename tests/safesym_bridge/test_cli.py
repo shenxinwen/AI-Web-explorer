@@ -60,7 +60,9 @@ def test_main_web_kobe_graph_subcommand_writes_graph(monkeypatch, tmp_path):
             edges=[],
         )
 
-    monkeypatch.setattr(cli, "build_debug_web_kobe_graph", fake_build_debug_web_kobe_graph)
+    monkeypatch.setattr(
+        cli, "build_debug_web_kobe_graph", fake_build_debug_web_kobe_graph
+    )
 
     assert main(["web-kobe-graph", "--output", str(output)]) == 0
     assert output.exists()
@@ -88,19 +90,20 @@ def test_main_web_kobe_pddl_subcommand_writes_domain_and_problem(
         domain = "(define (domain web-kobe))"
         problem = "(define (problem web-kobe-problem))"
 
-    monkeypatch.setattr(cli, "build_debug_web_kobe_graph", fake_build_debug_web_kobe_graph)
+    monkeypatch.setattr(
+        cli, "build_debug_web_kobe_graph", fake_build_debug_web_kobe_graph
+    )
     monkeypatch.setattr(
         cli,
         "compile_web_kobe_graph_to_pddl",
         lambda graph, goal_node_id: FakeArtifacts(),
     )
 
-    assert (
-        main(["web-kobe-pddl", "--output", str(output), "--goal-node", "start"])
-        == 0
-    )
+    assert main(["web-kobe-pddl", "--output", str(output), "--goal-node", "start"]) == 0
     assert (output / "domain.pddl").read_text(encoding="utf-8") == FakeArtifacts.domain
-    assert (output / "problem.pddl").read_text(encoding="utf-8") == FakeArtifacts.problem
+    assert (output / "problem.pddl").read_text(
+        encoding="utf-8"
+    ) == FakeArtifacts.problem
 
 
 def test_main_web_kobe_explore_subcommand_runs_playwright_runner(
@@ -118,8 +121,19 @@ def test_main_web_kobe_explore_subcommand_runs_playwright_runner(
         page_id=None,
         steps=1,
         headless=True,
+        screenshot_dir=None,
     ):
-        calls.append((url, output_path_arg, app_name, page_id, steps, headless))
+        calls.append(
+            (
+                url,
+                output_path_arg,
+                app_name,
+                page_id,
+                steps,
+                headless,
+                screenshot_dir,
+            )
+        )
         output_path_arg.write_text(
             '{"meta": {"schema_version": "web-kobe-graph-v1"}}',
             encoding="utf-8",
@@ -145,6 +159,8 @@ def test_main_web_kobe_explore_subcommand_runs_playwright_runner(
             "fixture_shop",
             "--steps",
             "2",
+            "--screenshot-dir",
+            str(tmp_path / "screenshots"),
             "--headed",
         ]
     )
@@ -158,6 +174,7 @@ def test_main_web_kobe_explore_subcommand_runs_playwright_runner(
             "fixture_shop",
             2,
             False,
+            tmp_path / "screenshots",
         )
     ]
 
@@ -236,13 +253,11 @@ def test_main_web_kobe_pddl_from_graph_writes_domain_and_problem(tmp_path):
     )
 
     assert exit_code == 0
-    assert (
-        "(:action add_to_cart"
-        in (output_dir / "domain.pddl").read_text(encoding="utf-8")
+    assert "(:action add_to_cart" in (output_dir / "domain.pddl").read_text(
+        encoding="utf-8"
     )
-    assert (
-        "(:goal (and (at_filled)))"
-        in (output_dir / "problem.pddl").read_text(encoding="utf-8")
+    assert "(:goal (and (at_filled)))" in (output_dir / "problem.pddl").read_text(
+        encoding="utf-8"
     )
 
 
@@ -494,8 +509,22 @@ def test_main_web_kobe_saucedemo_stagehand_smoke_wires_runner(
         headless=True,
         model=None,
         steps=8,
+        screenshot_dir=None,
+        use_openai_visual_delta=False,
+        visual_delta_model=None,
     ):
-        calls.append((output_path, stagehand_trace_path, headless, model, steps))
+        calls.append(
+            (
+                output_path,
+                stagehand_trace_path,
+                headless,
+                model,
+                steps,
+                screenshot_dir,
+                use_openai_visual_delta,
+                visual_delta_model,
+            )
+        )
         output_path.write_text(
             json.dumps({"meta": {"app": "saucedemo"}}),
             encoding="utf-8",
@@ -520,8 +549,24 @@ def test_main_web_kobe_saucedemo_stagehand_smoke_wires_runner(
             "6",
             "--model",
             "openai/gpt-5-nano",
+            "--screenshot-dir",
+            str(tmp_path / "shots"),
+            "--openai-visual-delta",
+            "--visual-delta-model",
+            "gpt-4o-mini",
         ]
     )
 
     assert exit_code == 0
-    assert calls == [(output, trace, True, "openai/gpt-5-nano", 6)]
+    assert calls == [
+        (
+            output,
+            trace,
+            True,
+            "openai/gpt-5-nano",
+            6,
+            tmp_path / "shots",
+            True,
+            "gpt-4o-mini",
+        )
+    ]

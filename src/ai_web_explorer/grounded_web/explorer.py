@@ -22,11 +22,19 @@ from ai_web_explorer.grounded_web.llm_action_selector import (
     LlmActionSelectionResult,
 )
 from ai_web_explorer.grounded_web.graph_manager import WebKobeGraphManager
+from ai_web_explorer.grounded_web.business_profile import BusinessFlowProfile
+from ai_web_explorer.grounded_web.business_profile import PlanningDelta
 from ai_web_explorer.grounded_web.models import StateSnapshot
+from ai_web_explorer.grounded_web.planning_fact_verifier import verify_planning_delta
 from ai_web_explorer.grounded_web.semantic_assistor import SemanticAssistor
 from ai_web_explorer.grounded_web.typed_delta import (
     observed_deltas_from_typed,
     typed_deltas_from_facts,
+)
+from ai_web_explorer.grounded_web.visual_delta import (
+    VisualDeltaProvider,
+    VisualDeltaRequest,
+    summarize_visual_delta,
 )
 
 
@@ -103,6 +111,40 @@ def _observed_delta_from_facts_or_signature(
     return _schema_observed_delta(before_signature, after_signature, url)
 
 
+def _merged_unique(*lists: list[str]) -> list[str]:
+    merged: list[str] = []
+    for items in lists:
+        for item in items:
+            if item not in merged:
+                merged.append(item)
+    return merged
+
+
+def _merge_planning_deltas(
+    structured: PlanningDelta | None,
+    visual: PlanningDelta | None,
+) -> PlanningDelta | None:
+    if structured is None:
+        return visual
+    if visual is None:
+        return structured
+    return PlanningDelta(
+        candidate_added_facts=_merged_unique(
+            visual.candidate_added_facts,
+            structured.candidate_added_facts,
+        ),
+        candidate_removed_facts=_merged_unique(
+            visual.candidate_removed_facts,
+            structured.candidate_removed_facts,
+        ),
+        verified_added_facts=list(structured.verified_added_facts),
+        verified_removed_facts=list(structured.verified_removed_facts),
+        evidence=list(visual.evidence) + list(structured.evidence),
+        confidence=structured.confidence or visual.confidence,
+        uncertainty_reason=visual.uncertainty_reason,
+    )
+
+
 class WebKobeExplorer:
     def __init__(
         self,
@@ -113,11 +155,17 @@ class WebKobeExplorer:
         action_selector: (
             Callable[[LlmActionSelectionRequest], LlmActionSelectionResult] | None
         ) = None,
+        business_profile: BusinessFlowProfile | None = None,
+        capture_screenshots: bool = False,
+        visual_delta_provider: VisualDeltaProvider | None = None,
     ):
         self.adapter = adapter
         self.semantic_assistor = semantic_assistor
         self.goal = goal
         self.action_selector = action_selector
+        self.business_profile = business_profile
+        self.capture_screenshots = capture_screenshots
+        self.visual_delta_provider = visual_delta_provider
         self.selection_traces: list[dict] = []
         self.manager = WebKobeGraphManager(app=adapter.app_name)
         self._start_node_id: str | None = None
@@ -139,6 +187,7 @@ class WebKobeExplorer:
         if selected is None:
             return self.manager.to_graph(start_node_id=self._start_node_id)
 
+        before_screenshot_path = await self._capture_screenshot("before")
         execution_success = await self.adapter.execute(selected)
         execution_error = getattr(self.adapter, "last_execution_error", None)
         after = await self._observe_after_action(
@@ -146,6 +195,7 @@ class WebKobeExplorer:
             before_facts=before_facts,
             execution_success=execution_success,
         )
+        after_screenshot_path = await self._capture_screenshot("after")
         after_interactables = await self.adapter.list_interactables(after)
         after_draft = self.semantic_assistor.describe_state(
             snapshot=after,
@@ -175,6 +225,43 @@ class WebKobeExplorer:
             and edge_status == "no_observed_change"
         ):
             edge_status = "succeeded_with_navigation"
+        execution_metadata = dict(
+            getattr(self.adapter, "last_execution_metadata", {}) or {}
+        )
+        if before_screenshot_path is not None:
+            execution_metadata["before_screenshot_path"] = before_screenshot_path
+        if after_screenshot_path is not None:
+            execution_metadata["after_screenshot_path"] = after_screenshot_path
+        structured_planning_delta = (
+            verify_planning_delta(
+                profile=self.business_profile,
+                before_signature=before.signature,
+                after_signature=after.signature,
+            )
+            if self.business_profile is not None
+            else None
+        )
+        visual_planning_delta = None
+        if (
+            self.business_profile is not None
+            and self.visual_delta_provider is not None
+            and before_screenshot_path is not None
+            and after_screenshot_path is not None
+        ):
+            visual_result = summarize_visual_delta(
+                VisualDeltaRequest(
+                    goal=self.goal,
+                    action=selected,
+                    profile=self.business_profile,
+                    before_screenshot_path=before_screenshot_path,
+                    after_screenshot_path=after_screenshot_path,
+                    before_signature=before.signature,
+                    after_signature=after.signature,
+                ),
+                provider=self.visual_delta_provider,
+            )
+            visual_planning_delta = visual_result.planning_delta
+            execution_metadata["visual_delta_trace"] = visual_result.trace.to_dict()
         edge = WebKobeEdge(
             source_node_id=source_id,
             target_node_id=target_id,
@@ -193,9 +280,11 @@ class WebKobeExplorer:
                 after_observation_id=target_id,
                 success=execution_success,
                 error=execution_error,
-                metadata=dict(
-                    getattr(self.adapter, "last_execution_metadata", {}) or {}
-                ),
+                metadata=execution_metadata,
+            ),
+            planning_delta=_merge_planning_deltas(
+                structured_planning_delta,
+                visual_planning_delta,
             ),
             status=edge_status,
             evidence=[Evidence(source="web_kobe_explorer", url=before.url)],
@@ -207,6 +296,15 @@ class WebKobeExplorer:
             locator=selected.locator,
         )
         return self.manager.to_graph(start_node_id=self._start_node_id)
+
+    async def _capture_screenshot(self, phase: str) -> str | None:
+        if not self.capture_screenshots:
+            return None
+        capture = getattr(self.adapter, "capture_screenshot", None)
+        if capture is None:
+            return None
+        label = f"{phase}_{self.manager.total_steps_completed + 1:04d}"
+        return await capture(label)
 
     async def _observe_after_action(
         self,

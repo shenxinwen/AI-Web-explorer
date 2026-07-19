@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any
 
 from ai_web_explorer.grounded_web.action_extractor import (
@@ -42,12 +43,16 @@ class WebKobePlaywrightAdapter:
         page_id: str | None = None,
         state_observer: StateObserver | None = None,
         action_provider: ActionProvider | None = None,
+        screenshot_dir: str | Path | None = None,
     ):
         self.page = page
         self.app_name = app_name
         self.page_id = page_id
         self.state_observer = state_observer
         self.action_provider = action_provider
+        self.screenshot_dir = (
+            Path(screenshot_dir) if screenshot_dir is not None else None
+        )
         self.last_execution_error: str | None = None
         self.last_structure_observation = None
         self.last_state_facts = None
@@ -161,6 +166,14 @@ class WebKobePlaywrightAdapter:
             )
         except Exception as exc:
             return self._fail_execution(f"playwright_error:{type(exc).__name__}")
+
+    async def capture_screenshot(self, label: str) -> str | None:
+        if self.screenshot_dir is None:
+            return None
+        self.screenshot_dir.mkdir(parents=True, exist_ok=True)
+        path = self.screenshot_dir / f"{label}.png"
+        await self.page.screenshot(path=str(path))
+        return str(path)
 
 
 PlaywrightBackend = WebKobePlaywrightAdapter

@@ -104,6 +104,7 @@ class WebKobeGraphManager:
                 visit_count=existing.visit_count + 1,
                 observed_delta=list(edge.observed_delta or existing.observed_delta),
                 schema_delta=edge.schema_delta or existing.schema_delta,
+                planning_delta=edge.planning_delta or existing.planning_delta,
                 execution_trace=edge.execution_trace,
                 evidence=list(existing.evidence or edge.evidence),
             )

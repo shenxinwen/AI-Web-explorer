@@ -39,6 +39,7 @@ class WebKobePlaywrightAdapter(_GroundedWebKobePlaywrightAdapter):
         page_id: str | None = None,
         state_observer=None,
         action_provider=None,
+        screenshot_dir=None,
     ):
         if app_name == "saucedemo" and state_observer is None:
             state_observer = observe_saucedemo_state
@@ -50,6 +51,7 @@ class WebKobePlaywrightAdapter(_GroundedWebKobePlaywrightAdapter):
             page_id=page_id,
             state_observer=state_observer,
             action_provider=action_provider,
+            screenshot_dir=screenshot_dir,
         )
 
 

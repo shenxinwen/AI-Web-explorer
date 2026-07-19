@@ -15,6 +15,7 @@ from ai_web_explorer.grounded_web.graph import (
     WebKobeGraph,
     WebKobeNode,
 )
+from ai_web_explorer.grounded_web.business_profile import PlanningDelta
 from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
     compile_web_kobe_graph_to_pddl,
     load_web_kobe_graph_json,
@@ -231,8 +232,7 @@ def test_compile_web_kobe_graph_to_pddl_declares_predicates_from_effect_deltas()
     assert "\n    (control_place_order_enabled)\n" in predicate_block
     assert (
         ":effect (and (not (at_cart)) (at_checkout) "
-        "(control_place_order_enabled))"
-        in artifacts.domain
+        "(control_place_order_enabled))" in artifacts.domain
     )
 
 
@@ -274,6 +274,59 @@ def test_compile_web_kobe_graph_to_pddl_projects_successful_navigation_edges():
     assert "(:action cart_open" in artifacts.domain
     assert ":precondition (and (at_inventory))" in artifacts.domain
     assert ":effect (and (not (at_inventory)) (at_cart))" in artifacts.domain
+
+
+def test_compile_web_kobe_graph_to_pddl_trusts_candidate_planning_delta():
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="cart",
+        total_steps_completed=1,
+        nodes=[
+            _node("cart", "cart", {"raw_cart_count": 1}),
+            _node("review", "review", {"raw_cart_count": 1}),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="cart",
+                target_node_id="review",
+                instruction="continue to review",
+                action=BrowserAction("click", "button.continue", "continue_to_review"),
+                capability=None,
+                target_observation="order review",
+                observed_delta=[],
+                schema_delta={},
+                execution_trace=ExecutionTrace(
+                    "click",
+                    "button.continue",
+                    "continue",
+                    {},
+                    "cart",
+                    "review",
+                    True,
+                ),
+                planning_delta=PlanningDelta(
+                    candidate_added_facts=["order_place_pending_sensitive"],
+                    candidate_removed_facts=["checkout_started"],
+                    verified_added_facts=["order_review_ready"],
+                    verified_removed_facts=["checkout_info_complete"],
+                    evidence=["structured review evidence confirmed order review"],
+                    confidence=0.88,
+                ),
+                status="succeeded_with_observed_change",
+            )
+        ],
+    )
+
+    artifacts = compile_web_kobe_graph_to_pddl(graph, goal_node_id="review")
+
+    assert "(order_review_ready)" in artifacts.domain
+    assert "(checkout_info_complete)" in artifacts.domain
+    assert "(order_place_pending_sensitive)" in artifacts.domain
+    assert "(checkout_started)" in artifacts.domain
+    assert "(order_review_ready)" in artifacts.domain
+    assert "(not (checkout_info_complete))" in artifacts.domain
+    assert "(order_place_pending_sensitive)" in artifacts.domain
+    assert "(not (checkout_started))" in artifacts.domain
 
 
 def test_compile_web_kobe_graph_to_pddl_excludes_non_projectable_edges():
@@ -424,6 +477,50 @@ def test_load_web_kobe_graph_json_preserves_execution_trace_metadata(tmp_path):
 
     loaded = load_web_kobe_graph_json(path)
 
-    assert loaded.edges[0].execution_trace.metadata == {
-        "action_source": "stagehand"
-    }
+    assert loaded.edges[0].execution_trace.metadata == {"action_source": "stagehand"}
+
+
+def test_load_web_kobe_graph_json_preserves_planning_delta(tmp_path):
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="empty",
+        total_steps_completed=1,
+        nodes=[
+            _node("empty", "listing", {"cart_nonempty": False}),
+            _node("filled", "listing", {"cart_nonempty": True}),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="empty",
+                target_node_id="filled",
+                instruction="add to cart",
+                action=BrowserAction("click", "button.add", "add_to_cart"),
+                capability=None,
+                target_observation="filled cart",
+                observed_delta=[],
+                schema_delta={},
+                execution_trace=ExecutionTrace(
+                    "click",
+                    "button.add",
+                    "add",
+                    {},
+                    "empty",
+                    "filled",
+                    True,
+                ),
+                planning_delta=PlanningDelta(
+                    candidate_added_facts=["cart_nonempty"],
+                    verified_added_facts=["cart_nonempty"],
+                    evidence=["cart count indicates one or more items"],
+                    confidence=0.9,
+                ),
+            )
+        ],
+    )
+    path = tmp_path / "graph.json"
+    path.write_text(json.dumps(graph.to_dict()), encoding="utf-8")
+
+    loaded = load_web_kobe_graph_json(path)
+
+    assert loaded.edges[0].planning_delta is not None
+    assert loaded.edges[0].planning_delta.verified_added_facts == ["cart_nonempty"]

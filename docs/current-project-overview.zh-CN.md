@@ -1,214 +1,162 @@
 # 当前项目说明
 
-这份文档用于中文审阅。它说明当前项目在做什么、主线 pipeline 是什么、各模块怎么分工、哪些内容仍然是 SauceDemo/MVP 专用，以及下一阶段应该优先推进什么。
-
-对应英文版：
-
-```text
-docs/current-project-overview.md
-```
-
-以后英文版主要用于代码上下文和 AI 接力，中文版主要用于人工审查项目方向。
+这份文档用于人工审阅项目方向。英文版
+`docs/current-project-overview.md` 用于代码上下文和 AI 接力。每次项目方向变化时，
+两份文档都要同步更新。
 
 ## 项目目标
 
-原始 `ai-web-explorer` 项目做的是：
+这个项目不是要做一个能力全面的通用 web agent。
 
-```text
-用浏览器和 LLM 辅助探索网站
--> 输出网页状态和动作构成的图
-```
-
-我们当前项目在这个基础上，把目标推进到 SafeSym 需要的“网页环境理解层”：
+项目目标是服务 SafeSym：把真实网页交互转成规划器可以消费的模型。
 
 ```text
 真实网站
-  -> 浏览器观察
-  -> 抽象网页状态和动作
-  -> 构建图结构
-  -> 转换成 PDDL
-  -> SafeSym 注入安全约束
-  -> 规划器生成安全动作计划
+  -> 浏览器观察和动作执行
+  -> WebKobeGraph
+  -> Web-KOBE PDDL 投影
+  -> SafeSym parser / safety injection / planner artifacts
 ```
-
-更具体地说，我们不是要从零实现一个通用 web agent，而是要让 SafeSym 能理解未知网页环境：网页现在处于什么状态、有哪些动作可以做、动作会导致什么状态变化、哪些动作后续需要安全检查。
-
-当前阶段优先使用 `local_checkout` 作为低噪音 golden-path fixture，并保留 SauceDemo 作为应用级回归和未来安全规则场景。它们都不是最终目标，而是用于证明端到端链路的受控目标。
 
 核心研究问题是：
 
 ```text
-如何观察一个网页应用，
-把它的状态和可执行动作抽象成图，
-再把这张图转换成 SafeSym 可以使用的规划模型？
+如何探索一个网页应用，
+观察动作会导致什么变化，
+把这些变化抽象成 planning facts，
+再编译成 SafeSym 可以注入安全检查的规划模型？
 ```
 
-## 当前主线 Pipeline
+项目真正有价值的部分是状态图和规划模型，而不是底层网页操作能力。现有浏览器自动化
+或 web-agent 工具能帮上忙时应该复用，但状态抽象、图构建、PDDL 投影和 SafeSym 语义
+必须由本项目掌控。
 
-项目已经不再以旧的 FSM 路线为主。当前有一条新主线，以及一条应用级回归路线。
+## 主线 Pipeline
+
+当前主线是：
 
 ```text
-当前通用主线：
-  DOM-grounded Web-KOBE exploration
-  -> 页面结构观察
-  -> 状态事实和 typed delta
-  -> 通过 AutomationBackend 执行已选 BrowserAction
-  -> before/after observation 和 observed delta
-  -> WebKobeExplorer
+真实网页
+  -> grounded observation
+  -> candidate action discovery/selection
+  -> 通过 AutomationBackend 执行浏览器动作
+  -> before/after observation
+  -> schema_delta / typed_delta / planning_delta
   -> WebKobeGraph
-  -> WebKobeGraph-to-PDDL 投影
-  -> 面向 SafeSym/PDDL 的 artifact
-
-SafeSym 回归路线：
-  SauceDemoAdapter
-  -> GraphExplorer
-  -> WebObservedGraph
-  -> graph-derived PDDL
-  -> SafeSym
+  -> PDDL artifacts
+  -> SafeSym / planner 消费
 ```
 
-新的通用探索代码应该通过下面这个包进入：
+当前图应该被视为 task-guided partial website model，而不是完整网站模型。短期探索
+策略是 business-flow-guided：
 
 ```text
-src/ai_web_explorer/grounded_web/
+login 或 session setup
+  -> product selection
+  -> cart
+  -> checkout information
+  -> order review
+  -> pending sensitive order placement
 ```
 
-`grounded_web` 是现在的核心探索边界，负责：
+推进主任务时，explorer 应记录当前节点上可用但没有执行的动作，作为未来的 frontier
+actions。通过 replay、snapshot 或 backtracking 执行这些 frontier 的能力暂时延后，
+等状态观察更可靠之后再做。
 
-- DOM-grounded 网页观察；
-- 浏览器动作抽象；
-- 状态记录；
+## 架构边界
+
+### grounded_web
+
+`src/ai_web_explorer/grounded_web/` 是通用网页探索层。
+
+它负责：
+
+- DOM 和浏览器 grounded observation；
+- candidate action 表示；
+- 自动化后端接口；
+- before/after 状态记录；
+- typed delta 和 schema delta；
 - WebKobeGraph 构建；
-- 已选 BrowserAction 到具体浏览器后端执行的边界。
+- LLM/Stagehand 辅助选择或执行时的 trace 边界。
 
-`safesym_bridge` 不应该再承载通用探索逻辑。它现在应该专注于：
+它不应该包含 SafeSym-specific 规划逻辑，也不应该包含 SauceDemo-only 业务规则。
 
-- 消费 `grounded_web` 生成的图和数据结构；
-- 做 SafeSym/PDDL 投影；
-- 保留 SauceDemo 这类端到端回归适配；
-- 保留必要的历史路线作为参考，但不扩展成新主线。
+### safesym_bridge
 
-这个边界很重要。它让我们以后可以替换底层 web agent、Playwright backend、LLM/VLM 辅助模块，而不会推翻 SafeSym 对接层。
+`src/ai_web_explorer/safesym_bridge/` 消费图和观察产物。
 
-当前主线已经收束到 WebKobeGraph-to-PDDL 投影：使用 grounded Web-KOBE 探索得到的状态图，将成功且有观察意义的转移投影成简单 STRIPS `domain.pddl`，并通过显式 start/goal 节点生成具体 `problem.pddl`。这保持了 `grounded_web` 作为网页探索/观察层、`safesym_bridge` 作为面向规划器投影层的边界。
+它负责：
 
-## 近期已经完成的进展
+- WebKobeGraph-to-PDDL 投影；
+- SafeSym smoke 集成；
+- planner-facing artifacts；
+- local checkout 和 SauceDemo 回归；
+- 必要的应用专用 adapter、observer 和 action catalog。
 
-目前已经完成了几件关键整理工作：
+它不应该生长成通用探索 runtime。
 
-1. 新主线已经抽到 `grounded_web`。
+### AutomationBackend
 
-   `grounded_web` 现在包含 DOM 观察、动作提取、自动化后端、探索器、图结构、图管理器、Playwright backend、语义辅助和简单 agent。
-
-2. `grounded_web` 与 `safesym_bridge` 已经解耦。
-
-   `grounded_web` 不依赖 `safesym_bridge`；`safesym_bridge` 反过来消费 `grounded_web` 的结果。
-
-3. 删除了 `safesym_bridge` 中一批纯兼容 shim。
-
-   这些文件以前只是把 `grounded_web` 的类型重新导出，容易让模块边界变模糊。现在测试也已经迁移为直接依赖 `grounded_web`。
-
-4. 当前验证状态良好。
-
-   最近一次桥接层测试结果：
-
-   ```text
-tests/safesym_bridge: 156 passed, 2 skipped
-all retained tests: 160 passed, 2 skipped
-```
-
-   当前测试套件已经做过一次主线收束：删除旧 `WebObservedGraph -> PDDL`
-   单元测试、experimental capability graph sidecar 测试、legacy executor
-   测试和 simple-agent facade 测试。默认保留 Web-KOBE/PDDL 主线测试，以及
-   仍可能服务后续安全规则场景的 SauceDemo adapter/resolver/catalog 回归测试。
-   旧的 `tests/ai/` prompt-eval 测试和 `tests/data/` 大型截图/HTML 语料也已删除；
-   它们依赖 live OpenAI/MLflow 评估流程，不验证当前 SafeSym-oriented 主线。
-
-补充清理：旧 upstream `explore` runtime、对应 root-level modules、旧 `data/`
-样本/输出目录以及 `explore` console script 已从 active package 移除。保留的
-LLM 能力应继续遵守当前边界：LLM 只在 DOM-grounded candidates 中选择动作，
-不直接生成 selector 或接管浏览器执行。
-
-## Web-KOBE 风格探索主线
-
-当前通用探索方向已经收束到 Web-KOBE 风格图结构。
-
-它的目标不是记录网页里“有什么内容”，而是记录：
-
-- 当前页面/状态能做什么；
-- 哪些对象可以触发状态变化；
-- 执行动作前后状态如何变化；
-- 这些观察来自哪些 DOM/浏览器证据。
-
-当前 CLI 示例：
-
-```bash
-python -m ai_web_explorer.safesym_bridge.cli web-kobe-graph --output outputs/web_kobe_graph.json
-python -m ai_web_explorer.safesym_bridge.cli web-kobe-pddl --output outputs/web_kobe_pddl --goal-node start
-python -m ai_web_explorer.safesym_bridge.cli web-kobe-pddl-from-graph \
-  --graph outputs/web_kobe_explored_graph.json \
-  --output outputs/web_kobe_pddl \
-  --goal-node <goal_node_id>
-python -m ai_web_explorer.safesym_bridge.cli web-kobe-pddl-smoke \
-  --graph outputs/web_kobe_explored_graph.json \
-  --output outputs/web_kobe_pddl_smoke \
-  --goal-node <goal_node_id>
-```
-
-`web-kobe-pddl-smoke` 现在会检查探索得到的 WebKobeGraph 是否能生成非空、图上可达、内部一致的 PDDL artifact。smoke report 会包含 `pddl_static_consistency_ready` 和 `undeclared_predicates` 等字段，避免 action effect 静默引用 domain 中未声明的 predicate。这是 planning-readiness 验证，不是 SafeSym 安全规则触发验证。
-
-更重要的是实际探索命令：
-
-```bash
-python -m ai_web_explorer.safesym_bridge.cli web-kobe-explore \
-  --url http://127.0.0.1:8000/index.html \
-  --output outputs/local_checkout_web_kobe.json \
-  --app-name local_checkout \
-  --page-id local_checkout \
-  --steps 6
-```
-
-这条路线会：
+浏览器操作通过这个接口进入：
 
 ```text
-读取真实页面
--> 提取 DOM 中真实可交互元素
--> 转换成 grounded browser actions
--> 用 Playwright locator 执行动作
--> 记录动作前后的状态变化
--> 写入 WebKobeGraph
+src/ai_web_explorer/grounded_web/automation_backend.py
 ```
 
-LLM/VLM 后续可以参与动作选择、语义标注和验证，但 selector 和基础事实应尽量来自 DOM-grounded candidates，而不是让模型凭空生成。
+当前具体后端：
 
-当前实验性的 LLM 路径遵守这个边界：LLM selector 只能从已经 grounded 的
-`BrowserAction` 候选里选择一个 action id，不能生成 selector，也不能直接执行浏览器。
-每次选择都可以写入 trace sidecar，记录 goal、state、candidates、prompt、raw
-response、parsed response、status 和 error category。这样失败时可以区分是
-parse error、invalid action id、选择质量问题、浏览器执行失败，还是状态观察/delta 问题。
-
-当前已经提供离线 OpenAI-backed selector smoke：
-
-```bash
-python -m ai_web_explorer.safesym_bridge.cli web-kobe-openai-selector-smoke \
-  --output outputs/openai_selector_smoke.json
+```text
+src/ai_web_explorer/grounded_web/playwright_backend.py
+src/ai_web_explorer/grounded_web/stagehand_backend.py
 ```
 
-它不打开浏览器，只测试当前具体 SauceDemo 选择问题：在 `inventory` 页面、
-`cart_count=0`、候选动作为 `product_add_to_cart` / `cart_open` 时，期望选择
-`product_add_to_cart`。
+backend 负责操作浏览器。Web-KOBE 层负责图，以及这次状态转移的意义。
 
-当前也提供真实浏览器 SauceDemo LLM smoke：
+## 当前完成情况
 
-```bash
-python -m ai_web_explorer.safesym_bridge.cli web-kobe-saucedemo-llm-step-smoke \
-  --output outputs/saucedemo_llm_5step_graph.json \
-  --selector-trace outputs/saucedemo_llm_5step_trace.json \
-  --steps 5
+项目已经有端到端 MVP，但还不是成熟的通用网页状态建模系统。
+
+已经完成并验证：
+
+- `WebKobeGraph` 是新工作的主图结构；
+- `BusinessFlowProfile` 和 `PlanningDelta` schema 已经存在，用于 profile-guided
+  planning-state abstraction；
+- `WebKobeEdge` 可以承载 candidate 和 verified planning deltas；
+- 最小版 structured `PlanningFactVerifier` 可以从已有 state signature 中推导
+  verified planning deltas；
+- 当提供 business profile 时，`WebKobeExplorer` 可以把 profile-verified
+  `PlanningDelta` 记录到已执行 edge 上；
+- 当自动化后端支持截图时，`WebKobeExplorer` 可以可选采集 before/after screenshots；
+- 模型无关的 visual delta summarizer 可以把截图证据转成 candidate planning facts，
+  但不会验证这些 facts；
+- OpenAI visual delta provider 已通过独立 OpenAI vision 配置接入；它属于观察层，
+  与 Stagehand 隔离；
+- Stagehand SauceDemo smoke 可以通过 `--openai-visual-delta`、
+  `--visual-delta-model` 和 `--screenshot-dir` 可选启用 OpenAI visual delta；
+- 旧的自研通用动作执行层已经移除；
+- Playwright 仍用于受控 fixture 和 fallback 操作；
+- Stagehand 已作为真实站点动作发现/执行后端接入；
+- WebKobeGraph 可以投影成 PDDL；
+- PDDL 投影当前会把 candidate 和 verified planning-delta facts 都视作可信 effects，
+  用于先跑通 VLM/LLM-to-PDDL 端到端链路；
+- 生成的 PDDL 可以做图可达性和静态一致性检查；
+- Fast Downward 可以求解生成的 base plan；
+- SafeSym 可以在 smoke 场景中 parse、注入安全动作，并求解 safe plan。
+
+最近一次保留测试的状态：
+
+```text
+all retained tests: 182 passed, 2 skipped
 ```
 
-这个 smoke 把登录视作确定性的测试 bootstrap，然后从 inventory 页面开始让 agent
-执行。使用 `--steps 5` 时，live run 产生了：
+Playwright browser tests 在 restricted sandbox 中可能因为浏览器 spawn 权限失败。
+在这种环境里运行时需要外部执行权限。
+
+## 已验证链路
+
+### SauceDemo LLM Checkout Smoke
+
+应用专用的 SauceDemo LLM smoke 完成过五步 checkout 路径：
 
 ```text
 product_add_to_cart
@@ -218,445 +166,52 @@ product_add_to_cart
   -> order_place_confirm
 ```
 
-最终图到达 `saucedemo:checkout_complete`。图中记录了 `cart_count: 0 -> 1`；
-导航到 cart 的 edge 现在被视为 `succeeded_with_navigation`；随后记录
-`checkout_started: false -> true`、`order_review_ready: false -> true`，最后记录
-`order_created: false -> true` 和 `cart_count: 1 -> 0`。
-
-这个完整图现在可以投影成 PDDL，并由 Fast Downward 求解。base plan 是同一条五步
-checkout 路径。把生成的 PDDL 交给 `web-kobe-safesym-smoke` 并使用 SafeSym 的
-`configs/constraint_rules.json` 后，SafeSym 端到端通过并插入了：
+图到达 `checkout_complete`，投影出的 PDDL 可以被求解，SafeSym 会在下面两个动作前
+插入安全检查：
 
 ```text
-check_information_verification_checkout_info_submit
-check_human_confirmation_order_place_confirm
-```
-
-对应的 safe plan 会在 `checkout_info_submit` 和 `order_place_confirm` 前插入这些检查。
-
-旧的 intent-resolution 动作闭环已经从 active mainline 移除。现在的边界是：
-
-```text
-selected BrowserAction
--> AutomationBackend 执行
--> before/after observation
--> typed/schema delta
--> WebKobeGraph edge
-```
-
-也就是说，`WebKobeExplorer` 直接执行已经选定的 `BrowserAction`，然后观察动作前后状态、记录 typed/schema delta，并写入图边。这样保留了 SafeSym 需要的建模边界，但不再扩展项目自有的通用 web-agent 执行层。
-
-如果动作执行成功但第一次观察没有发现 delta，explorer 会在有限时间窗口内继续轮询观察状态，然后才记录 `no_observed_change`。这是观察等待策略，不是动作重试；默认不会再次执行浏览器动作。
-
-## 当前自动化边界
-
-我们希望复用现有 web agent 或浏览器自动化能力，但自己掌控探索目标和数据结构。
-
-当前边界是：
-
-```text
-Reusable automation backend
-  -> 负责操作浏览器
-  -> click / fill / scroll / wait / navigate
-  -> locator resolution
-  -> browser/session handling
-
-Web-KOBE / SafeSym explorer
-  -> 负责探索策略
-  -> 记录 before/after observation
-  -> 推断状态 delta
-  -> 构建 Web-KOBE / capability graph
-  -> 后续导出 SafeSym/PDDL 可用 artifact
-```
-
-自动化后端接口位于：
-
-```text
-src/ai_web_explorer/grounded_web/automation_backend.py
-```
-
-当前保留的具体实现是：
-
-```text
-src/ai_web_explorer/grounded_web/playwright_backend.py
-src/ai_web_explorer/grounded_web/stagehand_backend.py
-```
-
-Playwright-backed adapter 用于受控 fixture / fallback 操作；Stagehand-backed wrapper 用于真实站点单步动作发现和执行。二者都不拥有探索策略。探索策略和图记录属于 `WebKobeExplorer`。
-
-这样设计的好处是：以后如果我们接入现成 web agent，只需要把它封装成新的 `AutomationBackend`，不需要重写图结构和 SafeSym 对接。
-
-旧的 no-LLM `SimpleGroundedWebAgent`、`ActionIntent`、`ActionExecutionResult`
-和 ranking/action-loop helper 已经移除。它们容易诱导项目继续生长自己的通用
-web-agent 执行层。当前 active surface 更小：动作候选由外部 selector 或 explorer
-最小 fallback 选择，通过 `AutomationBackend` 执行，再由 Web-KOBE 建模。
-
-## 本地测试页面
-
-当前推荐的第一个 golden-path target 是本地 checkout fixture：
-
-```bash
-python -m http.server 8000 --directory tests/fixtures/local_checkout
-python -m ai_web_explorer.safesym_bridge.cli web-kobe-explore \
-  --url http://127.0.0.1:8000/index.html \
-  --output outputs/local_checkout_web_kobe.json \
-  --app-name local_checkout \
-  --page-id local_checkout \
-  --steps 6
-```
-
-选择本地 fixture 的原因：
-
-- 不需要登录；
-- 不受第三方网站变化影响；
-- 没有 cookie banner 等干扰；
-- 可以稳定测试商品、购物车、结账表单、订单完成等状态变化；
-- 便于验证 DOM 提取、Playwright 执行、表单填写、状态观察、状态节点区分、PDDL smoke 是否连通。
-
-这个 fixture 不是站点专用适配器，而是低噪音 shopping benchmark。它提供清楚的 DOM 和 `data-state` 证据，但 explorer 仍然走通用 grounded Web-KOBE 路径。
-
-SauceDemo 仍然是重要的真实网站 smoke target，但它有登录门槛，所以应该在本地 fixture 稳定后再使用。
-
-SauceDemo 示例：
-
-```bash
-python -m ai_web_explorer.safesym_bridge.cli web-kobe-explore \
-  --url https://www.saucedemo.com/ \
-  --output outputs/saucedemo_web_kobe_graph.json \
-  --app-name saucedemo \
-  --steps 4
-```
-
-对于 `--app-name saucedemo`，当前 adapter 会复用已有 SauceDemo state observer 和 action profile，从而记录 login、add-to-cart、cart open、checkout start 等更有意义的步骤。
-
-## 核心数据结构
-
-### WebObservation
-
-`WebObservation` 表示一个浏览器状态下的观察结果。
-
-文件：
-
-```text
-src/ai_web_explorer/safesym_bridge/web_observation.py
-```
-
-它包含：
-
-- `PageIdentity`：页面抽象身份、URL、标题；
-- `ObservedFact`：页面上的结构化事实；
-- `ObservationEvidence`：事实来自哪里；
-- `interactables`：DOM-backed 可交互候选元素。
-
-它的作用是把浏览器原始信息转换成规划系统能理解的稳定事实。
-
-### StateSnapshot
-
-`StateSnapshot` 是面向规划的紧凑状态快照。
-
-文件：
-
-```text
-src/ai_web_explorer/grounded_web/models.py
-```
-
-它包含：
-
-- `page_id`
-- `url`
-- `title`
-- `signature`
-
-`signature` 是当前状态事实和值的集合。它不是 PDDL 本身，而是项目内部的网页状态表示。
-
-### DOM Interactable Candidate
-
-DOM observer 会提取可见、可用的交互元素。
-
-文件：
-
-```text
-src/ai_web_explorer/grounded_web/dom_observer.py
-```
-
-扫描对象包括：
-
-```text
-button
-a[href]
-input
-textarea
-select
-[role="button"]
-[role="link"]
-[onclick]
-[data-test]
-```
-
-候选元素会记录：
-
-- 元素类型；
-- locator；
-- locator strategy；
-- 可见名称；
-- metadata。
-
-注意：candidate 只是“可能可操作的控件”，还不是语义规划动作。
-
-### WebKobeGraph
-
-`WebKobeGraph` 是当前通用探索主线的核心图结构。
-
-相关文件：
-
-```text
-src/ai_web_explorer/grounded_web/graph.py
-src/ai_web_explorer/grounded_web/graph_manager.py
-```
-
-它用于记录：
-
-- 页面/状态节点；
-- 浏览器 grounded actions；
-- 动作目标；
-- before/after observation；
-- observed deltas；
-- evidence；
-- 后续可用于 PDDL 的 hints。
-
-长期看，未知网页应该优先通过 `WebKobeGraph` 进入 SafeSym/PDDL 投影；当前已经有文件级入口可以把探索得到的 `WebKobeGraph` JSON 转成简单 PDDL。
-
-### WebObservedGraph
-
-`WebObservedGraph` 是目前 SauceDemo 回归路线中的图结构。
-
-文件：
-
-```text
-src/ai_web_explorer/safesym_bridge/observed_graph.py
-```
-
-它包含：
-
-- 抽象网页状态节点；
-- 语义动作边；
-- 状态事实值；
-- 动作前置条件；
-- 推断 effects；
-- 可交互元素。
-
-它当前仍然是 SauceDemo `Graph -> PDDL -> SafeSym` 回归链路的重要部分。
-
-### Effects
-
-Effects 的历史 SauceDemo 路线通过比较动作前后的 state signature 推断；当前 Web-KOBE 主线则把观察到的 typed delta 和 schema delta 直接记录在 `WebKobeGraph` edge 上，再由 PDDL projector 投影成动作 effect。
-
-文件：
-
-```text
-src/ai_web_explorer/safesym_bridge/effect_inferer.py
-```
-
-例子：
-
-```text
-before: cart_count = 0
-after:  cart_count = 1
-effect: set cart_count to 1
-```
-
-这很重要，因为长期目标是从真实观察中学习动作效果，而不是完全手写。
-
-## SafeSym 如何接入
-
-SafeSym 不负责探索网页。它接收规划模型，并在其中加入安全约束或安全检查动作。
-
-当前 SauceDemo MVP 中的重要敏感动作是：
-
-```text
+checkout_info_submit
 order_place_confirm
 ```
 
-这个动作表示确认下单。SafeSym 可以在这个动作前插入人工确认。
-
-当前端到端链路是：
-
-```text
-Graph PDDL
-  -> SafeSym compile_safe_pddl
-  -> Fast Downward
-  -> safe plan found
-```
-
-safe plan 中会包含类似下面的检查动作：
+插入的检查动作是：
 
 ```text
 check_information_verification_checkout_info_submit
 check_human_confirmation_order_place_confirm
 ```
 
-## 仍然是 SauceDemo 专用的部分
+### Stagehand SauceDemo Graph Smoke
 
-目前项目已经有端到端 MVP，但还不是通用 web planner。
+Stagehand 已经作为本地浏览器操作后端验证过。它通过 CDP 连接到 Web-KOBE 正在观察的
+同一个 Playwright browser。
 
-以下内容仍然偏 SauceDemo：
-
-- `login`、`inventory`、`checkout_overview` 等页面 ID；
-- `cart_count`、`order_created` 等状态事实；
-- `product_add_to_cart` 等语义动作；
-- 动作前置条件；
-- PDDL object list 和最终目标；
-- rule-based resolver。
-
-这是当前阶段可以接受的。我们的策略是先跑通链路，再逐步泛化。
-
-## 历史路线
-
-早期工作生成过 SafeSym-compatible FSM 输出。相关内容仍然会出现在旧设计文档和 artifact 中，但已经不是当前主线。
-
-当前主线：
-
-```text
-WebKobeGraph -> PDDL artifact -> SafeSym / planner 消费
-```
-
-保留的应用级回归路线：
-
-```text
-WebObservedGraph -> SauceDemo PDDL / 回归支持 -> SafeSym 场景
-```
-
-历史路线：
-
-```text
-observed transitions -> FSM JSON -> SafeSym loader compatibility
-```
-
-旧的 `fixed` / `observed` FSM CLI 命令已经不是重点。现在图结构才是核心数据结构。
-
-## 当前技术边界与不足
-
-目前系统还有一些明确限制：
-
-- 通用状态事实仍然有意保持简单，本地 fixture 依赖 `[data-state]` 降低早期验证噪音；
-- DOM candidate extraction 已经比较通用，但动作选择和语义命名仍然偏规则；当前新增了实验性的 LLM action selector 可选 hook，但它不是默认策略；
-- WebKobeGraph-to-PDDL projector 目前只输出很小的 STRIPS 子集；
-- `web-kobe-pddl-smoke` 已经检查图上可达性和基础 PDDL 静态一致性，但还不是完整 PDDL parser，也没有真正调用外部 planner；
-- `web-kobe-safesym-smoke` 已经可以把生成的 Web-KOBE PDDL 交给外部 SafeSym parser、安全注入和可选 Fast Downward base/safe solve；
-- 当前 `local_checkout` smoke 已经能通过 SafeSym 和 Fast Downward，但还不会插入安全检查动作，因为 `dom_006_button_place_order` 这类投影 action 名还无法匹配 SafeSym 的安全规则模式；
-- 浏览器探索能力还比较窄，主要围绕 checkout-style 路径；当前 SauceDemo LLM smoke 证明了在应用级候选动作可用时，bounded selector 能完成 checkout 路径，但这还不等于已经证明任意网站或任意任务的泛化能力；
-- 真实 LLM selector smoke 已经在用户明确授权使用当前非 OpenAI 官方 `OPENAI_BASE_URL` 后跑通；离线 selector smoke 在 SauceDemo 的 `inventory/cart_count=0` 场景中选择了 `product_add_to_cart`，真实浏览器 smoke 现在能完成五步 SauceDemo checkout 路径，到达 `checkout_complete`，并生成 Fast Downward 与 SafeSym 都能消费的 graph/PDDL 模型。SafeSym 会为 `checkout_info_submit` 和 `order_place_confirm` 插入安全检查。默认自动化测试仍使用 fake provider 验证 selector 边界和 traceability，避免消耗 API 额度；
-- 状态去重、恢复、泛化能力还没有成熟；
-- 安全保证只适用于已观察并编译出的模型。
-
-这些不是失败，而是下一阶段要解决的问题。
-
-## 下一阶段方向
-
-短期目标应该聚焦：
-
-```text
-从真实网页交互中抽取状态转移图，而不是自己实现一个能力全面的 web agent
-```
-
-当前推荐的下一阶段设计是：
-
-```text
-Stagehand-backed WebKobeGraph Exploration MVP
-```
-
-也就是说，复用 Stagehand 作为浏览器动作后端，但项目仍然掌控 SafeSym 需要的建模层：
-
-```text
-SauceDemo 真实页面
--> Stagehand 单步 observe/act
--> 项目自己的 before/after observation
--> schema_delta / typed_delta
--> 带 Stagehand evidence 的 WebKobeGraph edge
--> WebKobeGraph-to-PDDL projection
--> PDDL smoke report
--> SafeSym parser / safety injection / planner smoke
-```
-
-这会把短期重点从“自己写更强的 web agent”调整为“复用成熟网页操作能力来构建状态转移图”。Stagehand 可以发现并执行下一步浏览器动作，但项目仍然决定观察到了什么状态变化，以及哪些内容进入 WebKobeGraph、PDDL 和 SafeSym。
-
-第一阶段目标任务从 SauceDemo 登录页开始，到 `checkout_overview` 为止：
-
-```text
-login
--> inventory
--> inventory/cart_nonempty
--> cart
--> checkout_info
--> checkout_overview
-```
-
-MVP 暂时不点击 `Finish` / 最终下单，也不把 Stagehand 的完整 `agent()` 当作一次不透明的整任务执行。图构建循环仍然应保持单步 transition：
-
-```text
-observe before state
--> Stagehand observe/act 一个受约束动作
--> observe after state
--> compute observed deltas
--> append graph edge
-```
-
-本阶段主设计文档：
-
-```text
-docs/superpowers/specs/2026-07-17-stagehand-backed-webkobegraph-exploration-design.md
-```
-
-计划中的 Stagehand-backed smoke 命令：
-
-```powershell
-$env:STAGEHAND_SERVER = "local"
-$env:STAGEHAND_MODEL = "deepseek/<your-model-name>"
-$env:MODEL_API_KEY = "<your-deepseek-key>"
-python -m ai_web_explorer.safesym_bridge.cli web-kobe-saucedemo-stagehand-smoke `
-  --output outputs/saucedemo_stagehand_graph.json `
-  --stagehand-trace outputs/saucedemo_stagehand_trace.json `
-  --steps 10
-```
-
-如果使用自带模型 key，`MODEL_API_KEY` 是推荐的 Python SDK 入口。这个 runner
-会自动加载 `.env`，读取 `STAGEHAND_MODEL`，也会根据 `deepseek/...` 模型名自动读取
-`DEEPSEEK_API_KEY` 作为兼容别名。当前推荐使用 `STAGEHAND_SERVER=local`，这样
-Stagehand 执行动作和 Web-KOBE 做 before/after observation 的页面是同一个
-Playwright page。`STAGEHAND_API_URL` 可以用于自定义 Stagehand service endpoint；
-它不是 DeepSeek/OpenAI-compatible 的模型 provider base URL。
-
-它从 SauceDemo 登录页开始，目标是在 `checkout_overview` 停止，不能点击
-`Finish`。
-
-使用 `.env` 中的 `STAGEHAND_SERVER=local`、`STAGEHAND_MODEL=deepseek/deepseek-v4-pro`
-和 `MODEL_API_KEY` 后，真实运行已经能用 10 个 Stagehand-backed 低层动作到达
-`checkout_overview__0e208d5cb9`：
+在 `.env` 配置好本地 Stagehand 和用户模型 key 后，真实 SauceDemo run 用 10 个
+Stagehand-backed 低层动作到达 `checkout_overview`：
 
 ```text
 fill username
--> fill password
--> click Login
--> add Sauce Labs Backpack to cart
--> open cart
--> click Checkout
--> fill first name
--> fill last name
--> fill postal code
--> click Continue
+  -> fill password
+  -> click Login
+  -> add Sauce Labs Backpack to cart
+  -> open cart
+  -> click Checkout
+  -> fill first name
+  -> fill last name
+  -> fill postal code
+  -> click Continue
 ```
 
-该 WebKobeGraph 包含 11 个节点和 10 条边，随后对该图运行
-`web-kobe-pddl-smoke` 得到 `planning_ready=True`，且没有 undeclared predicates。
-进一步用 Fast Downward 求解投影出的 PDDL 时，可以得到一条 10 步计划，且计划
-顺序与真实观察到的 Stagehand 动作序列一致。这说明 Stagehand-backed 路线目前
-已经跑通到真实浏览器操作、图构建、PDDL 投影和外部 planner 消费，目标节点为
-`checkout_overview`。
+得到的 WebKobeGraph 有 11 个节点和 10 条边。PDDL smoke 报告
+`planning_ready=True`，没有 undeclared predicates；Fast Downward 能求出与真实动作
+序列一致的计划。
 
-Stagehand/AI SDK 会提示 DeepSeek 模型不支持当前 `responseFormat` 设置，但本次
-observe/act 调用仍然成功。
+这说明真实站点链路已经验证到图构建、PDDL 投影和外部 planner 消费。但它还不能证明
+我们已经有鲁棒的通用网页状态理解能力。
 
-这里最重要的架构解释是：
+## Stagehand 接入定位
+
+Stagehand 应该被理解为：
 
 ```text
 Stagehand = 动作发现 / 动作执行证据
@@ -664,140 +219,259 @@ Web-KOBE observer = 状态事实和 before/after delta
 WebKobeGraph/PDDL/SafeSym = 项目自己掌控的规划模型
 ```
 
-Stagehand 的描述可以作为“它尝试做了什么”的证据，但它不是状态身份、状态变化、
-安全触发规则或 PDDL 语义的真相来源。这些责任必须继续留在
-`grounded_web` / `safesym_bridge` 里；否则项目就会退化成一次不透明的
-web-agent run，而不是 SafeSym 可以消费的网页状态模型。
+Stagehand 的描述可以作为“它尝试做了什么”的证据，但它不是以下内容的真相来源：
 
-下一阶段的探索策略应该是 business-flow-guided，而不是 coverage-first。不同类型
-的网站有不同的代表性业务流程，图应该优先围绕这些业务流程构建。对于当前
-电商/checkout 目标，代表性流程是：
+- 状态身份；
+- 状态变化；
+- 安全触发规则；
+- PDDL predicates 或 effects；
+- 节点合并；
+- 任务是否成功。
 
-```text
-login 或 session setup
--> product selection
--> cart
--> checkout information
--> order review
--> pending sensitive order placement
-```
-
-在 v1 策略里，explorer 仍然应该记录每个节点上“当时可用但没有执行”的候选动作。
-这些记录会成为后续提高覆盖率的 frontier actions。当前阶段暂时不做 replay 旧路径、
-恢复浏览器 snapshot，或者回溯到旧节点继续执行这些 frontier action。恢复/回溯运行时
-很重要，但应该等状态观察模型更清楚之后再做。
-
-因此 v1 产物应该是：
+当前使用 Stagehand 的方式是单步 transition loop：
 
 ```text
-task-guided main path
-+ 每个节点的 unexecuted/frontier action records
-+ sensitive/pending action candidates
-+ 已执行边上的 before/after state deltas
+observe before state
+  -> Stagehand observe/act 一个受约束动作
+  -> observe after state
+  -> compute project-owned deltas
+  -> append WebKobeGraph edge
 ```
 
-这应该被视为 task-guided partial graph，而不是完整网站模型。后续可以增加
-`frontier_coverage_report`，显式报告 total nodes、executed edges、unexecuted action
-count、sensitive pending count、以及仍有 frontier actions 的节点数量。
+不要把主实现替换成一次不透明的 Stagehand `agent()` 整任务运行。`agent()` 后续可以
+作为外部 baseline，但 SafeSym 需要 transition-level evidence。
 
-Stagehand 路线目前最薄弱的部分仍然是状态观察。当前 SauceDemo observer 还是会
-读取已知 URL 和 selector，比如 checkout 表单字段和购物车 badge。这作为真实站点
-回归 benchmark 是可以接受的，但不能把它当成通用网页状态理解。下一步工程重点
-应该是在保持站点专用 observer 隔离于 `safesym_bridge` 的前提下，泛化状态观察信号。
+## 状态观察与 Planning Facts
 
-暂缓事项包括节点去重、商品卡片重复结构抽象、参数化动作、回放/回溯到旧 frontier
-节点、最终下单安全规则触发，以及把 Stagehand `agent()` 作为外部 baseline。
+状态观察是当前最大的短板。
 
-近期 Stagehand-backed 优先事项是：
+系统现在能收集 URL、title、可见控件、DOM 文本、表单字段、`[data-state]` 值，以及
+SauceDemo 应用专用 facts。这些都是有用证据，但它们本身不一定是好的 PDDL 输入。
 
-- 引入比 `[data-state]` 和 SauceDemo selector 更通用的状态信号提取；
-- 增加语义 action-labeling 层，在证据足够时把低层 Stagehand 操作映射成稳定的领域动作；
-- 表示 `Finish` / 最终下单这类敏感或 pending action，而不是在探索阶段盲目执行；
-- 把未执行候选记录为每个节点的 frontier actions，但暂缓 replay/backtracking 执行这些 frontier；
-- 改进 Stagehand trace 诊断，覆盖 invalid choice、parse/model warning、execution failure、navigation 和 no observed delta；
-- 保持 CDP/session 接线可复用，但不要把 SauceDemo 任务 prompt 移进通用探索层。
+PDDL 应该消费 planning-level facts，例如：
+
+```text
+logged_in
+product_list_visible
+cart_empty
+cart_nonempty
+checkout_started
+checkout_info_complete
+order_review_ready
+order_place_pending_sensitive
+order_completed
+error_visible
+```
+
+预期抽象栈是：
+
+```text
+raw browser evidence
+  -> structured observation facts
+  -> candidate planning facts
+  -> verified planning facts
+  -> PDDL predicates/effects
+```
+
+图里应该保留证据和不确定性。模型或启发式规则可以提出某个动作成功了，但只有经过验证
+的 planning facts 才能影响 planner-facing model。
+
+项目应该引入业务类型 profile，而不是盲目收集网页上的所有状态。
+`BusinessFlowProfile` 定义某一类网站需要让规划器理解什么，但不绑定某个具体网站的
+selector 或精确 URL。
+
+例如，电商 checkout profile 可以描述 `cart_nonempty`、
+`checkout_info_complete`、`order_place_pending_sensitive` 这类 facts 的语义和
+证据线索：
+
+```text
+fact: cart_nonempty
+meaning: the user has at least one item selected for purchase
+evidence hints:
+  - cart badge or item count indicates one or more items
+  - cart page lists at least one product
+  - product card indicates the item is selected or removable
+```
+
+边界应该是：
+
+```text
+BusinessFlowProfile = 规划器需要理解什么
+observers/verifiers = 如何在当前页面寻找证据
+site adapters = 可选的 benchmark-specific 稳定化
+```
+
+这样既比 SauceDemo 专用规则更通用，又比盲目收集所有状态高效得多。
+
+## 当前不足
+
+已知限制：
+
+- 通用状态抽象仍然偏浅；
+- 当前 PDDL 投影仍是较小的 STRIPS 子集；
+- 部分 action name 仍太底层，难以稳定匹配 SafeSym safety-rule patterns；
+- SauceDemo 仍是真实站点 benchmark，不是任意网站泛化证明；
+- 当前图是 task-guided partial graph，不是完整网站模型；
+- frontier actions 目前主要是记录概念，replay/backtracking 暂缓；
+- 节点去重和重复结构抽象还不成熟；
+- 安全保证只适用于已观察并编译出的模型。
+
+这些是研究阶段的正常限制。下一阶段应该优先补状态抽象。
+
+## 下一阶段：AI 辅助的状态变化抽取
+
+下一阶段主题是：
+
+```text
+VLM/LLM-assisted planning-state delta extraction
+```
+
+目标是在可控范围内积极使用大模型，同时保留项目自己的验证和图真相。
+
+建议流程：
+
+```text
+before screenshot
+  + after screenshot
+  + executed action
+  + task goal
+  + before/after structured observation
+  -> VLM visual delta summary
+  -> LLM/parser normalized candidate planning delta
+  -> structured verification
+  -> verified planning facts/effects
+  -> WebKobeGraph edge
+  -> PDDL projection
+```
+
+截图采集只是本地 evidence collection，不表示当前配置的 Stagehand 文本模型可以处理
+图片。后续如果启用视觉分析，应通过单独的 VLM provider/config 接入，并把 VLM 输出作为
+candidate planning facts 交给 structured verification。
+
+当前实现显式保持这个隔离：
+
+```text
+Stagehand = operation backend
+visual_delta / OpenAIVisualDeltaProvider = observation-side VLM support
+PlanningFactVerifier = structured verification before graph/PDDL truth
+```
+
+职责划分：
+
+```text
+VLM = 视觉证据和任务相关变化假设
+LLM/parser = schema 规整和 predicate 选择
+structured verifier = DOM/URL/控件/表单证据校验
+WebKobeGraph/PDDL/SafeSym = verified planning model
+```
+
+VLM 不能直接写入 PDDL facts。LLM 不应该自由发明 predicates。verifier 应该保留
+不确定性，例如：
+
+```text
+candidate_success = true
+verified_success = false or uncertain
+reason = cart badge/button/URL evidence did not support the claim
+```
+
+这样系统既能利用大模型做语义压缩，又不会把规划模型变成不透明的模型输出记录。
+
+当前 `PlanningDelta` 结构有意同时保留 candidate facts 和 verified facts，但近期链路
+先假设 profile-level planning facts 足够可信，可以直接投影到 PDDL。这样能优先验证
+VLM/LLM-to-PDDL 的完整路径。structured verifier 后续再作为稳定性和可信度增强，
+负责判断哪些 candidate facts 应该升级为 verified facts。
+
+## 近期路线图
+
+建议下一步：
+
+1. 增加 LLM/parser normalizer，把总结映射到 profile predicate 集合。
+2. 扩展 structured verifier，让它能结合模型候选、DOM、URL、控件、表单值和已知状态信号。
+3. 在配置 `OPENAI_API_KEY` 和 vision-capable model 后，运行 Stagehand SauceDemo
+   OpenAI visual delta smoke。
+4. 先用 `local_checkout` 验证 profile-verified planning deltas，再用 SauceDemo 验证。
+
+暂缓事项：
+
+- 完整 frontier replay/backtracking；
+- 鲁棒节点合并和模板级页面抽象；
+- 商品卡片重复结构抽象；
+- 参数化动作；
+- checkout 之外的网站类型 profile；
+- Stagehand `agent()` baseline 对比。
 
 ## 重要文件
 
 ```text
 src/ai_web_explorer/grounded_web/
-  当前通用探索主线包。
+  通用探索和图构建包。
 
 src/ai_web_explorer/grounded_web/automation_backend.py
   浏览器自动化后端接口。
 
-src/ai_web_explorer/grounded_web/playwright_backend.py
-  当前 Playwright-backed 自动化实现。
-
-src/ai_web_explorer/grounded_web/dom_observer.py
-  DOM 可交互候选元素提取。
-
-src/ai_web_explorer/grounded_web/llm_action_selector.py
-  实验性 LLM selector 边界：只从 grounded action id 中选择，并记录可诊断的决策 trace。
-
-src/ai_web_explorer/grounded_web/openai_action_selector.py
-  OpenAI Chat Completions-backed selector provider。
-
-src/ai_web_explorer/grounded_web/stagehand_actions.py
-  Stagehand action/trace 契约，以及到 BrowserAction 记录的转换。
-
 src/ai_web_explorer/grounded_web/stagehand_backend.py
-  AutomationBackend wrapper，把 Stagehand 观察到的动作暴露给 Web-KOBE explorer，同时保留项目自己的图记录。
+  Stagehand-backed AutomationBackend wrapper。
 
 src/ai_web_explorer/grounded_web/stagehand_sdk_provider.py
-  可选 Stagehand SDK provider、模型 key 加载、local/remote server 设置，以及本地 CDP browser attach。
-
-src/ai_web_explorer/safesym_bridge/openai_selector_smoke.py
-  针对当前 `cart_count=0` 问题的离线 SauceDemo action-selection smoke。
-
-src/ai_web_explorer/grounded_web/graph.py
-  WebKobeGraph 数据结构。
+  Stagehand SDK 设置、模型 key 加载、本地 server/CDP 接线。
 
 src/ai_web_explorer/grounded_web/explorer.py
-  Web-KOBE 风格探索器。
+  Web-KOBE 探索循环。
 
-src/ai_web_explorer/safesym_bridge/web_observation.py
-  观察数据模型：facts、evidence、page identity。
+src/ai_web_explorer/grounded_web/graph.py
+src/ai_web_explorer/grounded_web/graph_manager.py
+  WebKobeGraph 数据结构和管理。
 
-src/ai_web_explorer/safesym_bridge/state_observer.py
-  SauceDemo-specific 状态事实提取。
+src/ai_web_explorer/grounded_web/state_facts.py
+src/ai_web_explorer/grounded_web/typed_delta.py
+  通用状态事实和 delta 提取。
 
-src/ai_web_explorer/safesym_bridge/observed_graph.py
-  SauceDemo 回归路线中的 WebObservedGraph。
+src/ai_web_explorer/grounded_web/business_profile.py
+  BusinessFlowProfile 和 planning-delta schema，用于 profile-guided 状态抽象。
+
+src/ai_web_explorer/grounded_web/planning_fact_verifier.py
+  structured verifier，把观察到的状态变化映射成 profile-guided PlanningDelta。
+
+src/ai_web_explorer/grounded_web/visual_delta.py
+  模型无关的 visual delta summarizer，用截图证据生成 candidate planning facts。
+
+src/ai_web_explorer/grounded_web/openai_visual_delta.py
+  OpenAI vision provider，用于 visual delta summarization。它属于观察层，不属于
+  Stagehand 操作层。
+
+src/ai_web_explorer/safesym_bridge/
+  SafeSym/PDDL 投影和应用级回归包。
 
 src/ai_web_explorer/safesym_bridge/web_kobe_pddl_projector.py
-  当前主线的 WebKobeGraph 到 PDDL 投影器。
+  当前主线 WebKobeGraph-to-PDDL projector。
 
 src/ai_web_explorer/safesym_bridge/web_kobe_pddl_smoke.py
-  WebKobeGraph PDDL artifact 的 planning-readiness 和静态一致性 smoke report。
+  PDDL planning-readiness smoke。
+
+src/ai_web_explorer/safesym_bridge/state_observer.py
+src/ai_web_explorer/safesym_bridge/saucedemo_adapter.py
+  SauceDemo-specific 观察和回归支持。
 
 docs/safesym-bridge.md
-  SafeSym bridge 使用说明和命令参考。
+  SafeSym bridge 命令参考。
 ```
 
-## 给下一次对话的接力说明
+## 接力说明
 
-如果开启新对话，建议先让 AI 阅读：
+新会话中，先阅读英文版 overview。中文版主要用于人工审阅，但两份文档必须同步。
 
-```text
-docs/current-project-overview.md
-```
+开始新的架构或实现工作前，先复述这些点：
 
-中文版主要供人工审阅项目方向；AI 接力时默认读英文版即可。但每次更新进展时，
-英文版和中文版都需要同步更新。
-
-然后要求它复述：
-
-- 项目最终目标；
-- 当前主线 pipeline；
-- `grounded_web` 与 `safesym_bridge` 的边界；
-- 最近完成的清理；
-- 下一阶段要优先解决的问题。
+- 项目服务 SafeSym，不是通用 web-agent 产品；
+- `grounded_web` 负责探索和构建 WebKobeGraph；
+- `safesym_bridge` 负责投影和验证 planner-facing artifacts；
+- Stagehand 是 action backend/evidence source，不是图真相来源；
+- 下一阶段优先解决 verified planning-state delta extraction。
 
 默认工作方式：
 
 ```text
 单智能体
 省 token
-不要使用 subagent / 多智能体，除非用户明确允许
+不要使用 subagent，除非用户明确允许
 ```

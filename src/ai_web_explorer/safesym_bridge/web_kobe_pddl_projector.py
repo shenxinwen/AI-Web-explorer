@@ -18,6 +18,7 @@ from ai_web_explorer.grounded_web.graph import (
     WebKobeGraph,
     WebKobeNode,
 )
+from ai_web_explorer.grounded_web.business_profile import PlanningDelta
 
 PROJECTABLE_EDGE_STATUSES = {
     "verified",
@@ -125,6 +126,20 @@ def _execution_trace_from_dict(data: dict[str, Any]) -> ExecutionTrace:
     )
 
 
+def _planning_delta_from_dict(data: dict[str, Any] | None) -> PlanningDelta | None:
+    if data is None:
+        return None
+    return PlanningDelta(
+        candidate_added_facts=list(data.get("candidate_added_facts", [])),
+        candidate_removed_facts=list(data.get("candidate_removed_facts", [])),
+        verified_added_facts=list(data.get("verified_added_facts", [])),
+        verified_removed_facts=list(data.get("verified_removed_facts", [])),
+        evidence=list(data.get("evidence", [])),
+        confidence=data.get("confidence"),
+        uncertainty_reason=data.get("uncertainty_reason"),
+    )
+
+
 def _edge_from_dict(data: dict[str, Any]) -> WebKobeEdge:
     return WebKobeEdge(
         source_node_id=str(data["source_node_id"]),
@@ -134,13 +149,13 @@ def _edge_from_dict(data: dict[str, Any]) -> WebKobeEdge:
         capability=None,
         target_observation=str(data.get("target_observation", "")),
         observed_delta=[
-            _observed_delta_from_dict(item)
-            for item in data.get("observed_delta", [])
+            _observed_delta_from_dict(item) for item in data.get("observed_delta", [])
         ],
         schema_delta=data.get("schema_delta"),
         execution_trace=_execution_trace_from_dict(
             dict(data.get("execution_trace", {}))
         ),
+        planning_delta=_planning_delta_from_dict(data.get("planning_delta")),
         visit_count=int(data.get("visit_count", 1)),
         status=str(data.get("status", "verified")),
         evidence=[_evidence_from_dict(item) for item in data.get("evidence", [])],
@@ -184,6 +199,23 @@ def _is_zero_or_negative_number(value: object) -> bool:
 
 def _positive_predicate(name: str) -> str:
     return f"{_predicate(name)}_positive"
+
+
+def _unique_facts(*fact_lists: list[str]) -> list[str]:
+    facts: list[str] = []
+    for fact_list in fact_lists:
+        for fact in fact_list:
+            if fact not in facts:
+                facts.append(fact)
+    return facts
+
+
+def _trusted_added_planning_facts(delta: PlanningDelta) -> list[str]:
+    return _unique_facts(delta.candidate_added_facts, delta.verified_added_facts)
+
+
+def _trusted_removed_planning_facts(delta: PlanningDelta) -> list[str]:
+    return _unique_facts(delta.candidate_removed_facts, delta.verified_removed_facts)
 
 
 def _state_predicate_for_value(key: str, value: object) -> str | None:
@@ -233,13 +265,9 @@ def _action_name(raw: str) -> str:
 def _delta_predicate_change(delta) -> tuple[str, bool] | None:
     if isinstance(delta.after, bool):
         return _predicate(delta.field), delta.after
-    if _is_zero_or_negative_number(delta.before) and _is_positive_number(
-        delta.after
-    ):
+    if _is_zero_or_negative_number(delta.before) and _is_positive_number(delta.after):
         return _positive_predicate(delta.field), True
-    if _is_positive_number(delta.before) and _is_zero_or_negative_number(
-        delta.after
-    ):
+    if _is_positive_number(delta.before) and _is_zero_or_negative_number(delta.after):
         return _positive_predicate(delta.field), False
     return None
 
@@ -250,6 +278,15 @@ def _effect_predicates_for_edge(edge) -> list[str]:
         change = _delta_predicate_change(delta)
         if change is not None:
             predicates.append(change[0])
+    if edge.planning_delta is not None:
+        predicates.extend(
+            _predicate(fact)
+            for fact in _trusted_added_planning_facts(edge.planning_delta)
+        )
+        predicates.extend(
+            _predicate(fact)
+            for fact in _trusted_removed_planning_facts(edge.planning_delta)
+        )
     return predicates
 
 
@@ -267,6 +304,11 @@ def _effects_for_edge(edge) -> list[str]:
             effects.append(f"({pred})")
         else:
             effects.append(f"(not ({pred}))")
+    if edge.planning_delta is not None:
+        for fact in _trusted_added_planning_facts(edge.planning_delta):
+            effects.append(f"({_predicate(fact)})")
+        for fact in _trusted_removed_planning_facts(edge.planning_delta):
+            effects.append(f"(not ({_predicate(fact)}))")
     return effects
 
 

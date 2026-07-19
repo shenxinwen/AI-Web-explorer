@@ -16,6 +16,7 @@ from ai_web_explorer.grounded_web.graph import (
 from ai_web_explorer.grounded_web.controller import (
     WebKobeExplorationController,
 )
+from ai_web_explorer.grounded_web.business_profile import ecommerce_checkout_profile
 from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
 from ai_web_explorer.safesym_bridge.web_kobe_playwright_adapter import (
     WebKobePlaywrightAdapter,
@@ -30,6 +31,9 @@ from ai_web_explorer.grounded_web.llm_action_selector import (
 )
 from ai_web_explorer.grounded_web.openai_action_selector import (
     create_openai_chat_selection_provider_from_env,
+)
+from ai_web_explorer.grounded_web.openai_visual_delta import (
+    create_openai_visual_delta_provider_from_env,
 )
 from ai_web_explorer.grounded_web.stagehand_backend import (
     StagehandAutomationBackend,
@@ -115,6 +119,7 @@ async def run_web_kobe_exploration(
         Callable[[LlmActionSelectionRequest], LlmActionSelectionResult] | None
     ) = None,
     selector_trace_path: Path | None = None,
+    screenshot_dir: Path | None = None,
 ) -> Path:
     from playwright.async_api import async_playwright
 
@@ -127,12 +132,14 @@ async def run_web_kobe_exploration(
                 page,
                 app_name=app_name,
                 page_id=page_id,
+                screenshot_dir=screenshot_dir,
             )
             explorer = WebKobeExplorer(
                 adapter=adapter,
                 semantic_assistor=DeterministicSemanticAssistor(app=app_name),
                 goal=goal,
                 action_selector=action_selector,
+                capture_screenshots=screenshot_dir is not None,
             )
             controller = WebKobeExplorationController(explorer)
             result = await controller.run(max_steps=max(steps, 1))
@@ -238,14 +245,26 @@ async def run_saucedemo_stagehand_step(
     steps: int = 8,
     provider=None,
     model: str | None = None,
+    screenshot_dir: Path | None = None,
+    visual_delta_provider=None,
+    use_openai_visual_delta: bool = False,
+    visual_delta_model: str | None = None,
 ) -> Path:
     from playwright.async_api import async_playwright
 
+    if (visual_delta_provider is not None or use_openai_visual_delta) and (
+        screenshot_dir is None
+    ):
+        raise ValueError("screenshot_dir is required for visual delta analysis.")
+    resolved_visual_delta_provider = visual_delta_provider
+    if resolved_visual_delta_provider is None and use_openai_visual_delta:
+        resolved_visual_delta_provider = create_openai_visual_delta_provider_from_env(
+            model=visual_delta_model,
+        )
+
     cdp_port = _pick_free_port() if provider is None else None
     launch_args = (
-        [f"--remote-debugging-port={cdp_port}"]
-        if cdp_port is not None
-        else None
+        [f"--remote-debugging-port={cdp_port}"] if cdp_port is not None else None
     )
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(
@@ -268,6 +287,7 @@ async def run_saucedemo_stagehand_step(
             base_adapter = WebKobePlaywrightAdapter(
                 page,
                 app_name="saucedemo",
+                screenshot_dir=screenshot_dir,
             )
             adapter = StagehandAutomationBackend(
                 base_backend=base_adapter,
@@ -287,6 +307,13 @@ async def run_saucedemo_stagehand_step(
                 adapter=adapter,
                 semantic_assistor=DeterministicSemanticAssistor(app="saucedemo"),
                 goal="Reach SauceDemo checkout overview without placing the order.",
+                capture_screenshots=screenshot_dir is not None,
+                business_profile=(
+                    ecommerce_checkout_profile()
+                    if resolved_visual_delta_provider is not None
+                    else None
+                ),
+                visual_delta_provider=resolved_visual_delta_provider,
             )
             controller = WebKobeExplorationController(explorer)
             result = await controller.run(max_steps=max(steps, 1))

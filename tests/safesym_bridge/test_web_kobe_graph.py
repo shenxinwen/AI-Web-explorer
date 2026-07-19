@@ -17,6 +17,7 @@ from ai_web_explorer.grounded_web.graph import (
     WebKobeGraph,
     WebKobeNode,
 )
+from ai_web_explorer.grounded_web.business_profile import PlanningDelta
 
 
 def test_web_kobe_graph_serializes_node_edge_and_evidence():
@@ -124,6 +125,12 @@ def test_web_kobe_graph_serializes_node_edge_and_evidence():
             add_effects=["logged_in", "at_home"],
             del_effects=["at_login"],
         ),
+        planning_delta=PlanningDelta(
+            candidate_added_facts=["logged_in"],
+            verified_added_facts=["logged_in"],
+            evidence=["login controls were replaced by shopping controls"],
+            confidence=0.95,
+        ),
         visit_count=1,
         status="verified",
         evidence=evidence,
@@ -145,3 +152,4 @@ def test_web_kobe_graph_serializes_node_edge_and_evidence():
     assert data["nodes"][0]["capabilities"][0]["capability_id"] == "submit_login_form"
     assert data["edges"][0]["status"] == "verified"
     assert data["edges"][0]["pddl_hint"]["add_effects"] == ["logged_in", "at_home"]
+    assert data["edges"][0]["planning_delta"]["verified_added_facts"] == ["logged_in"]

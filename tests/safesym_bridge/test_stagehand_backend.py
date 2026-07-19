@@ -33,6 +33,15 @@ class FakeBaseBackend:
         raise AssertionError("Stagehand wrapper must execute through provider")
 
 
+class ScreenshotBaseBackend(FakeBaseBackend):
+    def __init__(self):
+        self.captured = []
+
+    async def capture_screenshot(self, label):
+        self.captured.append(label)
+        return f"outputs/{label}.png"
+
+
 class FakeStagehandProvider:
     def __init__(self):
         self.observed = []
@@ -72,9 +81,7 @@ async def test_stagehand_backend_exposes_one_observed_action_as_interactable():
 
     actions = await backend.list_interactables(state)
 
-    assert provider.observed == [
-        ("Log in and reach checkout overview.", "login")
-    ]
+    assert provider.observed == [("Log in and reach checkout overview.", "login")]
     assert actions[0]["semantic_id"] == "stagehand_000_click_login_button"
     assert actions[0]["description"] == "Click the Login button"
     assert actions[0]["locator"] == "#login-button"
@@ -150,3 +157,18 @@ async def test_stagehand_backend_retains_previous_observed_actions_for_cached_no
 
     assert await backend.execute(first_actions[0]) is True
     assert provider.acted[0].description == "Click Login"
+
+
+@pytest.mark.anyio
+async def test_stagehand_backend_delegates_screenshot_capture_to_base_backend():
+    base = ScreenshotBaseBackend()
+    backend = StagehandAutomationBackend(
+        base_backend=base,
+        provider=FakeStagehandProvider(),
+        goal="Log in.",
+    )
+
+    path = await backend.capture_screenshot("before_0001")
+
+    assert path == "outputs/before_0001.png"
+    assert base.captured == ["before_0001"]

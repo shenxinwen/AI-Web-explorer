@@ -98,6 +98,7 @@ class FakePage:
         self.action_locator = action_locator or FakeActionLocator()
         self.waits = []
         self.load_state_waits = []
+        self.screenshots = []
 
     async def title(self):
         return "Fixture Shop"
@@ -118,6 +119,9 @@ class FakePage:
 
     async def wait_for_load_state(self, state, timeout=None):
         self.load_state_waits.append((state, timeout))
+
+    async def screenshot(self, *, path):
+        self.screenshots.append(path)
 
 
 @pytest.mark.anyio
@@ -346,3 +350,29 @@ async def test_execute_reports_locator_not_visible():
 
     assert result is False
     assert adapter.last_execution_error == "locator_not_visible"
+
+
+@pytest.mark.anyio
+async def test_capture_screenshot_writes_to_configured_directory(tmp_path):
+    page = FakePage()
+    adapter = WebKobePlaywrightAdapter(
+        page,
+        page_id="fixture_shop",
+        screenshot_dir=tmp_path,
+    )
+
+    path = await adapter.capture_screenshot("before_0001")
+
+    assert path == str(tmp_path / "before_0001.png")
+    assert page.screenshots == [str(tmp_path / "before_0001.png")]
+
+
+@pytest.mark.anyio
+async def test_capture_screenshot_returns_none_without_directory():
+    page = FakePage()
+    adapter = WebKobePlaywrightAdapter(page, page_id="fixture_shop")
+
+    path = await adapter.capture_screenshot("before_0001")
+
+    assert path is None
+    assert page.screenshots == []
