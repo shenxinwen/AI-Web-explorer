@@ -146,7 +146,7 @@ backend 负责操作浏览器。Web-KOBE 层负责图，以及这次状态转移
 最近一次保留测试的状态：
 
 ```text
-all retained tests: 182 passed, 2 skipped
+all retained tests: 183 passed, 2 skipped
 ```
 
 Playwright browser tests 在 restricted sandbox 中可能因为浏览器 spawn 权限失败。

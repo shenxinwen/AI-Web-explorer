@@ -129,6 +129,9 @@ and also accepts provider-specific aliases such as `DEEPSEEK_API_KEY` for
 which lets Stagehand operate on the same Playwright page that Web-KOBE observes.
 `STAGEHAND_API_URL` may be set for a custom Stagehand service endpoint; it is
 not the DeepSeek/OpenAI-compatible model provider base URL.
+If the local Stagehand SEA server starts listening but does not become ready
+within the SDK default window, set `STAGEHAND_LOCAL_READY_TIMEOUT_S` to a larger
+value such as `45`.
 
 The current verified DeepSeek-backed local run reached `checkout_overview` in
 10 low-level Stagehand steps and did not click `Finish`. A follow-up

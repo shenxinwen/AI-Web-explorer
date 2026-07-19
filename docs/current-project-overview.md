@@ -155,7 +155,7 @@ Completed and validated:
 Latest retained test status:
 
 ```text
-all retained tests: 182 passed, 2 skipped
+all retained tests: 183 passed, 2 skipped
 ```
 
 Playwright browser tests may still fail inside a restricted sandbox with browser

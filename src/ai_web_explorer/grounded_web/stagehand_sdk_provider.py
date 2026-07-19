@@ -156,6 +156,9 @@ async def create_async_stagehand_provider_from_env(
         ),
         "server": server,
     }
+    local_ready_timeout = env.get("STAGEHAND_LOCAL_READY_TIMEOUT_S")
+    if local_ready_timeout:
+        client_options["local_ready_timeout_s"] = float(local_ready_timeout)
     stagehand_api_url = env.get("STAGEHAND_API_URL")
     if stagehand_api_url:
         client_options["base_url"] = stagehand_api_url

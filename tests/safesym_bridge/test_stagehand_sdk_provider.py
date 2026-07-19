@@ -230,6 +230,38 @@ async def test_create_stagehand_provider_passes_stagehand_api_url(monkeypatch):
     ]
 
 
+@pytest.mark.anyio
+async def test_create_stagehand_provider_passes_local_ready_timeout(monkeypatch):
+    calls = []
+
+    class FakeSessions:
+        async def start(self, **kwargs):
+            return FakeSession()
+
+    class FakeAsyncStagehand:
+        def __init__(self, **kwargs):
+            calls.append(kwargs)
+            self.sessions = FakeSessions()
+
+    monkeypatch.setitem(
+        sys.modules,
+        "stagehand",
+        SimpleNamespace(AsyncStagehand=FakeAsyncStagehand),
+    )
+
+    await create_async_stagehand_provider_from_env(
+        load_dotenv=lambda: None,
+        environ={
+            "STAGEHAND_SERVER": "local",
+            "STAGEHAND_MODEL": "deepseek/deepseek-v4-pro",
+            "MODEL_API_KEY": "model-test-key",
+            "STAGEHAND_LOCAL_READY_TIMEOUT_S": "30",
+        },
+    )
+
+    assert calls[0]["local_ready_timeout_s"] == 30.0
+
+
 class FakeAction:
     def __init__(self, data):
         self.data = data
