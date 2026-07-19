@@ -136,9 +136,13 @@ backend 负责操作浏览器。Web-KOBE 层负责图，以及这次状态转移
 - 旧的自研通用动作执行层已经移除；
 - Playwright 仍用于受控 fixture 和 fallback 操作；
 - Stagehand 已作为真实站点动作发现/执行后端接入；
+- 本地 Stagehand 启动时会确保 localhost 绕过系统代理/VPN 设置，避免 SDK
+  readiness check 无法访问本地 SEA server；
 - WebKobeGraph 可以投影成 PDDL；
 - PDDL 投影当前会把 candidate 和 verified planning-delta facts 都视作可信 effects，
   用于先跑通 VLM/LLM-to-PDDL 端到端链路；
+- 当结构化 delta 和 planning delta 描述同一个 predicate change 时，PDDL 投影会去重
+  repeated effects；
 - 生成的 PDDL 可以做图可达性和静态一致性检查；
 - Fast Downward 可以求解生成的 base plan；
 - SafeSym 可以在 smoke 场景中 parse、注入安全动作，并求解 safe plan。
@@ -146,7 +150,7 @@ backend 负责操作浏览器。Web-KOBE 层负责图，以及这次状态转移
 最近一次保留测试的状态：
 
 ```text
-all retained tests: 183 passed, 2 skipped
+all retained tests: 186 passed, 2 skipped
 ```
 
 Playwright browser tests 在 restricted sandbox 中可能因为浏览器 spawn 权限失败。
@@ -206,8 +210,15 @@ fill username
 `planning_ready=True`，没有 undeclared predicates；Fast Downward 能求出与真实动作
 序列一致的计划。
 
-这说明真实站点链路已经验证到图构建、PDDL 投影和外部 planner 消费。但它还不能证明
-我们已经有鲁棒的通用网页状态理解能力。
+后续一次完整链路 run 使用 DeepSeek 作为 Stagehand 文本动作选择模型，并使用 `gpt-4o`
+作为观察侧 visual delta 模型，对 before/after screenshots 做状态变化总结。该 run 产生了
+`cart_nonempty`、`checkout_started`、`order_review_ready` 等 candidate planning facts，
+并完成 WebKobeGraph -> PDDL -> SafeSym parse/injection -> Fast Downward base/safe plan。
+safe plan 与 base plan 一致，因为这次 run 按设计停在 `checkout_overview`，没有包含最终
+`Finish` / `order_place_confirm` 动作。
+
+这说明真实站点链路已经验证到截图证据驱动的 planning-delta 捕获、图构建、PDDL 投影和外部
+planner 消费。但它还不能证明我们已经有鲁棒的通用网页状态理解能力。
 
 ## Stagehand 接入定位
 
@@ -387,8 +398,8 @@ VLM/LLM-to-PDDL 的完整路径。structured verifier 后续再作为稳定性�
 
 1. 增加 LLM/parser normalizer，把总结映射到 profile predicate 集合。
 2. 扩展 structured verifier，让它能结合模型候选、DOM、URL、控件、表单值和已知状态信号。
-3. 在配置 `OPENAI_API_KEY` 和 vision-capable model 后，运行 Stagehand SauceDemo
-   OpenAI visual delta smoke。
+3. 当明确要测试 SafeSym safety-trigger insertion 时，扩展 Stagehand SauceDemo smoke，
+   让图包含最终下单动作。
 4. 先用 `local_checkout` 验证 profile-verified planning deltas，再用 SauceDemo 验证。
 
 暂缓事项：

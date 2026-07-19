@@ -5,6 +5,8 @@ import pytest
 
 from ai_web_explorer.grounded_web.stagehand_sdk_provider import (
     StagehandSdkProvider,
+    _append_no_proxy_hosts,
+    _ensure_local_stagehand_no_proxy,
     create_async_stagehand_provider_from_env,
 )
 
@@ -260,6 +262,25 @@ async def test_create_stagehand_provider_passes_local_ready_timeout(monkeypatch)
     )
 
     assert calls[0]["local_ready_timeout_s"] == 30.0
+
+
+def test_append_no_proxy_hosts_preserves_existing_entries():
+    assert (
+        _append_no_proxy_hosts("example.test, localhost")
+        == "example.test,localhost,127.0.0.1"
+    )
+
+
+def test_ensure_local_stagehand_no_proxy_sets_common_env_names():
+    env = {
+        "NO_PROXY": "example.test",
+        "no_proxy": "localhost",
+    }
+
+    _ensure_local_stagehand_no_proxy(env)
+
+    assert env["NO_PROXY"] == "example.test,127.0.0.1,localhost"
+    assert env["no_proxy"] == "localhost,127.0.0.1"
 
 
 class FakeAction:

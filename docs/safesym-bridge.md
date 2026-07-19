@@ -132,11 +132,22 @@ not the DeepSeek/OpenAI-compatible model provider base URL.
 If the local Stagehand SEA server starts listening but does not become ready
 within the SDK default window, set `STAGEHAND_LOCAL_READY_TIMEOUT_S` to a larger
 value such as `45`.
+The project Stagehand provider also ensures `127.0.0.1` and `localhost` are
+added to `NO_PROXY` / `no_proxy` for local runs, because some Windows VPN or
+system proxy setups otherwise route the SDK localhost readiness check through a
+proxy and cause a timeout before SauceDemo is reached.
 
 The current verified DeepSeek-backed local run reached `checkout_overview` in
 10 low-level Stagehand steps and did not click `Finish`. A follow-up
 `web-kobe-pddl-smoke` over `outputs/saucedemo_stagehand_graph.json` reported
 `planning_ready=True` and no undeclared predicates.
+
+A later full-chain run used DeepSeek for Stagehand and `gpt-4o` for
+observation-side visual delta with `--openai-visual-delta`,
+`--visual-delta-model gpt-4o`, and `--screenshot-dir`. It produced a graph,
+screenshots, PDDL artifacts, and SafeSym base/safe plans. No safety actions
+were inserted in that run because the graph stopped at `checkout_overview` and
+did not include the final order placement action.
 
 ## SauceDemo Role
 

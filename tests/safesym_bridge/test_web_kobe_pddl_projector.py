@@ -329,6 +329,58 @@ def test_compile_web_kobe_graph_to_pddl_trusts_candidate_planning_delta():
     assert "(not (checkout_started))" in artifacts.domain
 
 
+def test_compile_web_kobe_graph_to_pddl_deduplicates_repeated_effects():
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="cart",
+        total_steps_completed=1,
+        nodes=[
+            _node("cart", "cart", {"checkout_started": False}),
+            _node("checkout", "checkout", {"checkout_started": True}),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="cart",
+                target_node_id="checkout",
+                instruction="start checkout",
+                action=BrowserAction("click", "button.checkout", "start_checkout"),
+                capability=None,
+                target_observation="checkout info",
+                observed_delta=[
+                    ObservedDelta(
+                        "checkout_started",
+                        False,
+                        True,
+                        "state_indicator_change",
+                        evidence=[Evidence(source="unit_test")],
+                    )
+                ],
+                schema_delta={
+                    "checkout_started": {"before": False, "after": True}
+                },
+                execution_trace=ExecutionTrace(
+                    "click",
+                    "button.checkout",
+                    "checkout",
+                    {},
+                    "cart",
+                    "checkout",
+                    True,
+                ),
+                planning_delta=PlanningDelta(
+                    candidate_added_facts=["checkout_started"],
+                    verified_added_facts=["checkout_started"],
+                ),
+                status="succeeded_with_observed_change",
+            )
+        ],
+    )
+
+    artifacts = compile_web_kobe_graph_to_pddl(graph, goal_node_id="checkout")
+
+    assert artifacts.domain.count("(checkout_started)") == 2
+
+
 def test_compile_web_kobe_graph_to_pddl_excludes_non_projectable_edges():
     nodes = [
         _node("start", "start", {}),

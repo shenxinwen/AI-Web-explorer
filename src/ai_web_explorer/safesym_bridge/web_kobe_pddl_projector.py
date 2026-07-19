@@ -210,6 +210,14 @@ def _unique_facts(*fact_lists: list[str]) -> list[str]:
     return facts
 
 
+def _unique_strings(items: list[str]) -> list[str]:
+    unique: list[str] = []
+    for item in items:
+        if item not in unique:
+            unique.append(item)
+    return unique
+
+
 def _trusted_added_planning_facts(delta: PlanningDelta) -> list[str]:
     return _unique_facts(delta.candidate_added_facts, delta.verified_added_facts)
 
@@ -309,7 +317,7 @@ def _effects_for_edge(edge) -> list[str]:
             effects.append(f"({_predicate(fact)})")
         for fact in _trusted_removed_planning_facts(edge.planning_delta):
             effects.append(f"(not ({_predicate(fact)}))")
-    return effects
+    return _unique_strings(effects)
 
 
 def _is_projectable_edge(edge) -> bool:

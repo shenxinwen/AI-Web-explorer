@@ -144,9 +144,13 @@ Completed and validated:
 - The old from-scratch action execution layer has been removed.
 - Playwright remains available for controlled fixtures and fallback operation.
 - Stagehand is integrated as a real-site action discovery/execution backend.
+- Local Stagehand startup now ensures localhost bypasses system proxy/VPN
+  settings so SDK readiness checks can reach the local SEA server.
 - WebKobeGraph can be projected into PDDL.
 - PDDL projection currently treats candidate and verified planning-delta facts
   as trusted effects so the VLM/LLM-to-PDDL chain can be validated end to end.
+- PDDL projection deduplicates repeated effects when structured deltas and
+  planning deltas describe the same predicate change.
 - Generated PDDL can be checked for graph reachability and static consistency.
 - Fast Downward can solve the generated base plan.
 - SafeSym can parse, inject safety actions, and solve the safe plan in smoke
@@ -155,7 +159,7 @@ Completed and validated:
 Latest retained test status:
 
 ```text
-all retained tests: 183 passed, 2 skipped
+all retained tests: 186 passed, 2 skipped
 ```
 
 Playwright browser tests may still fail inside a restricted sandbox with browser
@@ -217,9 +221,18 @@ The resulting WebKobeGraph had 11 nodes and 10 edges. PDDL smoke reported
 `planning_ready=True` with no undeclared predicates, and Fast Downward produced
 a plan matching the observed action sequence.
 
-This validates the real-site chain up to graph construction, PDDL projection,
-and external planner consumption. It does not yet validate robust generic state
-understanding.
+A later full-chain run used DeepSeek for Stagehand text action selection and
+`gpt-4o` for observation-side visual delta over before/after screenshots. It
+produced candidate planning facts such as `cart_nonempty`,
+`checkout_started`, and `order_review_ready`, projected the graph to PDDL, and
+passed SafeSym parse/injection plus base/safe Fast Downward solves. The safe
+plan matched the base plan because this run intentionally stopped at
+`checkout_overview` and did not include the final `Finish` /
+`order_place_confirm` action.
+
+This validates the real-site chain up to screenshot-backed planning-delta
+capture, graph construction, PDDL projection, and external planner
+consumption. It does not yet validate robust generic state understanding.
 
 ## Stagehand Integration
 
@@ -416,8 +429,8 @@ Recommended next steps:
 1. Add an LLM/parser normalizer that maps summaries to the profile predicate set.
 2. Extend the structured verifier to combine model candidates with DOM, URL,
    controls, form values, and known state signals.
-3. Run the Stagehand SauceDemo smoke with OpenAI visual delta when
-   `OPENAI_API_KEY` and a vision-capable model are configured.
+3. Extend the Stagehand SauceDemo smoke to include the final order placement
+   action when explicitly testing SafeSym safety-trigger insertion.
 4. Validate profile-verified planning deltas on `local_checkout` first, then
    SauceDemo.
 
