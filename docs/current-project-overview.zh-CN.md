@@ -669,18 +669,51 @@ Stagehand 的描述可以作为“它尝试做了什么”的证据，但它不�
 `grounded_web` / `safesym_bridge` 里；否则项目就会退化成一次不透明的
 web-agent run，而不是 SafeSym 可以消费的网页状态模型。
 
+下一阶段的探索策略应该是 business-flow-guided，而不是 coverage-first。不同类型
+的网站有不同的代表性业务流程，图应该优先围绕这些业务流程构建。对于当前
+电商/checkout 目标，代表性流程是：
+
+```text
+login 或 session setup
+-> product selection
+-> cart
+-> checkout information
+-> order review
+-> pending sensitive order placement
+```
+
+在 v1 策略里，explorer 仍然应该记录每个节点上“当时可用但没有执行”的候选动作。
+这些记录会成为后续提高覆盖率的 frontier actions。当前阶段暂时不做 replay 旧路径、
+恢复浏览器 snapshot，或者回溯到旧节点继续执行这些 frontier action。恢复/回溯运行时
+很重要，但应该等状态观察模型更清楚之后再做。
+
+因此 v1 产物应该是：
+
+```text
+task-guided main path
++ 每个节点的 unexecuted/frontier action records
++ sensitive/pending action candidates
++ 已执行边上的 before/after state deltas
+```
+
+这应该被视为 task-guided partial graph，而不是完整网站模型。后续可以增加
+`frontier_coverage_report`，显式报告 total nodes、executed edges、unexecuted action
+count、sensitive pending count、以及仍有 frontier actions 的节点数量。
+
 Stagehand 路线目前最薄弱的部分仍然是状态观察。当前 SauceDemo observer 还是会
 读取已知 URL 和 selector，比如 checkout 表单字段和购物车 badge。这作为真实站点
 回归 benchmark 是可以接受的，但不能把它当成通用网页状态理解。下一步工程重点
 应该是在保持站点专用 observer 隔离于 `safesym_bridge` 的前提下，泛化状态观察信号。
 
-暂缓事项包括节点去重、商品卡片重复结构抽象、参数化动作、最终下单安全规则触发，以及把 Stagehand `agent()` 作为外部 baseline。
+暂缓事项包括节点去重、商品卡片重复结构抽象、参数化动作、回放/回溯到旧 frontier
+节点、最终下单安全规则触发，以及把 Stagehand `agent()` 作为外部 baseline。
 
 近期 Stagehand-backed 优先事项是：
 
 - 引入比 `[data-state]` 和 SauceDemo selector 更通用的状态信号提取；
 - 增加语义 action-labeling 层，在证据足够时把低层 Stagehand 操作映射成稳定的领域动作；
 - 表示 `Finish` / 最终下单这类敏感或 pending action，而不是在探索阶段盲目执行；
+- 把未执行候选记录为每个节点的 frontier actions，但暂缓 replay/backtracking 执行这些 frontier；
 - 改进 Stagehand trace 诊断，覆盖 invalid choice、parse/model warning、execution failure、navigation 和 no observed delta；
 - 保持 CDP/session 接线可复用，但不要把 SauceDemo 任务 prompt 移进通用探索层。
 

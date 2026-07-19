@@ -779,6 +779,41 @@ PDDL semantics. The project must keep those responsibilities in
 `grounded_web`/`safesym_bridge`; otherwise the work collapses back into an
 opaque web-agent run instead of a SafeSym-facing web-state model.
 
+The next exploration strategy should be business-flow-guided rather than
+coverage-first. Different website types have different representative business
+flows, and the graph should be built around those flows first. For the current
+e-commerce/check-out target, the representative flow is:
+
+```text
+login or session setup
+  -> product selection
+  -> cart
+  -> checkout information
+  -> order review
+  -> pending sensitive order placement
+```
+
+During this v1 strategy, the explorer should still record candidates that were
+available but not executed at each node. These records become future frontier
+actions for later coverage improvement. The current stage should not yet try to
+replay old paths, restore browser snapshots, or backtrack to old nodes to finish
+those frontier actions. That recovery/backtracking runtime is important, but it
+is deferred until the project has a cleaner state-observation model.
+
+The intended v1 output is therefore:
+
+```text
+task-guided main path
+  + per-node unexecuted/frontier action records
+  + sensitive/pending action candidates
+  + before/after state deltas on executed edges
+```
+
+This should be treated as a task-guided partial graph, not a complete website
+model. A future `frontier_coverage_report` should make that explicit by
+reporting fields such as total nodes, executed edges, unexecuted action count,
+sensitive pending count, and nodes with remaining frontier actions.
+
 The weakest remaining part of the Stagehand path is state observation. The
 current SauceDemo observer still reads known URLs and selectors such as
 checkout fields and cart badges. That is acceptable as a real-site regression
@@ -787,8 +822,9 @@ step should generalize observation signals while keeping app-specific observers
 isolated in `safesym_bridge`.
 
 Deferred work includes node deduplication, repeated product-card abstraction,
-parameterized actions, final order-placement safety triggers, and using
-Stagehand `agent()` only as an external baseline.
+parameterized actions, replay/backtracking to old frontier nodes, final
+order-placement safety triggers, and using Stagehand `agent()` only as an
+external baseline.
 
 Near-term Stagehand-backed priorities are:
 
@@ -798,6 +834,8 @@ Near-term Stagehand-backed priorities are:
   to stable domain-level actions when enough evidence exists;
 - represent sensitive or pending actions such as `Finish` / order placement
   without blindly executing them during graph exploration;
+- record unexecuted candidates as per-node frontier actions, while deferring
+  replay/backtracking execution of those frontiers;
 - improve Stagehand trace diagnostics around invalid choices, parse/model
   warnings, failed execution, navigation, and no observed delta;
 - keep CDP/session wiring reusable without moving SauceDemo task prompts into
