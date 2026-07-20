@@ -262,6 +262,10 @@ class WebKobeExplorer:
             )
             visual_planning_delta = visual_result.planning_delta
             execution_metadata["visual_delta_trace"] = visual_result.trace.to_dict()
+            if visual_result.trace.visual_change_summary:
+                execution_metadata["visual_change_summary"] = (
+                    visual_result.trace.visual_change_summary
+                )
         edge = WebKobeEdge(
             source_node_id=source_id,
             target_node_id=target_id,

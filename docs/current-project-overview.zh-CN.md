@@ -332,6 +332,10 @@ site adapters = 可选的 benchmark-specific 稳定化
 - 通用状态抽象仍然偏浅；
 - 当前 PDDL 投影仍是较小的 STRIPS 子集；
 - 部分 action name 仍太底层，难以稳定匹配 SafeSym safety-rule patterns；
+- 当前 visual-delta 路径是让 VLM provider 直接返回 profile 内的 candidate facts，
+  还没有拆成“纯视觉变化总结 -> 独立 LLM/parser normalizer 映射 facts”两步；
+- structured verifier 仍主要基于 signature diff。DOM、URL、控件、表单值和截图
+  已经是证据来源，但还没有被一个通用的 profile-driven verifier 综合校验；
 - SauceDemo 仍是真实站点 benchmark，不是任意网站泛化证明；
 - 当前图是 task-guided partial graph，不是完整网站模型；
 - frontier actions 目前主要是记录概念，replay/backtracking 暂缓；
@@ -378,6 +382,33 @@ visual_delta / OpenAIVisualDeltaProvider = observation-side VLM support
 PlanningFactVerifier = structured verification before graph/PDDL truth
 ```
 
+重要的当前状态区分：
+
+```text
+现在已经实现：
+  before/after screenshots
+  + profile fact set
+  -> VLM provider 返回 visible_change_summary
+     + candidate_added_facts / candidate_removed_facts
+  -> 代码拒绝 profile 外的未知 facts
+  -> WebKobeGraph edge metadata 记录 visual_change_summary，方便人工审阅
+  -> 轻量 signature verifier 补充结构化 verified facts
+
+短期实验：
+  保持单次 VLM 调用
+  要求同时输出 human-readable visual_change_summary 和 profile-bounded
+  candidate facts
+  先跑 SauceDemo final-order，检查每条边的 candidate delta 是否足够支撑
+  PDDL/SafeSym 实验
+
+后续方向：
+  before/after screenshots
+  -> VLM 只总结视觉变化
+  -> LLM/parser 把总结映射到预设 profile fact 集合
+  -> structured verifier 用 DOM/URL/控件/表单证据校验候选 facts，
+     再决定哪些可以成为 planner-facing truth
+```
+
 职责划分：
 
 ```text
@@ -407,11 +438,16 @@ VLM/LLM-to-PDDL 的完整路径。structured verifier 后续再作为稳定性�
 
 建议下一步：
 
-1. 增加 LLM/parser normalizer，把总结映射到 profile predicate 集合。
-2. 扩展 structured verifier，让它能结合模型候选、DOM、URL、控件、表单值和已知状态信号。
-3. 在配置 `OPENAI_API_KEY` 和 vision-capable model 后，运行 Stagehand SauceDemo
-   OpenAI visual delta smoke。
-4. 先用 `local_checkout` 验证 profile-verified planning deltas，再用 SauceDemo 验证。
+1. 先在 SauceDemo final-order 上运行简单单 VLM visual delta 实验，并审阅每条边的
+   `visual_change_summary` 和 candidate facts。
+2. 用同样的 profile-bounded visual delta 方法尝试另一个电商网站和一个论坛类网站，
+   观察抽象在哪里失效。
+3. 如果单调用路径难诊断或不稳定，再把 visual-delta 拆成 VLM 视觉总结和 LLM/parser
+   fact normalization 两步。
+4. 增加 LLM/parser normalizer，把总结映射到 profile predicate 集合。
+5. 扩展 structured verifier，让它能结合模型候选、DOM、URL、控件、表单值和已知状态信号。
+6. 先用 `local_checkout` 验证 profile-verified planning deltas，再用 SauceDemo 和额外
+   benchmark 网站验证。
 
 暂缓事项：
 

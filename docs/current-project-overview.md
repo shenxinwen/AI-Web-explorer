@@ -357,6 +357,12 @@ Known limits:
 - Current PDDL projection is intentionally small and STRIPS-oriented.
 - Some action names are still too low-level to match SafeSym safety-rule
   patterns reliably.
+- The current visual-delta path asks the VLM provider to return candidate
+  profile facts directly. It does not yet split the work into a pure visual
+  change summary followed by a separate LLM/parser normalizer.
+- The structured verifier is still signature-diff based. DOM, URL, controls,
+  form values, and screenshots are evidence sources, but they are not yet
+  combined by a general profile-driven verifier.
 - SauceDemo remains a real-site benchmark, not proof of arbitrary-site
   generality.
 - The graph is currently task-guided and partial, not a complete website model.
@@ -408,6 +414,33 @@ visual_delta / OpenAIVisualDeltaProvider = observation-side VLM support
 PlanningFactVerifier = structured verification before graph/PDDL truth
 ```
 
+Important current-status distinction:
+
+```text
+implemented now:
+  before/after screenshots
+  + profile fact set
+  -> VLM provider returns visible_change_summary
+     + candidate_added_facts / candidate_removed_facts
+  -> code rejects unknown facts outside the profile
+  -> WebKobeGraph edge metadata records the visual_change_summary for review
+  -> lightweight signature verifier adds structured verified facts
+
+short-term experiment:
+  keep the single VLM call
+  require both a human-readable visual_change_summary and profile-bounded
+  candidate facts
+  run SauceDemo final-order and inspect whether each edge's candidate delta is
+  good enough for PDDL/SafeSym experiments
+
+later direction:
+  before/after screenshots
+  -> VLM visual change summary only
+  -> LLM/parser maps that summary into the preset profile fact set
+  -> structured verifier checks those candidates against DOM/URL/control/form
+     evidence before they become planner-facing truth
+```
+
 Responsibilities:
 
 ```text
@@ -440,13 +473,18 @@ facts.
 
 Recommended next steps:
 
-1. Add an LLM/parser normalizer that maps summaries to the profile predicate set.
-2. Extend the structured verifier to combine model candidates with DOM, URL,
+1. Run the simple single-VLM visual delta experiment on SauceDemo final-order
+   and inspect `visual_change_summary` plus candidate facts on each edge.
+2. Try the same profile-bounded visual delta approach on one other e-commerce
+   site and one forum-like site to understand where the abstraction breaks.
+3. Split the current visual-delta path into VLM visual summary and LLM/parser
+   fact normalization stages if the single-call path is hard to diagnose or
+   too unstable.
+4. Add an LLM/parser normalizer that maps summaries to the profile predicate set.
+5. Extend the structured verifier to combine model candidates with DOM, URL,
    controls, form values, and known state signals.
-3. Run the Stagehand SauceDemo smoke with OpenAI visual delta when
-   `OPENAI_API_KEY` and a vision-capable model are configured.
-4. Validate profile-verified planning deltas on `local_checkout` first, then
-   SauceDemo.
+6. Validate profile-verified planning deltas on `local_checkout` first, then
+   SauceDemo and the additional benchmark sites.
 
 Deferred work:
 

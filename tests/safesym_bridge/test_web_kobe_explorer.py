@@ -257,7 +257,8 @@ async def test_explore_one_step_records_visual_delta_candidates_without_verifyin
     def visual_provider(prompt, *, before_screenshot_path, after_screenshot_path):
         provider_calls.append((before_screenshot_path, after_screenshot_path))
         return (
-            '{"candidate_added_facts":["order_place_pending_sensitive"],'
+            '{"visible_change_summary":"Final confirmation control appears.",'
+            '"candidate_added_facts":["order_place_pending_sensitive"],'
             '"candidate_removed_facts":[],'
             '"evidence":["final confirmation control appears visible"],'
             '"confidence":0.7}'
@@ -280,6 +281,10 @@ async def test_explore_one_step_records_visual_delta_candidates_without_verifyin
         "cart_nonempty",
     ]
     assert edge.planning_delta.verified_added_facts == ["cart_nonempty"]
+    assert (
+        edge.execution_trace.metadata["visual_change_summary"]
+        == "Final confirmation control appears."
+    )
     assert edge.execution_trace.metadata["visual_delta_trace"]["status"] == "summarized"
 
 
