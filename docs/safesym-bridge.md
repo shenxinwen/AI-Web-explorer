@@ -119,6 +119,17 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-saucedemo-stagehand-smoke 
   --steps 10
 ```
 
+To use SauceDemo as a full checkout safety-trigger regression, explicitly allow
+the final `Finish` click and give the runner enough steps:
+
+```powershell
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-saucedemo-stagehand-smoke `
+  --output outputs/saucedemo_stagehand_final_order_graph.json `
+  --stagehand-trace outputs/saucedemo_stagehand_final_order_trace.json `
+  --steps 12 `
+  --allow-final-order
+```
+
 This command is opt-in because real Stagehand runs require external credentials
 and browser/model access. Default tests use fake providers.
 
@@ -145,9 +156,10 @@ The current verified DeepSeek-backed local run reached `checkout_overview` in
 A later full-chain run used DeepSeek for Stagehand and `gpt-4o` for
 observation-side visual delta with `--openai-visual-delta`,
 `--visual-delta-model gpt-4o`, and `--screenshot-dir`. It produced a graph,
-screenshots, PDDL artifacts, and SafeSym base/safe plans. No safety actions
-were inserted in that run because the graph stopped at `checkout_overview` and
-did not include the final order placement action.
+screenshots, PDDL artifacts, and SafeSym base/safe plans. When
+`--allow-final-order` is omitted, no safety actions are expected because the
+graph stops at `checkout_overview` and does not include the final order
+placement action.
 
 ## SauceDemo Role
 

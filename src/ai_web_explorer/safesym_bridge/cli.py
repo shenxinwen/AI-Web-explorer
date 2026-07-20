@@ -278,6 +278,14 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     saucedemo_stagehand_parser.add_argument(
+        "--allow-final-order",
+        action="store_true",
+        help=(
+            "Allow the SauceDemo test flow to click Finish and reach checkout "
+            "complete. Use only for the SauceDemo test site."
+        ),
+    )
+    saucedemo_stagehand_parser.add_argument(
         "--headed",
         action="store_true",
         help="Show the browser window while running the smoke.",
@@ -380,6 +388,7 @@ def main(argv: list[str] | None = None) -> int:
                     screenshot_dir=args.screenshot_dir,
                     use_openai_visual_delta=args.openai_visual_delta,
                     visual_delta_model=args.visual_delta_model,
+                    allow_final_order=args.allow_final_order,
                 )
             )
         else:

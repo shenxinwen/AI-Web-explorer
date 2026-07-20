@@ -512,6 +512,7 @@ def test_main_web_kobe_saucedemo_stagehand_smoke_wires_runner(
         screenshot_dir=None,
         use_openai_visual_delta=False,
         visual_delta_model=None,
+        allow_final_order=False,
     ):
         calls.append(
             (
@@ -523,6 +524,7 @@ def test_main_web_kobe_saucedemo_stagehand_smoke_wires_runner(
                 screenshot_dir,
                 use_openai_visual_delta,
                 visual_delta_model,
+                allow_final_order,
             )
         )
         output_path.write_text(
@@ -554,6 +556,7 @@ def test_main_web_kobe_saucedemo_stagehand_smoke_wires_runner(
             "--openai-visual-delta",
             "--visual-delta-model",
             "gpt-4o-mini",
+            "--allow-final-order",
         ]
     )
 
@@ -568,5 +571,6 @@ def test_main_web_kobe_saucedemo_stagehand_smoke_wires_runner(
             tmp_path / "shots",
             True,
             "gpt-4o-mini",
+            True,
         )
     ]

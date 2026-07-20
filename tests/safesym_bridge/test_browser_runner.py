@@ -905,6 +905,93 @@ async def test_run_saucedemo_stagehand_step_wires_visual_delta_provider(
 
 
 @pytest.mark.anyio
+async def test_run_saucedemo_stagehand_step_can_allow_final_order(
+    tmp_path,
+    monkeypatch,
+):
+    import playwright.async_api as playwright_async_api
+
+    output_path = tmp_path / "stagehand_graph.json"
+    calls = []
+
+    class FakePage:
+        async def goto(self, url):
+            pass
+
+    class FakeBrowser:
+        async def new_page(self):
+            return FakePage()
+
+        async def close(self):
+            pass
+
+    class FakeChromium:
+        async def launch(self, *, headless=True, args=None):
+            return FakeBrowser()
+
+    class FakePlaywright:
+        chromium = FakeChromium()
+
+    class FakePlaywrightContext:
+        async def __aenter__(self):
+            return FakePlaywright()
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+    class FakeBaseAdapter:
+        def __init__(self, page, *, app_name, page_id=None, screenshot_dir=None):
+            self.app_name = app_name
+
+    class FakeStagehandBackend:
+        def __init__(self, *, base_backend, provider, goal):
+            self.app_name = base_backend.app_name
+            calls.append(("stagehand_goal", goal))
+
+    class FakeController:
+        def __init__(self, explorer):
+            calls.append(("explorer_goal", explorer.goal))
+
+        async def run(self, *, max_steps=1):
+            return WebKobeExplorationResult(
+                graph=WebKobeGraph(
+                    app="saucedemo",
+                    start_node_id="login",
+                    total_steps_completed=max_steps,
+                ),
+                summary=WebKobeExplorationSummary(
+                    requested_steps=max_steps,
+                    steps_completed=max_steps,
+                    stop_reason="max_steps",
+                    node_count=0,
+                    edge_count=0,
+                    failed_edge_count=0,
+                ),
+            )
+
+    monkeypatch.setattr(
+        playwright_async_api,
+        "async_playwright",
+        lambda: FakePlaywrightContext(),
+    )
+    monkeypatch.setattr(browser_runner, "WebKobePlaywrightAdapter", FakeBaseAdapter)
+    monkeypatch.setattr(browser_runner, "StagehandAutomationBackend", FakeStagehandBackend)
+    monkeypatch.setattr(browser_runner, "WebKobeExplorationController", FakeController)
+
+    await browser_runner.run_saucedemo_stagehand_step(
+        output_path,
+        provider=object(),
+        allow_final_order=True,
+    )
+
+    assert ("click Finish" in calls[0][1])
+    assert calls[1] == (
+        "explorer_goal",
+        "Complete the SauceDemo checkout flow through the confirmation page.",
+    )
+
+
+@pytest.mark.anyio
 async def test_run_saucedemo_stagehand_step_creates_openai_visual_delta_provider(
     tmp_path,
     monkeypatch,
