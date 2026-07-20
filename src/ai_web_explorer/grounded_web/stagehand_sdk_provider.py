@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-from collections.abc import MutableMapping
 from typing import Any, Callable, Mapping
 
 from ai_web_explorer.grounded_web.stagehand_actions import (
@@ -21,9 +20,7 @@ def _to_dict(value: Any) -> dict[str, Any]:
         return dict(value.model_dump(exclude_none=True))
     if hasattr(value, "__dict__"):
         return {
-            key: item
-            for key, item in vars(value).items()
-            if not key.startswith("_")
+            key: item for key, item in vars(value).items() if not key.startswith("_")
         }
     return {"value": value}
 
@@ -99,32 +96,7 @@ _PROVIDER_KEY_ENV_BY_MODEL_PREFIX = {
     "together": "TOGETHER_API_KEY",
     "xai": "XAI_API_KEY",
 }
-
-_LOCAL_STAGEHAND_NO_PROXY_HOSTS = ("127.0.0.1", "localhost")
-
-
-def _append_no_proxy_hosts(value: str | None) -> str:
-    existing = [
-        item.strip()
-        for item in (value or "").split(",")
-        if item.strip()
-    ]
-    seen = {item.lower() for item in existing}
-    for host in _LOCAL_STAGEHAND_NO_PROXY_HOSTS:
-        if host.lower() not in seen:
-            existing.append(host)
-            seen.add(host.lower())
-    return ",".join(existing)
-
-
-def _ensure_local_stagehand_no_proxy(
-    env: MutableMapping[str, str],
-) -> None:
-    # Stagehand's Python SDK uses httpx with trust_env=True while polling the
-    # local SEA server. On Windows/VPN setups, localhost can otherwise be sent
-    # through a system proxy and the local ready check times out.
-    for key in ("NO_PROXY", "no_proxy"):
-        env[key] = _append_no_proxy_hosts(env.get(key))
+_LOCAL_NO_PROXY_HOSTS = ("localhost", "127.0.0.1", "::1")
 
 
 def _resolve_model_name(
@@ -151,6 +123,31 @@ def _resolve_model_api_key(*, model_name: str, env: Mapping[str, str]) -> str | 
     return None
 
 
+def _merge_no_proxy(value: str | None) -> str:
+    existing = [item.strip() for item in (value or "").split(",") if item.strip()]
+    merged = list(existing)
+    existing_lower = {item.lower() for item in existing}
+    for host in _LOCAL_NO_PROXY_HOSTS:
+        if host.lower() not in existing_lower:
+            merged.append(host)
+    return ",".join(merged)
+
+
+def _ensure_local_no_proxy() -> None:
+    os.environ["NO_PROXY"] = _merge_no_proxy(os.environ.get("NO_PROXY"))
+    os.environ["no_proxy"] = _merge_no_proxy(os.environ.get("no_proxy"))
+
+
+def _resolve_local_ready_timeout(env: Mapping[str, str]) -> float | None:
+    raw_timeout = env.get("STAGEHAND_LOCAL_READY_TIMEOUT_S")
+    if raw_timeout is None:
+        return None
+    try:
+        return float(raw_timeout)
+    except ValueError as error:
+        raise ValueError("STAGEHAND_LOCAL_READY_TIMEOUT_S must be a number.") from error
+
+
 async def create_async_stagehand_provider_from_env(
     *,
     model_name: str | None = None,
@@ -175,8 +172,8 @@ async def create_async_stagehand_provider_from_env(
     server = env.get("STAGEHAND_SERVER", "local").lower()
     if server not in {"local", "remote"}:
         raise ValueError("STAGEHAND_SERVER must be either 'local' or 'remote'.")
-    if server == "local" and env is os.environ:
-        _ensure_local_stagehand_no_proxy(os.environ)
+    if server == "local":
+        _ensure_local_no_proxy()
 
     client_options: dict[str, Any] = {
         "model_api_key": _resolve_model_api_key(
@@ -185,12 +182,12 @@ async def create_async_stagehand_provider_from_env(
         ),
         "server": server,
     }
-    local_ready_timeout = env.get("STAGEHAND_LOCAL_READY_TIMEOUT_S")
-    if local_ready_timeout:
-        client_options["local_ready_timeout_s"] = float(local_ready_timeout)
     stagehand_api_url = env.get("STAGEHAND_API_URL")
     if stagehand_api_url:
         client_options["base_url"] = stagehand_api_url
+    local_ready_timeout = _resolve_local_ready_timeout(env)
+    if local_ready_timeout is not None:
+        client_options["local_ready_timeout_s"] = local_ready_timeout
     client = AsyncStagehand(**client_options)
     session_options: dict[str, Any] = {"model_name": resolved_model_name}
     if server == "local":

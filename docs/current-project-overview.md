@@ -144,13 +144,13 @@ Completed and validated:
 - The old from-scratch action execution layer has been removed.
 - Playwright remains available for controlled fixtures and fallback operation.
 - Stagehand is integrated as a real-site action discovery/execution backend.
-- Local Stagehand startup now ensures localhost bypasses system proxy/VPN
-  settings so SDK readiness checks can reach the local SEA server.
 - WebKobeGraph can be projected into PDDL.
 - PDDL projection currently treats candidate and verified planning-delta facts
   as trusted effects so the VLM/LLM-to-PDDL chain can be validated end to end.
-- PDDL projection deduplicates repeated effects when structured deltas and
-  planning deltas describe the same predicate change.
+- PDDL projection can translate low-level browser action names into
+  SafeSym-facing business action names when transition evidence supports it;
+  for example, an edge that creates `order_created` projects as
+  `order_place_confirm`.
 - Generated PDDL can be checked for graph reachability and static consistency.
 - Fast Downward can solve the generated base plan.
 - SafeSym can parse, inject safety actions, and solve the safe plan in smoke
@@ -159,7 +159,7 @@ Completed and validated:
 Latest retained test status:
 
 ```text
-all retained tests: 186 passed, 2 skipped
+all retained tests: 183 passed, 2 skipped
 ```
 
 Playwright browser tests may still fail inside a restricted sandbox with browser
@@ -221,18 +221,26 @@ The resulting WebKobeGraph had 11 nodes and 10 edges. PDDL smoke reported
 `planning_ready=True` with no undeclared predicates, and Fast Downward produced
 a plan matching the observed action sequence.
 
-A later full-chain run used DeepSeek for Stagehand text action selection and
-`gpt-4o` for observation-side visual delta over before/after screenshots. It
-produced candidate planning facts such as `cart_nonempty`,
-`checkout_started`, and `order_review_ready`, projected the graph to PDDL, and
-passed SafeSym parse/injection plus base/safe Fast Downward solves. The safe
-plan matched the base plan because this run intentionally stopped at
-`checkout_overview` and did not include the final `Finish` /
-`order_place_confirm` action.
+For the SauceDemo test site, the Stagehand smoke also has an explicit
+`--allow-final-order` mode. That mode lets the runner click `Finish` and reach
+`checkout_complete` so the full order-confirmation safety path can be tested.
+The default remains safer and stops at checkout overview.
 
-This validates the real-site chain up to screenshot-backed planning-delta
-capture, graph construction, PDDL projection, and external planner
-consumption. It does not yet validate robust generic state understanding.
+The current verified final-order run reached `checkout_complete` in 11
+Stagehand-backed transitions. The generated PDDL projected the final low-level
+click as `order_place_confirm`; SafeSym with `configs/constraint_rules.json`
+inserted:
+
+```text
+check_human_confirmation_order_place_confirm
+```
+
+Use `constraint_rules.json` for injection smoke runs. `safety_rules.json` is
+for risk labeling and does not contain the check-action injection config.
+
+This validates the real-site chain up to graph construction, PDDL projection,
+and external planner consumption. It does not yet validate robust generic state
+understanding.
 
 ## Stagehand Integration
 
@@ -253,6 +261,12 @@ not the source of truth for:
 - PDDL predicates or effects;
 - node merging;
 - task success.
+
+Likewise, Stagehand's low-level action label is not necessarily the
+planner-facing action name. The PDDL projection layer may map a transition such
+as "click Finish and `order_created` becomes true" to the business action
+`order_place_confirm`, because SafeSym rules operate on planning semantics, not
+tool-specific click labels.
 
 The project currently uses Stagehand in a one-transition-at-a-time loop:
 
@@ -343,6 +357,12 @@ Known limits:
 - Current PDDL projection is intentionally small and STRIPS-oriented.
 - Some action names are still too low-level to match SafeSym safety-rule
   patterns reliably.
+- The current visual-delta path asks the VLM provider to return candidate
+  profile facts directly. It does not yet split the work into a pure visual
+  change summary followed by a separate LLM/parser normalizer.
+- The structured verifier is still signature-diff based. DOM, URL, controls,
+  form values, and screenshots are evidence sources, but they are not yet
+  combined by a general profile-driven verifier.
 - SauceDemo remains a real-site benchmark, not proof of arbitrary-site
   generality.
 - The graph is currently task-guided and partial, not a complete website model.
@@ -394,6 +414,33 @@ visual_delta / OpenAIVisualDeltaProvider = observation-side VLM support
 PlanningFactVerifier = structured verification before graph/PDDL truth
 ```
 
+Important current-status distinction:
+
+```text
+implemented now:
+  before/after screenshots
+  + profile fact set
+  -> VLM provider returns visible_change_summary
+     + candidate_added_facts / candidate_removed_facts
+  -> code rejects unknown facts outside the profile
+  -> WebKobeGraph edge metadata records the visual_change_summary for review
+  -> lightweight signature verifier adds structured verified facts
+
+short-term experiment:
+  keep the single VLM call
+  require both a human-readable visual_change_summary and profile-bounded
+  candidate facts
+  run SauceDemo final-order and inspect whether each edge's candidate delta is
+  good enough for PDDL/SafeSym experiments
+
+later direction:
+  before/after screenshots
+  -> VLM visual change summary only
+  -> LLM/parser maps that summary into the preset profile fact set
+  -> structured verifier checks those candidates against DOM/URL/control/form
+     evidence before they become planner-facing truth
+```
+
 Responsibilities:
 
 ```text
@@ -426,13 +473,18 @@ facts.
 
 Recommended next steps:
 
-1. Add an LLM/parser normalizer that maps summaries to the profile predicate set.
-2. Extend the structured verifier to combine model candidates with DOM, URL,
+1. Run the simple single-VLM visual delta experiment on SauceDemo final-order
+   and inspect `visual_change_summary` plus candidate facts on each edge.
+2. Try the same profile-bounded visual delta approach on one other e-commerce
+   site and one forum-like site to understand where the abstraction breaks.
+3. Split the current visual-delta path into VLM visual summary and LLM/parser
+   fact normalization stages if the single-call path is hard to diagnose or
+   too unstable.
+4. Add an LLM/parser normalizer that maps summaries to the profile predicate set.
+5. Extend the structured verifier to combine model candidates with DOM, URL,
    controls, form values, and known state signals.
-3. Extend the Stagehand SauceDemo smoke to include the final order placement
-   action when explicitly testing SafeSym safety-trigger insertion.
-4. Validate profile-verified planning deltas on `local_checkout` first, then
-   SauceDemo.
+6. Validate profile-verified planning deltas on `local_checkout` first, then
+   SauceDemo and the additional benchmark sites.
 
 Deferred work:
 

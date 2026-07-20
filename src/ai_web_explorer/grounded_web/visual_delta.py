@@ -30,6 +30,7 @@ class VisualDeltaTrace:
     raw_response: str
     llm_response: dict[str, Any] | None
     status: str
+    visual_change_summary: str | None = None
     error_type: str | None = None
     error_message: str | None = None
 
@@ -41,6 +42,7 @@ class VisualDeltaTrace:
                 dict(self.llm_response) if self.llm_response is not None else None
             ),
             "status": self.status,
+            "visual_change_summary": self.visual_change_summary,
             "error_type": self.error_type,
             "error_message": self.error_message,
         }
@@ -89,6 +91,7 @@ def _trace(
     raw_response: str = "",
     llm_response: dict[str, Any] | None = None,
     status: str,
+    visual_change_summary: str | None = None,
     error_type: str | None = None,
     error_message: str | None = None,
 ) -> VisualDeltaTrace:
@@ -97,6 +100,7 @@ def _trace(
         raw_response=raw_response,
         llm_response=llm_response,
         status=status,
+        visual_change_summary=visual_change_summary,
         error_type=error_type,
         error_message=error_message,
     )
@@ -146,6 +150,20 @@ def summarize_visual_delta(
         )
 
     allowed = _fact_ids(request.profile)
+    visual_change_summary = parsed.get("visible_change_summary")
+    if not isinstance(visual_change_summary, str) or not visual_change_summary.strip():
+        return VisualDeltaResult(
+            planning_delta=_empty_delta(),
+            trace=_trace(
+                prompt=prompt,
+                raw_response=raw_response,
+                llm_response=parsed,
+                status="failed",
+                error_type="missing_visual_change_summary",
+                error_message="Visual delta response must include visible_change_summary.",
+            ),
+        )
+
     candidate_added = _string_list(parsed.get("candidate_added_facts"))
     candidate_removed = _string_list(parsed.get("candidate_removed_facts"))
     unknown = sorted(
@@ -180,6 +198,7 @@ def summarize_visual_delta(
             raw_response=raw_response,
             llm_response=parsed,
             status="summarized",
+            visual_change_summary=visual_change_summary.strip(),
         ),
     )
 

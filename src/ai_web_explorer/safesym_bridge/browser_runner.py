@@ -44,25 +44,21 @@ from ai_web_explorer.grounded_web.stagehand_sdk_provider import (
 
 
 SAUCEDEMO_CHECKOUT_OVERVIEW_STAGEHAND_GOAL = (
-    "Choose exactly one next low-level browser action for the "
-    "SauceDemo checkout task. If the username field is empty, "
-    "fill it with standard_user. If the username is filled and "
-    "the password field is empty, fill it with secret_sauce. "
-    "If both login fields are filled, click Login. After "
-    "login, add one item to the cart, open the cart, start "
-    "checkout, fill checkout information, and stop on checkout "
-    "overview. Do not click Finish."
+    "Choose exactly one next low-level browser action for the SauceDemo "
+    "checkout task. If the username field is empty, fill it with standard_user. "
+    "If the username is filled and the password field is empty, fill it with "
+    "secret_sauce. If both login fields are filled, click Login. After login, "
+    "add one item to the cart, open the cart, start checkout, fill checkout "
+    "information, and stop on checkout overview. Do not click Finish."
 )
 SAUCEDEMO_CHECKOUT_COMPLETE_STAGEHAND_GOAL = (
-    "Choose exactly one next low-level browser action for the "
-    "SauceDemo checkout task. If the username field is empty, "
-    "fill it with standard_user. If the username is filled and "
-    "the password field is empty, fill it with secret_sauce. "
-    "If both login fields are filled, click Login. After "
-    "login, add one item to the cart, open the cart, start "
-    "checkout, fill checkout information, continue to the "
-    "checkout overview, click Finish, and stop when the checkout "
-    "complete page is visible."
+    "Choose exactly one next low-level browser action for the SauceDemo "
+    "checkout task. If the username field is empty, fill it with standard_user. "
+    "If the username is filled and the password field is empty, fill it with "
+    "secret_sauce. If both login fields are filled, click Login. After login, "
+    "add one item to the cart, open the cart, start checkout, fill checkout "
+    "information, continue to checkout overview, click Finish, and stop when "
+    "the checkout complete confirmation page is visible."
 )
 SAUCEDEMO_CHECKOUT_OVERVIEW_EXPLORER_GOAL = (
     "Reach SauceDemo checkout overview without placing the order."

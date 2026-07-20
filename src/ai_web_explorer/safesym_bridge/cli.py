@@ -281,8 +281,8 @@ def main(argv: list[str] | None = None) -> int:
         "--allow-final-order",
         action="store_true",
         help=(
-            "Allow the SauceDemo test flow to click Finish and reach checkout "
-            "complete. Use only for the SauceDemo test site."
+            "Allow the SauceDemo test-site smoke to click Finish and reach "
+            "checkout complete. By default the run stops at checkout overview."
         ),
     )
     saucedemo_stagehand_parser.add_argument(

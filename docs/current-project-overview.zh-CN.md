@@ -136,13 +136,11 @@ backend 负责操作浏览器。Web-KOBE 层负责图，以及这次状态转移
 - 旧的自研通用动作执行层已经移除；
 - Playwright 仍用于受控 fixture 和 fallback 操作；
 - Stagehand 已作为真实站点动作发现/执行后端接入；
-- 本地 Stagehand 启动时会确保 localhost 绕过系统代理/VPN 设置，避免 SDK
-  readiness check 无法访问本地 SEA server；
 - WebKobeGraph 可以投影成 PDDL；
 - PDDL 投影当前会把 candidate 和 verified planning-delta facts 都视作可信 effects，
   用于先跑通 VLM/LLM-to-PDDL 端到端链路；
-- 当结构化 delta 和 planning delta 描述同一个 predicate change 时，PDDL 投影会去重
-  repeated effects；
+- 当状态转移证据支持时，PDDL 投影层可以把低层浏览器动作名翻译成 SafeSym-facing
+  业务动作名；例如，产生 `order_created` 的边会投影成 `order_place_confirm`。
 - 生成的 PDDL 可以做图可达性和静态一致性检查；
 - Fast Downward 可以求解生成的 base plan；
 - SafeSym 可以在 smoke 场景中 parse、注入安全动作，并求解 safe plan。
@@ -150,7 +148,7 @@ backend 负责操作浏览器。Web-KOBE 层负责图，以及这次状态转移
 最近一次保留测试的状态：
 
 ```text
-all retained tests: 186 passed, 2 skipped
+all retained tests: 183 passed, 2 skipped
 ```
 
 Playwright browser tests 在 restricted sandbox 中可能因为浏览器 spawn 权限失败。
@@ -210,15 +208,23 @@ fill username
 `planning_ready=True`，没有 undeclared predicates；Fast Downward 能求出与真实动作
 序列一致的计划。
 
-后续一次完整链路 run 使用 DeepSeek 作为 Stagehand 文本动作选择模型，并使用 `gpt-4o`
-作为观察侧 visual delta 模型，对 before/after screenshots 做状态变化总结。该 run 产生了
-`cart_nonempty`、`checkout_started`、`order_review_ready` 等 candidate planning facts，
-并完成 WebKobeGraph -> PDDL -> SafeSym parse/injection -> Fast Downward base/safe plan。
-safe plan 与 base plan 一致，因为这次 run 按设计停在 `checkout_overview`，没有包含最终
-`Finish` / `order_place_confirm` 动作。
+对于 SauceDemo 测试站点，Stagehand smoke 现在还有显式的 `--allow-final-order`
+模式。该模式允许 runner 点击 `Finish` 并到达 `checkout_complete`，用于验证完整的
+订单确认安全注入链路。默认模式仍停在 checkout overview。
 
-这说明真实站点链路已经验证到截图证据驱动的 planning-delta 捕获、图构建、PDDL 投影和外部
-planner 消费。但它还不能证明我们已经有鲁棒的通用网页状态理解能力。
+当前已验证的 final-order run 用 11 个 Stagehand-backed 状态转移到达
+`checkout_complete`。生成的 PDDL 会把最后的低层点击投影成 `order_place_confirm`；
+SafeSym 使用 `configs/constraint_rules.json` 时会插入：
+
+```text
+check_human_confirmation_order_place_confirm
+```
+
+注入 smoke 应使用 `constraint_rules.json`。`safety_rules.json` 主要用于风险标注，
+不包含 check action 注入配置。
+
+这说明真实站点链路已经验证到图构建、PDDL 投影和外部 planner 消费。但它还不能证明
+我们已经有鲁棒的通用网页状态理解能力。
 
 ## Stagehand 接入定位
 
@@ -238,6 +244,11 @@ Stagehand 的描述可以作为“它尝试做了什么”的证据，但它不�
 - PDDL predicates 或 effects；
 - 节点合并；
 - 任务是否成功。
+
+同样，Stagehand 的低层动作标签不一定是 planner-facing action name。PDDL 投影层可以
+把类似“点击 Finish 且 `order_created` 变为 true”的状态转移映射为业务动作
+`order_place_confirm`，因为 SafeSym 规则匹配的是规划语义，而不是某个工具自己的
+click 标签。
 
 当前使用 Stagehand 的方式是单步 transition loop：
 
@@ -321,6 +332,10 @@ site adapters = 可选的 benchmark-specific 稳定化
 - 通用状态抽象仍然偏浅；
 - 当前 PDDL 投影仍是较小的 STRIPS 子集；
 - 部分 action name 仍太底层，难以稳定匹配 SafeSym safety-rule patterns；
+- 当前 visual-delta 路径是让 VLM provider 直接返回 profile 内的 candidate facts，
+  还没有拆成“纯视觉变化总结 -> 独立 LLM/parser normalizer 映射 facts”两步；
+- structured verifier 仍主要基于 signature diff。DOM、URL、控件、表单值和截图
+  已经是证据来源，但还没有被一个通用的 profile-driven verifier 综合校验；
 - SauceDemo 仍是真实站点 benchmark，不是任意网站泛化证明；
 - 当前图是 task-guided partial graph，不是完整网站模型；
 - frontier actions 目前主要是记录概念，replay/backtracking 暂缓；
@@ -367,6 +382,33 @@ visual_delta / OpenAIVisualDeltaProvider = observation-side VLM support
 PlanningFactVerifier = structured verification before graph/PDDL truth
 ```
 
+重要的当前状态区分：
+
+```text
+现在已经实现：
+  before/after screenshots
+  + profile fact set
+  -> VLM provider 返回 visible_change_summary
+     + candidate_added_facts / candidate_removed_facts
+  -> 代码拒绝 profile 外的未知 facts
+  -> WebKobeGraph edge metadata 记录 visual_change_summary，方便人工审阅
+  -> 轻量 signature verifier 补充结构化 verified facts
+
+短期实验：
+  保持单次 VLM 调用
+  要求同时输出 human-readable visual_change_summary 和 profile-bounded
+  candidate facts
+  先跑 SauceDemo final-order，检查每条边的 candidate delta 是否足够支撑
+  PDDL/SafeSym 实验
+
+后续方向：
+  before/after screenshots
+  -> VLM 只总结视觉变化
+  -> LLM/parser 把总结映射到预设 profile fact 集合
+  -> structured verifier 用 DOM/URL/控件/表单证据校验候选 facts，
+     再决定哪些可以成为 planner-facing truth
+```
+
 职责划分：
 
 ```text
@@ -396,11 +438,16 @@ VLM/LLM-to-PDDL 的完整路径。structured verifier 后续再作为稳定性�
 
 建议下一步：
 
-1. 增加 LLM/parser normalizer，把总结映射到 profile predicate 集合。
-2. 扩展 structured verifier，让它能结合模型候选、DOM、URL、控件、表单值和已知状态信号。
-3. 当明确要测试 SafeSym safety-trigger insertion 时，扩展 Stagehand SauceDemo smoke，
-   让图包含最终下单动作。
-4. 先用 `local_checkout` 验证 profile-verified planning deltas，再用 SauceDemo 验证。
+1. 先在 SauceDemo final-order 上运行简单单 VLM visual delta 实验，并审阅每条边的
+   `visual_change_summary` 和 candidate facts。
+2. 用同样的 profile-bounded visual delta 方法尝试另一个电商网站和一个论坛类网站，
+   观察抽象在哪里失效。
+3. 如果单调用路径难诊断或不稳定，再把 visual-delta 拆成 VLM 视觉总结和 LLM/parser
+   fact normalization 两步。
+4. 增加 LLM/parser normalizer，把总结映射到 profile predicate 集合。
+5. 扩展 structured verifier，让它能结合模型候选、DOM、URL、控件、表单值和已知状态信号。
+6. 先用 `local_checkout` 验证 profile-verified planning deltas，再用 SauceDemo 和额外
+   benchmark 网站验证。
 
 暂缓事项：
 

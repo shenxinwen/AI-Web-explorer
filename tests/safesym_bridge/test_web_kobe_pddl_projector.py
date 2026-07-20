@@ -10,6 +10,7 @@ from ai_web_explorer.grounded_web.capability_graph import (
 )
 from ai_web_explorer.grounded_web.graph import (
     BrowserAction,
+    PddlActionHint,
     ReferenceObservation,
     WebKobeEdge,
     WebKobeGraph,
@@ -305,7 +306,10 @@ def test_compile_web_kobe_graph_to_pddl_trusts_candidate_planning_delta():
                     True,
                 ),
                 planning_delta=PlanningDelta(
-                    candidate_added_facts=["order_place_pending_sensitive"],
+                    candidate_added_facts=[
+                        "order_place_pending_sensitive",
+                        "order_review_ready",
+                    ],
                     candidate_removed_facts=["checkout_started"],
                     verified_added_facts=["order_review_ready"],
                     verified_removed_facts=["checkout_info_complete"],
@@ -327,6 +331,110 @@ def test_compile_web_kobe_graph_to_pddl_trusts_candidate_planning_delta():
     assert "(not (checkout_info_complete))" in artifacts.domain
     assert "(order_place_pending_sensitive)" in artifacts.domain
     assert "(not (checkout_started))" in artifacts.domain
+    assert "(order_review_ready) (order_review_ready)" not in artifacts.domain
+
+
+def test_compile_web_kobe_graph_to_pddl_prefers_pddl_action_hint_name():
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="review",
+        total_steps_completed=1,
+        nodes=[
+            _node("review", "checkout_overview", {"order_created": False}),
+            _node("complete", "checkout_complete", {"order_created": True}),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="review",
+                target_node_id="complete",
+                instruction="finish order",
+                action=BrowserAction("click", "button", "click_finish_button"),
+                capability=None,
+                target_observation="checkout complete",
+                observed_delta=[
+                    ObservedDelta(
+                        "order_created",
+                        False,
+                        True,
+                        "state_indicator_change",
+                        evidence=[Evidence(source="unit_test")],
+                    )
+                ],
+                schema_delta={"order_created": {"before": False, "after": True}},
+                execution_trace=ExecutionTrace(
+                    "click",
+                    "button",
+                    "Finish",
+                    {},
+                    "review",
+                    "complete",
+                    True,
+                ),
+                pddl_hint=PddlActionHint(action_name="submit_final_order"),
+            )
+        ],
+    )
+
+    artifacts = compile_web_kobe_graph_to_pddl(graph, goal_node_id="complete")
+
+    assert "(:action submit_final_order" in artifacts.domain
+    assert "(:action click_finish_button" not in artifacts.domain
+
+
+def test_compile_web_kobe_graph_to_pddl_maps_order_completion_for_safesym():
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="checkout_overview",
+        total_steps_completed=1,
+        nodes=[
+            _node("checkout_overview", "checkout_overview", {"order_created": False}),
+            _node("checkout_complete", "checkout_complete", {"order_created": True}),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="checkout_overview",
+                target_node_id="checkout_complete",
+                instruction="finish checkout",
+                action=BrowserAction(
+                    "click",
+                    "button",
+                    "stagehand_000_click_finish_button_on_checkout_overview",
+                ),
+                capability=None,
+                target_observation="checkout complete",
+                observed_delta=[
+                    ObservedDelta(
+                        "order_created",
+                        False,
+                        True,
+                        "state_indicator_change",
+                        evidence=[Evidence(source="unit_test")],
+                    )
+                ],
+                schema_delta={"order_created": {"before": False, "after": True}},
+                execution_trace=ExecutionTrace(
+                    "click",
+                    "button",
+                    "Finish",
+                    {},
+                    "checkout_overview",
+                    "checkout_complete",
+                    True,
+                ),
+            )
+        ],
+    )
+
+    artifacts = compile_web_kobe_graph_to_pddl(
+        graph,
+        goal_node_id="checkout_complete",
+    )
+
+    assert "(:action order_place_confirm" in artifacts.domain
+    assert "(:action stagehand_000_click_finish_button_on_checkout_overview" not in (
+        artifacts.domain
+    )
+    assert "(order_created)" in artifacts.domain
 
 
 def test_compile_web_kobe_graph_to_pddl_deduplicates_repeated_effects():
@@ -355,9 +463,7 @@ def test_compile_web_kobe_graph_to_pddl_deduplicates_repeated_effects():
                         evidence=[Evidence(source="unit_test")],
                     )
                 ],
-                schema_delta={
-                    "checkout_started": {"before": False, "after": True}
-                },
+                schema_delta={"checkout_started": {"before": False, "after": True}},
                 execution_trace=ExecutionTrace(
                     "click",
                     "button.checkout",
@@ -576,3 +682,44 @@ def test_load_web_kobe_graph_json_preserves_planning_delta(tmp_path):
 
     assert loaded.edges[0].planning_delta is not None
     assert loaded.edges[0].planning_delta.verified_added_facts == ["cart_nonempty"]
+
+
+def test_load_web_kobe_graph_json_preserves_pddl_action_hint(tmp_path):
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="review",
+        total_steps_completed=1,
+        nodes=[
+            _node("review", "checkout_overview", {}),
+            _node("complete", "checkout_complete", {}),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="review",
+                target_node_id="complete",
+                instruction="place order",
+                action=BrowserAction("click", "button", "click_finish"),
+                capability=None,
+                target_observation="complete",
+                observed_delta=[],
+                schema_delta={},
+                execution_trace=ExecutionTrace(
+                    "click",
+                    "button",
+                    "Finish",
+                    {},
+                    "review",
+                    "complete",
+                    True,
+                ),
+                pddl_hint=PddlActionHint(action_name="order_place_confirm"),
+            )
+        ],
+    )
+    path = tmp_path / "graph.json"
+    path.write_text(json.dumps(graph.to_dict()), encoding="utf-8")
+
+    loaded = load_web_kobe_graph_json(path)
+
+    assert loaded.edges[0].pddl_hint is not None
+    assert loaded.edges[0].pddl_hint.action_name == "order_place_confirm"
