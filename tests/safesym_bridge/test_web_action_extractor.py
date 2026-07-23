@@ -63,7 +63,26 @@ def test_browser_actions_from_password_input_uses_stable_password_value():
 
     actions = browser_actions_from_candidates(candidates)
 
-    assert actions[0].input_values == {"#password": "secret_sauce"}
+    assert actions[0].input_values == {"#password": "test-password"}
+
+
+def test_browser_actions_from_username_input_uses_generic_value():
+    candidates = [
+        DomInteractableCandidate(
+            id="dom_005",
+            kind="input",
+            locator="#user-name",
+            locator_strategy="id",
+            name="Username",
+            visible=True,
+            enabled=True,
+            metadata={"type": "text", "placeholder": "Username"},
+        )
+    ]
+
+    actions = browser_actions_from_candidates(candidates)
+
+    assert actions[0].input_values == {"#user-name": "test-user"}
 
 
 def test_browser_actions_from_search_input_uses_search_value():

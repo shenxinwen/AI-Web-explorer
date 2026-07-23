@@ -61,6 +61,9 @@ def test_grounded_web_imports_can_build_grounded_action():
             locator="#add",
             semantic_id="dom_001_button_add_to_cart",
             description="Add to cart",
+            action_label="Add to cart",
+            canonical_action_name="click_add_to_cart",
+            naming_provenance={"source": "dom_candidate"},
         )
     ]
 

@@ -26,13 +26,13 @@ def _default_input_value(candidate: DomInteractableCandidate) -> str:
     if input_type == "email" or "email" in text:
         return "test@example.com"
     if input_type == "password" or "password" in text:
-        return "secret_sauce"
+        return "test-password"
     if input_type in {"number", "range"} or "quantity" in text or "qty" in text:
         return "1"
     if input_type == "search" or "search" in text:
         return "sample"
     if "user" in text or "login" in text:
-        return "standard_user"
+        return "test-user"
     return "test"
 
 
@@ -67,6 +67,9 @@ def browser_actions_from_candidates(
                 semantic_id=semantic_id,
                 input_values=_input_values_for(candidate),
                 description=candidate.name,
+                action_label=candidate.name,
+                canonical_action_name=f"{action_kind}_{_slug(visible)}",
+                naming_provenance={"source": "dom_candidate"},
             )
         )
     return actions

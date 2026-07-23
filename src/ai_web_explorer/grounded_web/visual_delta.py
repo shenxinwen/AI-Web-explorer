@@ -112,17 +112,63 @@ def _string_list(value: Any) -> list[str]:
     return [str(item) for item in value]
 
 
+def _summary_text(value: Any) -> str | None:
+    if isinstance(value, str):
+        text = value.strip()
+        return text or None
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
+    return None
+
+
+def _fact_id_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    facts: list[str] = []
+    for item in value:
+        candidate = item.get("fact_id") if isinstance(item, dict) else item
+        text = str(candidate).strip() if candidate is not None else ""
+        if text:
+            facts.append(text)
+    return facts
+
+
+def _evidence_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    evidence: list[str] = []
+    for item in value:
+        if isinstance(item, dict) and item.get("description"):
+            evidence.append(str(item["description"]))
+        elif isinstance(item, (dict, list)):
+            evidence.append(json.dumps(item, ensure_ascii=False, sort_keys=True))
+        else:
+            evidence.append(str(item))
+    return evidence
+
+
 def summarize_visual_delta(
     request: VisualDeltaRequest,
     *,
     provider: VisualDeltaProvider,
 ) -> VisualDeltaResult:
     prompt = _prompt_for_request(request)
-    raw_response = provider(
-        prompt,
-        before_screenshot_path=request.before_screenshot_path,
-        after_screenshot_path=request.after_screenshot_path,
-    )
+    try:
+        raw_response = provider(
+            prompt,
+            before_screenshot_path=request.before_screenshot_path,
+            after_screenshot_path=request.after_screenshot_path,
+        )
+    except Exception as error:
+        return VisualDeltaResult(
+            planning_delta=_empty_delta(),
+            trace=_trace(
+                prompt=prompt,
+                status="failed",
+                error_type="provider_error",
+                error_message=str(error),
+            ),
+        )
     try:
         parsed = json.loads(raw_response)
     except json.JSONDecodeError as error:
@@ -150,8 +196,8 @@ def summarize_visual_delta(
         )
 
     allowed = _fact_ids(request.profile)
-    visual_change_summary = parsed.get("visible_change_summary")
-    if not isinstance(visual_change_summary, str) or not visual_change_summary.strip():
+    visual_change_summary = _summary_text(parsed.get("visible_change_summary"))
+    if visual_change_summary is None:
         return VisualDeltaResult(
             planning_delta=_empty_delta(),
             trace=_trace(
@@ -164,8 +210,8 @@ def summarize_visual_delta(
             ),
         )
 
-    candidate_added = _string_list(parsed.get("candidate_added_facts"))
-    candidate_removed = _string_list(parsed.get("candidate_removed_facts"))
+    candidate_added = _fact_id_list(parsed.get("candidate_added_facts"))
+    candidate_removed = _fact_id_list(parsed.get("candidate_removed_facts"))
     unknown = sorted(
         {fact for fact in candidate_added + candidate_removed if fact not in allowed}
     )
@@ -187,7 +233,7 @@ def summarize_visual_delta(
         candidate_removed_facts=candidate_removed,
         verified_added_facts=[],
         verified_removed_facts=[],
-        evidence=_string_list(parsed.get("evidence")),
+        evidence=_evidence_list(parsed.get("evidence")),
         confidence=parsed.get("confidence"),
         uncertainty_reason="visual delta has not been structurally verified",
     )
@@ -198,7 +244,7 @@ def summarize_visual_delta(
             raw_response=raw_response,
             llm_response=parsed,
             status="summarized",
-            visual_change_summary=visual_change_summary.strip(),
+            visual_change_summary=visual_change_summary,
         ),
     )
 

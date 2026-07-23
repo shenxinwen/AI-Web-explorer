@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import shutil
 from pathlib import Path
 
 from ai_web_explorer.safesym_bridge.browser_runner import (
+    SAUCEDEMO_BENCHMARK_START_URL,
+    build_saucedemo_stagehand_benchmark_context,
     build_debug_web_kobe_graph,
+    run_ecommerce_stagehand_step,
     run_web_kobe_exploration,
     run_saucedemo_openai_selector_step,
     run_saucedemo_stagehand_step,
@@ -24,6 +28,25 @@ from ai_web_explorer.safesym_bridge.web_kobe_safesym_smoke import (
 from ai_web_explorer.safesym_bridge.openai_selector_smoke import (
     write_openai_selector_smoke,
 )
+
+
+def _clean_output_dir_for(paths: list[Path | None]) -> Path:
+    resolved_paths = [path for path in paths if path is not None]
+    if not resolved_paths:
+        raise ValueError("At least one output path is required for cleanup.")
+    output_dir = resolved_paths[0].parent
+    if any(path.parent != output_dir for path in resolved_paths):
+        raise ValueError(
+            "--clean-output-dir requires output, trace, and screenshot paths "
+            "to share the same parent directory."
+        )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for child in output_dir.iterdir():
+        if child.is_dir():
+            shutil.rmtree(child)
+        else:
+            child.unlink()
+    return output_dir
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -221,6 +244,131 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Show the browser window while running the smoke.",
     )
+    ecommerce_stagehand_parser = subparsers.add_parser(
+        "web-kobe-ecommerce-stagehand-smoke",
+        help=(
+            "Run Stagehand-backed e-commerce Web-KOBE exploration from a "
+            "benchmark config and write graph plus Stagehand trace."
+        ),
+    )
+    ecommerce_stagehand_parser.add_argument(
+        "--benchmark",
+        choices=["saucedemo"],
+        default="saucedemo",
+        help="Benchmark config to use for start URL and test context.",
+    )
+    ecommerce_stagehand_parser.add_argument(
+        "--start-url",
+        default=None,
+        help="Optional start URL override. Defaults to the benchmark URL.",
+    )
+    ecommerce_stagehand_parser.add_argument(
+        "--app-name",
+        default=None,
+        help="Optional graph app name override. Defaults to the benchmark name.",
+    )
+    ecommerce_stagehand_parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("outputs/latest/ecommerce_stagehand_graph.json"),
+        help="Path to write the Web-KOBE graph JSON.",
+    )
+    ecommerce_stagehand_parser.add_argument(
+        "--stagehand-trace",
+        type=Path,
+        default=Path("outputs/latest/ecommerce_stagehand_trace.json"),
+        help="Path to write Stagehand execution trace JSON.",
+    )
+    ecommerce_stagehand_parser.add_argument(
+        "--model",
+        default=None,
+        help="Stagehand model name, or set STAGEHAND_MODEL.",
+    )
+    ecommerce_stagehand_parser.add_argument(
+        "--steps",
+        type=int,
+        default=8,
+        help="Maximum number of Stagehand-backed graph steps.",
+    )
+    ecommerce_stagehand_parser.add_argument(
+        "--screenshot-dir",
+        type=Path,
+        default=Path("outputs/latest/screenshots"),
+        help=(
+            "Optional directory for before/after screenshots. This only "
+            "captures local evidence; VLM analysis requires separate config."
+        ),
+    )
+    ecommerce_stagehand_parser.add_argument(
+        "--clean-output-dir",
+        action="store_true",
+        help=(
+            "Delete existing files in the shared output directory before the "
+            "run. Intended for outputs/latest so only the latest experiment "
+            "is retained."
+        ),
+    )
+    ecommerce_stagehand_parser.add_argument(
+        "--openai-visual-delta",
+        action="store_true",
+        help=(
+            "Enable observation-side OpenAI vision comparison over captured "
+            "before/after screenshots. Requires --screenshot-dir."
+        ),
+    )
+    ecommerce_stagehand_parser.add_argument(
+        "--visual-delta-model",
+        default=None,
+        help="Optional OpenAI vision model override for --openai-visual-delta.",
+    )
+    ecommerce_stagehand_parser.add_argument(
+        "--deepseek-semantic-naming",
+        action="store_true",
+        help=(
+            "Enable observation-side DeepSeek semantic naming for graph node "
+            "and action labels. Runtime IDs and selectors are unchanged."
+        ),
+    )
+    ecommerce_stagehand_parser.add_argument(
+        "--semantic-naming-model",
+        default=None,
+        help="Optional model override for --deepseek-semantic-naming.",
+    )
+    ecommerce_stagehand_parser.add_argument(
+        "--allow-final-order",
+        action="store_true",
+        help="Allow explicit test-site final order confirmation.",
+    )
+    ecommerce_stagehand_parser.add_argument(
+        "--test-username",
+        default="standard_user",
+        help="Benchmark test username to expose through Stagehand task context.",
+    )
+    ecommerce_stagehand_parser.add_argument(
+        "--test-password",
+        default="secret_sauce",
+        help="Benchmark test password to expose through Stagehand task context.",
+    )
+    ecommerce_stagehand_parser.add_argument(
+        "--checkout-first-name",
+        default="Test",
+        help="Benchmark checkout first name for task context.",
+    )
+    ecommerce_stagehand_parser.add_argument(
+        "--checkout-last-name",
+        default="User",
+        help="Benchmark checkout last name for task context.",
+    )
+    ecommerce_stagehand_parser.add_argument(
+        "--checkout-postal-code",
+        default="12345",
+        help="Benchmark checkout postal code for task context.",
+    )
+    ecommerce_stagehand_parser.add_argument(
+        "--headed",
+        action="store_true",
+        help="Show the browser window while running the smoke.",
+    )
     saucedemo_stagehand_parser = subparsers.add_parser(
         "web-kobe-saucedemo-stagehand-smoke",
         help=(
@@ -278,12 +426,54 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     saucedemo_stagehand_parser.add_argument(
+        "--deepseek-semantic-naming",
+        action="store_true",
+        help=(
+            "Enable observation-side DeepSeek semantic naming for graph node "
+            "and action labels. Runtime IDs and selectors are unchanged."
+        ),
+    )
+    saucedemo_stagehand_parser.add_argument(
+        "--semantic-naming-model",
+        default=None,
+        help=(
+            "Optional model override for --deepseek-semantic-naming. Defaults "
+            "to SEMANTIC_NAMING_MODEL, DEEPSEEK_SEMANTIC_NAMING_MODEL, "
+            "STAGEHAND_MODEL, or the project DeepSeek default."
+        ),
+    )
+    saucedemo_stagehand_parser.add_argument(
         "--allow-final-order",
         action="store_true",
         help=(
             "Allow the SauceDemo test-site smoke to click Finish and reach "
             "checkout complete. By default the run stops at checkout overview."
         ),
+    )
+    saucedemo_stagehand_parser.add_argument(
+        "--test-username",
+        default="standard_user",
+        help="Benchmark test username to expose through Stagehand task context.",
+    )
+    saucedemo_stagehand_parser.add_argument(
+        "--test-password",
+        default="secret_sauce",
+        help="Benchmark test password to expose through Stagehand task context.",
+    )
+    saucedemo_stagehand_parser.add_argument(
+        "--checkout-first-name",
+        default="Test",
+        help="Benchmark checkout first name for task context.",
+    )
+    saucedemo_stagehand_parser.add_argument(
+        "--checkout-last-name",
+        default="User",
+        help="Benchmark checkout last name for task context.",
+    )
+    saucedemo_stagehand_parser.add_argument(
+        "--checkout-postal-code",
+        default="12345",
+        help="Benchmark checkout postal code for task context.",
     )
     saucedemo_stagehand_parser.add_argument(
         "--headed",
@@ -377,6 +567,36 @@ def main(argv: list[str] | None = None) -> int:
                     headless=not args.headed,
                 )
             )
+        elif args.mode == "web-kobe-ecommerce-stagehand-smoke":
+            if args.clean_output_dir:
+                _clean_output_dir_for(
+                    [args.output, args.stagehand_trace, args.screenshot_dir]
+                )
+            benchmark_context = build_saucedemo_stagehand_benchmark_context(
+                test_username=args.test_username,
+                test_password=args.test_password,
+                checkout_first_name=args.checkout_first_name,
+                checkout_last_name=args.checkout_last_name,
+                checkout_postal_code=args.checkout_postal_code,
+            )
+            output_path = asyncio.run(
+                run_ecommerce_stagehand_step(
+                    args.output,
+                    start_url=args.start_url or SAUCEDEMO_BENCHMARK_START_URL,
+                    app_name=args.app_name or args.benchmark,
+                    stagehand_trace_path=args.stagehand_trace,
+                    model=args.model,
+                    steps=args.steps,
+                    headless=not args.headed,
+                    screenshot_dir=args.screenshot_dir,
+                    use_openai_visual_delta=args.openai_visual_delta,
+                    visual_delta_model=args.visual_delta_model,
+                    use_deepseek_semantic_naming=args.deepseek_semantic_naming,
+                    semantic_naming_model=args.semantic_naming_model,
+                    allow_final_order=args.allow_final_order,
+                    benchmark_context=benchmark_context,
+                )
+            )
         elif args.mode == "web-kobe-saucedemo-stagehand-smoke":
             output_path = asyncio.run(
                 run_saucedemo_stagehand_step(
@@ -388,7 +608,14 @@ def main(argv: list[str] | None = None) -> int:
                     screenshot_dir=args.screenshot_dir,
                     use_openai_visual_delta=args.openai_visual_delta,
                     visual_delta_model=args.visual_delta_model,
+                    use_deepseek_semantic_naming=args.deepseek_semantic_naming,
+                    semantic_naming_model=args.semantic_naming_model,
                     allow_final_order=args.allow_final_order,
+                    test_username=args.test_username,
+                    test_password=args.test_password,
+                    checkout_first_name=args.checkout_first_name,
+                    checkout_last_name=args.checkout_last_name,
+                    checkout_postal_code=args.checkout_postal_code,
                 )
             )
         else:

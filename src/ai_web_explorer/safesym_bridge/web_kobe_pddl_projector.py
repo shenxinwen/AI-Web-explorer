@@ -35,6 +35,11 @@ class WebKobePddlArtifacts:
     problem: str
 
 
+@dataclass(frozen=True)
+class PddlProjectionOptions:
+    include_observed_delta_facts: bool = False
+
+
 def _evidence_from_dict(data: dict[str, Any]) -> Evidence:
     return Evidence(
         source=str(data.get("source", "json")),
@@ -89,6 +94,9 @@ def _node_from_dict(data: dict[str, Any]) -> WebKobeNode:
         visit_count=int(data.get("visit_count", 0)),
         status=str(data.get("status", "verified")),
         evidence=[_evidence_from_dict(item) for item in data.get("evidence", [])],
+        node_label=data.get("node_label"),
+        state_summary=data.get("state_summary"),
+        naming_provenance=data.get("naming_provenance"),
     )
 
 
@@ -99,6 +107,9 @@ def _action_from_dict(data: dict[str, Any]) -> BrowserAction:
         semantic_id=str(data["semantic_id"]),
         input_values=dict(data.get("input_values", {})),
         description=data.get("description"),
+        action_label=data.get("action_label"),
+        canonical_action_name=data.get("canonical_action_name"),
+        naming_provenance=data.get("naming_provenance"),
     )
 
 
@@ -283,8 +294,33 @@ def _action_name(raw: str) -> str:
     return _predicate(raw)
 
 
+UI_LEVEL_ACTION_TERMS = {
+    "button",
+    "click",
+    "fill",
+    "selector",
+    "type",
+    "xpath",
+}
+
+
+def _business_canonical_action_name(edge) -> str | None:
+    canonical = getattr(edge.action, "canonical_action_name", None)
+    if not canonical:
+        return None
+    name = _action_name(canonical)
+    if not name or name != canonical:
+        return None
+    terms = set(name.split("_"))
+    if terms & UI_LEVEL_ACTION_TERMS:
+        return None
+    return name
+
+
 def _is_order_completion_edge(edge) -> bool:
-    effect_predicates = set(_effect_predicates_for_edge(edge))
+    effect_predicates = set(
+        _effect_predicates_for_edge(edge, options=PddlProjectionOptions())
+    )
     if "order_created" in effect_predicates or "order_completed" in effect_predicates:
         return True
     return "checkout_complete" in _predicate(
@@ -292,12 +328,21 @@ def _is_order_completion_edge(edge) -> bool:
     ) and "finish" in _predicate(edge.action.semantic_id)
 
 
-def _pddl_action_name_for_edge(edge) -> str:
+def _readable_action_suffix_for_edge(edge) -> str:
     if edge.pddl_hint is not None:
         return _action_name(edge.pddl_hint.action_name)
+    canonical = _business_canonical_action_name(edge)
+    if canonical is not None:
+        return canonical
     if _is_order_completion_edge(edge):
         return "order_place_confirm"
-    return _action_name(edge.action.semantic_id)
+    fallback = _action_name(edge.action.semantic_id)
+    return fallback or "transition"
+
+
+def _unique_pddl_action_name(edge, *, index: int) -> str:
+    suffix = _readable_action_suffix_for_edge(edge)
+    return f"edge_{index:03d}_{suffix}"
 
 
 def _delta_predicate_change(delta) -> tuple[str, bool] | None:
@@ -310,12 +355,17 @@ def _delta_predicate_change(delta) -> tuple[str, bool] | None:
     return None
 
 
-def _effect_predicates_for_edge(edge) -> list[str]:
+def _observed_effect_predicates_for_edge(edge) -> list[str]:
     predicates = []
     for delta in edge.observed_delta:
         change = _delta_predicate_change(delta)
         if change is not None:
             predicates.append(change[0])
+    return predicates
+
+
+def _planning_effect_predicates_for_edge(edge) -> list[str]:
+    predicates = []
     if edge.planning_delta is not None:
         predicates.extend(
             _predicate(fact)
@@ -328,20 +378,65 @@ def _effect_predicates_for_edge(edge) -> list[str]:
     return predicates
 
 
-def _effects_for_edge(edge) -> list[str]:
+def _effect_predicates_for_edge(
+    edge,
+    *,
+    options: PddlProjectionOptions,
+) -> list[str]:
+    predicates = []
+    if options.include_observed_delta_facts:
+        predicates.extend(_observed_effect_predicates_for_edge(edge))
+    predicates.extend(_planning_effect_predicates_for_edge(edge))
+    return predicates
+
+
+def _removed_planning_predicates_for_edge(edge) -> list[str]:
+    if edge.planning_delta is None:
+        return []
+    return [
+        _predicate(fact)
+        for fact in _trusted_removed_planning_facts(edge.planning_delta)
+    ]
+
+
+def _preconditions_for_edge(
+    edge,
+    *,
+    options: PddlProjectionOptions,
+) -> list[str]:
+    preconditions = [f"({_at(edge.source_node_id)})"]
+    for predicate in _removed_planning_predicates_for_edge(edge):
+        preconditions.append(f"({predicate})")
+    if options.include_observed_delta_facts:
+        for delta in edge.observed_delta:
+            change = _delta_predicate_change(delta)
+            if change is None:
+                continue
+            pred, becomes_true = change
+            if not becomes_true:
+                preconditions.append(f"({pred})")
+    return _unique_items(preconditions)
+
+
+def _effects_for_edge(
+    edge,
+    *,
+    options: PddlProjectionOptions,
+) -> list[str]:
     effects = [
         f"(not ({_at(edge.source_node_id)}))",
         f"({_at(edge.target_node_id)})",
     ]
-    for delta in edge.observed_delta:
-        change = _delta_predicate_change(delta)
-        if change is None:
-            continue
-        pred, becomes_true = change
-        if becomes_true:
-            effects.append(f"({pred})")
-        else:
-            effects.append(f"(not ({pred}))")
+    if options.include_observed_delta_facts:
+        for delta in edge.observed_delta:
+            change = _delta_predicate_change(delta)
+            if change is None:
+                continue
+            pred, becomes_true = change
+            if becomes_true:
+                effects.append(f"({pred})")
+            else:
+                effects.append(f"(not ({pred}))")
     if edge.planning_delta is not None:
         for fact in _trusted_added_planning_facts(edge.planning_delta):
             effects.append(f"({_predicate(fact)})")
@@ -359,7 +454,9 @@ def compile_web_kobe_graph_to_pddl(
     *,
     goal_node_id: str,
     start_node_id: str | None = None,
+    options: PddlProjectionOptions | None = None,
 ) -> WebKobePddlArtifacts:
+    options = options or PddlProjectionOptions()
     selected_start_node_id = start_node_id or graph.start_node_id
     _require_node(graph, selected_start_node_id, role="start")
     _require_node(graph, goal_node_id, role="goal")
@@ -369,17 +466,16 @@ def compile_web_kobe_graph_to_pddl(
     )
     for edge in graph.edges:
         if _is_projectable_edge(edge):
-            predicate_names.update(_effect_predicates_for_edge(edge))
+            predicate_names.update(_effect_predicates_for_edge(edge, options=options))
     predicates = sorted(predicate_names)
     predicate_text = "\n".join(f"    ({name})" for name in predicates)
 
+    projectable_edges = [edge for edge in graph.edges if _is_projectable_edge(edge)]
     action_blocks = []
-    for edge in graph.edges:
-        if not _is_projectable_edge(edge):
-            continue
-        action_name = _pddl_action_name_for_edge(edge)
-        preconditions = [f"({_at(edge.source_node_id)})"]
-        effects = _effects_for_edge(edge)
+    for index, edge in enumerate(projectable_edges, start=1):
+        action_name = _unique_pddl_action_name(edge, index=index)
+        preconditions = _preconditions_for_edge(edge, options=options)
+        effects = _effects_for_edge(edge, options=options)
         action_blocks.append(
             "\n".join(
                 [

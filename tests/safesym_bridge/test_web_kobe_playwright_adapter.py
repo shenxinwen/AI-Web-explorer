@@ -220,6 +220,9 @@ async def test_list_interactables_uses_dom_candidates(monkeypatch):
             "locator_strategy": "css",
             "action_kind": "click",
             "input_values": {},
+            "action_label": "Add to cart",
+            "canonical_action_name": "click_add_to_cart",
+            "naming_provenance": {"source": "dom_candidate"},
             "metadata": {"data-test": "add-to-cart"},
             "explored": False,
         }
@@ -271,6 +274,9 @@ async def test_saucedemo_adapter_uses_static_action_profile():
                 "#user-name": "standard_user",
                 "#password": "secret_sauce",
             },
+            "action_label": "Click the Login button",
+            "canonical_action_name": "login_submit",
+            "naming_provenance": {"source": "saucedemo_action_catalog"},
             "metadata": {},
             "explored": False,
         }

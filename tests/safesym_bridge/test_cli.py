@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -30,6 +31,7 @@ def test_main_help_lists_only_web_kobe_mainline_commands(capsys):
     assert "web-kobe-pddl-smoke" in help_output
     assert "web-kobe-safesym-smoke" in help_output
     assert "web-kobe-openai-selector-smoke" in help_output
+    assert "web-kobe-ecommerce-stagehand-smoke" in help_output
     assert "web-kobe-saucedemo-llm-step-smoke" in help_output
     assert "web-kobe-saucedemo-stagehand-smoke" in help_output
     assert "capability-graph" not in help_output
@@ -253,7 +255,7 @@ def test_main_web_kobe_pddl_from_graph_writes_domain_and_problem(tmp_path):
     )
 
     assert exit_code == 0
-    assert "(:action add_to_cart" in (output_dir / "domain.pddl").read_text(
+    assert "(:action edge_001_add_to_cart" in (output_dir / "domain.pddl").read_text(
         encoding="utf-8"
     )
     assert "(:goal (and (at_filled)))" in (output_dir / "problem.pddl").read_text(
@@ -512,7 +514,14 @@ def test_main_web_kobe_saucedemo_stagehand_smoke_wires_runner(
         screenshot_dir=None,
         use_openai_visual_delta=False,
         visual_delta_model=None,
+        use_deepseek_semantic_naming=False,
+        semantic_naming_model=None,
         allow_final_order=False,
+        test_username="standard_user",
+        test_password="secret_sauce",
+        checkout_first_name="Test",
+        checkout_last_name="User",
+        checkout_postal_code="12345",
     ):
         calls.append(
             (
@@ -524,7 +533,14 @@ def test_main_web_kobe_saucedemo_stagehand_smoke_wires_runner(
                 screenshot_dir,
                 use_openai_visual_delta,
                 visual_delta_model,
+                use_deepseek_semantic_naming,
+                semantic_naming_model,
                 allow_final_order,
+                test_username,
+                test_password,
+                checkout_first_name,
+                checkout_last_name,
+                checkout_postal_code,
             )
         )
         output_path.write_text(
@@ -556,7 +572,20 @@ def test_main_web_kobe_saucedemo_stagehand_smoke_wires_runner(
             "--openai-visual-delta",
             "--visual-delta-model",
             "gpt-4o-mini",
+            "--deepseek-semantic-naming",
+            "--semantic-naming-model",
+            "deepseek-chat",
             "--allow-final-order",
+            "--test-username",
+            "fixture_user",
+            "--test-password",
+            "fixture_password",
+            "--checkout-first-name",
+            "Ada",
+            "--checkout-last-name",
+            "Lovelace",
+            "--checkout-postal-code",
+            "42424",
         ]
     )
 
@@ -572,5 +601,185 @@ def test_main_web_kobe_saucedemo_stagehand_smoke_wires_runner(
             True,
             "gpt-4o-mini",
             True,
+            "deepseek-chat",
+            True,
+            "fixture_user",
+            "fixture_password",
+            "Ada",
+            "Lovelace",
+            "42424",
         )
     ]
+
+
+def test_main_web_kobe_ecommerce_stagehand_smoke_wires_benchmark_runner(
+    monkeypatch,
+    tmp_path,
+):
+    output = tmp_path / "graph.json"
+    trace = tmp_path / "trace.json"
+    calls = []
+
+    async def fake_run_ecommerce_stagehand_step(
+        output_path,
+        *,
+        start_url,
+        app_name="ecommerce",
+        stagehand_trace_path=None,
+        headless=True,
+        model=None,
+        steps=8,
+        screenshot_dir=None,
+        use_openai_visual_delta=False,
+        visual_delta_model=None,
+        use_deepseek_semantic_naming=False,
+        semantic_naming_model=None,
+        allow_final_order=False,
+        benchmark_context=None,
+    ):
+        calls.append(
+            (
+                output_path,
+                start_url,
+                app_name,
+                stagehand_trace_path,
+                headless,
+                model,
+                steps,
+                screenshot_dir,
+                use_openai_visual_delta,
+                visual_delta_model,
+                use_deepseek_semantic_naming,
+                semantic_naming_model,
+                allow_final_order,
+                benchmark_context.site_label,
+                benchmark_context.test_credentials,
+                benchmark_context.checkout_data,
+            )
+        )
+        output_path.write_text(
+            json.dumps({"meta": {"app": app_name}}),
+            encoding="utf-8",
+        )
+        return output_path
+
+    monkeypatch.setattr(
+        cli,
+        "run_ecommerce_stagehand_step",
+        fake_run_ecommerce_stagehand_step,
+        raising=False,
+    )
+
+    exit_code = main(
+        [
+            "web-kobe-ecommerce-stagehand-smoke",
+            "--benchmark",
+            "saucedemo",
+            "--output",
+            str(output),
+            "--stagehand-trace",
+            str(trace),
+            "--steps",
+            "6",
+            "--model",
+            "deepseek/test",
+            "--test-username",
+            "fixture_user",
+            "--test-password",
+            "fixture_password",
+            "--checkout-first-name",
+            "Ada",
+            "--checkout-last-name",
+            "Lovelace",
+            "--checkout-postal-code",
+            "42424",
+            "--allow-final-order",
+        ]
+    )
+
+    assert exit_code == 0
+    assert calls == [
+        (
+            output,
+            "https://www.saucedemo.com/",
+            "saucedemo",
+            trace,
+            True,
+            "deepseek/test",
+            6,
+            Path("outputs/latest/screenshots"),
+            False,
+            None,
+            False,
+            None,
+            True,
+            "public demo e-commerce site",
+            {"username": "fixture_user", "password": "fixture_password"},
+            {
+                "first_name": "Ada",
+                "last_name": "Lovelace",
+                "postal_code": "42424",
+            },
+        )
+    ]
+
+
+def test_main_web_kobe_ecommerce_stagehand_smoke_cleans_latest_output_dir(
+    monkeypatch,
+    tmp_path,
+):
+    output_dir = tmp_path / "latest"
+    output_dir.mkdir()
+    stale_file = output_dir / "stale.json"
+    stale_file.write_text("old", encoding="utf-8")
+    output = output_dir / "graph.json"
+    trace = output_dir / "trace.json"
+    screenshots = output_dir / "screenshots"
+    calls = []
+
+    async def fake_run_ecommerce_stagehand_step(
+        output_path,
+        *,
+        start_url,
+        app_name="ecommerce",
+        stagehand_trace_path=None,
+        screenshot_dir=None,
+        **kwargs,
+    ):
+        calls.append((output_path, stagehand_trace_path, screenshot_dir))
+        assert not stale_file.exists()
+        output_path.write_text("{}", encoding="utf-8")
+        stagehand_trace_path.write_text("[]", encoding="utf-8")
+        screenshot_dir.mkdir(parents=True, exist_ok=True)
+        return output_path
+
+    monkeypatch.setattr(
+        cli,
+        "run_ecommerce_stagehand_step",
+        fake_run_ecommerce_stagehand_step,
+        raising=False,
+    )
+
+    exit_code = main(
+        [
+            "web-kobe-ecommerce-stagehand-smoke",
+            "--output",
+            str(output),
+            "--stagehand-trace",
+            str(trace),
+            "--screenshot-dir",
+            str(screenshots),
+            "--clean-output-dir",
+        ]
+    )
+
+    assert exit_code == 0
+    assert calls == [(output, trace, screenshots)]
+
+
+def test_clean_output_dir_requires_shared_parent(tmp_path):
+    output = tmp_path / "latest" / "graph.json"
+    trace = tmp_path / "other" / "trace.json"
+
+    with pytest.raises(ValueError):
+        cli._clean_output_dir_for([output, trace])

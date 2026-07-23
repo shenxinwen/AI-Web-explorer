@@ -107,6 +107,9 @@ class WebKobePlaywrightAdapter:
                 "locator_strategy": candidate.locator_strategy,
                 "action_kind": action.action_kind,
                 "input_values": dict(action.input_values),
+                "action_label": action.action_label,
+                "canonical_action_name": action.canonical_action_name,
+                "naming_provenance": action.naming_provenance,
                 "metadata": dict(candidate.metadata),
                 "explored": False,
             }
@@ -188,6 +191,9 @@ def _interactable_record(action: BrowserAction | dict[str, Any]) -> dict[str, An
             "locator_strategy": None,
             "action_kind": action.action_kind,
             "input_values": dict(action.input_values),
+            "action_label": action.action_label,
+            "canonical_action_name": action.canonical_action_name,
+            "naming_provenance": action.naming_provenance,
             "metadata": {},
             "explored": False,
         }
@@ -198,6 +204,9 @@ def _interactable_record(action: BrowserAction | dict[str, Any]) -> dict[str, An
         "locator_strategy": action.get("locator_strategy"),
         "action_kind": action.get("action_kind"),
         "input_values": dict(action.get("input_values") or {}),
+        "action_label": action.get("action_label"),
+        "canonical_action_name": action.get("canonical_action_name"),
+        "naming_provenance": action.get("naming_provenance"),
         "metadata": dict(action.get("metadata") or {}),
         "explored": bool(action.get("explored", False)),
     }

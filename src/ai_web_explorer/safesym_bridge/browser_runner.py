@@ -18,8 +18,11 @@ from ai_web_explorer.grounded_web.controller import (
 )
 from ai_web_explorer.grounded_web.business_profile import ecommerce_checkout_profile
 from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
-from ai_web_explorer.safesym_bridge.web_kobe_playwright_adapter import (
+from ai_web_explorer.grounded_web.playwright_backend import (
     WebKobePlaywrightAdapter,
+)
+from ai_web_explorer.safesym_bridge.web_kobe_playwright_adapter import (
+    WebKobePlaywrightAdapter as SauceDemoProfilePlaywrightAdapter,
 )
 from ai_web_explorer.grounded_web.semantic_assistor import (
     DeterministicSemanticAssistor,
@@ -35,37 +38,58 @@ from ai_web_explorer.grounded_web.openai_action_selector import (
 from ai_web_explorer.grounded_web.openai_visual_delta import (
     create_openai_visual_delta_provider_from_env,
 )
+from ai_web_explorer.grounded_web.semantic_naming import (
+    create_deepseek_semantic_naming_provider_from_env,
+    semantic_naming_provider_from_text_provider,
+)
 from ai_web_explorer.grounded_web.stagehand_backend import (
     StagehandAutomationBackend,
+)
+from ai_web_explorer.grounded_web.stagehand_prompt import (
+    BenchmarkTaskContext,
+    ECOMMERCE_CHECKOUT_DOMAIN_GUIDANCE,
+    build_ecommerce_checkout_stagehand_goal,
 )
 from ai_web_explorer.grounded_web.stagehand_sdk_provider import (
     create_async_stagehand_provider_from_env,
 )
 
 
-SAUCEDEMO_CHECKOUT_OVERVIEW_STAGEHAND_GOAL = (
-    "Choose exactly one next low-level browser action for the SauceDemo "
-    "checkout task. If the username field is empty, fill it with standard_user. "
-    "If the username is filled and the password field is empty, fill it with "
-    "secret_sauce. If both login fields are filled, click Login. After login, "
-    "add one item to the cart, open the cart, start checkout, fill checkout "
-    "information, and stop on checkout overview. Do not click Finish."
+ECOMMERCE_CHECKOUT_OVERVIEW_STAGEHAND_GOAL = build_ecommerce_checkout_stagehand_goal(
+    allow_final_order=False,
 )
-SAUCEDEMO_CHECKOUT_COMPLETE_STAGEHAND_GOAL = (
-    "Choose exactly one next low-level browser action for the SauceDemo "
-    "checkout task. If the username field is empty, fill it with standard_user. "
-    "If the username is filled and the password field is empty, fill it with "
-    "secret_sauce. If both login fields are filled, click Login. After login, "
-    "add one item to the cart, open the cart, start checkout, fill checkout "
-    "information, continue to checkout overview, click Finish, and stop when "
-    "the checkout complete confirmation page is visible."
+ECOMMERCE_CHECKOUT_COMPLETE_STAGEHAND_GOAL = build_ecommerce_checkout_stagehand_goal(
+    allow_final_order=True,
 )
-SAUCEDEMO_CHECKOUT_OVERVIEW_EXPLORER_GOAL = (
-    "Reach SauceDemo checkout overview without placing the order."
+ECOMMERCE_CHECKOUT_OVERVIEW_EXPLORER_GOAL = (
+    "Reach an e-commerce checkout overview without placing the order."
 )
-SAUCEDEMO_CHECKOUT_COMPLETE_EXPLORER_GOAL = (
-    "Complete the SauceDemo checkout flow through the confirmation page."
+ECOMMERCE_CHECKOUT_COMPLETE_EXPLORER_GOAL = (
+    "Complete an e-commerce test checkout flow through the confirmation page."
 )
+SAUCEDEMO_BENCHMARK_START_URL = "https://www.saucedemo.com/"
+
+
+def build_saucedemo_stagehand_benchmark_context(
+    *,
+    test_username: str = "standard_user",
+    test_password: str = "secret_sauce",
+    checkout_first_name: str = "Test",
+    checkout_last_name: str = "User",
+    checkout_postal_code: str = "12345",
+) -> BenchmarkTaskContext:
+    return BenchmarkTaskContext(
+        site_label="public demo e-commerce site",
+        test_credentials={
+            "username": test_username,
+            "password": test_password,
+        },
+        checkout_data={
+            "first_name": checkout_first_name,
+            "last_name": checkout_last_name,
+            "postal_code": checkout_postal_code,
+        },
+    )
 
 
 def build_debug_web_kobe_graph() -> WebKobeGraph:
@@ -210,7 +234,7 @@ async def run_saucedemo_llm_selector_step(
         page = await browser.new_page()
         try:
             await _bootstrap_saucedemo_login(page)
-            adapter = WebKobePlaywrightAdapter(
+            adapter = SauceDemoProfilePlaywrightAdapter(
                 page,
                 app_name="saucedemo",
             )
@@ -274,7 +298,62 @@ async def run_saucedemo_stagehand_step(
     visual_delta_provider=None,
     use_openai_visual_delta: bool = False,
     visual_delta_model: str | None = None,
+    semantic_naming_provider=None,
+    use_deepseek_semantic_naming: bool = False,
+    semantic_naming_model: str | None = None,
     allow_final_order: bool = False,
+    test_username: str = "standard_user",
+    test_password: str = "secret_sauce",
+    checkout_first_name: str = "Test",
+    checkout_last_name: str = "User",
+    checkout_postal_code: str = "12345",
+) -> Path:
+    return await run_ecommerce_stagehand_step(
+        output_path,
+        start_url=SAUCEDEMO_BENCHMARK_START_URL,
+        app_name="saucedemo",
+        stagehand_trace_path=stagehand_trace_path,
+        headless=headless,
+        steps=steps,
+        provider=provider,
+        model=model,
+        screenshot_dir=screenshot_dir,
+        visual_delta_provider=visual_delta_provider,
+        use_openai_visual_delta=use_openai_visual_delta,
+        visual_delta_model=visual_delta_model,
+        semantic_naming_provider=semantic_naming_provider,
+        use_deepseek_semantic_naming=use_deepseek_semantic_naming,
+        semantic_naming_model=semantic_naming_model,
+        allow_final_order=allow_final_order,
+        benchmark_context=build_saucedemo_stagehand_benchmark_context(
+            test_username=test_username,
+            test_password=test_password,
+            checkout_first_name=checkout_first_name,
+            checkout_last_name=checkout_last_name,
+            checkout_postal_code=checkout_postal_code,
+        ),
+    )
+
+
+async def run_ecommerce_stagehand_step(
+    output_path: Path,
+    *,
+    start_url: str,
+    app_name: str = "ecommerce",
+    stagehand_trace_path: Path | None = None,
+    headless: bool = True,
+    steps: int = 8,
+    provider=None,
+    model: str | None = None,
+    screenshot_dir: Path | None = None,
+    visual_delta_provider=None,
+    use_openai_visual_delta: bool = False,
+    visual_delta_model: str | None = None,
+    semantic_naming_provider=None,
+    use_deepseek_semantic_naming: bool = False,
+    semantic_naming_model: str | None = None,
+    allow_final_order: bool = False,
+    benchmark_context: BenchmarkTaskContext | None = None,
 ) -> Path:
     from playwright.async_api import async_playwright
 
@@ -287,6 +366,19 @@ async def run_saucedemo_stagehand_step(
         resolved_visual_delta_provider = create_openai_visual_delta_provider_from_env(
             model=visual_delta_model,
         )
+    resolved_semantic_naming_provider = semantic_naming_provider
+    if resolved_semantic_naming_provider is None and use_deepseek_semantic_naming:
+        text_provider = create_deepseek_semantic_naming_provider_from_env(
+            model=semantic_naming_model,
+        )
+        resolved_semantic_naming_provider = semantic_naming_provider_from_text_provider(
+            text_provider
+        )
+
+    stagehand_goal = build_ecommerce_checkout_stagehand_goal(
+        allow_final_order=allow_final_order,
+        benchmark_context=benchmark_context,
+    )
 
     cdp_port = _pick_free_port() if provider is None else None
     launch_args = (
@@ -302,7 +394,7 @@ async def run_saucedemo_stagehand_step(
         )
         page = await browser.new_page()
         try:
-            await page.goto("https://www.saucedemo.com/")
+            await page.goto(start_url)
             resolved_provider = provider
             if resolved_provider is None:
                 resolved_provider = await create_async_stagehand_provider_from_env(
@@ -312,25 +404,22 @@ async def run_saucedemo_stagehand_step(
                 )
             base_adapter = WebKobePlaywrightAdapter(
                 page,
-                app_name="saucedemo",
+                app_name=app_name,
                 screenshot_dir=screenshot_dir,
             )
             adapter = StagehandAutomationBackend(
                 base_backend=base_adapter,
                 provider=resolved_provider,
-                goal=(
-                    SAUCEDEMO_CHECKOUT_COMPLETE_STAGEHAND_GOAL
-                    if allow_final_order
-                    else SAUCEDEMO_CHECKOUT_OVERVIEW_STAGEHAND_GOAL
-                ),
+                goal=stagehand_goal,
+                execution_mode="business_milestone",
             )
             explorer = WebKobeExplorer(
                 adapter=adapter,
-                semantic_assistor=DeterministicSemanticAssistor(app="saucedemo"),
+                semantic_assistor=DeterministicSemanticAssistor(app=app_name),
                 goal=(
-                    SAUCEDEMO_CHECKOUT_COMPLETE_EXPLORER_GOAL
+                    ECOMMERCE_CHECKOUT_COMPLETE_EXPLORER_GOAL
                     if allow_final_order
-                    else SAUCEDEMO_CHECKOUT_OVERVIEW_EXPLORER_GOAL
+                    else ECOMMERCE_CHECKOUT_OVERVIEW_EXPLORER_GOAL
                 ),
                 capture_screenshots=screenshot_dir is not None,
                 business_profile=(
@@ -339,6 +428,7 @@ async def run_saucedemo_stagehand_step(
                     else None
                 ),
                 visual_delta_provider=resolved_visual_delta_provider,
+                semantic_naming_provider=resolved_semantic_naming_provider,
             )
             controller = WebKobeExplorationController(explorer)
             result = await controller.run(max_steps=max(steps, 1))

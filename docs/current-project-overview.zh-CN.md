@@ -77,6 +77,7 @@ actions。通过 replay、snapshot 或 backtracking 执行这些 frontier 的能
 - before/after 状态记录；
 - typed delta 和 schema delta；
 - WebKobeGraph 构建；
+- 运行时稳定的图身份，以及人类可读的语义命名；
 - LLM/Stagehand 辅助选择或执行时的 trace 边界。
 
 它不应该包含 SafeSym-specific 规划逻辑，也不应该包含 SauceDemo-only 业务规则。
@@ -112,6 +113,35 @@ src/ai_web_explorer/grounded_web/stagehand_backend.py
 
 backend 负责操作浏览器。Web-KOBE 层负责图，以及这次状态转移的意义。
 
+## 图身份与命名
+
+图身份和人类可读命名要分开处理。
+
+运行时身份由确定性代码负责：
+
+```text
+node_id
+edge_id
+BrowserAction.semantic_id
+BrowserAction.locator
+```
+
+这些字段可以驱动节点合并、动作执行、trace 对齐和 PDDL 投影。LLM/VLM provider
+不应该重写它们。
+
+人类可读命名是带来源的辅助注释：
+
+```text
+WebKobeNode.node_label
+WebKobeNode.state_summary
+BrowserAction.action_label
+BrowserAction.canonical_action_name
+naming_provenance
+```
+
+这些字段用于让图更容易审阅，也可以在后续帮助 PDDL 映射层选择 planner-facing
+动作名。它们不是图身份。启用 DeepSeek semantic naming 时，它只写这些可读字段。
+
 ## 当前完成情况
 
 项目已经有端到端 MVP，但还不是成熟的通用网页状态建模系统。
@@ -133,22 +163,54 @@ backend 负责操作浏览器。Web-KOBE 层负责图，以及这次状态转移
   与 Stagehand 隔离；
 - Stagehand SauceDemo smoke 可以通过 `--openai-visual-delta`、
   `--visual-delta-model` 和 `--screenshot-dir` 可选启用 OpenAI visual delta；
+- `WebKobeNode` 和 `BrowserAction` 已经把运行时身份与可读命名分开。
+  `node_id`、`edge_id`、`semantic_id` 和 locator 仍然是确定性的执行/投影锚点；
+  `node_label`、`state_summary`、`action_label`、`canonical_action_name` 和
+  `naming_provenance` 是可选的诊断或投影辅助字段；
+- DOM 和 Stagehand candidates 会提供轻量级基础命名证据。Stagehand SauceDemo smoke
+  可以通过 `--deepseek-semantic-naming` 和 `--semantic-naming-model` 可选启用
+  DeepSeek semantic naming；它使用已配置的 DeepSeek/OpenAI-compatible 文本接口，
+  不改变运行时 ID、selector、状态 facts 或 PDDL effects；
+- business-milestone 边现在可以基于 VLM 的 `visual_change_summary` 做 transition-level
+  LLM 命名。这是通用命名步骤，不是电商 action mapping 表。它只要求输出简洁的
+  lower_snake_case 业务转移名，并只影响可读 action 字段和 PDDL action 命名优先级；
+- DOM/HTML 抽取仍然属于通用证据层。它应当用于支持或质疑 profile facts，而不是被
+  站点专用 observer 取代；
 - 旧的自研通用动作执行层已经移除；
 - Playwright 仍用于受控 fixture 和 fallback 操作；
 - Stagehand 已作为真实站点动作发现/执行后端接入；
+- 主线 Stagehand benchmark 路径现在使用通用 grounded Playwright adapter 和电商级
+  任务指导，不应自动启用 SauceDemo-specific observer 或静态 action catalog；
+- Stagehand 电商任务 prompt 已拆成 domain guidance、benchmark context、
+  action policy 和 safety boundary。SauceDemo 凭据和 checkout 数据属于 benchmark
+  context，可以通过 smoke 命令配置，不应写进可复用的 domain guidance；
+- 电商 Stagehand smoke 现在默认采用 business-milestone 执行边界：每个图 step
+  要求 Stagehand 推进一个有意义的 checkout 业务里程碑，低层 click/fill 只留在
+  edge trace 中，不直接成为 planner-facing graph edge；
+- 推荐使用 benchmark-driven 的电商 Stagehand smoke 入口：
+  `web-kobe-ecommerce-stagehand-smoke --benchmark saucedemo`。旧的
+  `web-kobe-saucedemo-stagehand-smoke` 命令保留为兼容 wrapper，方便已有脚本继续使用；
 - WebKobeGraph 可以投影成 PDDL；
 - PDDL 投影当前会把 candidate 和 verified planning-delta facts 都视作可信 effects，
   用于先跑通 VLM/LLM-to-PDDL 端到端链路；
-- 当状态转移证据支持时，PDDL 投影层可以把低层浏览器动作名翻译成 SafeSym-facing
-  业务动作名；例如，产生 `order_created` 的边会投影成 `order_place_confirm`。
+- PDDL 投影现在会区分唯一的 planner action identity 和可读业务标签。投影出的 action
+  name 由代码生成，采用稳定的 `edge_###_<business_suffix>` 形式，避免 LLM 可读标签重复
+  导致 PDDL action 重名；
+- PDDL 投影默认只使用 planner-facing facts：图位置 predicates 和来自 `PlanningDelta`
+  的 profile/planning facts。DOM/control `observed_delta` facts 保留为图上的证据，不再
+  默认成为 PDDL predicates；
+- planning delete effects 会保守投影：被删除的 planning facts 会同时作为 action
+  precondition，从而让生成模型保持在当前 Fast Downward smoke 期望的 STRIPS 片段内；
 - 生成的 PDDL 可以做图可达性和静态一致性检查；
-- Fast Downward 可以求解生成的 base plan；
-- SafeSym 可以在 smoke 场景中 parse、注入安全动作，并求解 safe plan。
+- PDDL smoke diagnostics 现在会报告 projected action names、duplicate action names、
+  observed/control fact projection，以及没有匹配 precondition 的 delete effects；
+- SafeSym 可以 parse/inject 生成的 PDDL。下一次实验应在这轮投影层 hardening 后重新跑
+  Fast Downward base/safe solve。
 
 最近一次保留测试的状态：
 
 ```text
-all retained tests: 183 passed, 2 skipped
+all retained tests: 192 passed, 2 skipped
 ```
 
 Playwright browser tests 在 restricted sandbox 中可能因为浏览器 spawn 权限失败。
@@ -226,6 +288,39 @@ check_human_confirmation_order_place_confirm
 这说明真实站点链路已经验证到图构建、PDDL 投影和外部 planner 消费。但它还不能证明
 我们已经有鲁棒的通用网页状态理解能力。
 
+### Stagehand Business-Milestone Smoke
+
+当前电商 Stagehand 实验使用 `business_milestone` backend 模式。每个图 step 都通过
+bounded `agentExecute` 要求 Stagehand 推进一个有意义的 checkout 业务里程碑，Web-KOBE
+只在里程碑前后各观察一次。
+
+最新 SauceDemo final-order run 产生了更接近业务流程的图：
+
+```text
+login/product listing
+  -> add product to cart
+  -> open cart
+  -> start checkout
+  -> submit checkout information / reach order review
+  -> place order / reach checkout complete
+```
+
+这次 run 到达了 `checkout_complete`，有 6 条 projectable business transitions。在
+planner-facing projection hardening 之前，SafeSym parse/inject 可以消费生成的 PDDL，
+但 Fast Downward solve 暴露了投影层问题：可读 action name 重复，以及 delete effect
+删除了 precondition 中没有建立为真的 fact。
+
+这次 run 暴露的注意点：
+
+- Stagehand `agentExecute` 实际完成了有用的浏览器操作，但返回 `success=false`，错误为
+  `Thinking mode does not support this tool_choice`。Web-KOBE 现在会把 backend 原始
+  返回保存在 metadata 中，同时允许明确的状态变化决定图 transition 是否成功；
+- planner-facing action identity 现在由代码唯一化；LLM transition naming 只作为可读
+  suffix；
+- PDDL 投影现在优先使用 profile/planning facts，并把低层 DOM/control predicates 保留为
+  证据，而不是默认 planner-facing facts；
+- runner 在 `order_completed` 后还需要更强的终止条件，避免在完成页多尝试一次无变化动作。
+
 ## Stagehand 接入定位
 
 Stagehand 应该被理解为：
@@ -250,25 +345,75 @@ Stagehand 的描述可以作为“它尝试做了什么”的证据，但它不�
 `order_place_confirm`，因为 SafeSym 规则匹配的是规划语义，而不是某个工具自己的
 click 标签。
 
-当前使用 Stagehand 的方式是单步 transition loop：
+当前 Stagehand 电商 benchmark 正在从低层 `observe()`/单动作执行，转向
+business-milestone 边界：
 
 ```text
 observe before state
-  -> Stagehand observe/act 一个受约束动作
+  -> 要求 Stagehand 推进一个有意义的业务里程碑
+  -> Stagehand 内部可以执行多个低层 click/fill 交互
   -> observe after state
   -> compute project-owned deltas
-  -> append WebKobeGraph edge
+  -> append one WebKobeGraph business edge
 ```
 
+低层 Stagehand 动作不应成为最终图边或 PDDL action。它们是挂在业务边上的
+trace/evidence。benchmark runner 现在有 `business_milestone` Stagehand backend
+模式用于这个实验。该模式优先使用 Stagehand 的 bounded `execute`/agentExecute 路径，
+并设置较小 step limit，让 Stagehand 可以在内部完成一个里程碑；旧的 observed-action
+模式保留为诊断 baseline。
+
 不要把主实现替换成一次不透明的 Stagehand `agent()` 整任务运行。`agent()` 后续可以
-作为外部 baseline，但 SafeSym 需要 transition-level evidence。
+作为外部 baseline，但 SafeSym 需要 milestone-level transition evidence。
+
+Stagehand 真实站点 benchmark 仍然可以从 SauceDemo URL 开始，但它的任务 prompt 应描述
+通用电商行为，而不是站点专用脚本。prompt 不应编码 SauceDemo 用户名、密码、商品名、
+精确按钮文案或固定步骤序列。测试数据应通过 benchmark 配置或任务上下文提供，而不是
+写在通用 prompt 里。
+
+代码中，这个边界由 Stagehand prompt builder 表达：
+
+```text
+domain guidance = 可复用的电商 checkout 先验
+benchmark context = 当前测试站点凭据和 checkout 数据
+action policy = 每次图 transition 推进一个业务里程碑
+safety boundary = 是否允许最终订单确认
+```
+
+命令边界也应保持同样形状：
+
+```text
+web-kobe-ecommerce-stagehand-smoke
+  --benchmark saucedemo
+  --start-url 可选覆盖
+  --test-username / --test-password / checkout data
+```
+
+这样 SauceDemo 是 benchmark 配置，而不是主线架构路径的名字。
+
+日常实验只保留最新生成产物，统一写入 `outputs/latest/`。标准 SauceDemo 测试站点命令
+形状是：
+
+```text
+web-kobe web-kobe-ecommerce-stagehand-smoke
+  --benchmark saucedemo
+  --output outputs/latest/ecommerce_stagehand_graph.json
+  --stagehand-trace outputs/latest/ecommerce_stagehand_trace.json
+  --screenshot-dir outputs/latest/screenshots
+  --clean-output-dir
+  --allow-final-order
+```
+
+如果某次历史输出需要长期保留，应先复制到别处，再使用 `--clean-output-dir`。
 
 ## 状态观察与 Planning Facts
 
 状态观察是当前最大的短板。
 
-系统现在能收集 URL、title、可见控件、DOM 文本、表单字段、`[data-state]` 值，以及
-SauceDemo 应用专用 facts。这些都是有用证据，但它们本身不一定是好的 PDDL 输入。
+系统现在能收集 URL、title、可见控件、DOM 文本、HTML/DOM 结构、表单字段和
+`[data-state]` 值。这些都是有用证据，但它们本身不一定是好的 PDDL 输入。
+legacy SauceDemo-specific facts 可以保留在回归模块中，但不应作为客观 Stagehand 探索
+的主 observer。
 
 PDDL 应该消费 planning-level facts，例如：
 
@@ -278,6 +423,8 @@ product_list_visible
 cart_empty
 cart_nonempty
 checkout_started
+required_info_missing
+required_info_provided
 checkout_info_complete
 order_review_ready
 order_place_pending_sensitive
@@ -330,8 +477,10 @@ site adapters = 可选的 benchmark-specific 稳定化
 已知限制：
 
 - 通用状态抽象仍然偏浅；
-- 当前 PDDL 投影仍是较小的 STRIPS 子集；
-- 部分 action name 仍太底层，难以稳定匹配 SafeSym safety-rule patterns；
+- 当前 PDDL 投影仍是较小的 STRIPS 子集。它现在默认使用干净的 planner-facing facts，
+  但语义质量仍取决于 `PlanningDelta` 的质量；
+- 虽然 PDDL action identity 已经唯一化，但部分 action name 作为 safety trigger 仍可能
+  难以稳定匹配 SafeSym safety-rule patterns；
 - 当前 visual-delta 路径是让 VLM provider 直接返回 profile 内的 candidate facts，
   还没有拆成“纯视觉变化总结 -> 独立 LLM/parser normalizer 映射 facts”两步；
 - structured verifier 仍主要基于 signature diff。DOM、URL、控件、表单值和截图
@@ -470,6 +619,10 @@ src/ai_web_explorer/grounded_web/automation_backend.py
 src/ai_web_explorer/grounded_web/stagehand_backend.py
   Stagehand-backed AutomationBackend wrapper。
 
+src/ai_web_explorer/grounded_web/stagehand_prompt.py
+  Stagehand task prompt builder。它把可复用 domain guidance 与 benchmark context、
+  safety mode 分开。
+
 src/ai_web_explorer/grounded_web/stagehand_sdk_provider.py
   Stagehand SDK 设置、模型 key 加载、本地 server/CDP 接线。
 
@@ -508,7 +661,7 @@ src/ai_web_explorer/safesym_bridge/web_kobe_pddl_smoke.py
 
 src/ai_web_explorer/safesym_bridge/state_observer.py
 src/ai_web_explorer/safesym_bridge/saucedemo_adapter.py
-  SauceDemo-specific 观察和回归支持。
+  legacy SauceDemo-specific 观察和回归支持。它们不是通用 Stagehand 探索 observer。
 
 docs/safesym-bridge.md
   SafeSym bridge 命令参考。

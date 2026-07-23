@@ -71,6 +71,9 @@ class BrowserAction:
     semantic_id: str
     input_values: dict[str, str] = field(default_factory=dict)
     description: str | None = None
+    action_label: str | None = None
+    canonical_action_name: str | None = None
+    naming_provenance: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -79,6 +82,13 @@ class BrowserAction:
             "semantic_id": self.semantic_id,
             "input_values": dict(self.input_values),
             "description": self.description,
+            "action_label": self.action_label,
+            "canonical_action_name": self.canonical_action_name,
+            "naming_provenance": (
+                dict(self.naming_provenance)
+                if self.naming_provenance is not None
+                else None
+            ),
         }
 
 
@@ -113,6 +123,9 @@ class WebKobeNode:
     visit_count: int = 0
     status: str = "verified"
     evidence: list[Evidence] = field(default_factory=list)
+    node_label: str | None = None
+    state_summary: str | None = None
+    naming_provenance: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -137,6 +150,13 @@ class WebKobeNode:
             "visit_count": self.visit_count,
             "status": self.status,
             "evidence": _list_to_dict(self.evidence),
+            "node_label": self.node_label,
+            "state_summary": self.state_summary,
+            "naming_provenance": (
+                dict(self.naming_provenance)
+                if self.naming_provenance is not None
+                else None
+            ),
         }
 
 

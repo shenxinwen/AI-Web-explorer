@@ -46,6 +46,8 @@ class FakeStagehandProvider:
     def __init__(self):
         self.observed = []
         self.acted = []
+        self.acted_instructions = []
+        self.executed_instructions = []
 
     async def observe_next_action(self, *, instruction, state):
         self.observed.append((instruction, state.page_id))
@@ -66,6 +68,24 @@ class FakeStagehandProvider:
             message="Clicked login",
             action_description="Clicked button with text Login",
             raw={"actionId": "act_login"},
+        )
+
+    async def act_instruction(self, instruction):
+        self.acted_instructions.append(instruction)
+        return StagehandActResult(
+            success=True,
+            message="Advanced one milestone",
+            action_description="Logged in and reached a product listing",
+            raw={"actionId": "act_milestone"},
+        )
+
+    async def execute_instruction(self, instruction, *, max_steps):
+        self.executed_instructions.append((instruction, max_steps))
+        return StagehandActResult(
+            success=True,
+            message="Completed milestone",
+            action_description="Logged in and reached a product listing",
+            raw={"actions": [{"type": "act", "action": "fill username"}]},
         )
 
 
@@ -172,3 +192,85 @@ async def test_stagehand_backend_delegates_screenshot_capture_to_base_backend():
 
     assert path == "outputs/before_0001.png"
     assert base.captured == ["before_0001"]
+
+
+@pytest.mark.anyio
+async def test_stagehand_backend_business_milestone_mode_acts_without_observe():
+    provider = FakeStagehandProvider()
+    backend = StagehandAutomationBackend(
+        base_backend=FakeBaseBackend(),
+        provider=provider,
+        goal="Advance one meaningful checkout milestone.",
+        execution_mode="business_milestone",
+    )
+    state = await backend.observe_state()
+
+    actions = await backend.list_interactables(state)
+    success = await backend.execute(actions[0])
+
+    assert success is True
+    assert provider.observed == []
+    assert provider.acted == []
+    assert provider.acted_instructions == []
+    assert provider.executed_instructions == [
+        ("Advance one meaningful checkout milestone.", 5)
+    ]
+    assert actions[0]["semantic_id"] == "stagehand_business_milestone_001"
+    assert actions[0]["description"] == "Advance one meaningful checkout milestone."
+    assert actions[0]["locator"] is None
+    assert actions[0]["action_kind"] == "business_intent"
+    assert actions[0]["input_values"] == {}
+    assert actions[0]["action_label"] == "Advance one business milestone"
+    assert actions[0]["canonical_action_name"] == "advance_business_milestone"
+    assert actions[0]["naming_provenance"] == {"source": "stagehand_business_milestone"}
+    assert actions[0]["explored"] is False
+    assert actions[0]["metadata"] == {
+        "action_source": "stagehand",
+        "stagehand_execution_mode": "business_milestone",
+    }
+    assert backend.last_execution_metadata["stagehand_observed_action"] is None
+    assert (
+        backend.last_execution_metadata["stagehand_act_result"]["action_description"]
+        == "Logged in and reached a product listing"
+    )
+
+
+@pytest.mark.anyio
+async def test_stagehand_backend_business_milestone_falls_back_to_act_instruction():
+    class ActOnlyProvider:
+        def __init__(self):
+            self.acted_instructions = []
+
+        async def act_instruction(self, instruction):
+            self.acted_instructions.append(instruction)
+            return StagehandActResult(success=True, message="Acted")
+
+    provider = ActOnlyProvider()
+    backend = StagehandAutomationBackend(
+        base_backend=FakeBaseBackend(),
+        provider=provider,
+        goal="Advance one meaningful checkout milestone.",
+        execution_mode="business_milestone",
+    )
+    state = await backend.observe_state()
+    actions = await backend.list_interactables(state)
+
+    assert await backend.execute(actions[0]) is True
+    assert provider.acted_instructions == ["Advance one meaningful checkout milestone."]
+
+
+@pytest.mark.anyio
+async def test_stagehand_backend_business_milestone_ids_are_runtime_unique():
+    backend = StagehandAutomationBackend(
+        base_backend=FakeBaseBackend(),
+        provider=FakeStagehandProvider(),
+        goal="Advance one meaningful checkout milestone.",
+        execution_mode="business_milestone",
+    )
+    state = await backend.observe_state()
+
+    first = await backend.list_interactables(state)
+    second = await backend.list_interactables(state)
+
+    assert first[0]["semantic_id"] == "stagehand_business_milestone_001"
+    assert second[0]["semantic_id"] == "stagehand_business_milestone_002"

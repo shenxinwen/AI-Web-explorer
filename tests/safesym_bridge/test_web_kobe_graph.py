@@ -50,6 +50,9 @@ def test_web_kobe_graph_serializes_node_edge_and_evidence():
     )
     node = WebKobeNode(
         node_id="n0_login",
+        node_label="login_empty",
+        state_summary="Login page before credentials are entered.",
+        naming_provenance={"source": "unit_test"},
         page_description="login page",
         page_frame=page_frame,
         state_schema={"logged_in": [False]},
@@ -95,6 +98,9 @@ def test_web_kobe_graph_serializes_node_edge_and_evidence():
             action_kind="composite",
             locator="#login-button",
             semantic_id="submit_login_form",
+            action_label="Submit login form",
+            canonical_action_name="login_submit",
+            naming_provenance={"source": "unit_test"},
             input_values={"username": "standard_user", "password": "secret_sauce"},
         ),
         capability=capability,
@@ -148,6 +154,15 @@ def test_web_kobe_graph_serializes_node_edge_and_evidence():
 
     assert data["meta"]["schema_version"] == "web-kobe-graph-v1"
     assert data["meta"]["app"] == "example"
+    assert data["nodes"][0]["node_label"] == "login_empty"
+    assert (
+        data["nodes"][0]["state_summary"]
+        == "Login page before credentials are entered."
+    )
+    assert data["nodes"][0]["naming_provenance"] == {"source": "unit_test"}
+    assert data["edges"][0]["action"]["action_label"] == "Submit login form"
+    assert data["edges"][0]["action"]["canonical_action_name"] == "login_submit"
+    assert data["edges"][0]["action"]["naming_provenance"] == {"source": "unit_test"}
     assert data["nodes"][0]["action_targets"][0]["target_type"] == "form"
     assert data["nodes"][0]["capabilities"][0]["capability_id"] == "submit_login_form"
     assert data["edges"][0]["status"] == "verified"

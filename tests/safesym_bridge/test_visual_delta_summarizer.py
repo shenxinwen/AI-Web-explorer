@@ -92,3 +92,54 @@ def test_summarize_visual_delta_requires_visible_change_summary():
     assert result.trace.status == "failed"
     assert result.trace.error_type == "missing_visual_change_summary"
     assert result.planning_delta.candidate_added_facts == []
+
+
+def test_summarize_visual_delta_accepts_object_summary_and_fact_objects():
+    request = VisualDeltaRequest(
+        goal="Add one item to the cart.",
+        action=BrowserAction("click", "button.add", "add_to_cart"),
+        profile=ecommerce_checkout_profile(),
+        before_screenshot_path="before.png",
+        after_screenshot_path="after.png",
+    )
+
+    def provider(prompt, *, before_screenshot_path, after_screenshot_path):
+        return (
+            '{"visible_change_summary":{'
+            '"before":{"cart_count":0},'
+            '"after":{"cart_count":1}},'
+            '"candidate_added_facts":[{"fact_id":"cart_nonempty"}],'
+            '"candidate_removed_facts":[{"fact_id":"cart_empty"}],'
+            '"evidence":[{"description":"cart badge changed from 0 to 1"}],'
+            '"confidence":"high"}'
+        )
+
+    result = summarize_visual_delta(request, provider=provider)
+
+    assert result.trace.status == "summarized"
+    assert result.trace.visual_change_summary == (
+        '{"after": {"cart_count": 1}, "before": {"cart_count": 0}}'
+    )
+    assert result.planning_delta.candidate_added_facts == ["cart_nonempty"]
+    assert result.planning_delta.candidate_removed_facts == ["cart_empty"]
+    assert result.planning_delta.evidence == ["cart badge changed from 0 to 1"]
+
+
+def test_summarize_visual_delta_captures_provider_errors_without_raising():
+    request = VisualDeltaRequest(
+        goal="Add one item to the cart.",
+        action=BrowserAction("click", "button.add", "add_to_cart"),
+        profile=ecommerce_checkout_profile(),
+        before_screenshot_path="before.png",
+        after_screenshot_path="after.png",
+    )
+
+    def provider(prompt, *, before_screenshot_path, after_screenshot_path):
+        raise RuntimeError("network unavailable")
+
+    result = summarize_visual_delta(request, provider=provider)
+
+    assert result.trace.status == "failed"
+    assert result.trace.error_type == "provider_error"
+    assert result.trace.error_message == "network unavailable"
+    assert result.planning_delta.candidate_added_facts == []

@@ -11,6 +11,7 @@ SUCCESS_EDGE_STATUSES = frozenset(
         "succeeded",
         "succeeded_with_observed_change",
         "succeeded_with_navigation",
+        "no_observed_change",
     }
 )
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from typing import Any, Callable
 
 from ai_web_explorer.grounded_web.automation_backend import AutomationBackend
@@ -27,6 +28,12 @@ from ai_web_explorer.grounded_web.business_profile import PlanningDelta
 from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.grounded_web.planning_fact_verifier import verify_planning_delta
 from ai_web_explorer.grounded_web.semantic_assistor import SemanticAssistor
+from ai_web_explorer.grounded_web.semantic_naming import (
+    SemanticNamingProvider,
+    SemanticNamingRequest,
+    apply_semantic_naming,
+    apply_transition_naming,
+)
 from ai_web_explorer.grounded_web.typed_delta import (
     observed_deltas_from_typed,
     typed_deltas_from_facts,
@@ -65,6 +72,9 @@ def _browser_action_from_interactable(item: dict[str, Any]) -> BrowserAction:
         semantic_id=str(item.get("semantic_id") or "unknown_action"),
         input_values=dict(item.get("input_values") or {}),
         description=item.get("description"),
+        action_label=item.get("action_label"),
+        canonical_action_name=item.get("canonical_action_name"),
+        naming_provenance=item.get("naming_provenance"),
     )
 
 
@@ -158,6 +168,7 @@ class WebKobeExplorer:
         business_profile: BusinessFlowProfile | None = None,
         capture_screenshots: bool = False,
         visual_delta_provider: VisualDeltaProvider | None = None,
+        semantic_naming_provider: SemanticNamingProvider | None = None,
     ):
         self.adapter = adapter
         self.semantic_assistor = semantic_assistor
@@ -166,6 +177,7 @@ class WebKobeExplorer:
         self.business_profile = business_profile
         self.capture_screenshots = capture_screenshots
         self.visual_delta_provider = visual_delta_provider
+        self.semantic_naming_provider = semantic_naming_provider
         self.selection_traces: list[dict] = []
         self.manager = WebKobeGraphManager(app=adapter.app_name)
         self._start_node_id: str | None = None
@@ -186,6 +198,21 @@ class WebKobeExplorer:
         selected = self._select_action(before, source_interactables)
         if selected is None:
             return self.manager.to_graph(start_node_id=self._start_node_id)
+
+        if (
+            self.semantic_naming_provider is not None
+            and selected.action_kind != "business_intent"
+        ):
+            node_fields, selected = apply_semantic_naming(
+                SemanticNamingRequest(
+                    goal=self.goal,
+                    state=before,
+                    action=selected,
+                ),
+                provider=self.semantic_naming_provider,
+            )
+            source_node = _node_from_draft(before_draft)
+            self.manager.identify_or_add_node(replace(source_node, **node_fields))
 
         before_screenshot_path = await self._capture_screenshot("before")
         execution_success = await self.adapter.execute(selected)
@@ -219,15 +246,15 @@ class WebKobeExplorer:
             execution_error=execution_error,
             observed_delta=observed_delta,
         )
-        if (
-            execution_success
-            and source_id != target_id
-            and edge_status == "no_observed_change"
-        ):
+        if source_id != target_id and edge_status in {
+            "no_observed_change",
+            "failed_execution",
+        }:
             edge_status = "succeeded_with_navigation"
         execution_metadata = dict(
             getattr(self.adapter, "last_execution_metadata", {}) or {}
         )
+        execution_metadata["backend_reported_success"] = execution_success
         if before_screenshot_path is not None:
             execution_metadata["before_screenshot_path"] = before_screenshot_path
         if after_screenshot_path is not None:
@@ -266,6 +293,15 @@ class WebKobeExplorer:
                 execution_metadata["visual_change_summary"] = (
                     visual_result.trace.visual_change_summary
                 )
+                if self.semantic_naming_provider is not None:
+                    selected = apply_transition_naming(
+                        action=selected,
+                        goal=self.goal,
+                        visual_change_summary=(
+                            visual_result.trace.visual_change_summary
+                        ),
+                        provider=self.semantic_naming_provider,
+                    )
         edge = WebKobeEdge(
             source_node_id=source_id,
             target_node_id=target_id,
@@ -282,7 +318,7 @@ class WebKobeExplorer:
                 input_values_used=dict(selected.input_values),
                 before_observation_id=source_id,
                 after_observation_id=target_id,
-                success=execution_success,
+                success=edge_status != "failed_execution",
                 error=execution_error,
                 metadata=execution_metadata,
             ),
@@ -358,10 +394,10 @@ class WebKobeExplorer:
         execution_error: str | None,
         observed_delta: list[ObservedDelta],
     ) -> str:
-        if not execution_success:
-            return "failed_execution"
         if observed_delta:
             return "succeeded_with_observed_change"
+        if not execution_success:
+            return "failed_execution"
         return "no_observed_change"
 
     def _select_action(

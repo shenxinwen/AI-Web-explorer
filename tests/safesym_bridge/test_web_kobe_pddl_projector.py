@@ -18,6 +18,7 @@ from ai_web_explorer.grounded_web.graph import (
 )
 from ai_web_explorer.grounded_web.business_profile import PlanningDelta
 from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
+    PddlProjectionOptions,
     compile_web_kobe_graph_to_pddl,
     load_web_kobe_graph_json,
 )
@@ -91,7 +92,7 @@ def test_compile_web_kobe_graph_to_pddl_uses_page_and_boolean_delta():
         goal_node_id="listing_nonempty",
     )
 
-    assert "(:action add_to_cart_product" in artifacts.domain
+    assert "(:action edge_001_add_to_cart_product" in artifacts.domain
     assert "(at_listing_empty)" in artifacts.problem
     assert "(cart_nonempty)" in artifacts.domain
     assert "(:goal (and (at_listing_nonempty)))" in artifacts.problem
@@ -173,7 +174,11 @@ def test_compile_web_kobe_graph_to_pddl_projects_positive_numeric_facts():
         ],
     )
 
-    artifacts = compile_web_kobe_graph_to_pddl(graph, goal_node_id="filled")
+    artifacts = compile_web_kobe_graph_to_pddl(
+        graph,
+        goal_node_id="filled",
+        options=PddlProjectionOptions(include_observed_delta_facts=True),
+    )
 
     assert "(cart_count_positive)" in artifacts.domain
     assert (
@@ -183,7 +188,7 @@ def test_compile_web_kobe_graph_to_pddl_projects_positive_numeric_facts():
     assert "(cart_count_positive)" not in artifacts.problem
 
 
-def test_compile_web_kobe_graph_to_pddl_declares_predicates_from_effect_deltas():
+def test_compile_web_kobe_graph_to_pddl_does_not_project_observed_control_facts_by_default():
     graph = WebKobeGraph(
         app="example",
         start_node_id="cart",
@@ -219,22 +224,69 @@ def test_compile_web_kobe_graph_to_pddl_declares_predicates_from_effect_deltas()
                     "checkout",
                     True,
                 ),
+                planning_delta=PlanningDelta(
+                    candidate_added_facts=["checkout_started"],
+                    evidence=["checkout page became visible"],
+                ),
                 status="succeeded_with_observed_change",
             )
         ],
     )
 
     artifacts = compile_web_kobe_graph_to_pddl(graph, goal_node_id="checkout")
-    predicate_block = artifacts.domain.split("  (:predicates", 1)[1].split(
-        "  (:action",
-        1,
-    )[0]
 
-    assert "\n    (control_place_order_enabled)\n" in predicate_block
-    assert (
-        ":effect (and (not (at_cart)) (at_checkout) "
-        "(control_place_order_enabled))" in artifacts.domain
+    assert "(checkout_started)" in artifacts.domain
+    assert "control_place_order_enabled" not in artifacts.domain
+
+
+def test_compile_web_kobe_graph_to_pddl_can_include_observed_facts_for_diagnostics():
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="cart",
+        total_steps_completed=1,
+        nodes=[
+            _node("cart", "cart", {}),
+            _node("checkout", "checkout", {}),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="cart",
+                target_node_id="checkout",
+                instruction="begin checkout",
+                action=BrowserAction("click", "#checkout", "begin_checkout"),
+                capability=None,
+                target_observation="checkout page",
+                observed_delta=[
+                    ObservedDelta(
+                        "control_place_order_enabled",
+                        None,
+                        True,
+                        "control_availability_changed",
+                        evidence=[Evidence(source="unit_test")],
+                    )
+                ],
+                schema_delta={},
+                execution_trace=ExecutionTrace(
+                    "click",
+                    "#checkout",
+                    "checkout",
+                    {},
+                    "cart",
+                    "checkout",
+                    True,
+                ),
+                status="succeeded_with_observed_change",
+            )
+        ],
     )
+
+    artifacts = compile_web_kobe_graph_to_pddl(
+        graph,
+        goal_node_id="checkout",
+        options=PddlProjectionOptions(include_observed_delta_facts=True),
+    )
+
+    assert "(control_place_order_enabled)" in artifacts.domain
 
 
 def test_compile_web_kobe_graph_to_pddl_projects_successful_navigation_edges():
@@ -272,7 +324,7 @@ def test_compile_web_kobe_graph_to_pddl_projects_successful_navigation_edges():
 
     artifacts = compile_web_kobe_graph_to_pddl(graph, goal_node_id="cart")
 
-    assert "(:action cart_open" in artifacts.domain
+    assert "(:action edge_001_cart_open" in artifacts.domain
     assert ":precondition (and (at_inventory))" in artifacts.domain
     assert ":effect (and (not (at_inventory)) (at_cart))" in artifacts.domain
 
@@ -377,7 +429,7 @@ def test_compile_web_kobe_graph_to_pddl_prefers_pddl_action_hint_name():
 
     artifacts = compile_web_kobe_graph_to_pddl(graph, goal_node_id="complete")
 
-    assert "(:action submit_final_order" in artifacts.domain
+    assert "(:action edge_001_submit_final_order" in artifacts.domain
     assert "(:action click_finish_button" not in artifacts.domain
 
 
@@ -430,61 +482,11 @@ def test_compile_web_kobe_graph_to_pddl_maps_order_completion_for_safesym():
         goal_node_id="checkout_complete",
     )
 
-    assert "(:action order_place_confirm" in artifacts.domain
+    assert "(:action edge_001_order_place_confirm" in artifacts.domain
     assert "(:action stagehand_000_click_finish_button_on_checkout_overview" not in (
         artifacts.domain
     )
     assert "(order_created)" in artifacts.domain
-
-
-def test_compile_web_kobe_graph_to_pddl_deduplicates_repeated_effects():
-    graph = WebKobeGraph(
-        app="example",
-        start_node_id="cart",
-        total_steps_completed=1,
-        nodes=[
-            _node("cart", "cart", {"checkout_started": False}),
-            _node("checkout", "checkout", {"checkout_started": True}),
-        ],
-        edges=[
-            WebKobeEdge(
-                source_node_id="cart",
-                target_node_id="checkout",
-                instruction="start checkout",
-                action=BrowserAction("click", "button.checkout", "start_checkout"),
-                capability=None,
-                target_observation="checkout info",
-                observed_delta=[
-                    ObservedDelta(
-                        "checkout_started",
-                        False,
-                        True,
-                        "state_indicator_change",
-                        evidence=[Evidence(source="unit_test")],
-                    )
-                ],
-                schema_delta={"checkout_started": {"before": False, "after": True}},
-                execution_trace=ExecutionTrace(
-                    "click",
-                    "button.checkout",
-                    "checkout",
-                    {},
-                    "cart",
-                    "checkout",
-                    True,
-                ),
-                planning_delta=PlanningDelta(
-                    candidate_added_facts=["checkout_started"],
-                    verified_added_facts=["checkout_started"],
-                ),
-                status="succeeded_with_observed_change",
-            )
-        ],
-    )
-
-    artifacts = compile_web_kobe_graph_to_pddl(graph, goal_node_id="checkout")
-
-    assert artifacts.domain.count("(checkout_started)") == 2
 
 
 def test_compile_web_kobe_graph_to_pddl_excludes_non_projectable_edges():
@@ -533,10 +535,220 @@ def test_compile_web_kobe_graph_to_pddl_excludes_non_projectable_edges():
 
     artifacts = compile_web_kobe_graph_to_pddl(graph, goal_node_id="success")
 
-    assert "(:action go_success" in artifacts.domain
+    assert "(:action edge_001_go_success" in artifacts.domain
     assert "(:action go_failed" not in artifacts.domain
     assert "(:action go_no_change" not in artifacts.domain
     assert "(:action go_unexpected" not in artifacts.domain
+
+
+def test_compile_web_kobe_graph_to_pddl_prefers_business_canonical_action_name():
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="start",
+        total_steps_completed=1,
+        nodes=[
+            _node("start", "before", {}),
+            _node("done", "after", {}),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="start",
+                target_node_id="done",
+                instruction="advance one business milestone",
+                action=BrowserAction(
+                    "business_intent",
+                    None,
+                    "stagehand_business_milestone_001",
+                    canonical_action_name="submit_application",
+                ),
+                capability=None,
+                target_observation="after",
+                observed_delta=[],
+                schema_delta={},
+                execution_trace=ExecutionTrace(
+                    "business_intent",
+                    None,
+                    "stagehand_business_milestone_001",
+                    {},
+                    "start",
+                    "done",
+                    True,
+                ),
+                status="succeeded_with_observed_change",
+            )
+        ],
+    )
+
+    artifacts = compile_web_kobe_graph_to_pddl(graph, goal_node_id="done")
+
+    assert "(:action edge_001_submit_application" in artifacts.domain
+    assert "(:action stagehand_business_milestone_001" not in artifacts.domain
+
+
+def test_compile_web_kobe_graph_to_pddl_ignores_ui_level_canonical_action_name():
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="start",
+        total_steps_completed=1,
+        nodes=[
+            _node("start", "before", {}),
+            _node("done", "after", {}),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="start",
+                target_node_id="done",
+                instruction="advance one business milestone",
+                action=BrowserAction(
+                    "business_intent",
+                    None,
+                    "stagehand_business_milestone_001",
+                    canonical_action_name="click_submit_button",
+                ),
+                capability=None,
+                target_observation="after",
+                observed_delta=[],
+                schema_delta={},
+                execution_trace=ExecutionTrace(
+                    "business_intent",
+                    None,
+                    "stagehand_business_milestone_001",
+                    {},
+                    "start",
+                    "done",
+                    True,
+                ),
+                status="succeeded_with_observed_change",
+            )
+        ],
+    )
+
+    artifacts = compile_web_kobe_graph_to_pddl(graph, goal_node_id="done")
+
+    assert "(:action edge_001_stagehand_business_milestone_001" in artifacts.domain
+    assert "(:action click_submit_button" not in artifacts.domain
+
+
+def test_compile_web_kobe_graph_to_pddl_makes_duplicate_readable_names_unique():
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="inventory",
+        total_steps_completed=2,
+        nodes=[
+            _node("inventory", "inventory", {}),
+            _node("cart", "cart", {}),
+            _node("checkout", "checkout", {}),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="inventory",
+                target_node_id="cart",
+                instruction="open cart",
+                action=BrowserAction(
+                    "business_intent",
+                    None,
+                    "stagehand_business_milestone_001",
+                    canonical_action_name="advance_business_milestone",
+                ),
+                capability=None,
+                target_observation="cart",
+                observed_delta=[],
+                schema_delta={},
+                execution_trace=ExecutionTrace(
+                    "business_intent",
+                    None,
+                    "stagehand_business_milestone_001",
+                    {},
+                    "inventory",
+                    "cart",
+                    True,
+                ),
+                status="succeeded_with_observed_change",
+            ),
+            WebKobeEdge(
+                source_node_id="cart",
+                target_node_id="checkout",
+                instruction="start checkout",
+                action=BrowserAction(
+                    "business_intent",
+                    None,
+                    "stagehand_business_milestone_002",
+                    canonical_action_name="advance_business_milestone",
+                ),
+                capability=None,
+                target_observation="checkout",
+                observed_delta=[],
+                schema_delta={},
+                execution_trace=ExecutionTrace(
+                    "business_intent",
+                    None,
+                    "stagehand_business_milestone_002",
+                    {},
+                    "cart",
+                    "checkout",
+                    True,
+                ),
+                status="succeeded_with_observed_change",
+            ),
+        ],
+    )
+
+    artifacts = compile_web_kobe_graph_to_pddl(graph, goal_node_id="checkout")
+
+    assert "(:action edge_001_advance_business_milestone" in artifacts.domain
+    assert "(:action edge_002_advance_business_milestone" in artifacts.domain
+    assert artifacts.domain.count("(:action advance_business_milestone") == 0
+
+
+def test_compile_web_kobe_graph_to_pddl_requires_removed_planning_facts():
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="inventory",
+        total_steps_completed=2,
+        nodes=[
+            _node("inventory", "inventory", {}),
+            _node("cart", "cart", {}),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="inventory",
+                target_node_id="cart",
+                instruction="open cart",
+                action=BrowserAction(
+                    "business_intent",
+                    None,
+                    "stagehand_business_milestone_001",
+                    canonical_action_name="open_cart",
+                ),
+                capability=None,
+                target_observation="cart",
+                observed_delta=[],
+                schema_delta={},
+                execution_trace=ExecutionTrace(
+                    "business_intent",
+                    None,
+                    "stagehand_business_milestone_001",
+                    {},
+                    "inventory",
+                    "cart",
+                    True,
+                ),
+                planning_delta=PlanningDelta(
+                    candidate_added_facts=["cart_page_visible"],
+                    candidate_removed_facts=["product_list_visible"],
+                    evidence=["cart page replaced product list"],
+                ),
+                status="succeeded_with_observed_change",
+            )
+        ],
+    )
+
+    artifacts = compile_web_kobe_graph_to_pddl(graph, goal_node_id="cart")
+
+    assert (
+        ":precondition (and (at_inventory) (product_list_visible))" in artifacts.domain
+    )
+    assert "(not (product_list_visible))" in artifacts.domain
 
 
 def test_load_web_kobe_graph_json_reads_to_dict_output(tmp_path):

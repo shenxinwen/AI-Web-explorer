@@ -69,13 +69,18 @@ def stagehand_action_to_browser_action(
     input_values: dict[str, str] = {}
     if method in {"fill", "type"} and selector and action.arguments:
         input_values[selector] = str(action.arguments[0])
-    semantic_id = f"stagehand_{index:03d}_{method}_{_target_slug(action.description, method)}"
+    semantic_id = (
+        f"stagehand_{index:03d}_{method}_{_target_slug(action.description, method)}"
+    )
     return BrowserAction(
         action_kind=method,
         locator=selector,
         semantic_id=semantic_id,
         input_values=input_values,
         description=action.description,
+        action_label=action.description,
+        canonical_action_name=_target_slug(action.description, method),
+        naming_provenance={"source": "stagehand_observe"},
     )
 
 
@@ -97,6 +102,8 @@ def stagehand_trace_metadata(trace: StagehandStepTrace) -> dict[str, Any]:
                 "stagehand_observed_action": dict(observed_action.raw),
             }
         )
+    else:
+        metadata["stagehand_observed_action"] = None
     if act_result is not None:
         metadata["stagehand_act_result"] = {
             "success": act_result.success,

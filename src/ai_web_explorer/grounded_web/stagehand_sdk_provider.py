@@ -13,16 +13,34 @@ def _to_dict(value: Any) -> dict[str, Any]:
     if value is None:
         return {}
     if isinstance(value, dict):
-        return dict(value)
+        return {key: _to_jsonable(item) for key, item in value.items()}
     if hasattr(value, "to_dict"):
         return dict(value.to_dict(exclude_none=True))
     if hasattr(value, "model_dump"):
         return dict(value.model_dump(exclude_none=True))
     if hasattr(value, "__dict__"):
         return {
-            key: item for key, item in vars(value).items() if not key.startswith("_")
+            key: _to_jsonable(item)
+            for key, item in vars(value).items()
+            if not key.startswith("_")
         }
     return {"value": value}
+
+
+def _to_jsonable(value: Any) -> Any:
+    if isinstance(value, list):
+        return [_to_jsonable(item) for item in value]
+    if isinstance(value, tuple):
+        return [_to_jsonable(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _to_jsonable(item) for key, item in value.items()}
+    if (
+        hasattr(value, "to_dict")
+        or hasattr(value, "model_dump")
+        or hasattr(value, "__dict__")
+    ):
+        return _to_dict(value)
+    return value
 
 
 def _result_items(response: Any) -> list[Any]:
@@ -79,6 +97,50 @@ class StagehandSdkProvider:
                 result_data.get("actionDescription")
                 or result_data.get("action_description")
             ),
+            raw=raw_data,
+        )
+
+    async def act_instruction(self, instruction: str) -> StagehandActResult:
+        act_args = {"input": instruction}
+        if self.page is not None:
+            act_args["page"] = self.page
+        response = await self.session.act(**act_args)
+        raw_data = _to_dict(getattr(response, "data", response))
+        result_data = _to_dict(raw_data.get("result"))
+        return StagehandActResult(
+            success=bool(result_data.get("success", raw_data.get("success", True))),
+            message=result_data.get("message"),
+            action_description=(
+                result_data.get("actionDescription")
+                or result_data.get("action_description")
+            ),
+            raw=raw_data,
+        )
+
+    async def execute_instruction(
+        self,
+        instruction: str,
+        *,
+        max_steps: int = 5,
+    ) -> StagehandActResult:
+        execute_args = {
+            "agent_config": {"mode": "dom"},
+            "execute_options": {
+                "instruction": instruction,
+                "max_steps": max_steps,
+                "use_search": False,
+            },
+        }
+        if self.page is not None:
+            execute_args["page"] = self.page
+        response = await self.session.execute(**execute_args)
+        raw_data = _to_dict(getattr(response, "data", response))
+        result_data = _to_dict(raw_data.get("result"))
+        message = result_data.get("message")
+        return StagehandActResult(
+            success=bool(result_data.get("success", raw_data.get("success", True))),
+            message=message,
+            action_description=str(message) if message is not None else None,
             raw=raw_data,
         )
 

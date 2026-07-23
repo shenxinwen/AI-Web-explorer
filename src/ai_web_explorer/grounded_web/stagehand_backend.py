@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from typing import Literal
 
 from ai_web_explorer.grounded_web.automation_backend import AutomationBackend
 from ai_web_explorer.grounded_web.graph import BrowserAction
@@ -23,14 +24,21 @@ class StagehandAutomationBackend:
         base_backend: AutomationBackend,
         provider: StagehandProvider,
         goal: str,
+        execution_mode: Literal["observed_action", "business_milestone"] = (
+            "observed_action"
+        ),
+        business_milestone_max_steps: int = 5,
     ) -> None:
         self.base_backend = base_backend
         self.provider = provider
         self.goal = goal
+        self.execution_mode = execution_mode
+        self.business_milestone_max_steps = business_milestone_max_steps
         self.app_name = base_backend.app_name
         self.last_execution_error: str | None = None
         self.last_execution_metadata: dict[str, Any] = {}
         self._observed_actions_by_id: dict[str, StagehandObservedAction] = {}
+        self._business_milestone_counter = 0
 
     async def observe_state(self) -> StateSnapshot:
         state = await self.base_backend.observe_state()
@@ -42,6 +50,29 @@ class StagehandAutomationBackend:
         self,
         state: StateSnapshot,
     ) -> list[dict[str, Any]]:
+        if self.execution_mode == "business_milestone":
+            self._business_milestone_counter += 1
+            return [
+                {
+                    "semantic_id": (
+                        "stagehand_business_milestone_"
+                        f"{self._business_milestone_counter:03d}"
+                    ),
+                    "description": self.goal,
+                    "locator": None,
+                    "action_kind": "business_intent",
+                    "input_values": {},
+                    "action_label": "Advance one business milestone",
+                    "canonical_action_name": "advance_business_milestone",
+                    "naming_provenance": {"source": "stagehand_business_milestone"},
+                    "explored": False,
+                    "metadata": {
+                        "action_source": "stagehand",
+                        "stagehand_execution_mode": "business_milestone",
+                    },
+                }
+            ]
+
         observed = await self.provider.observe_next_action(
             instruction=self.goal,
             state=state,
@@ -60,6 +91,9 @@ class StagehandAutomationBackend:
                     "locator": action.locator,
                     "action_kind": action.action_kind,
                     "input_values": dict(action.input_values),
+                    "action_label": action.action_label,
+                    "canonical_action_name": action.canonical_action_name,
+                    "naming_provenance": action.naming_provenance,
                     "explored": False,
                     "metadata": {
                         "action_source": "stagehand",
@@ -75,6 +109,11 @@ class StagehandAutomationBackend:
             if isinstance(action, BrowserAction)
             else str(action.get("semantic_id", ""))
         )
+        if self.execution_mode == "business_milestone" and semantic_id.startswith(
+            "stagehand_business_milestone_"
+        ):
+            return await self._execute_business_milestone()
+
         stagehand_action = self._observed_actions_by_id.get(semantic_id)
         if stagehand_action is None:
             self.last_execution_error = "stagehand_action_not_found"
@@ -101,6 +140,40 @@ class StagehandAutomationBackend:
             act_result=result,
         )
         self.last_execution_metadata = stagehand_trace_metadata(trace)
+        self.last_execution_error = None if result.success else result.message
+        return result.success
+
+    async def _execute_business_milestone(self) -> bool:
+        try:
+            execute_instruction = getattr(self.provider, "execute_instruction", None)
+            if execute_instruction is not None:
+                result = await execute_instruction(
+                    self.goal,
+                    max_steps=self.business_milestone_max_steps,
+                )
+            else:
+                act_instruction = getattr(self.provider, "act_instruction")
+                result = await act_instruction(self.goal)
+        except Exception as error:
+            self.last_execution_error = str(error)
+            trace = StagehandStepTrace(
+                instruction=self.goal,
+                observed_action=None,
+                act_result=None,
+                error=self.last_execution_error,
+            )
+            self.last_execution_metadata = stagehand_trace_metadata(trace)
+            self.last_execution_metadata["stagehand_execution_mode"] = (
+                "business_milestone"
+            )
+            return False
+        trace = StagehandStepTrace(
+            instruction=self.goal,
+            observed_action=None,
+            act_result=result,
+        )
+        self.last_execution_metadata = stagehand_trace_metadata(trace)
+        self.last_execution_metadata["stagehand_execution_mode"] = "business_milestone"
         self.last_execution_error = None if result.success else result.message
         return result.success
 

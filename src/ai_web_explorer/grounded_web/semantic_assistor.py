@@ -8,6 +8,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from ai_web_explorer.grounded_web.capability_graph import Evidence, PageFrame
 from ai_web_explorer.grounded_web.models import StateSnapshot
+from ai_web_explorer.grounded_web.state_signature import slug_identifier
 
 
 def _url_pattern_for(url: str) -> str:
@@ -33,6 +34,9 @@ class SemanticStateDraft:
     last_state_snapshot: dict[str, Any]
     interactable_elements: list[dict[str, Any]]
     evidence: list[Evidence]
+    node_label: str | None = None
+    state_summary: str | None = None
+    naming_provenance: dict[str, Any] | None = None
 
 
 class SemanticAssistor(Protocol):
@@ -63,6 +67,8 @@ class DeterministicSemanticAssistor:
         ]
         last_state = dict(snapshot.signature)
         node_id = _state_node_id(snapshot.page_id, last_state)
+        node_label = slug_identifier(snapshot.page_id, fallback="state")
+        state_summary = f"{snapshot.page_id} state"
         page_frame = PageFrame(
             page_id=f"{self.app}:{snapshot.page_id}",
             page_type=snapshot.page_id,
@@ -75,6 +81,9 @@ class DeterministicSemanticAssistor:
         )
         return SemanticStateDraft(
             node_id=node_id,
+            node_label=node_label,
+            state_summary=state_summary,
+            naming_provenance={"source": "deterministic_fallback"},
             page_description=f"{snapshot.page_id} page",
             page_frame=page_frame,
             state_schema={key: [value] for key, value in last_state.items()},

@@ -14,6 +14,8 @@ def test_ecommerce_checkout_profile_defines_planning_facts_without_site_selector
     assert profile.site_type == "ecommerce_checkout"
     assert "cart_nonempty" in fact_ids
     assert "checkout_info_complete" in fact_ids
+    assert "required_info_missing" in fact_ids
+    assert "required_info_provided" in fact_ids
     assert "order_place_pending_sensitive" in fact_ids
     assert "order_review" in [stage.stage_id for stage in profile.stages]
 

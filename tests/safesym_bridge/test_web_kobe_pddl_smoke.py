@@ -143,6 +143,10 @@ def test_analyze_web_kobe_pddl_smoke_reports_planning_ready_graph():
     assert data["goal_reachable_in_graph"] is True
     assert data["projectable_edge_count"] == 1
     assert data["projected_action_count"] == 1
+    assert data["projected_action_names"] == ["edge_001_add_to_cart"]
+    assert data["duplicate_action_names"] == []
+    assert data["projected_observed_fact_count"] == 0
+    assert data["unsafe_delete_effects"] == []
     assert data["projected_predicate_count"] >= 3
     assert data["pddl_static_consistency_ready"] is True
     assert data["undeclared_predicates"] == []
@@ -203,9 +207,10 @@ def test_analyze_web_kobe_pddl_smoke_reports_undeclared_effect_predicates(
     assert data["pddl_static_consistency_ready"] is False
     assert data["undeclared_predicates"] == ["cart_count_positive"]
     assert data["planning_ready"] is False
-    assert "domain uses undeclared predicates: cart_count_positive" in data[
-        "failure_reasons"
-    ]
+    assert (
+        "domain uses undeclared predicates: cart_count_positive"
+        in data["failure_reasons"]
+    )
 
 
 def test_analyze_web_kobe_pddl_smoke_reports_unreachable_goal():
@@ -216,9 +221,22 @@ def test_analyze_web_kobe_pddl_smoke_reports_unreachable_goal():
     data = report.to_dict()
     assert data["goal_reachable_in_graph"] is False
     assert data["planning_ready"] is False
-    assert "goal is not reachable from start through projectable edges" in data[
-        "failure_reasons"
-    ]
+    assert (
+        "goal is not reachable from start through projectable edges"
+        in data["failure_reasons"]
+    )
+
+
+def test_analyze_web_kobe_pddl_smoke_reports_action_and_fact_diagnostics():
+    graph = _graph([_edge("empty", "filled", "add_to_cart")])
+
+    report = analyze_web_kobe_pddl_smoke(graph, goal_node_id="filled")
+
+    data = report.to_dict()
+    assert data["projected_action_names"] == ["edge_001_add_to_cart"]
+    assert data["duplicate_action_names"] == []
+    assert data["projected_observed_fact_count"] == 0
+    assert data["unsafe_delete_effects"] == []
 
 
 def test_write_web_kobe_pddl_smoke_writes_pddl_and_report(tmp_path):
@@ -241,7 +259,7 @@ def test_write_web_kobe_pddl_smoke_writes_pddl_and_report(tmp_path):
     assert domain_path.exists()
     assert problem_path.exists()
     assert report_path.exists()
-    assert "(:action add_to_cart" in domain_path.read_text(encoding="utf-8")
+    assert "(:action edge_001_add_to_cart" in domain_path.read_text(encoding="utf-8")
     assert "(:goal (and (at_filled)))" in problem_path.read_text(encoding="utf-8")
     data = json.loads(report_path.read_text(encoding="utf-8"))
     assert data["planning_ready"] is True

@@ -31,6 +31,10 @@ class WebKobePddlSmokeReport:
     projected_predicate_count: int
     pddl_static_consistency_ready: bool
     undeclared_predicates: list[str] = field(default_factory=list)
+    projected_action_names: list[str] = field(default_factory=list)
+    duplicate_action_names: list[str] = field(default_factory=list)
+    projected_observed_fact_count: int = 0
+    unsafe_delete_effects: list[str] = field(default_factory=list)
     domain_path: str | None = None
     problem_path: str | None = None
     safety_trigger_expected: bool = False
@@ -50,6 +54,10 @@ class WebKobePddlSmokeReport:
             "projected_predicate_count": self.projected_predicate_count,
             "pddl_static_consistency_ready": self.pddl_static_consistency_ready,
             "undeclared_predicates": list(self.undeclared_predicates),
+            "projected_action_names": list(self.projected_action_names),
+            "duplicate_action_names": list(self.duplicate_action_names),
+            "projected_observed_fact_count": self.projected_observed_fact_count,
+            "unsafe_delete_effects": list(self.unsafe_delete_effects),
             "domain_path": self.domain_path,
             "problem_path": self.problem_path,
             "safety_trigger_expected": self.safety_trigger_expected,
@@ -115,6 +123,42 @@ def _count_projected_actions(domain: str) -> int:
     return domain.count("(:action ")
 
 
+def _projected_action_names(domain: str) -> list[str]:
+    return re.findall(r"\(:action\s+([^\s()]+)", domain)
+
+
+def _duplicate_action_names(domain: str) -> list[str]:
+    names = _projected_action_names(domain)
+    return sorted({name for name in names if names.count(name) > 1})
+
+
+def _projected_observed_fact_count(domain: str) -> int:
+    return len(re.findall(r"\(control_[a-zA-Z0-9_]+\)", domain))
+
+
+def _unsafe_delete_effects(domain: str) -> list[str]:
+    results: list[str] = []
+    for block in domain.split("  (:action ")[1:]:
+        action_name = block.splitlines()[0].strip()
+        precondition_block = ""
+        effect_block = ""
+        if ":precondition" in block and ":effect" in block:
+            precondition_block = block.split(":precondition", 1)[1].split(
+                ":effect",
+                1,
+            )[0]
+            effect_block = block.split(":effect", 1)[1]
+        for predicate in re.findall(
+            r"\(not\s+\(([a-zA-Z][a-zA-Z0-9_]*)\)\)",
+            effect_block,
+        ):
+            if predicate.startswith("at_"):
+                continue
+            if f"({predicate})" not in precondition_block:
+                results.append(f"{action_name}:{predicate}")
+    return sorted(results)
+
+
 def _count_projected_predicates(domain: str) -> int:
     in_predicates = False
     count = 0
@@ -146,9 +190,13 @@ def _declared_predicates(domain: str) -> set[str]:
 def _used_predicates(domain: str, problem: str) -> set[str]:
     used: set[str] = set()
     if "  (:action" in domain:
-        used.update(_predicate_names_in_text("  (:action" + domain.split("  (:action", 1)[1]))
+        used.update(
+            _predicate_names_in_text("  (:action" + domain.split("  (:action", 1)[1])
+        )
     if "  (:init" in problem:
-        used.update(_predicate_names_in_text("  (:init" + problem.split("  (:init", 1)[1]))
+        used.update(
+            _predicate_names_in_text("  (:init" + problem.split("  (:init", 1)[1])
+        )
     return used - {"and", "not"}
 
 
@@ -163,6 +211,8 @@ def _failure_reasons(
     projected_action_count: int,
     projected_predicate_count: int,
     undeclared_predicates: list[str],
+    duplicate_action_names: list[str],
+    unsafe_delete_effects: list[str],
     domain: str,
     problem: str,
 ) -> list[str]:
@@ -175,8 +225,16 @@ def _failure_reasons(
         reasons.append("no PDDL predicates were projected")
     if undeclared_predicates:
         reasons.append(
-            "domain uses undeclared predicates: "
-            + ", ".join(undeclared_predicates)
+            "domain uses undeclared predicates: " + ", ".join(undeclared_predicates)
+        )
+    if duplicate_action_names:
+        reasons.append(
+            "domain has duplicate action names: " + ", ".join(duplicate_action_names)
+        )
+    if unsafe_delete_effects:
+        reasons.append(
+            "domain has delete effects without matching preconditions: "
+            + ", ".join(unsafe_delete_effects)
         )
     if "(:init" not in problem:
         reasons.append("problem is missing init section")
@@ -212,6 +270,10 @@ def analyze_web_kobe_pddl_smoke(
         goal_node_id=goal_node_id,
     )
     projected_action_count = _count_projected_actions(artifacts.domain)
+    projected_action_names = _projected_action_names(artifacts.domain)
+    duplicate_action_names = _duplicate_action_names(artifacts.domain)
+    projected_observed_fact_count = _projected_observed_fact_count(artifacts.domain)
+    unsafe_delete_effects = _unsafe_delete_effects(artifacts.domain)
     projected_predicate_count = _count_projected_predicates(artifacts.domain)
     undeclared_predicates = _undeclared_predicates(
         artifacts.domain,
@@ -223,6 +285,8 @@ def analyze_web_kobe_pddl_smoke(
         projected_action_count=projected_action_count,
         projected_predicate_count=projected_predicate_count,
         undeclared_predicates=undeclared_predicates,
+        duplicate_action_names=duplicate_action_names,
+        unsafe_delete_effects=unsafe_delete_effects,
         domain=artifacts.domain,
         problem=artifacts.problem,
     )
@@ -238,6 +302,10 @@ def analyze_web_kobe_pddl_smoke(
         projected_predicate_count=projected_predicate_count,
         pddl_static_consistency_ready=not undeclared_predicates,
         undeclared_predicates=undeclared_predicates,
+        projected_action_names=projected_action_names,
+        duplicate_action_names=duplicate_action_names,
+        projected_observed_fact_count=projected_observed_fact_count,
+        unsafe_delete_effects=unsafe_delete_effects,
         domain_path=str(domain_path) if domain_path is not None else None,
         problem_path=str(problem_path) if problem_path is not None else None,
         planning_ready=not reasons,

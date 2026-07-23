@@ -18,6 +18,9 @@ def _saucedemo_action_records(state: StateSnapshot) -> list[dict[str, Any]]:
             "locator": action.selector,
             "action_kind": action.execution_kind,
             "input_values": dict(action.values),
+            "action_label": action.raw_description,
+            "canonical_action_name": action.semantic_id,
+            "naming_provenance": {"source": "saucedemo_action_catalog"},
             "explored": False,
         }
         for action in static_actions_for_state(state)

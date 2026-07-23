@@ -173,6 +173,14 @@ class FailingDiagnosticAdapter(FakeAdapter):
         super().__init__()
         self.last_execution_error = None
 
+    async def observe_state(self):
+        return StateSnapshot(
+            page_id="listing",
+            url="https://example.test/listing",
+            title="Listing",
+            signature={"cart_nonempty": False},
+        )
+
     async def execute(self, action: BrowserAction):
         self.executed.append(action)
         self.last_execution_error = "locator_not_visible"
@@ -191,6 +199,33 @@ async def test_explore_one_step_records_backend_execution_error():
     edge = graph.edges[0]
     assert edge.status == "failed_execution"
     assert edge.execution_trace.error == "locator_not_visible"
+
+
+class ReportedFailureWithObservedChangeAdapter(FakeAdapter):
+    def __init__(self):
+        super().__init__()
+        self.last_execution_error = None
+
+    async def execute(self, action: BrowserAction):
+        self.executed.append(action)
+        self.last_execution_error = "tool reported failure after changing the page"
+        return False
+
+
+@pytest.mark.anyio
+async def test_explore_one_step_accepts_observed_change_after_backend_failure():
+    explorer = WebKobeExplorer(
+        adapter=ReportedFailureWithObservedChangeAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+    )
+
+    graph = await explorer.explore_one_step()
+
+    edge = graph.edges[0]
+    assert edge.status == "succeeded_with_observed_change"
+    assert edge.execution_trace.success is True
+    assert edge.execution_trace.error == "tool reported failure after changing the page"
+    assert edge.execution_trace.metadata["backend_reported_success"] is False
 
 
 class StagehandMetadataAdapter(FakeAdapter):
@@ -219,6 +254,7 @@ async def test_explore_one_step_preserves_backend_execution_metadata():
     assert graph.edges[0].execution_trace.metadata == {
         "action_source": "stagehand",
         "stagehand_selector": "button.add",
+        "backend_reported_success": True,
     }
 
 
@@ -507,3 +543,104 @@ async def test_explore_one_step_can_use_selector_to_choose_goal_relevant_action(
     assert adapter.executed[0].semantic_id == "product_add_to_cart"
     assert graph.edges[0].action.semantic_id == "product_add_to_cart"
     assert explorer.selection_traces[0]["status"] == "selected"
+
+
+@pytest.mark.anyio
+async def test_explore_one_step_applies_semantic_naming_without_changing_ids():
+    class NamingAdapter(FakeAdapter):
+        async def list_interactables(self, state):
+            return [
+                {
+                    "semantic_id": "stagehand_000_click_add_to_cart",
+                    "description": "click Add to cart",
+                    "locator": "#add",
+                    "action_kind": "click",
+                    "input_values": {},
+                    "explored": False,
+                }
+            ]
+
+        async def execute(self, action: BrowserAction):
+            self.executed.append(action)
+            return True
+
+    def semantic_naming_provider(request):
+        assert request.action is not None
+        return {
+            "node_label": "Product list",
+            "state_summary": "Inventory page before adding an item.",
+            "action_label": "Add product to cart",
+            "canonical_action_name": "product_add_to_cart",
+        }
+
+    adapter = NamingAdapter()
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=DeterministicSemanticAssistor(app="shop"),
+        goal="Add a product to the cart.",
+        semantic_naming_provider=semantic_naming_provider,
+    )
+
+    graph = await explorer.explore_one_step()
+
+    assert adapter.executed[0].semantic_id == "stagehand_000_click_add_to_cart"
+    assert graph.nodes[0].node_label == "product_list"
+    assert graph.nodes[0].state_summary == "Inventory page before adding an item."
+    assert graph.edges[0].action.semantic_id == "stagehand_000_click_add_to_cart"
+    assert graph.edges[0].action.action_label == "Add product to cart"
+    assert graph.edges[0].action.canonical_action_name == "product_add_to_cart"
+
+
+@pytest.mark.anyio
+async def test_explore_one_step_applies_transition_naming_from_visual_summary():
+    adapter = ScreenshotAdapter()
+    seen_requests = []
+
+    def visual_provider(prompt, *, before_screenshot_path, after_screenshot_path):
+        return (
+            '{"visible_change_summary":"The page changed from a sign-in form '
+            'to an account dashboard.",'
+            '"candidate_added_facts":[],'
+            '"candidate_removed_facts":[],'
+            '"evidence":[],'
+            '"confidence":0.7}'
+        )
+
+    def semantic_naming_provider(request):
+        seen_requests.append(request)
+        if request.naming_task == "transition":
+            return {
+                "action_label": "Log in",
+                "canonical_action_name": "log_in",
+                "confidence": 0.9,
+            }
+        return {}
+
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        goal="Complete a task on the website.",
+        business_profile=ecommerce_checkout_profile(),
+        capture_screenshots=True,
+        visual_delta_provider=visual_provider,
+        semantic_naming_provider=semantic_naming_provider,
+    )
+
+    graph = await explorer.explore_one_step()
+
+    transition_requests = [
+        request for request in seen_requests if request.naming_task == "transition"
+    ]
+    assert len(transition_requests) == 1
+    assert (
+        transition_requests[0].visual_change_summary
+        == "The page changed from a sign-in form to an account dashboard."
+    )
+    edge = graph.edges[0]
+    assert edge.action.semantic_id == "add_to_cart_product"
+    assert edge.action.action_label == "Log in"
+    assert edge.action.canonical_action_name == "log_in"
+    assert edge.action.naming_provenance == {
+        "source": "llm_transition_naming",
+        "confidence": 0.9,
+    }

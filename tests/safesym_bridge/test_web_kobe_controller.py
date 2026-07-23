@@ -20,6 +20,7 @@ def _graph(
     *,
     completed: int,
     edge_status: str = "verified",
+    execution_success: bool | None = None,
 ) -> WebKobeGraph:
     edges = []
     if completed:
@@ -40,8 +41,20 @@ def _graph(
                     input_values_used={},
                     before_observation_id="state",
                     after_observation_id="state",
-                    success=edge_status == "verified",
-                    error=None if edge_status == "verified" else "failed",
+                    success=(
+                        edge_status == "verified"
+                        if execution_success is None
+                        else execution_success
+                    ),
+                    error=(
+                        None
+                        if (
+                            edge_status == "verified"
+                            if execution_success is None
+                            else execution_success
+                        )
+                        else "failed"
+                    ),
                 ),
                 status=edge_status,
             )
@@ -102,6 +115,29 @@ async def test_controller_treats_explorer_success_status_as_success():
 
     assert explorer.calls == 3
     assert result.summary.steps_completed == 3
+    assert result.summary.stop_reason == "max_steps"
+    assert result.summary.failed_edge_count == 0
+
+
+@pytest.mark.anyio
+async def test_controller_continues_after_no_observed_change():
+    explorer = FakeExplorer(
+        [
+            _graph(
+                completed=1,
+                edge_status="no_observed_change",
+                execution_success=True,
+            ),
+            _graph(completed=2),
+        ]
+    )
+    controller = WebKobeExplorationController(explorer)
+
+    result = await controller.run(max_steps=2)
+
+    assert explorer.calls == 2
+    assert result.graph.total_steps_completed == 2
+    assert result.summary.steps_completed == 2
     assert result.summary.stop_reason == "max_steps"
     assert result.summary.failed_edge_count == 0
 

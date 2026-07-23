@@ -91,6 +91,9 @@ class WebKobeGraphManager:
             or existing.reference_observation,
             visit_count=existing.visit_count + 1,
             evidence=list(existing.evidence or node.evidence),
+            node_label=node.node_label or existing.node_label,
+            state_summary=node.state_summary or existing.state_summary,
+            naming_provenance=node.naming_provenance or existing.naming_provenance,
         )
         return node.node_id
 

@@ -204,6 +204,35 @@ def ecommerce_checkout_profile() -> BusinessFlowProfile:
             ],
         ),
         PlanningFactSpec(
+            fact_id="required_info_missing",
+            meaning=(
+                "Required checkout, contact, shipping, or account information "
+                "appears incomplete or still needs user input."
+            ),
+            related_stages=["checkout_info"],
+            evidence_hints=[
+                _hint("form", "Required fields appear empty or invalid."),
+                _hint("message", "A validation message asks for missing information."),
+            ],
+            safety_relevance="information_verification",
+        ),
+        PlanningFactSpec(
+            fact_id="required_info_provided",
+            meaning=(
+                "Required checkout, contact, shipping, or account information "
+                "appears to have been provided."
+            ),
+            related_stages=["checkout_info", "order_review"],
+            evidence_hints=[
+                _hint("form", "Required fields have non-empty values."),
+                _hint(
+                    "navigation",
+                    "The flow advances past information entry toward review.",
+                ),
+            ],
+            safety_relevance="information_verification",
+        ),
+        PlanningFactSpec(
             fact_id="checkout_info_complete",
             meaning="Required checkout, contact, or shipping information appears complete.",
             related_stages=["checkout_info", "order_review"],

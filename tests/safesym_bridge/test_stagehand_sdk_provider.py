@@ -6,8 +6,6 @@ import pytest
 
 from ai_web_explorer.grounded_web.stagehand_sdk_provider import (
     StagehandSdkProvider,
-    _ensure_local_no_proxy,
-    _merge_no_proxy,
     create_async_stagehand_provider_from_env,
 )
 
@@ -274,55 +272,6 @@ async def test_create_stagehand_provider_passes_stagehand_api_url(monkeypatch):
     ]
 
 
-@pytest.mark.anyio
-async def test_create_stagehand_provider_passes_local_ready_timeout(monkeypatch):
-    calls = []
-
-    class FakeSessions:
-        async def start(self, **kwargs):
-            return FakeSession()
-
-    class FakeAsyncStagehand:
-        def __init__(self, **kwargs):
-            calls.append(kwargs)
-            self.sessions = FakeSessions()
-
-    monkeypatch.setitem(
-        sys.modules,
-        "stagehand",
-        SimpleNamespace(AsyncStagehand=FakeAsyncStagehand),
-    )
-
-    await create_async_stagehand_provider_from_env(
-        load_dotenv=lambda: None,
-        environ={
-            "STAGEHAND_SERVER": "local",
-            "STAGEHAND_MODEL": "deepseek/deepseek-v4-pro",
-            "MODEL_API_KEY": "model-test-key",
-            "STAGEHAND_LOCAL_READY_TIMEOUT_S": "30",
-        },
-    )
-
-    assert calls[0]["local_ready_timeout_s"] == 30.0
-
-
-def test_merge_no_proxy_preserves_existing_entries():
-    assert _merge_no_proxy("example.test, localhost") == (
-        "example.test,localhost,127.0.0.1,::1"
-    )
-
-
-def test_ensure_local_no_proxy_sets_common_env_names(monkeypatch):
-    monkeypatch.setenv("NO_PROXY", "example.test")
-
-    _ensure_local_no_proxy()
-
-    no_proxy = {item.strip() for item in os.environ["NO_PROXY"].split(",")}
-    lower_no_proxy = {item.strip() for item in os.environ["no_proxy"].split(",")}
-    assert {"example.test", "localhost", "127.0.0.1", "::1"}.issubset(no_proxy)
-    assert {"example.test", "localhost", "127.0.0.1", "::1"}.issubset(lower_no_proxy)
-
-
 class FakeAction:
     def __init__(self, data):
         self.data = data
@@ -337,6 +286,9 @@ class FakeSession:
         self.observed_page = None
         self.acted_input = None
         self.acted_page = None
+        self.executed_agent_config = None
+        self.executed_options = None
+        self.executed_page = None
 
     async def observe(self, instruction, page=None):
         self.observed_instruction = instruction
@@ -371,6 +323,24 @@ class FakeSession:
             )
         )
 
+    async def execute(self, agent_config, execute_options, page=None):
+        self.executed_agent_config = agent_config
+        self.executed_options = execute_options
+        self.executed_page = page
+        return SimpleNamespace(
+            data=SimpleNamespace(
+                result=SimpleNamespace(
+                    success=True,
+                    completed=True,
+                    message="Logged in and reached a product listing",
+                    actions=[
+                        SimpleNamespace(type="act", action="fill username"),
+                        SimpleNamespace(type="act", action="click login"),
+                    ],
+                )
+            )
+        )
+
 
 @pytest.mark.anyio
 async def test_stagehand_sdk_provider_converts_observe_and_act_results():
@@ -391,6 +361,41 @@ async def test_stagehand_sdk_provider_converts_observe_and_act_results():
     assert session.acted_input["selector"] == "#login-button"
     assert result.success is True
     assert result.raw["actionId"] == "act_1"
+
+
+@pytest.mark.anyio
+async def test_stagehand_sdk_provider_acts_on_instruction_text():
+    session = FakeSession()
+    provider = StagehandSdkProvider(session=session)
+
+    result = await provider.act_instruction(
+        "Advance the website by exactly one meaningful business milestone."
+    )
+
+    assert (
+        session.acted_input
+        == "Advance the website by exactly one meaningful business milestone."
+    )
+    assert result.success is True
+    assert result.action_description == "Clicked Login"
+
+
+@pytest.mark.anyio
+async def test_stagehand_sdk_provider_executes_instruction_with_step_limit():
+    session = FakeSession()
+    provider = StagehandSdkProvider(session=session)
+
+    result = await provider.execute_instruction("Advance one milestone.", max_steps=5)
+
+    assert session.executed_agent_config == {"mode": "dom"}
+    assert session.executed_options == {
+        "instruction": "Advance one milestone.",
+        "max_steps": 5,
+        "use_search": False,
+    }
+    assert result.success is True
+    assert result.message == "Logged in and reached a product listing"
+    assert result.raw["result"]["actions"][0]["action"] == "fill username"
 
 
 @pytest.mark.anyio
