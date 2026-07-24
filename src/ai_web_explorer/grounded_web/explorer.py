@@ -329,6 +329,11 @@ class WebKobeExplorer:
             status=edge_status,
             evidence=[Evidence(source="web_kobe_explorer", url=before.url)],
         )
+        if self.business_profile is not None:
+            self.manager.propagate_planning_state(
+                edge,
+                profile=self.business_profile,
+            )
         self.manager.add_edge(edge)
         self.manager.mark_interactable_explored(
             source_id,

@@ -134,6 +134,23 @@ async def test_explore_one_step_records_profile_verified_planning_delta():
 
 
 @pytest.mark.anyio
+async def test_explore_one_step_propagates_planning_delta_to_target_node():
+    explorer = WebKobeExplorer(
+        adapter=FakeAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        business_profile=ecommerce_checkout_profile(),
+    )
+
+    graph = await explorer.explore_one_step()
+
+    edge = graph.edges[0]
+    nodes_by_id = {node.node_id: node for node in graph.nodes}
+    target = nodes_by_id[edge.target_node_id]
+    assert target.planning_state is not None
+    assert target.planning_state.active_facts == ["cart_nonempty"]
+
+
+@pytest.mark.anyio
 async def test_explore_one_step_preserves_initial_start_node_across_steps():
     explorer = WebKobeExplorer(
         adapter=FakeAdapter(),

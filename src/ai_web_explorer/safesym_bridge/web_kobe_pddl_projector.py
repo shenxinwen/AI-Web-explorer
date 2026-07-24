@@ -20,6 +20,7 @@ from ai_web_explorer.grounded_web.graph import (
     WebKobeNode,
 )
 from ai_web_explorer.grounded_web.business_profile import PlanningDelta
+from ai_web_explorer.grounded_web.business_profile import PlanningState
 
 PROJECTABLE_EDGE_STATUSES = {
     "verified",
@@ -97,6 +98,7 @@ def _node_from_dict(data: dict[str, Any]) -> WebKobeNode:
         node_label=data.get("node_label"),
         state_summary=data.get("state_summary"),
         naming_provenance=data.get("naming_provenance"),
+        planning_state=_planning_state_from_dict(data.get("planning_state")),
     )
 
 
@@ -149,6 +151,15 @@ def _planning_delta_from_dict(data: dict[str, Any] | None) -> PlanningDelta | No
         evidence=list(data.get("evidence", [])),
         confidence=data.get("confidence"),
         uncertainty_reason=data.get("uncertainty_reason"),
+    )
+
+
+def _planning_state_from_dict(data: dict[str, Any] | None) -> PlanningState | None:
+    if data is None:
+        return None
+    return PlanningState(
+        active_facts=list(data.get("active_facts", [])),
+        evidence=list(data.get("evidence", [])),
     )
 
 
@@ -261,6 +272,9 @@ def _state_predicate_for_value(key: str, value: object) -> str | None:
 def _state_predicates(graph: WebKobeGraph) -> list[str]:
     names: set[str] = set()
     for node in graph.nodes:
+        if node.planning_state is not None:
+            names.update(_predicate(fact) for fact in node.planning_state.active_facts)
+            continue
         for key, value in node.last_state_snapshot.items():
             predicate = _state_predicate_for_value(key, value)
             if predicate is not None:
@@ -282,6 +296,11 @@ def _require_node(graph: WebKobeGraph, node_id: str, *, role: str):
 def _initial_predicates(graph: WebKobeGraph, *, start_node_id: str) -> list[str]:
     start = _require_node(graph, start_node_id, role="start")
     predicates = [_at(start.node_id)]
+    if start.planning_state is not None:
+        predicates.extend(
+            _predicate(fact) for fact in start.planning_state.active_facts
+        )
+        return sorted(set(predicates))
     for key, value in start.last_state_snapshot.items():
         if isinstance(value, bool) and value is True:
             predicates.append(_predicate(key))
@@ -382,30 +401,56 @@ def _effect_predicates_for_edge(
     edge,
     *,
     options: PddlProjectionOptions,
+    source_node=None,
 ) -> list[str]:
     predicates = []
     if options.include_observed_delta_facts:
         predicates.extend(_observed_effect_predicates_for_edge(edge))
-    predicates.extend(_planning_effect_predicates_for_edge(edge))
+    if edge.planning_delta is not None:
+        predicates.extend(
+            _predicate(fact)
+            for fact in _trusted_added_planning_facts(edge.planning_delta)
+        )
+        predicates.extend(
+            _removed_planning_predicates_for_edge(edge, source_node=source_node)
+        )
     return predicates
 
 
-def _removed_planning_predicates_for_edge(edge) -> list[str]:
+def _active_planning_predicates_for_node(node) -> set[str] | None:
+    if node.planning_state is None:
+        return None
+    return {_predicate(fact) for fact in node.planning_state.active_facts}
+
+
+def _removed_planning_predicates_for_edge(edge, *, source_node=None) -> list[str]:
     if edge.planning_delta is None:
         return []
-    return [
+    predicates = [
         _predicate(fact)
         for fact in _trusted_removed_planning_facts(edge.planning_delta)
     ]
+    active_predicates = (
+        _active_planning_predicates_for_node(source_node)
+        if source_node is not None
+        else None
+    )
+    if active_predicates is None:
+        return predicates
+    return [predicate for predicate in predicates if predicate in active_predicates]
 
 
 def _preconditions_for_edge(
     edge,
     *,
     options: PddlProjectionOptions,
+    source_node=None,
 ) -> list[str]:
     preconditions = [f"({_at(edge.source_node_id)})"]
-    for predicate in _removed_planning_predicates_for_edge(edge):
+    for predicate in _removed_planning_predicates_for_edge(
+        edge,
+        source_node=source_node,
+    ):
         preconditions.append(f"({predicate})")
     if options.include_observed_delta_facts:
         for delta in edge.observed_delta:
@@ -422,6 +467,7 @@ def _effects_for_edge(
     edge,
     *,
     options: PddlProjectionOptions,
+    source_node=None,
 ) -> list[str]:
     effects = [
         f"(not ({_at(edge.source_node_id)}))",
@@ -440,8 +486,11 @@ def _effects_for_edge(
     if edge.planning_delta is not None:
         for fact in _trusted_added_planning_facts(edge.planning_delta):
             effects.append(f"({_predicate(fact)})")
-        for fact in _trusted_removed_planning_facts(edge.planning_delta):
-            effects.append(f"(not ({_predicate(fact)}))")
+        for predicate in _removed_planning_predicates_for_edge(
+            edge,
+            source_node=source_node,
+        ):
+            effects.append(f"(not ({predicate}))")
     return _unique_items(effects)
 
 
@@ -464,9 +513,16 @@ def compile_web_kobe_graph_to_pddl(
     predicate_names = set(
         [_at(node.node_id) for node in graph.nodes] + _state_predicates(graph)
     )
+    nodes_by_id = _nodes_by_id(graph)
     for edge in graph.edges:
         if _is_projectable_edge(edge):
-            predicate_names.update(_effect_predicates_for_edge(edge, options=options))
+            predicate_names.update(
+                _effect_predicates_for_edge(
+                    edge,
+                    options=options,
+                    source_node=nodes_by_id.get(edge.source_node_id),
+                )
+            )
     predicates = sorted(predicate_names)
     predicate_text = "\n".join(f"    ({name})" for name in predicates)
 
@@ -474,8 +530,17 @@ def compile_web_kobe_graph_to_pddl(
     action_blocks = []
     for index, edge in enumerate(projectable_edges, start=1):
         action_name = _unique_pddl_action_name(edge, index=index)
-        preconditions = _preconditions_for_edge(edge, options=options)
-        effects = _effects_for_edge(edge, options=options)
+        source_node = nodes_by_id.get(edge.source_node_id)
+        preconditions = _preconditions_for_edge(
+            edge,
+            options=options,
+            source_node=source_node,
+        )
+        effects = _effects_for_edge(
+            edge,
+            options=options,
+            source_node=source_node,
+        )
         action_blocks.append(
             "\n".join(
                 [

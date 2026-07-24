@@ -1,6 +1,14 @@
-from ai_web_explorer.grounded_web.capability_graph import Evidence, PageFrame
+from ai_web_explorer.grounded_web.business_profile import PlanningDelta
+from ai_web_explorer.grounded_web.business_profile import ecommerce_checkout_profile
+from ai_web_explorer.grounded_web.capability_graph import (
+    Evidence,
+    ExecutionTrace,
+    PageFrame,
+)
 from ai_web_explorer.grounded_web.graph import (
+    BrowserAction,
     ReferenceObservation,
+    WebKobeEdge,
     WebKobeNode,
 )
 from ai_web_explorer.grounded_web.graph_manager import WebKobeGraphManager
@@ -111,3 +119,40 @@ def test_interactable_merge_preserves_explored_by_locator_when_label_changes():
 
     assert len(graph.nodes[0].interactable_elements) == 1
     assert graph.nodes[0].interactable_elements[0]["explored"] is True
+
+
+def test_propagate_planning_state_filters_to_profile_facts():
+    manager = WebKobeGraphManager(app="example")
+    manager.identify_or_add_node(
+        _node("inventory", {}, interactables=[]),
+    )
+    manager.identify_or_add_node(_node("cart", {}, interactables=[]))
+    edge = WebKobeEdge(
+        source_node_id="inventory",
+        target_node_id="cart",
+        instruction="open cart",
+        action=BrowserAction("business_intent", None, "open_cart"),
+        capability=None,
+        target_observation="cart page",
+        observed_delta=[],
+        schema_delta={},
+        execution_trace=ExecutionTrace(
+            "business_intent",
+            None,
+            "open_cart",
+            {},
+            "inventory",
+            "cart",
+            True,
+        ),
+        planning_delta=PlanningDelta(
+            candidate_added_facts=["cart_page_visible", "made_up_fact"],
+        ),
+    )
+
+    manager.propagate_planning_state(edge, profile=ecommerce_checkout_profile())
+
+    graph = manager.to_graph(start_node_id="inventory")
+    cart = next(node for node in graph.nodes if node.node_id == "cart")
+    assert cart.planning_state is not None
+    assert cart.planning_state.active_facts == ["cart_page_visible"]

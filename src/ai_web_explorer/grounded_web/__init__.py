@@ -11,6 +11,7 @@ from ai_web_explorer.grounded_web.automation_backend import AutomationBackend
 from ai_web_explorer.grounded_web.business_profile import (
     BusinessFlowProfile,
     PlanningDelta,
+    PlanningState,
     ecommerce_checkout_profile,
 )
 from ai_web_explorer.grounded_web.controller import (
@@ -48,6 +49,7 @@ __all__ = [
     "OpenAIVisualDeltaProvider",
     "OpenAICompatibleSemanticNamingProvider",
     "PlanningDelta",
+    "PlanningState",
     "SemanticNamingProvider",
     "SemanticNamingRequest",
     "VisualDeltaProvider",

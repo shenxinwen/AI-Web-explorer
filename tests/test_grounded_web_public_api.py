@@ -4,6 +4,7 @@ from ai_web_explorer.grounded_web import (
     BusinessFlowProfile,
     OpenAIVisualDeltaProvider,
     PlanningDelta,
+    PlanningState,
     VisualDeltaProvider,
     VisualDeltaRequest,
     WebKobeExplorationController,
@@ -29,6 +30,7 @@ def test_grounded_web_package_exposes_mainline_api():
     assert BusinessFlowProfile.__name__ == "BusinessFlowProfile"
     assert OpenAIVisualDeltaProvider.__name__ == "OpenAIVisualDeltaProvider"
     assert PlanningDelta.__name__ == "PlanningDelta"
+    assert PlanningState.__name__ == "PlanningState"
     assert VisualDeltaProvider is not None
     assert VisualDeltaRequest.__name__ == "VisualDeltaRequest"
     assert WebKobeExplorationController.__name__ == "WebKobeExplorationController"

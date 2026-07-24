@@ -9,6 +9,11 @@ from ai_web_explorer.grounded_web.graph import (
     WebKobeGraph,
     WebKobeNode,
 )
+from ai_web_explorer.grounded_web.business_profile import (
+    BusinessFlowProfile,
+    PlanningDelta,
+    PlanningState,
+)
 
 
 def _merge_schema(
@@ -60,6 +65,35 @@ def _merge_interactables(
     return merged
 
 
+def _profile_fact_ids(profile: BusinessFlowProfile) -> set[str]:
+    return {fact.fact_id for fact in profile.planning_facts}
+
+
+def _unique_facts(*fact_lists: list[str]) -> list[str]:
+    facts: list[str] = []
+    for fact_list in fact_lists:
+        for fact in fact_list:
+            if fact not in facts:
+                facts.append(fact)
+    return facts
+
+
+def _trusted_added_facts(delta: PlanningDelta | None) -> list[str]:
+    if delta is None:
+        return []
+    return _unique_facts(delta.candidate_added_facts, delta.verified_added_facts)
+
+
+def _trusted_removed_facts(delta: PlanningDelta | None) -> list[str]:
+    if delta is None:
+        return []
+    return _unique_facts(delta.candidate_removed_facts, delta.verified_removed_facts)
+
+
+def _filtered_facts(facts: list[str], *, allowed_facts: set[str]) -> list[str]:
+    return [fact for fact in facts if fact in allowed_facts]
+
+
 class WebKobeGraphManager:
     def __init__(self, app: str):
         self.app = app
@@ -94,6 +128,7 @@ class WebKobeGraphManager:
             node_label=node.node_label or existing.node_label,
             state_summary=node.state_summary or existing.state_summary,
             naming_provenance=node.naming_provenance or existing.naming_provenance,
+            planning_state=node.planning_state or existing.planning_state,
         )
         return node.node_id
 
@@ -112,6 +147,56 @@ class WebKobeGraphManager:
                 evidence=list(existing.evidence or edge.evidence),
             )
         self.total_steps_completed += 1
+
+    def propagate_planning_state(
+        self,
+        edge: WebKobeEdge,
+        *,
+        profile: BusinessFlowProfile,
+    ) -> None:
+        source = self._nodes[edge.source_node_id]
+        target = self._nodes[edge.target_node_id]
+        allowed_facts = _profile_fact_ids(profile)
+
+        active_facts = (
+            list(source.planning_state.active_facts)
+            if source.planning_state is not None
+            else []
+        )
+        active_set = set(active_facts)
+        removed_facts = [
+            fact
+            for fact in _filtered_facts(
+                _trusted_removed_facts(edge.planning_delta),
+                allowed_facts=allowed_facts,
+            )
+            if fact in active_set
+        ]
+        added_facts = _filtered_facts(
+            _trusted_added_facts(edge.planning_delta),
+            allowed_facts=allowed_facts,
+        )
+
+        next_facts = [fact for fact in active_facts if fact not in removed_facts]
+        for fact in added_facts:
+            if fact not in next_facts:
+                next_facts.append(fact)
+
+        evidence = (
+            list(source.planning_state.evidence)
+            if source.planning_state is not None
+            else []
+        )
+        if added_facts or removed_facts:
+            evidence.append(f"propagated from edge {edge.edge_id}")
+
+        self._nodes[edge.target_node_id] = replace(
+            target,
+            planning_state=PlanningState(
+                active_facts=next_facts,
+                evidence=evidence,
+            ),
+        )
 
     def mark_interactable_explored(
         self,

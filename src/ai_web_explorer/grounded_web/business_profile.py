@@ -106,6 +106,18 @@ class PlanningDelta:
         }
 
 
+@dataclass(frozen=True)
+class PlanningState:
+    active_facts: list[str] = field(default_factory=list)
+    evidence: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "active_facts": list(self.active_facts),
+            "evidence": list(self.evidence),
+        }
+
+
 def _hint(evidence_type: str, description: str) -> EvidenceHint:
     return EvidenceHint(evidence_type=evidence_type, description=description)
 
@@ -339,6 +351,7 @@ __all__ = [
     "BusinessStage",
     "EvidenceHint",
     "PlanningDelta",
+    "PlanningState",
     "PlanningFactSpec",
     "SensitiveActionCategory",
     "ecommerce_checkout_profile",

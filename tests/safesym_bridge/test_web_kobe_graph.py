@@ -18,6 +18,7 @@ from ai_web_explorer.grounded_web.graph import (
     WebKobeNode,
 )
 from ai_web_explorer.grounded_web.business_profile import PlanningDelta
+from ai_web_explorer.grounded_web.business_profile import PlanningState
 
 
 def test_web_kobe_graph_serializes_node_edge_and_evidence():
@@ -60,6 +61,10 @@ def test_web_kobe_graph_serializes_node_edge_and_evidence():
         state_indicators=[
             StateIndicator("logged_in", False, "planning_state", evidence=evidence)
         ],
+        planning_state=PlanningState(
+            active_facts=["required_info_missing"],
+            evidence=["unit test planning state"],
+        ),
         action_targets=[
             ActionTarget(
                 target_type="form",
@@ -160,6 +165,10 @@ def test_web_kobe_graph_serializes_node_edge_and_evidence():
         == "Login page before credentials are entered."
     )
     assert data["nodes"][0]["naming_provenance"] == {"source": "unit_test"}
+    assert data["nodes"][0]["planning_state"] == {
+        "active_facts": ["required_info_missing"],
+        "evidence": ["unit test planning state"],
+    }
     assert data["edges"][0]["action"]["action_label"] == "Submit login form"
     assert data["edges"][0]["action"]["canonical_action_name"] == "login_submit"
     assert data["edges"][0]["action"]["naming_provenance"] == {"source": "unit_test"}

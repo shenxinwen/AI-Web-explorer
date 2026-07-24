@@ -17,6 +17,7 @@ from ai_web_explorer.grounded_web.graph import (
     WebKobeNode,
 )
 from ai_web_explorer.grounded_web.business_profile import PlanningDelta
+from ai_web_explorer.grounded_web.business_profile import PlanningState
 from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
     PddlProjectionOptions,
     compile_web_kobe_graph_to_pddl,
@@ -24,7 +25,12 @@ from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
 )
 
 
-def _node(node_id: str, page_type: str, values: dict) -> WebKobeNode:
+def _node(
+    node_id: str,
+    page_type: str,
+    values: dict,
+    planning_facts: list[str] | None = None,
+) -> WebKobeNode:
     evidence = [Evidence(source="unit_test")]
     return WebKobeNode(
         node_id=node_id,
@@ -44,6 +50,11 @@ def _node(node_id: str, page_type: str, values: dict) -> WebKobeNode:
             title=page_type,
         ),
         evidence=evidence,
+        planning_state=(
+            PlanningState(active_facts=planning_facts)
+            if planning_facts is not None
+            else None
+        ),
     )
 
 
@@ -119,6 +130,33 @@ def test_compile_web_kobe_graph_to_pddl_uses_custom_start_node():
     )
 
     assert "(:init (at_cart) (cart_nonempty))" in artifacts.problem
+
+
+def test_compile_web_kobe_graph_to_pddl_prefers_planning_state_for_init():
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="inventory",
+        total_steps_completed=0,
+        nodes=[
+            _node(
+                "inventory",
+                "inventory",
+                {"cart_nonempty": False, "raw_debug_flag": True},
+                planning_facts=["logged_in", "product_list_visible"],
+            ),
+        ],
+        edges=[],
+    )
+
+    artifacts = compile_web_kobe_graph_to_pddl(
+        graph,
+        goal_node_id="inventory",
+    )
+
+    assert "(:init (at_inventory) (logged_in) (product_list_visible))" in (
+        artifacts.problem
+    )
+    assert "raw_debug_flag" not in artifacts.problem
 
 
 def test_compile_web_kobe_graph_to_pddl_rejects_missing_goal_node():
@@ -751,6 +789,55 @@ def test_compile_web_kobe_graph_to_pddl_requires_removed_planning_facts():
     assert "(not (product_list_visible))" in artifacts.domain
 
 
+def test_compile_web_kobe_graph_to_pddl_omits_delete_for_inactive_planning_fact():
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="inventory",
+        total_steps_completed=1,
+        nodes=[
+            _node("inventory", "inventory", {}, planning_facts=["cart_nonempty"]),
+            _node("cart", "cart", {}, planning_facts=["cart_nonempty"]),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="inventory",
+                target_node_id="cart",
+                instruction="open cart",
+                action=BrowserAction(
+                    "business_intent",
+                    None,
+                    "stagehand_business_milestone_001",
+                    canonical_action_name="open_cart",
+                ),
+                capability=None,
+                target_observation="cart",
+                observed_delta=[],
+                schema_delta={},
+                execution_trace=ExecutionTrace(
+                    "business_intent",
+                    None,
+                    "stagehand_business_milestone_001",
+                    {},
+                    "inventory",
+                    "cart",
+                    True,
+                ),
+                planning_delta=PlanningDelta(
+                    candidate_added_facts=["cart_page_visible"],
+                    candidate_removed_facts=["product_list_visible"],
+                    evidence=["cart page replaced product list"],
+                ),
+                status="succeeded_with_observed_change",
+            )
+        ],
+    )
+
+    artifacts = compile_web_kobe_graph_to_pddl(graph, goal_node_id="cart")
+
+    assert "product_list_visible" not in artifacts.domain
+    assert "(cart_page_visible)" in artifacts.domain
+
+
 def test_load_web_kobe_graph_json_reads_to_dict_output(tmp_path):
     graph = WebKobeGraph(
         app="example",
@@ -894,6 +981,33 @@ def test_load_web_kobe_graph_json_preserves_planning_delta(tmp_path):
 
     assert loaded.edges[0].planning_delta is not None
     assert loaded.edges[0].planning_delta.verified_added_facts == ["cart_nonempty"]
+
+
+def test_load_web_kobe_graph_json_preserves_node_planning_state(tmp_path):
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="filled",
+        total_steps_completed=0,
+        nodes=[
+            _node(
+                "filled",
+                "listing",
+                {},
+                planning_facts=["cart_nonempty", "product_list_visible"],
+            ),
+        ],
+        edges=[],
+    )
+    path = tmp_path / "graph.json"
+    path.write_text(json.dumps(graph.to_dict()), encoding="utf-8")
+
+    loaded = load_web_kobe_graph_json(path)
+
+    assert loaded.nodes[0].planning_state is not None
+    assert loaded.nodes[0].planning_state.active_facts == [
+        "cart_nonempty",
+        "product_list_visible",
+    ]
 
 
 def test_load_web_kobe_graph_json_preserves_pddl_action_hint(tmp_path):

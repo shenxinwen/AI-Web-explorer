@@ -12,6 +12,7 @@ from ai_web_explorer.grounded_web.capability_graph import (
     StateIndicator,
 )
 from ai_web_explorer.grounded_web.business_profile import PlanningDelta
+from ai_web_explorer.grounded_web.business_profile import PlanningState
 
 WEB_KOBE_SCHEMA_VERSION = "web-kobe-graph-v1"
 
@@ -126,6 +127,7 @@ class WebKobeNode:
     node_label: str | None = None
     state_summary: str | None = None
     naming_provenance: dict[str, Any] | None = None
+    planning_state: PlanningState | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -155,6 +157,11 @@ class WebKobeNode:
             "naming_provenance": (
                 dict(self.naming_provenance)
                 if self.naming_provenance is not None
+                else None
+            ),
+            "planning_state": (
+                self.planning_state.to_dict()
+                if self.planning_state is not None
                 else None
             ),
         }
