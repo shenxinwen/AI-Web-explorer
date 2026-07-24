@@ -30,6 +30,7 @@ def _node(
     page_type: str,
     values: dict,
     planning_facts: list[str] | None = None,
+    node_label: str | None = None,
 ) -> WebKobeNode:
     evidence = [Evidence(source="unit_test")]
     return WebKobeNode(
@@ -50,6 +51,7 @@ def _node(
             title=page_type,
         ),
         evidence=evidence,
+        node_label=node_label,
         planning_state=(
             PlanningState(active_facts=planning_facts)
             if planning_facts is not None
@@ -130,6 +132,63 @@ def test_compile_web_kobe_graph_to_pddl_uses_custom_start_node():
     )
 
     assert "(:init (at_cart) (cart_nonempty))" in artifacts.problem
+
+
+def test_compile_web_kobe_graph_to_pddl_uses_node_label_for_location_predicates():
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="swag_labs__abc123",
+        total_steps_completed=1,
+        nodes=[
+            _node(
+                "swag_labs__abc123",
+                "inventory",
+                {},
+                planning_facts=["logged_in"],
+                node_label="inventory",
+            ),
+            _node(
+                "swag_labs__def456",
+                "checkout",
+                {},
+                node_label="checkout_step_one",
+            ),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="swag_labs__abc123",
+                target_node_id="swag_labs__def456",
+                instruction="start checkout",
+                action=BrowserAction("business_intent", None, "start_checkout"),
+                capability=None,
+                target_observation="checkout page",
+                observed_delta=[],
+                schema_delta={},
+                execution_trace=ExecutionTrace(
+                    "business_intent",
+                    None,
+                    "start_checkout",
+                    {},
+                    "swag_labs__abc123",
+                    "swag_labs__def456",
+                    True,
+                ),
+                status="succeeded_with_navigation",
+            ),
+        ],
+    )
+
+    artifacts = compile_web_kobe_graph_to_pddl(
+        graph,
+        goal_node_id="swag_labs__def456",
+    )
+
+    assert "(at_inventory)" in artifacts.problem
+    assert "(:goal (and (at_checkout_step_one)))" in artifacts.problem
+    assert "(not (at_inventory))" in artifacts.domain
+    assert "(at_checkout_step_one)" in artifacts.domain
+    assert "at_swag_labs" not in artifacts.domain
+    assert "at_swag_labs" not in artifacts.problem
 
 
 def test_compile_web_kobe_graph_to_pddl_prefers_planning_state_for_init():

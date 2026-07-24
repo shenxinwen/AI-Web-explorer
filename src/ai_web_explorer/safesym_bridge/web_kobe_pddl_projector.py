@@ -224,6 +224,22 @@ def _at(node_id: str) -> str:
     return f"at_{_predicate(node_id)}"
 
 
+def _location_base_for_node(node) -> str:
+    return _predicate(node.node_label or node.node_id) or _predicate(node.node_id)
+
+
+def _location_predicates_by_node_id(graph: WebKobeGraph) -> dict[str, str]:
+    used: dict[str, int] = {}
+    locations: dict[str, str] = {}
+    for node in graph.nodes:
+        base = _location_base_for_node(node) or "state"
+        count = used.get(base, 0) + 1
+        used[base] = count
+        suffix = "" if count == 1 else f"_{count:03d}"
+        locations[node.node_id] = f"at_{base}{suffix}"
+    return locations
+
+
 def _is_positive_number(value: object) -> bool:
     return isinstance(value, int | float) and not isinstance(value, bool) and value > 0
 
@@ -293,9 +309,14 @@ def _require_node(graph: WebKobeGraph, node_id: str, *, role: str):
     return nodes[node_id]
 
 
-def _initial_predicates(graph: WebKobeGraph, *, start_node_id: str) -> list[str]:
+def _initial_predicates(
+    graph: WebKobeGraph,
+    *,
+    start_node_id: str,
+    location_predicates: dict[str, str],
+) -> list[str]:
     start = _require_node(graph, start_node_id, role="start")
-    predicates = [_at(start.node_id)]
+    predicates = [location_predicates[start.node_id]]
     if start.planning_state is not None:
         predicates.extend(
             _predicate(fact) for fact in start.planning_state.active_facts
@@ -444,9 +465,10 @@ def _preconditions_for_edge(
     edge,
     *,
     options: PddlProjectionOptions,
+    location_predicates: dict[str, str],
     source_node=None,
 ) -> list[str]:
-    preconditions = [f"({_at(edge.source_node_id)})"]
+    preconditions = [f"({location_predicates[edge.source_node_id]})"]
     for predicate in _removed_planning_predicates_for_edge(
         edge,
         source_node=source_node,
@@ -467,11 +489,12 @@ def _effects_for_edge(
     edge,
     *,
     options: PddlProjectionOptions,
+    location_predicates: dict[str, str],
     source_node=None,
 ) -> list[str]:
     effects = [
-        f"(not ({_at(edge.source_node_id)}))",
-        f"({_at(edge.target_node_id)})",
+        f"(not ({location_predicates[edge.source_node_id]}))",
+        f"({location_predicates[edge.target_node_id]})",
     ]
     if options.include_observed_delta_facts:
         for delta in edge.observed_delta:
@@ -510,9 +533,8 @@ def compile_web_kobe_graph_to_pddl(
     _require_node(graph, selected_start_node_id, role="start")
     _require_node(graph, goal_node_id, role="goal")
 
-    predicate_names = set(
-        [_at(node.node_id) for node in graph.nodes] + _state_predicates(graph)
-    )
+    location_predicates = _location_predicates_by_node_id(graph)
+    predicate_names = set(list(location_predicates.values()) + _state_predicates(graph))
     nodes_by_id = _nodes_by_id(graph)
     for edge in graph.edges:
         if _is_projectable_edge(edge):
@@ -534,11 +556,13 @@ def compile_web_kobe_graph_to_pddl(
         preconditions = _preconditions_for_edge(
             edge,
             options=options,
+            location_predicates=location_predicates,
             source_node=source_node,
         )
         effects = _effects_for_edge(
             edge,
             options=options,
+            location_predicates=location_predicates,
             source_node=source_node,
         )
         action_blocks.append(
@@ -568,6 +592,7 @@ def compile_web_kobe_graph_to_pddl(
         for name in _initial_predicates(
             graph,
             start_node_id=selected_start_node_id,
+            location_predicates=location_predicates,
         )
     )
     problem = "\n".join(
@@ -575,7 +600,7 @@ def compile_web_kobe_graph_to_pddl(
             "(define (problem web-kobe-problem)",
             "  (:domain web-kobe)",
             f"  (:init {init_text})",
-            f"  (:goal (and ({_at(goal_node_id)})))",
+            f"  (:goal (and ({location_predicates[goal_node_id]})))",
             ")",
         ]
     )

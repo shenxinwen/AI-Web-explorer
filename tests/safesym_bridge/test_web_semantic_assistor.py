@@ -32,6 +32,24 @@ def test_deterministic_semantic_assistor_builds_listing_state_draft():
     assert draft.interactable_elements[0]["semantic_id"] == "product_add_to_cart"
 
 
+def test_deterministic_semantic_assistor_prefers_url_path_for_node_label():
+    snapshot = StateSnapshot(
+        page_id="swag_labs",
+        url="https://www.saucedemo.com/checkout-step-one.html",
+        title="Swag Labs",
+        signature={"url_path": "/checkout-step-one.html"},
+    )
+
+    draft = DeterministicSemanticAssistor(app="saucedemo").describe_state(
+        snapshot=snapshot,
+        interactables=[],
+    )
+
+    assert draft.node_label == "checkout_step_one"
+    assert draft.state_summary == "checkout_step_one state"
+    assert draft.page_description == "checkout_step_one page"
+
+
 def test_deterministic_semantic_assistor_uses_same_node_id_for_same_state():
     first = StateSnapshot(
         page_id="inventory",

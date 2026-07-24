@@ -25,6 +25,22 @@ def _state_node_id(page_id: str, signature: dict[str, Any]) -> str:
     return f"{page_id}__{digest}"
 
 
+def _path_label_from_snapshot(snapshot: StateSnapshot) -> str | None:
+    raw_path = snapshot.signature.get("url_path")
+    if not raw_path:
+        raw_path = urlsplit(snapshot.url).path
+    path = str(raw_path).strip().strip("/")
+    if not path:
+        return None
+    last_segment = path.rsplit("/", 1)[-1]
+    for suffix in (".html", ".htm"):
+        if last_segment.lower().endswith(suffix):
+            last_segment = last_segment[: -len(suffix)]
+            break
+    label = slug_identifier(last_segment or path, fallback="")
+    return label or None
+
+
 @dataclass(frozen=True)
 class SemanticStateDraft:
     node_id: str
@@ -67,8 +83,11 @@ class DeterministicSemanticAssistor:
         ]
         last_state = dict(snapshot.signature)
         node_id = _state_node_id(snapshot.page_id, last_state)
-        node_label = slug_identifier(snapshot.page_id, fallback="state")
-        state_summary = f"{snapshot.page_id} state"
+        node_label = _path_label_from_snapshot(snapshot) or slug_identifier(
+            snapshot.page_id,
+            fallback="state",
+        )
+        state_summary = f"{node_label} state"
         page_frame = PageFrame(
             page_id=f"{self.app}:{snapshot.page_id}",
             page_type=snapshot.page_id,
@@ -84,7 +103,7 @@ class DeterministicSemanticAssistor:
             node_label=node_label,
             state_summary=state_summary,
             naming_provenance={"source": "deterministic_fallback"},
-            page_description=f"{snapshot.page_id} page",
+            page_description=f"{node_label} page",
             page_frame=page_frame,
             state_schema={key: [value] for key, value in last_state.items()},
             last_state_snapshot=last_state,
