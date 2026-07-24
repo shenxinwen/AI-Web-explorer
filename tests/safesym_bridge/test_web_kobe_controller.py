@@ -176,3 +176,24 @@ async def test_controller_stops_after_failed_action():
     assert result.summary.steps_completed == 1
     assert result.summary.stop_reason == "failed_action"
     assert result.summary.failed_edge_count == 1
+
+
+@pytest.mark.anyio
+async def test_controller_stops_when_terminal_condition_matches():
+    explorer = FakeExplorer(
+        [
+            _graph(completed=1),
+            _graph(completed=2),
+        ]
+    )
+    controller = WebKobeExplorationController(
+        explorer,
+        terminal_condition=lambda graph: graph.total_steps_completed >= 1,
+    )
+
+    result = await controller.run(max_steps=3)
+
+    assert explorer.calls == 1
+    assert result.graph.total_steps_completed == 1
+    assert result.summary.steps_completed == 1
+    assert result.summary.stop_reason == "terminal_condition"

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Callable, Protocol
 
 from ai_web_explorer.grounded_web.graph import WebKobeGraph
 
@@ -58,8 +58,14 @@ def _summary(
 
 
 class WebKobeExplorationController:
-    def __init__(self, explorer: StepExplorer):
+    def __init__(
+        self,
+        explorer: StepExplorer,
+        *,
+        terminal_condition: Callable[[WebKobeGraph], bool] | None = None,
+    ):
         self.explorer = explorer
+        self.terminal_condition = terminal_condition
 
     async def run(self, *, max_steps: int = 1) -> WebKobeExplorationResult:
         requested_steps = max(max_steps, 0)
@@ -81,6 +87,9 @@ class WebKobeExplorationController:
             previous_completed = graph.total_steps_completed
             if graph.edges and graph.edges[-1].status not in SUCCESS_EDGE_STATUSES:
                 stop_reason = "failed_action"
+                break
+            if self.terminal_condition is not None and self.terminal_condition(graph):
+                stop_reason = "terminal_condition"
                 break
 
         if graph is None:

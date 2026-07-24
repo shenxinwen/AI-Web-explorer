@@ -62,6 +62,9 @@ def _node_from_draft(draft) -> WebKobeNode:
             title=draft.page_frame.title,
         ),
         evidence=draft.evidence,
+        node_label=draft.node_label,
+        state_summary=draft.state_summary,
+        naming_provenance=draft.naming_provenance,
     )
 
 

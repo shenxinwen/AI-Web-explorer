@@ -119,6 +119,22 @@ async def test_explore_one_step_records_self_loop_delta():
 
 
 @pytest.mark.anyio
+async def test_explore_one_step_preserves_deterministic_node_naming():
+    explorer = WebKobeExplorer(
+        adapter=FakeAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+    )
+
+    graph = await explorer.explore_one_step()
+
+    nodes_by_id = {node.node_id: node for node in graph.nodes}
+    source = nodes_by_id[graph.edges[0].source_node_id]
+    assert source.node_label == "listing"
+    assert source.state_summary == "listing state"
+    assert source.naming_provenance == {"source": "deterministic_fallback"}
+
+
+@pytest.mark.anyio
 async def test_explore_one_step_records_profile_verified_planning_delta():
     explorer = WebKobeExplorer(
         adapter=FakeAdapter(),

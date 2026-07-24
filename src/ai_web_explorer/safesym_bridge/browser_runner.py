@@ -130,6 +130,31 @@ def write_web_kobe_graph(graph: WebKobeGraph, output_path: Path) -> Path:
     return output_path
 
 
+def _is_ecommerce_terminal_graph(graph: WebKobeGraph) -> bool:
+    if not graph.edges:
+        return False
+    target_id = graph.edges[-1].target_node_id
+    nodes_by_id = {node.node_id: node for node in graph.nodes}
+    target = nodes_by_id.get(target_id)
+    if target is None:
+        return False
+    active_facts = (
+        set(target.planning_state.active_facts)
+        if target.planning_state is not None
+        else set()
+    )
+    if "order_completed" in active_facts:
+        return True
+    reference_url = (
+        target.reference_observation.url
+        if target.reference_observation is not None
+        else ""
+    )
+    url = reference_url or target.page_frame.url
+    normalized = url.lower().replace("_", "-")
+    return "checkout-complete" in normalized or "order-complete" in normalized
+
+
 def _pick_free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
@@ -431,6 +456,8 @@ async def run_ecommerce_stagehand_step(
                 semantic_naming_provider=resolved_semantic_naming_provider,
             )
             controller = WebKobeExplorationController(explorer)
+            if allow_final_order:
+                controller.terminal_condition = _is_ecommerce_terminal_graph
             result = await controller.run(max_steps=max(steps, 1))
             graph = result.graph
             write_web_kobe_graph(graph, output_path)
