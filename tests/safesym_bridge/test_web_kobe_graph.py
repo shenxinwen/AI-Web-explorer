@@ -19,6 +19,7 @@ from ai_web_explorer.grounded_web.graph import (
 )
 from ai_web_explorer.grounded_web.business_profile import PlanningDelta
 from ai_web_explorer.grounded_web.business_profile import PlanningState
+from ai_web_explorer.grounded_web.business_profile import PlanningTransition
 
 
 def test_web_kobe_graph_serializes_node_edge_and_evidence():
@@ -142,6 +143,14 @@ def test_web_kobe_graph_serializes_node_edge_and_evidence():
             evidence=["login controls were replaced by shopping controls"],
             confidence=0.95,
         ),
+        planning_transition=PlanningTransition(
+            pre_facts=["required_info_missing"],
+            added_facts=["logged_in"],
+            removed_facts=["required_info_missing"],
+            post_facts=["logged_in"],
+            evidence=["login controls were replaced by shopping controls"],
+            confidence=0.95,
+        ),
         visit_count=1,
         status="verified",
         evidence=evidence,
@@ -177,3 +186,11 @@ def test_web_kobe_graph_serializes_node_edge_and_evidence():
     assert data["edges"][0]["status"] == "verified"
     assert data["edges"][0]["pddl_hint"]["add_effects"] == ["logged_in", "at_home"]
     assert data["edges"][0]["planning_delta"]["verified_added_facts"] == ["logged_in"]
+    assert data["edges"][0]["planning_transition"] == {
+        "pre_facts": ["required_info_missing"],
+        "added_facts": ["logged_in"],
+        "removed_facts": ["required_info_missing"],
+        "post_facts": ["logged_in"],
+        "evidence": ["login controls were replaced by shopping controls"],
+        "confidence": 0.95,
+    }

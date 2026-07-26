@@ -484,6 +484,15 @@ The graph should preserve evidence and uncertainty. A model or heuristic may
 propose that an action succeeded, but only verified planning facts should affect
 the planner-facing model.
 
+Graph state ownership is intentionally split. `node.planning_state` is a
+node-level aggregate of profile facts observed or propagated at that page/context.
+It is useful for analysis, terminal-state checks, and future context-aware
+frontier selection. `edge.planning_transition` records the transition-local
+facts before and after a specific action. PDDL action prediction should prefer
+`edge.planning_transition.pre_facts`, `added_facts`, and `removed_facts`, falling
+back to the older `planning_delta`/source-node state path only for historical
+graphs.
+
 The project should introduce business-type profiles instead of trying to
 collect every possible page state. A `BusinessFlowProfile` defines what a class
 of websites needs the planner to understand, without binding that abstraction to

@@ -18,6 +18,7 @@ from ai_web_explorer.grounded_web.graph import (
 )
 from ai_web_explorer.grounded_web.business_profile import PlanningDelta
 from ai_web_explorer.grounded_web.business_profile import PlanningState
+from ai_web_explorer.grounded_web.business_profile import PlanningTransition
 from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
     PddlProjectionOptions,
     compile_web_kobe_graph_to_pddl,
@@ -902,6 +903,73 @@ def test_compile_web_kobe_graph_to_pddl_requires_removed_planning_facts():
     assert "(not (product_list_visible))" in artifacts.domain
 
 
+def test_compile_web_kobe_graph_to_pddl_prefers_transition_pre_facts():
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="cart",
+        total_steps_completed=1,
+        nodes=[
+            _node("cart", "cart", {}),
+            _node("checkout", "checkout_info", {}),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="cart",
+                target_node_id="checkout",
+                instruction="start checkout",
+                action=BrowserAction(
+                    "business_intent",
+                    None,
+                    "stagehand_business_milestone_001",
+                    canonical_action_name="start_checkout",
+                ),
+                capability=None,
+                target_observation="checkout",
+                observed_delta=[
+                    ObservedDelta(
+                        "debug_panel_open",
+                        False,
+                        True,
+                        "state_indicator_change",
+                    )
+                ],
+                schema_delta={},
+                execution_trace=ExecutionTrace(
+                    "business_intent",
+                    None,
+                    "stagehand_business_milestone_001",
+                    {},
+                    "cart",
+                    "checkout",
+                    True,
+                ),
+                planning_delta=PlanningDelta(
+                    candidate_added_facts=["checkout_started"],
+                ),
+                planning_transition=PlanningTransition(
+                    pre_facts=["cart_has_items"],
+                    added_facts=["checkout_started"],
+                    removed_facts=[],
+                    post_facts=["cart_has_items", "checkout_started"],
+                    evidence=["checkout form became visible"],
+                ),
+                status="succeeded_with_observed_change",
+            )
+        ],
+    )
+
+    artifacts = compile_web_kobe_graph_to_pddl(
+        graph,
+        goal_node_id="checkout",
+        options=PddlProjectionOptions(include_observed_delta_facts=True),
+    )
+
+    assert ":precondition (and (at_cart) (cart_has_items))" in artifacts.domain
+    assert "(checkout_started)" in artifacts.domain
+    assert "(debug_panel_open)" in artifacts.domain
+    assert "(debug_panel_open) (checkout_started)" in artifacts.domain
+
+
 def test_compile_web_kobe_graph_to_pddl_omits_delete_for_inactive_planning_fact():
     graph = WebKobeGraph(
         app="example",
@@ -1094,6 +1162,64 @@ def test_load_web_kobe_graph_json_preserves_planning_delta(tmp_path):
 
     assert loaded.edges[0].planning_delta is not None
     assert loaded.edges[0].planning_delta.verified_added_facts == ["cart_has_items"]
+
+
+def test_load_web_kobe_graph_json_preserves_planning_transition(tmp_path):
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="cart",
+        total_steps_completed=1,
+        nodes=[
+            _node("cart", "cart", {}, planning_facts=["cart_has_items"]),
+            _node(
+                "checkout",
+                "checkout_info",
+                {},
+                planning_facts=["cart_has_items", "checkout_started"],
+            ),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="cart",
+                target_node_id="checkout",
+                instruction="start checkout",
+                action=BrowserAction("click", "button.checkout", "checkout"),
+                capability=None,
+                target_observation="checkout",
+                observed_delta=[],
+                schema_delta={},
+                execution_trace=ExecutionTrace(
+                    "click",
+                    "button.checkout",
+                    "checkout",
+                    {},
+                    "cart",
+                    "checkout",
+                    True,
+                ),
+                planning_transition=PlanningTransition(
+                    pre_facts=["cart_has_items"],
+                    added_facts=["checkout_started"],
+                    removed_facts=[],
+                    post_facts=["cart_has_items", "checkout_started"],
+                    evidence=["checkout form became visible"],
+                    confidence=0.8,
+                ),
+            )
+        ],
+    )
+    path = tmp_path / "graph.json"
+    path.write_text(json.dumps(graph.to_dict()), encoding="utf-8")
+
+    loaded = load_web_kobe_graph_json(path)
+
+    assert loaded.edges[0].planning_transition is not None
+    assert loaded.edges[0].planning_transition.pre_facts == ["cart_has_items"]
+    assert loaded.edges[0].planning_transition.added_facts == ["checkout_started"]
+    assert loaded.edges[0].planning_transition.post_facts == [
+        "cart_has_items",
+        "checkout_started",
+    ]
 
 
 def test_load_web_kobe_graph_json_preserves_node_planning_state(tmp_path):

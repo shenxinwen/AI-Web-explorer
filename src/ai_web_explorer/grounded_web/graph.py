@@ -13,6 +13,7 @@ from ai_web_explorer.grounded_web.capability_graph import (
 )
 from ai_web_explorer.grounded_web.business_profile import PlanningDelta
 from ai_web_explorer.grounded_web.business_profile import PlanningState
+from ai_web_explorer.grounded_web.business_profile import PlanningTransition
 
 WEB_KOBE_SCHEMA_VERSION = "web-kobe-graph-v1"
 
@@ -180,6 +181,7 @@ class WebKobeEdge:
     execution_trace: ExecutionTrace
     pddl_hint: PddlActionHint | None = None
     planning_delta: PlanningDelta | None = None
+    planning_transition: PlanningTransition | None = None
     visit_count: int = 1
     status: str = "verified"
     evidence: list[Evidence] = field(default_factory=list)
@@ -207,6 +209,11 @@ class WebKobeEdge:
             "planning_delta": (
                 self.planning_delta.to_dict()
                 if self.planning_delta is not None
+                else None
+            ),
+            "planning_transition": (
+                self.planning_transition.to_dict()
+                if self.planning_transition is not None
                 else None
             ),
             "visit_count": self.visit_count,

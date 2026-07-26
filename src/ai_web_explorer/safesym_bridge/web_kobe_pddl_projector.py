@@ -21,6 +21,7 @@ from ai_web_explorer.grounded_web.graph import (
 )
 from ai_web_explorer.grounded_web.business_profile import PlanningDelta
 from ai_web_explorer.grounded_web.business_profile import PlanningState
+from ai_web_explorer.grounded_web.business_profile import PlanningTransition
 
 PROJECTABLE_EDGE_STATUSES = {
     "verified",
@@ -163,6 +164,21 @@ def _planning_state_from_dict(data: dict[str, Any] | None) -> PlanningState | No
     )
 
 
+def _planning_transition_from_dict(
+    data: dict[str, Any] | None,
+) -> PlanningTransition | None:
+    if data is None:
+        return None
+    return PlanningTransition(
+        pre_facts=list(data.get("pre_facts", [])),
+        added_facts=list(data.get("added_facts", [])),
+        removed_facts=list(data.get("removed_facts", [])),
+        post_facts=list(data.get("post_facts", [])),
+        evidence=list(data.get("evidence", [])),
+        confidence=data.get("confidence"),
+    )
+
+
 def _pddl_action_hint_from_dict(data: dict[str, Any] | None) -> PddlActionHint | None:
     if data is None:
         return None
@@ -191,6 +207,9 @@ def _edge_from_dict(data: dict[str, Any]) -> WebKobeEdge:
         ),
         pddl_hint=_pddl_action_hint_from_dict(data.get("pddl_hint")),
         planning_delta=_planning_delta_from_dict(data.get("planning_delta")),
+        planning_transition=_planning_transition_from_dict(
+            data.get("planning_transition")
+        ),
         visit_count=int(data.get("visit_count", 1)),
         status=str(data.get("status", "verified")),
         evidence=[_evidence_from_dict(item) for item in data.get("evidence", [])],
@@ -418,20 +437,6 @@ def _observed_effect_predicates_for_edge(edge) -> list[str]:
     return predicates
 
 
-def _planning_effect_predicates_for_edge(edge) -> list[str]:
-    predicates = []
-    if edge.planning_delta is not None:
-        predicates.extend(
-            _predicate(fact)
-            for fact in _trusted_added_planning_facts(edge.planning_delta)
-        )
-        predicates.extend(
-            _predicate(fact)
-            for fact in _trusted_removed_planning_facts(edge.planning_delta)
-        )
-    return predicates
-
-
 def _effect_predicates_for_edge(
     edge,
     *,
@@ -441,6 +446,17 @@ def _effect_predicates_for_edge(
     predicates = []
     if options.include_observed_delta_facts:
         predicates.extend(_observed_effect_predicates_for_edge(edge))
+    if edge.planning_transition is not None:
+        predicates.extend(
+            _predicate(fact) for fact in edge.planning_transition.pre_facts
+        )
+        predicates.extend(
+            _predicate(fact) for fact in edge.planning_transition.added_facts
+        )
+        predicates.extend(
+            _predicate(fact) for fact in edge.planning_transition.removed_facts
+        )
+        return predicates
     if edge.planning_delta is not None:
         predicates.extend(
             _predicate(fact)
@@ -483,11 +499,16 @@ def _preconditions_for_edge(
     source_node=None,
 ) -> list[str]:
     preconditions = [f"({location_predicates[edge.source_node_id]})"]
-    for predicate in _removed_planning_predicates_for_edge(
-        edge,
-        source_node=source_node,
-    ):
-        preconditions.append(f"({predicate})")
+    if edge.planning_transition is not None:
+        preconditions.extend(
+            f"({_predicate(fact)})" for fact in edge.planning_transition.pre_facts
+        )
+    else:
+        for predicate in _removed_planning_predicates_for_edge(
+            edge,
+            source_node=source_node,
+        ):
+            preconditions.append(f"({predicate})")
     if options.include_observed_delta_facts:
         for delta in edge.observed_delta:
             change = _delta_predicate_change(delta)
@@ -520,6 +541,12 @@ def _effects_for_edge(
                 effects.append(f"({pred})")
             else:
                 effects.append(f"(not ({pred}))")
+    if edge.planning_transition is not None:
+        for fact in edge.planning_transition.added_facts:
+            effects.append(f"({_predicate(fact)})")
+        for fact in edge.planning_transition.removed_facts:
+            effects.append(f"(not ({_predicate(fact)}))")
+        return _unique_items(effects)
     if edge.planning_delta is not None:
         for fact in _trusted_added_planning_facts(edge.planning_delta):
             effects.append(f"({_predicate(fact)})")

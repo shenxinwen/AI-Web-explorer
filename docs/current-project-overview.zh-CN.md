@@ -443,6 +443,13 @@ raw browser evidence
 图里应该保留证据和不确定性。模型或启发式规则可以提出某个动作成功了，但只有经过验证
 的 planning facts 才能影响 planner-facing model。
 
+图里的状态归属应当拆开。`node.planning_state` 是 node/page/context 层面的 profile
+facts 聚合摘要，用于分析、终止状态判断，以及未来 context-aware frontier 选择。
+`edge.planning_transition` 记录某一次具体动作的 transition-local 前后事实。
+PDDL action prediction 应优先使用 `edge.planning_transition.pre_facts`、
+`added_facts` 和 `removed_facts`；只有历史 graph 缺少该字段时，才回退到旧的
+`planning_delta`/source-node state 路径。
+
 项目应该引入业务类型 profile，而不是盲目收集网页上的所有状态。
 `BusinessFlowProfile` 定义某一类网站需要让规划器理解什么，但不绑定某个具体网站的
 selector 或精确 URL。

@@ -13,6 +13,7 @@ from ai_web_explorer.grounded_web.business_profile import (
     BusinessFlowProfile,
     PlanningDelta,
     PlanningState,
+    PlanningTransition,
 )
 
 
@@ -143,6 +144,8 @@ class WebKobeGraphManager:
                 observed_delta=list(edge.observed_delta or existing.observed_delta),
                 schema_delta=edge.schema_delta or existing.schema_delta,
                 planning_delta=edge.planning_delta or existing.planning_delta,
+                planning_transition=edge.planning_transition
+                or existing.planning_transition,
                 execution_trace=edge.execution_trace,
                 evidence=list(existing.evidence or edge.evidence),
             )
@@ -153,7 +156,7 @@ class WebKobeGraphManager:
         edge: WebKobeEdge,
         *,
         profile: BusinessFlowProfile,
-    ) -> None:
+    ) -> WebKobeEdge:
         source = self._nodes[edge.source_node_id]
         target = self._nodes[edge.target_node_id]
         allowed_facts = _profile_fact_ids(profile)
@@ -190,6 +193,23 @@ class WebKobeGraphManager:
         if added_facts or removed_facts:
             evidence.append(f"propagated from edge {edge.edge_id}")
 
+        transition = PlanningTransition(
+            pre_facts=active_facts,
+            added_facts=added_facts,
+            removed_facts=removed_facts,
+            post_facts=next_facts,
+            evidence=(
+                list(edge.planning_delta.evidence)
+                if edge.planning_delta is not None
+                else []
+            ),
+            confidence=(
+                edge.planning_delta.confidence
+                if edge.planning_delta is not None
+                else None
+            ),
+        )
+
         self._nodes[edge.target_node_id] = replace(
             target,
             planning_state=PlanningState(
@@ -197,6 +217,7 @@ class WebKobeGraphManager:
                 evidence=evidence,
             ),
         )
+        return replace(edge, planning_transition=transition)
 
     def mark_interactable_explored(
         self,

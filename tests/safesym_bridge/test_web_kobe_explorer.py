@@ -164,6 +164,10 @@ async def test_explore_one_step_propagates_planning_delta_to_target_node():
     target = nodes_by_id[edge.target_node_id]
     assert target.planning_state is not None
     assert target.planning_state.active_facts == ["cart_has_items"]
+    assert edge.planning_transition is not None
+    assert edge.planning_transition.pre_facts == []
+    assert edge.planning_transition.added_facts == ["cart_has_items"]
+    assert edge.planning_transition.post_facts == ["cart_has_items"]
 
 
 @pytest.mark.anyio

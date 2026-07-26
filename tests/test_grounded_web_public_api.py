@@ -5,6 +5,7 @@ from ai_web_explorer.grounded_web import (
     OpenAIVisualDeltaProvider,
     PlanningDelta,
     PlanningState,
+    PlanningTransition,
     VisualDeltaProvider,
     VisualDeltaRequest,
     WebKobeExplorationController,
@@ -31,6 +32,7 @@ def test_grounded_web_package_exposes_mainline_api():
     assert OpenAIVisualDeltaProvider.__name__ == "OpenAIVisualDeltaProvider"
     assert PlanningDelta.__name__ == "PlanningDelta"
     assert PlanningState.__name__ == "PlanningState"
+    assert PlanningTransition.__name__ == "PlanningTransition"
     assert VisualDeltaProvider is not None
     assert VisualDeltaRequest.__name__ == "VisualDeltaRequest"
     assert WebKobeExplorationController.__name__ == "WebKobeExplorationController"

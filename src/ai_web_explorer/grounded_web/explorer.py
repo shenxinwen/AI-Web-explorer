@@ -333,7 +333,7 @@ class WebKobeExplorer:
             evidence=[Evidence(source="web_kobe_explorer", url=before.url)],
         )
         if self.business_profile is not None:
-            self.manager.propagate_planning_state(
+            edge = self.manager.propagate_planning_state(
                 edge,
                 profile=self.business_profile,
             )

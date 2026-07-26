@@ -118,6 +118,26 @@ class PlanningState:
         }
 
 
+@dataclass(frozen=True)
+class PlanningTransition:
+    pre_facts: list[str] = field(default_factory=list)
+    added_facts: list[str] = field(default_factory=list)
+    removed_facts: list[str] = field(default_factory=list)
+    post_facts: list[str] = field(default_factory=list)
+    evidence: list[str] = field(default_factory=list)
+    confidence: float | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "pre_facts": list(self.pre_facts),
+            "added_facts": list(self.added_facts),
+            "removed_facts": list(self.removed_facts),
+            "post_facts": list(self.post_facts),
+            "evidence": list(self.evidence),
+            "confidence": self.confidence,
+        }
+
+
 def _hint(evidence_type: str, description: str) -> EvidenceHint:
     return EvidenceHint(evidence_type=evidence_type, description=description)
 
@@ -327,6 +347,7 @@ __all__ = [
     "EvidenceHint",
     "PlanningDelta",
     "PlanningState",
+    "PlanningTransition",
     "PlanningFactSpec",
     "SensitiveActionCategory",
     "ecommerce_checkout_profile",

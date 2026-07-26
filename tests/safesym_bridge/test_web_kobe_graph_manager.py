@@ -1,4 +1,5 @@
 from ai_web_explorer.grounded_web.business_profile import PlanningDelta
+from ai_web_explorer.grounded_web.business_profile import PlanningTransition
 from ai_web_explorer.grounded_web.business_profile import ecommerce_checkout_profile
 from ai_web_explorer.grounded_web.capability_graph import (
     Evidence,
@@ -121,6 +122,56 @@ def test_interactable_merge_preserves_explored_by_locator_when_label_changes():
     assert graph.nodes[0].interactable_elements[0]["explored"] is True
 
 
+def test_add_edge_merges_planning_transition_for_repeated_edge():
+    manager = WebKobeGraphManager(app="example")
+    edge = WebKobeEdge(
+        source_node_id="inventory",
+        target_node_id="cart",
+        instruction="open cart",
+        action=BrowserAction("business_intent", None, "open_cart"),
+        capability=None,
+        target_observation="cart page",
+        observed_delta=[],
+        schema_delta={},
+        execution_trace=ExecutionTrace(
+            "business_intent",
+            None,
+            "open_cart",
+            {},
+            "inventory",
+            "cart",
+            True,
+        ),
+    )
+
+    manager.add_edge(edge)
+    manager.add_edge(
+        WebKobeEdge(
+            source_node_id=edge.source_node_id,
+            target_node_id=edge.target_node_id,
+            instruction=edge.instruction,
+            action=edge.action,
+            capability=edge.capability,
+            target_observation=edge.target_observation,
+            observed_delta=[],
+            schema_delta={},
+            execution_trace=edge.execution_trace,
+            planning_transition=PlanningTransition(
+                pre_facts=["cart_has_items"],
+                added_facts=["checkout_started"],
+                removed_facts=[],
+                post_facts=["cart_has_items", "checkout_started"],
+            ),
+        )
+    )
+
+    graph = manager.to_graph(start_node_id="inventory")
+
+    assert graph.edges[0].visit_count == 2
+    assert graph.edges[0].planning_transition is not None
+    assert graph.edges[0].planning_transition.pre_facts == ["cart_has_items"]
+
+
 def test_propagate_planning_state_filters_to_profile_facts():
     manager = WebKobeGraphManager(app="example")
     manager.identify_or_add_node(
@@ -150,9 +201,17 @@ def test_propagate_planning_state_filters_to_profile_facts():
         ),
     )
 
-    manager.propagate_planning_state(edge, profile=ecommerce_checkout_profile())
+    updated_edge = manager.propagate_planning_state(
+        edge,
+        profile=ecommerce_checkout_profile(),
+    )
 
     graph = manager.to_graph(start_node_id="inventory")
     cart = next(node for node in graph.nodes if node.node_id == "cart")
     assert cart.planning_state is not None
     assert cart.planning_state.active_facts == ["cart_page_visible"]
+    assert updated_edge.planning_transition is not None
+    assert updated_edge.planning_transition.pre_facts == []
+    assert updated_edge.planning_transition.added_facts == ["cart_page_visible"]
+    assert updated_edge.planning_transition.removed_facts == []
+    assert updated_edge.planning_transition.post_facts == ["cart_page_visible"]
