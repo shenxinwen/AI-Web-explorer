@@ -267,3 +267,27 @@ def test_write_web_kobe_pddl_smoke_writes_pddl_and_report(tmp_path):
     assert data["problem_path"] == str(problem_path)
     assert result.report.planning_ready is True
     assert result.artifacts.domain == domain_path.read_text(encoding="utf-8")
+
+
+def test_write_web_kobe_pddl_smoke_accepts_goal_fact(tmp_path):
+    from ai_web_explorer.safesym_bridge.web_kobe_pddl_smoke import (
+        write_web_kobe_pddl_smoke,
+    )
+
+    graph = _graph([_edge("empty", "filled", "add_to_cart")])
+
+    result = write_web_kobe_pddl_smoke(
+        graph,
+        tmp_path,
+        goal_node_id="filled",
+        goal_fact="cart_nonempty",
+    )
+
+    problem_path = tmp_path / "problem.pddl"
+    report_path = tmp_path / "smoke_report.json"
+
+    assert "(:goal (and (cart_nonempty)))" in problem_path.read_text(encoding="utf-8")
+    data = json.loads(report_path.read_text(encoding="utf-8"))
+    assert data["goal_node"] == "filled"
+    assert data["goal_fact"] == "cart_nonempty"
+    assert result.report.planning_ready is True

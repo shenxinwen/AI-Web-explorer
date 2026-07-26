@@ -25,6 +25,7 @@ class WebKobePddlSmokeReport:
     app: str
     start_node: str
     goal_node: str
+    goal_fact: str | None
     goal_reachable_in_graph: bool
     projectable_edge_count: int
     projected_action_count: int
@@ -48,6 +49,7 @@ class WebKobePddlSmokeReport:
             "app": self.app,
             "start_node": self.start_node,
             "goal_node": self.goal_node,
+            "goal_fact": self.goal_fact,
             "goal_reachable_in_graph": self.goal_reachable_in_graph,
             "projectable_edge_count": self.projectable_edge_count,
             "projected_action_count": self.projected_action_count,
@@ -253,6 +255,7 @@ def analyze_web_kobe_pddl_smoke(
     graph: WebKobeGraph,
     *,
     goal_node_id: str,
+    goal_fact: str | None = None,
     start_node_id: str | None = None,
     domain_path: Path | None = None,
     problem_path: Path | None = None,
@@ -262,6 +265,7 @@ def analyze_web_kobe_pddl_smoke(
         graph,
         start_node_id=start_node_id,
         goal_node_id=goal_node_id,
+        goal_fact=goal_fact,
     )
     projectable_edge_count = len(_projectable_edges(graph))
     goal_reachable = goal_reachable_through_projectable_edges(
@@ -296,6 +300,7 @@ def analyze_web_kobe_pddl_smoke(
         app=graph.app,
         start_node=selected_start,
         goal_node=goal_node_id,
+        goal_fact=goal_fact,
         goal_reachable_in_graph=goal_reachable,
         projectable_edge_count=projectable_edge_count,
         projected_action_count=projected_action_count,
@@ -318,6 +323,7 @@ def write_web_kobe_pddl_smoke(
     output_dir: Path,
     *,
     goal_node_id: str,
+    goal_fact: str | None = None,
     start_node_id: str | None = None,
 ) -> WebKobePddlSmokeResult:
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -329,11 +335,13 @@ def write_web_kobe_pddl_smoke(
         graph,
         start_node_id=start_node_id,
         goal_node_id=goal_node_id,
+        goal_fact=goal_fact,
     )
     report = analyze_web_kobe_pddl_smoke(
         graph,
         start_node_id=start_node_id,
         goal_node_id=goal_node_id,
+        goal_fact=goal_fact,
         domain_path=domain_path,
         problem_path=problem_path,
     )

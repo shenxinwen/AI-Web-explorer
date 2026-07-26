@@ -111,6 +111,14 @@ def main(argv: list[str] | None = None) -> int:
         required=True,
         help="Goal node ID for the generated Web-KOBE PDDL problem.",
     )
+    web_kobe_pddl_parser.add_argument(
+        "--goal-fact",
+        default=None,
+        help=(
+            "Optional profile fact predicate to use as the PDDL goal. "
+            "Defaults to the goal node location predicate."
+        ),
+    )
     web_kobe_pddl_from_graph_parser = subparsers.add_parser(
         "web-kobe-pddl-from-graph",
         help="Write PDDL from an explored Web-KOBE graph JSON.",
@@ -131,6 +139,14 @@ def main(argv: list[str] | None = None) -> int:
         "--goal-node",
         required=True,
         help="Goal node ID for the generated Web-KOBE PDDL problem.",
+    )
+    web_kobe_pddl_from_graph_parser.add_argument(
+        "--goal-fact",
+        default=None,
+        help=(
+            "Optional profile fact predicate to use as the PDDL goal. "
+            "Defaults to the goal node location predicate."
+        ),
     )
     web_kobe_pddl_from_graph_parser.add_argument(
         "--start-node",
@@ -157,6 +173,14 @@ def main(argv: list[str] | None = None) -> int:
         "--goal-node",
         required=True,
         help="Goal node ID for the generated Web-KOBE PDDL problem.",
+    )
+    web_kobe_pddl_smoke_parser.add_argument(
+        "--goal-fact",
+        default=None,
+        help=(
+            "Optional profile fact predicate to use as the PDDL goal. "
+            "Defaults to the goal node location predicate."
+        ),
     )
     web_kobe_pddl_smoke_parser.add_argument(
         "--start-node",
@@ -506,6 +530,7 @@ def main(argv: list[str] | None = None) -> int:
             artifacts = compile_web_kobe_graph_to_pddl(
                 graph,
                 goal_node_id=args.goal_node,
+                goal_fact=args.goal_fact,
             )
             args.output.mkdir(parents=True, exist_ok=True)
             (args.output / "domain.pddl").write_text(
@@ -523,6 +548,7 @@ def main(argv: list[str] | None = None) -> int:
                 graph,
                 start_node_id=args.start_node,
                 goal_node_id=args.goal_node,
+                goal_fact=args.goal_fact,
             )
             args.output.mkdir(parents=True, exist_ok=True)
             (args.output / "domain.pddl").write_text(
@@ -541,6 +567,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.output,
                 start_node_id=args.start_node,
                 goal_node_id=args.goal_node,
+                goal_fact=args.goal_fact,
             )
             output_path = result.output_dir
         elif args.mode == "web-kobe-safesym-smoke":

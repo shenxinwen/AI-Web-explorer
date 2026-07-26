@@ -14,6 +14,7 @@ from ai_web_explorer.grounded_web.graph import (
     WebKobeGraph,
     WebKobeNode,
 )
+from ai_web_explorer.grounded_web.business_profile import PlanningDelta
 from ai_web_explorer.safesym_bridge import cli
 from ai_web_explorer.safesym_bridge.cli import main
 
@@ -98,7 +99,7 @@ def test_main_web_kobe_pddl_subcommand_writes_domain_and_problem(
     monkeypatch.setattr(
         cli,
         "compile_web_kobe_graph_to_pddl",
-        lambda graph, goal_node_id: FakeArtifacts(),
+        lambda graph, goal_node_id, goal_fact=None: FakeArtifacts(),
     )
 
     assert main(["web-kobe-pddl", "--output", str(output), "--goal-node", "start"]) == 0
@@ -259,6 +260,95 @@ def test_main_web_kobe_pddl_from_graph_writes_domain_and_problem(tmp_path):
         encoding="utf-8"
     )
     assert "(:goal (and (at_filled)))" in (output_dir / "problem.pddl").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_main_web_kobe_pddl_from_graph_accepts_goal_fact(tmp_path):
+    graph_path = tmp_path / "web_kobe_graph.json"
+    output_dir = tmp_path / "web_kobe_pddl"
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="review",
+        total_steps_completed=1,
+        nodes=[
+            WebKobeNode(
+                node_id="review",
+                page_description="review page",
+                page_frame=PageFrame(
+                    page_id="review",
+                    page_type="review",
+                    url="https://example.test/review",
+                    url_pattern="https://example.test/review",
+                    title="review",
+                ),
+                state_schema={},
+                last_state_snapshot={},
+            ),
+            WebKobeNode(
+                node_id="complete",
+                page_description="complete page",
+                page_frame=PageFrame(
+                    page_id="complete",
+                    page_type="complete",
+                    url="https://example.test/complete",
+                    url_pattern="https://example.test/complete",
+                    title="complete",
+                ),
+                state_schema={},
+                last_state_snapshot={},
+            ),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="review",
+                target_node_id="complete",
+                instruction="complete order",
+                action=BrowserAction(
+                    "business_intent",
+                    None,
+                    "complete_order",
+                    canonical_action_name="complete_order",
+                ),
+                capability=None,
+                target_observation="complete",
+                observed_delta=[],
+                schema_delta={},
+                execution_trace=ExecutionTrace(
+                    "business_intent",
+                    None,
+                    "complete_order",
+                    {},
+                    "review",
+                    "complete",
+                    True,
+                ),
+                planning_delta=PlanningDelta(
+                    candidate_added_facts=["order_completed"],
+                    evidence=["confirmation page displayed"],
+                ),
+                status="succeeded_with_observed_change",
+            )
+        ],
+    )
+    graph_path.write_text(json.dumps(graph.to_dict()), encoding="utf-8")
+
+    exit_code = main(
+        [
+            "web-kobe-pddl-from-graph",
+            "--graph",
+            str(graph_path),
+            "--output",
+            str(output_dir),
+            "--goal-node",
+            "complete",
+            "--goal-fact",
+            "order_completed",
+        ]
+    )
+
+    assert exit_code == 0
+    assert "(:goal (and (order_completed)))" in (output_dir / "problem.pddl").read_text(
         encoding="utf-8"
     )
 

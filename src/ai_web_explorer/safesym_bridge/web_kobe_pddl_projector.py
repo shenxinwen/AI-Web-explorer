@@ -330,6 +330,20 @@ def _initial_predicates(
     return sorted(set(predicates))
 
 
+def _goal_predicate(
+    *,
+    goal_fact: str | None,
+    goal_node_id: str,
+    location_predicates: dict[str, str],
+) -> str:
+    if goal_fact is not None:
+        predicate = _predicate(goal_fact)
+        if not predicate:
+            raise ValueError("goal_fact must contain at least one predicate character.")
+        return predicate
+    return location_predicates[goal_node_id]
+
+
 def _action_name(raw: str) -> str:
     return _predicate(raw)
 
@@ -525,6 +539,7 @@ def compile_web_kobe_graph_to_pddl(
     graph: WebKobeGraph,
     *,
     goal_node_id: str,
+    goal_fact: str | None = None,
     start_node_id: str | None = None,
     options: PddlProjectionOptions | None = None,
 ) -> WebKobePddlArtifacts:
@@ -534,7 +549,13 @@ def compile_web_kobe_graph_to_pddl(
     _require_node(graph, goal_node_id, role="goal")
 
     location_predicates = _location_predicates_by_node_id(graph)
+    goal_predicate = _goal_predicate(
+        goal_fact=goal_fact,
+        goal_node_id=goal_node_id,
+        location_predicates=location_predicates,
+    )
     predicate_names = set(list(location_predicates.values()) + _state_predicates(graph))
+    predicate_names.add(goal_predicate)
     nodes_by_id = _nodes_by_id(graph)
     for edge in graph.edges:
         if _is_projectable_edge(edge):
@@ -600,7 +621,7 @@ def compile_web_kobe_graph_to_pddl(
             "(define (problem web-kobe-problem)",
             "  (:domain web-kobe)",
             f"  (:init {init_text})",
-            f"  (:goal (and ({location_predicates[goal_node_id]})))",
+            f"  (:goal (and ({goal_predicate})))",
             ")",
         ]
     )

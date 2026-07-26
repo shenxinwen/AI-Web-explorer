@@ -218,6 +218,60 @@ def test_compile_web_kobe_graph_to_pddl_prefers_planning_state_for_init():
     assert "raw_debug_flag" not in artifacts.problem
 
 
+def test_compile_web_kobe_graph_to_pddl_can_use_profile_fact_goal():
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="review",
+        total_steps_completed=1,
+        nodes=[
+            _node("review", "review", {}, planning_facts=["order_review_ready"]),
+            _node("complete", "complete", {}, planning_facts=["order_completed"]),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="review",
+                target_node_id="complete",
+                instruction="complete order",
+                action=BrowserAction(
+                    "business_intent",
+                    None,
+                    "stagehand_business_milestone_001",
+                    canonical_action_name="complete_order",
+                ),
+                capability=None,
+                target_observation="complete",
+                observed_delta=[],
+                schema_delta={},
+                execution_trace=ExecutionTrace(
+                    "business_intent",
+                    None,
+                    "stagehand_business_milestone_001",
+                    {},
+                    "review",
+                    "complete",
+                    True,
+                ),
+                planning_delta=PlanningDelta(
+                    candidate_added_facts=["order_completed"],
+                    candidate_removed_facts=["order_review_ready"],
+                    evidence=["confirmation page displayed"],
+                ),
+                status="succeeded_with_observed_change",
+            )
+        ],
+    )
+
+    artifacts = compile_web_kobe_graph_to_pddl(
+        graph,
+        goal_node_id="complete",
+        goal_fact="order_completed",
+    )
+
+    assert "(:goal (and (order_completed)))" in artifacts.problem
+    assert "(:goal (and (at_complete)))" not in artifacts.problem
+    assert "(order_completed)" in artifacts.domain
+
+
 def test_compile_web_kobe_graph_to_pddl_rejects_missing_goal_node():
     graph = WebKobeGraph(
         app="example",
