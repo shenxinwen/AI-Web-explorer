@@ -43,13 +43,13 @@ def test_collector_records_state_and_transition_delta():
         "https://example.test/products",
         "Products",
         cart_count=0,
-        cart_nonempty=False,
+        cart_has_items=False,
     )
     after = _observation(
         "https://example.test/products",
         "Products",
         cart_count=1,
-        cart_nonempty=True,
+        cart_has_items=True,
     )
 
     collector.on_state_observed(page=None, web_state=source, observation=before)
@@ -72,6 +72,6 @@ def test_collector_records_state_and_transition_delta():
     assert edge.action.semantic_id == "add_a_product_to_the_cart"
     assert edge.schema_delta == {
         "cart_count": {"before": 0, "after": 1},
-        "cart_nonempty": {"before": False, "after": True},
+        "cart_has_items": {"before": False, "after": True},
     }
     assert edge.execution_trace.success is True

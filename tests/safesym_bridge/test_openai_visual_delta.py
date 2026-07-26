@@ -30,8 +30,8 @@ class _FakeCompletions:
     def create(self, **kwargs):
         self.calls.append(kwargs)
         return _FakeCompletion(
-            '{"candidate_added_facts":["cart_nonempty"],'
-            '"candidate_removed_facts":["cart_empty"],'
+            '{"candidate_added_facts":["cart_has_items"],'
+            '"candidate_removed_facts":[],'
             '"evidence":["cart badge changed"],'
             '"confidence":0.8}'
         )
@@ -61,7 +61,7 @@ def test_openai_visual_delta_provider_sends_prompt_and_two_images(tmp_path):
         after_screenshot_path=str(after),
     )
 
-    assert '"candidate_added_facts":["cart_nonempty"]' in raw
+    assert '"candidate_added_facts":["cart_has_items"]' in raw
     call = client.chat.completions.calls[0]
     assert call["model"] == "gpt-vision-test"
     assert call["response_format"] == {"type": "json_object"}

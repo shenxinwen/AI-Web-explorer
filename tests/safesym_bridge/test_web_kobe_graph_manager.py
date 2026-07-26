@@ -41,8 +41,8 @@ def _node(node_id: str, values: dict, interactables=None) -> WebKobeNode:
 def test_identify_or_add_node_merges_schema_and_visit_count():
     manager = WebKobeGraphManager(app="example")
 
-    first = _node("product_listing", {"cart_nonempty": False})
-    second = _node("product_listing", {"cart_nonempty": True, "filter_open": False})
+    first = _node("product_listing", {"cart_has_items": False})
+    second = _node("product_listing", {"cart_has_items": True, "filter_open": False})
 
     assert manager.identify_or_add_node(first) == "product_listing"
     assert manager.identify_or_add_node(second) == "product_listing"
@@ -50,9 +50,9 @@ def test_identify_or_add_node_merges_schema_and_visit_count():
     graph = manager.to_graph()
     node = graph.nodes[0]
     assert node.visit_count == 2
-    assert node.state_schema["cart_nonempty"] == [False, True]
+    assert node.state_schema["cart_has_items"] == [False, True]
     assert node.state_schema["filter_open"] == [False]
-    assert node.last_state_snapshot == {"cart_nonempty": True, "filter_open": False}
+    assert node.last_state_snapshot == {"cart_has_items": True, "filter_open": False}
 
 
 def test_mark_interactable_explored_updates_matching_candidate():
@@ -60,7 +60,7 @@ def test_mark_interactable_explored_updates_matching_candidate():
     manager.identify_or_add_node(
         _node(
             "product_listing",
-            {"cart_nonempty": False},
+            {"cart_has_items": False},
             interactables=[
                 {
                     "semantic_id": "add_to_cart_product",

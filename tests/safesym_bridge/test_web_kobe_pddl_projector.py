@@ -66,8 +66,8 @@ def test_compile_web_kobe_graph_to_pddl_uses_page_and_boolean_delta():
         start_node_id="listing_empty",
         total_steps_completed=1,
         nodes=[
-            _node("listing_empty", "product_listing", {"cart_nonempty": False}),
-            _node("listing_nonempty", "product_listing", {"cart_nonempty": True}),
+            _node("listing_empty", "product_listing", {"cart_has_items": False}),
+            _node("listing_nonempty", "product_listing", {"cart_has_items": True}),
         ],
         edges=[
             WebKobeEdge(
@@ -79,14 +79,14 @@ def test_compile_web_kobe_graph_to_pddl_uses_page_and_boolean_delta():
                 target_observation="product listing page",
                 observed_delta=[
                     ObservedDelta(
-                        "cart_nonempty",
+                        "cart_has_items",
                         False,
                         True,
                         "state_indicator_change",
                         evidence=[Evidence(source="unit_test")],
                     )
                 ],
-                schema_delta={"cart_nonempty": {"before": False, "after": True}},
+                schema_delta={"cart_has_items": {"before": False, "after": True}},
                 execution_trace=ExecutionTrace(
                     "click",
                     "button.add",
@@ -107,7 +107,7 @@ def test_compile_web_kobe_graph_to_pddl_uses_page_and_boolean_delta():
 
     assert "(:action edge_001_add_to_cart_product" in artifacts.domain
     assert "(at_listing_empty)" in artifacts.problem
-    assert "(cart_nonempty)" in artifacts.domain
+    assert "(cart_has_items)" in artifacts.domain
     assert "(:goal (and (at_listing_nonempty)))" in artifacts.problem
     assert "(not (at_listing_empty))" in artifacts.domain
     assert "(at_listing_nonempty)" in artifacts.domain
@@ -119,8 +119,8 @@ def test_compile_web_kobe_graph_to_pddl_uses_custom_start_node():
         start_node_id="landing",
         total_steps_completed=0,
         nodes=[
-            _node("landing", "landing", {"cart_nonempty": False}),
-            _node("cart", "cart", {"cart_nonempty": True}),
+            _node("landing", "landing", {"cart_has_items": False}),
+            _node("cart", "cart", {"cart_has_items": True}),
         ],
         edges=[],
     )
@@ -131,7 +131,7 @@ def test_compile_web_kobe_graph_to_pddl_uses_custom_start_node():
         goal_node_id="cart",
     )
 
-    assert "(:init (at_cart) (cart_nonempty))" in artifacts.problem
+    assert "(:init (at_cart) (cart_has_items))" in artifacts.problem
 
 
 def test_compile_web_kobe_graph_to_pddl_uses_node_label_for_location_predicates():
@@ -200,7 +200,7 @@ def test_compile_web_kobe_graph_to_pddl_prefers_planning_state_for_init():
             _node(
                 "inventory",
                 "inventory",
-                {"cart_nonempty": False, "raw_debug_flag": True},
+                {"cart_has_items": False, "raw_debug_flag": True},
                 planning_facts=["logged_in", "product_list_visible"],
             ),
         ],
@@ -908,8 +908,8 @@ def test_compile_web_kobe_graph_to_pddl_omits_delete_for_inactive_planning_fact(
         start_node_id="inventory",
         total_steps_completed=1,
         nodes=[
-            _node("inventory", "inventory", {}, planning_facts=["cart_nonempty"]),
-            _node("cart", "cart", {}, planning_facts=["cart_nonempty"]),
+            _node("inventory", "inventory", {}, planning_facts=["cart_has_items"]),
+            _node("cart", "cart", {}, planning_facts=["cart_has_items"]),
         ],
         edges=[
             WebKobeEdge(
@@ -1056,8 +1056,8 @@ def test_load_web_kobe_graph_json_preserves_planning_delta(tmp_path):
         start_node_id="empty",
         total_steps_completed=1,
         nodes=[
-            _node("empty", "listing", {"cart_nonempty": False}),
-            _node("filled", "listing", {"cart_nonempty": True}),
+            _node("empty", "listing", {"cart_has_items": False}),
+            _node("filled", "listing", {"cart_has_items": True}),
         ],
         edges=[
             WebKobeEdge(
@@ -1079,8 +1079,8 @@ def test_load_web_kobe_graph_json_preserves_planning_delta(tmp_path):
                     True,
                 ),
                 planning_delta=PlanningDelta(
-                    candidate_added_facts=["cart_nonempty"],
-                    verified_added_facts=["cart_nonempty"],
+                    candidate_added_facts=["cart_has_items"],
+                    verified_added_facts=["cart_has_items"],
                     evidence=["cart count indicates one or more items"],
                     confidence=0.9,
                 ),
@@ -1093,7 +1093,7 @@ def test_load_web_kobe_graph_json_preserves_planning_delta(tmp_path):
     loaded = load_web_kobe_graph_json(path)
 
     assert loaded.edges[0].planning_delta is not None
-    assert loaded.edges[0].planning_delta.verified_added_facts == ["cart_nonempty"]
+    assert loaded.edges[0].planning_delta.verified_added_facts == ["cart_has_items"]
 
 
 def test_load_web_kobe_graph_json_preserves_node_planning_state(tmp_path):
@@ -1106,7 +1106,7 @@ def test_load_web_kobe_graph_json_preserves_node_planning_state(tmp_path):
                 "filled",
                 "listing",
                 {},
-                planning_facts=["cart_nonempty", "product_list_visible"],
+                planning_facts=["cart_has_items", "product_list_visible"],
             ),
         ],
         edges=[],
@@ -1118,7 +1118,7 @@ def test_load_web_kobe_graph_json_preserves_node_planning_state(tmp_path):
 
     assert loaded.nodes[0].planning_state is not None
     assert loaded.nodes[0].planning_state.active_facts == [
-        "cart_nonempty",
+        "cart_has_items",
         "product_list_visible",
     ]
 

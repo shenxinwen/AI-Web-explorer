@@ -177,16 +177,7 @@ def ecommerce_checkout_profile() -> BusinessFlowProfile:
             ],
         ),
         PlanningFactSpec(
-            fact_id="cart_empty",
-            meaning="No items appear to be selected for purchase.",
-            related_stages=["product_selection", "cart"],
-            evidence_hints=[
-                _hint("count", "A cart count or item total indicates zero items."),
-                _hint("region", "A cart view contains no product rows."),
-            ],
-        ),
-        PlanningFactSpec(
-            fact_id="cart_nonempty",
+            fact_id="cart_has_items",
             meaning="The user has at least one item selected for purchase.",
             related_stages=["product_selection", "cart"],
             evidence_hints=[
@@ -225,22 +216,6 @@ def ecommerce_checkout_profile() -> BusinessFlowProfile:
             evidence_hints=[
                 _hint("form", "Required fields appear empty or invalid."),
                 _hint("message", "A validation message asks for missing information."),
-            ],
-            safety_relevance="information_verification",
-        ),
-        PlanningFactSpec(
-            fact_id="required_info_provided",
-            meaning=(
-                "Required checkout, contact, shipping, or account information "
-                "appears to have been provided."
-            ),
-            related_stages=["checkout_info", "order_review"],
-            evidence_hints=[
-                _hint("form", "Required fields have non-empty values."),
-                _hint(
-                    "navigation",
-                    "The flow advances past information entry toward review.",
-                ),
             ],
             safety_relevance="information_verification",
         ),

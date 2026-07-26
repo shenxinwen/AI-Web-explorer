@@ -67,20 +67,14 @@ def verify_planning_delta(
         if before == after:
             continue
         if _is_zero_number(before) and _is_positive_number(after):
-            if "cart_nonempty" in profile_fact_ids:
-                _add_unique(candidate_added, "cart_nonempty")
-                _add_unique(verified_added, "cart_nonempty")
-            if "cart_empty" in profile_fact_ids:
-                _add_unique(candidate_removed, "cart_empty")
-                _add_unique(verified_removed, "cart_empty")
+            if "cart_has_items" in profile_fact_ids:
+                _add_unique(candidate_added, "cart_has_items")
+                _add_unique(verified_added, "cart_has_items")
             evidence.append(f"structured count {key} changed from {before} to {after}")
         elif _is_positive_number(before) and _is_zero_number(after):
-            if "cart_empty" in profile_fact_ids:
-                _add_unique(candidate_added, "cart_empty")
-                _add_unique(verified_added, "cart_empty")
-            if "cart_nonempty" in profile_fact_ids:
-                _add_unique(candidate_removed, "cart_nonempty")
-                _add_unique(verified_removed, "cart_nonempty")
+            if "cart_has_items" in profile_fact_ids:
+                _add_unique(candidate_removed, "cart_has_items")
+                _add_unique(verified_removed, "cart_has_items")
             evidence.append(f"structured count {key} changed from {before} to {after}")
 
     return PlanningDelta(

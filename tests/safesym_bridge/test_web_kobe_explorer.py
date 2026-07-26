@@ -29,13 +29,13 @@ class FakeAdapter:
                 page_id="listing",
                 url="https://example.test/listing",
                 title="Listing",
-                signature={"cart_nonempty": False},
+                signature={"cart_has_items": False},
             ),
             StateSnapshot(
                 page_id="listing",
                 url="https://example.test/listing",
                 title="Listing",
-                signature={"cart_nonempty": True},
+                signature={"cart_has_items": True},
             ),
         ]
         self.executed = []
@@ -114,8 +114,8 @@ async def test_explore_one_step_records_self_loop_delta():
     assert edge.target_node_id.startswith("listing__")
     assert edge.source_node_id != edge.target_node_id
     assert edge.action.semantic_id == "add_to_cart_product"
-    assert edge.schema_delta == {"cart_nonempty": {"before": False, "after": True}}
-    assert edge.observed_delta[0].field == "cart_nonempty"
+    assert edge.schema_delta == {"cart_has_items": {"before": False, "after": True}}
+    assert edge.observed_delta[0].field == "cart_has_items"
 
 
 @pytest.mark.anyio
@@ -146,7 +146,7 @@ async def test_explore_one_step_records_profile_verified_planning_delta():
 
     edge = graph.edges[0]
     assert edge.planning_delta is not None
-    assert edge.planning_delta.verified_added_facts == ["cart_nonempty"]
+    assert edge.planning_delta.verified_added_facts == ["cart_has_items"]
 
 
 @pytest.mark.anyio
@@ -163,7 +163,7 @@ async def test_explore_one_step_propagates_planning_delta_to_target_node():
     nodes_by_id = {node.node_id: node for node in graph.nodes}
     target = nodes_by_id[edge.target_node_id]
     assert target.planning_state is not None
-    assert target.planning_state.active_facts == ["cart_nonempty"]
+    assert target.planning_state.active_facts == ["cart_has_items"]
 
 
 @pytest.mark.anyio
@@ -211,7 +211,7 @@ class FailingDiagnosticAdapter(FakeAdapter):
             page_id="listing",
             url="https://example.test/listing",
             title="Listing",
-            signature={"cart_nonempty": False},
+            signature={"cart_has_items": False},
         )
 
     async def execute(self, action: BrowserAction):
@@ -347,9 +347,9 @@ async def test_explore_one_step_records_visual_delta_candidates_without_verifyin
     assert provider_calls == [("outputs/before_0001.png", "outputs/after_0001.png")]
     assert edge.planning_delta.candidate_added_facts == [
         "order_place_pending_sensitive",
-        "cart_nonempty",
+        "cart_has_items",
     ]
-    assert edge.planning_delta.verified_added_facts == ["cart_nonempty"]
+    assert edge.planning_delta.verified_added_facts == ["cart_has_items"]
     assert (
         edge.execution_trace.metadata["visual_change_summary"]
         == "Final confirmation control appears."
@@ -418,7 +418,7 @@ class NoChangeAdapter(FakeAdapter):
             page_id="listing",
             url="https://example.test/listing",
             title="Listing",
-            signature={"cart_nonempty": False},
+            signature={"cart_has_items": False},
         )
 
 

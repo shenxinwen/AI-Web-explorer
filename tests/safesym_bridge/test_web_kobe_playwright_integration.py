@@ -74,14 +74,14 @@ async def test_playwright_web_kobe_explorer_records_real_self_loop_delta():
             assert edge.source_node_id != edge.target_node_id
             assert edge.schema_delta == {
                 "cart_count": {"before": 0, "after": 1},
-                "cart_nonempty": {"before": False, "after": True},
+                "cart_has_items": {"before": False, "after": True},
             }
             assert {
                 delta.field: (delta.before, delta.after)
                 for delta in edge.observed_delta
             } == {
                 "cart_count": (0, 1),
-                "cart_nonempty": (False, True),
+                "cart_has_items": (False, True),
             }
         finally:
             await browser.close()

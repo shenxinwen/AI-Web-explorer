@@ -27,7 +27,20 @@ def test_verify_planning_delta_maps_generic_cart_count_to_profile_facts():
         after_signature={"cart_count": 2},
     )
 
-    assert delta.verified_added_facts == ["cart_nonempty"]
-    assert delta.verified_removed_facts == ["cart_empty"]
-    assert delta.candidate_added_facts == ["cart_nonempty"]
+    assert delta.verified_added_facts == ["cart_has_items"]
+    assert delta.verified_removed_facts == []
+    assert delta.candidate_added_facts == ["cart_has_items"]
+    assert "cart_count" in delta.evidence[0]
+
+
+def test_verify_planning_delta_removes_cart_has_items_when_cart_count_reaches_zero():
+    delta = verify_planning_delta(
+        profile=ecommerce_checkout_profile(),
+        before_signature={"cart_count": 2},
+        after_signature={"cart_count": 0},
+    )
+
+    assert delta.verified_added_facts == []
+    assert delta.verified_removed_facts == ["cart_has_items"]
+    assert delta.candidate_removed_facts == ["cart_has_items"]
     assert "cart_count" in delta.evidence[0]

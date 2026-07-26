@@ -460,11 +460,9 @@ PDDL should consume planning-level facts, for example:
 ```text
 logged_in
 product_list_visible
-cart_empty
-cart_nonempty
+cart_has_items
 checkout_started
 required_info_missing
-required_info_provided
 checkout_info_complete
 order_review_ready
 order_place_pending_sensitive
@@ -492,11 +490,11 @@ of websites needs the planner to understand, without binding that abstraction to
 one site's selectors or exact URLs.
 
 For example, an e-commerce checkout profile may describe facts such as
-`cart_nonempty`, `checkout_info_complete`, or
+`cart_has_items`, `checkout_info_complete`, or
 `order_place_pending_sensitive` with semantic meanings and evidence hints:
 
 ```text
-fact: cart_nonempty
+fact: cart_has_items
 meaning: the user has at least one item selected for purchase
 evidence hints:
   - cart badge or item count indicates one or more items

@@ -420,11 +420,9 @@ PDDL 应该消费 planning-level facts，例如：
 ```text
 logged_in
 product_list_visible
-cart_empty
-cart_nonempty
+cart_has_items
 checkout_started
 required_info_missing
-required_info_provided
 checkout_info_complete
 order_review_ready
 order_place_pending_sensitive
@@ -449,12 +447,12 @@ raw browser evidence
 `BusinessFlowProfile` 定义某一类网站需要让规划器理解什么，但不绑定某个具体网站的
 selector 或精确 URL。
 
-例如，电商 checkout profile 可以描述 `cart_nonempty`、
+例如，电商 checkout profile 可以描述 `cart_has_items`、
 `checkout_info_complete`、`order_place_pending_sensitive` 这类 facts 的语义和
 证据线索：
 
 ```text
-fact: cart_nonempty
+fact: cart_has_items
 meaning: the user has at least one item selected for purchase
 evidence hints:
   - cart badge or item count indicates one or more items

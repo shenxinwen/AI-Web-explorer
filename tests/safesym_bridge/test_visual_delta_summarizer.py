@@ -28,15 +28,15 @@ def test_summarize_visual_delta_maps_provider_json_to_candidate_planning_delta()
         assert after_screenshot_path == "after.png"
         return (
             '{"visible_change_summary":"Cart count changed from 0 to 1.",'
-            '"candidate_added_facts":["cart_nonempty"],'
-            '"candidate_removed_facts":["cart_empty"],'
+            '"candidate_added_facts":["cart_has_items"],'
+            '"candidate_removed_facts":[],'
             '"evidence":["cart badge shows one item"],'
             '"confidence":0.86}'
         )
 
     result = summarize_visual_delta(request, provider=provider)
 
-    assert result.planning_delta.candidate_added_facts == ["cart_nonempty"]
+    assert result.planning_delta.candidate_added_facts == ["cart_has_items"]
     assert result.planning_delta.verified_added_facts == []
     assert result.trace.status == "summarized"
     assert result.trace.visual_change_summary == "Cart count changed from 0 to 1."
@@ -58,7 +58,7 @@ def test_summarize_visual_delta_rejects_unknown_profile_facts():
         return (
             '{"visible_change_summary":"Cart badge changed.",'
             '"candidate_added_facts":["made_up_fact"],'
-            '"candidate_removed_facts":["cart_empty"],'
+            '"candidate_removed_facts":[],'
             '"evidence":["cart badge changed"],'
             '"confidence":0.6}'
         )
@@ -81,8 +81,8 @@ def test_summarize_visual_delta_requires_visible_change_summary():
 
     def provider(prompt, *, before_screenshot_path, after_screenshot_path):
         return (
-            '{"candidate_added_facts":["cart_nonempty"],'
-            '"candidate_removed_facts":["cart_empty"],'
+            '{"candidate_added_facts":["cart_has_items"],'
+            '"candidate_removed_facts":[],'
             '"evidence":["cart badge changed"],'
             '"confidence":0.6}'
         )
@@ -108,8 +108,8 @@ def test_summarize_visual_delta_accepts_object_summary_and_fact_objects():
             '{"visible_change_summary":{'
             '"before":{"cart_count":0},'
             '"after":{"cart_count":1}},'
-            '"candidate_added_facts":[{"fact_id":"cart_nonempty"}],'
-            '"candidate_removed_facts":[{"fact_id":"cart_empty"}],'
+            '"candidate_added_facts":[{"fact_id":"cart_has_items"}],'
+            '"candidate_removed_facts":[],'
             '"evidence":[{"description":"cart badge changed from 0 to 1"}],'
             '"confidence":"high"}'
         )
@@ -120,8 +120,8 @@ def test_summarize_visual_delta_accepts_object_summary_and_fact_objects():
     assert result.trace.visual_change_summary == (
         '{"after": {"cart_count": 1}, "before": {"cart_count": 0}}'
     )
-    assert result.planning_delta.candidate_added_facts == ["cart_nonempty"]
-    assert result.planning_delta.candidate_removed_facts == ["cart_empty"]
+    assert result.planning_delta.candidate_added_facts == ["cart_has_items"]
+    assert result.planning_delta.candidate_removed_facts == []
     assert result.planning_delta.evidence == ["cart badge changed from 0 to 1"]
 
 

@@ -280,14 +280,14 @@ def test_write_web_kobe_pddl_smoke_accepts_goal_fact(tmp_path):
         graph,
         tmp_path,
         goal_node_id="filled",
-        goal_fact="cart_nonempty",
+        goal_fact="cart_has_items",
     )
 
     problem_path = tmp_path / "problem.pddl"
     report_path = tmp_path / "smoke_report.json"
 
-    assert "(:goal (and (cart_nonempty)))" in problem_path.read_text(encoding="utf-8")
+    assert "(:goal (and (cart_has_items)))" in problem_path.read_text(encoding="utf-8")
     data = json.loads(report_path.read_text(encoding="utf-8"))
     assert data["goal_node"] == "filled"
-    assert data["goal_fact"] == "cart_nonempty"
+    assert data["goal_fact"] == "cart_has_items"
     assert result.report.planning_ready is True
