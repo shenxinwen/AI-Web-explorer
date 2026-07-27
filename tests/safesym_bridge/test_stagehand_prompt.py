@@ -63,20 +63,20 @@ def test_ecommerce_stagehand_goal_switches_final_order_boundary():
 def test_ecommerce_stagehand_goal_uses_business_milestone_boundary_by_default():
     goal = build_ecommerce_checkout_stagehand_goal()
 
-    assert "Advance the website by exactly one meaningful business milestone" in goal
-    assert "Do not execute multiple milestones in one call" in goal
+    assert "Advance the checkout task toward the experiment objective" in goal
+    assert "Stop as soon as a meaningful state transition is complete" in goal
+    assert "skip or merge milestones" in goal
     assert "Choose exactly one low-level browser action" not in goal
-    assert "logging in" in goal
+    assert "sign-in fields" in goal
 
 
 def test_ecommerce_stagehand_goal_includes_site_agnostic_guided_steps():
     goal = build_ecommerce_checkout_stagehand_goal()
 
-    assert "Guided checkout steps:" in goal
-    assert "Open the cart or basket" in goal
-    assert "Start checkout" in goal
-    assert "Fill required checkout, contact, or shipping fields" in goal
-    assert "Continue to order review or checkout overview" in goal
+    assert "Milestone guidance:" in goal
+    assert "Open the cart or proceed directly to checkout" in goal
+    assert "Fill required checkout, contact, shipping, billing, and payment fields" in goal
+    assert "Continue to order review, checkout overview" in goal
     assert "Do not use CSS selectors" in goal
     assert "#checkout" not in goal
     assert ".cart" not in goal
@@ -111,4 +111,15 @@ def test_ecommerce_stagehand_goal_can_target_configured_experiment_step():
     assert "step_id: fill_payment_info" in goal
     assert "Fill required payment fields" in goal
     assert "expected_added_facts: payment_info_complete" in goal
-    assert "Execute only this configured step" in goal
+    assert "Use this configured step as guidance" in goal
+    assert "skip or merge" in goal
+    assert "Execute only this configured step" not in goal
+
+
+def test_ecommerce_stagehand_goal_allows_flexible_milestone_guidance():
+    goal = build_ecommerce_checkout_stagehand_goal()
+
+    assert "Milestone guidance:" in goal
+    assert "guidance, not a mandatory fixed sequence" in goal
+    assert "skip or merge milestones" in goal
+    assert "Do not repeat a milestone that is already visibly satisfied" in goal

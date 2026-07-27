@@ -12,29 +12,25 @@ ECOMMERCE_CHECKOUT_DOMAIN_GUIDANCE = (
 )
 
 ECOMMERCE_CHECKOUT_ACTION_POLICY = (
-    "Advance the website by exactly one meaningful business milestone toward "
-    "the checkout goal. If a configured experiment step is present, execute "
-    "only this configured step for the current graph transition. Otherwise "
-    "choose the next useful milestone from visible page evidence. A milestone "
-    "may include logging in, reaching a product listing, adding an item to the "
-    "cart, opening the cart, starting checkout, completing required user "
-    "information, completing required payment information, reaching order "
-    "review, or placing the order when the configured experiment allows "
-    "completion. You may perform multiple low-level browser interactions if "
-    "needed. Do not execute multiple milestones in one call. Stop as soon as "
-    "one milestone is complete and report what milestone was completed with "
-    "visible evidence."
+    "Advance the checkout task toward the experiment objective. Prefer useful "
+    "milestones from the guidance list, but skip or merge milestones when the "
+    "page flow naturally makes a separate step unnecessary. Do not repeat a "
+    "milestone that is already visibly satisfied. You may perform multiple "
+    "low-level browser interactions if needed to complete a useful milestone. "
+    "Stop as soon as a meaningful state transition is complete and report what "
+    "changed with visible evidence."
 )
 
 ECOMMERCE_CHECKOUT_GUIDED_STEPS = (
-    "Use this site-agnostic business sequence as guidance for choosing the next "
-    "milestone. Open a product listing if needed. Add one available product to "
-    "the cart. Open the cart or basket. Start checkout. Fill required checkout, "
-    "contact, or shipping fields, plus billing and payment fields when the "
-    "visible flow requires them. Continue to order review or checkout overview. "
-    "Do not place the final order unless the safety boundary explicitly allows "
-    "final confirmation. Do not use CSS selectors, XPath, or site-specific "
-    "button scripts; choose from visible page evidence."
+    "These milestones are guidance, not a mandatory fixed sequence. Open a "
+    "product listing if needed. Add one available product to the cart. Open the "
+    "cart or proceed directly to checkout if the site combines those steps. "
+    "Fill required checkout, contact, shipping, billing, and payment fields "
+    "when the visible flow requires them. Continue to order review, checkout "
+    "overview, or final confirmation when the safety boundary allows it. Skip "
+    "or merge milestones that are already satisfied by the current page. Do not "
+    "use CSS selectors, XPath, or site-specific button scripts; choose from "
+    "visible page evidence."
 )
 
 ECOMMERCE_CHECKOUT_TEST_DATA_POLICY = (
@@ -102,7 +98,25 @@ def _render_current_step(current_step: object | None) -> str:
     safety_note = getattr(current_step, "safety_note", None)
     if safety_note:
         lines.append(f"safety_note: {safety_note}")
-    lines.append("Execute only this configured step for the current graph transition.")
+    lines.append(
+        "Use this configured step as guidance for the current graph transition; "
+        "skip or merge it if the page already satisfies it or naturally moves "
+        "to the next useful milestone."
+    )
+    return "\n".join(lines)
+
+
+def _render_milestone_guidance(experiment_plan: object | None) -> str:
+    if experiment_plan is None:
+        return ECOMMERCE_CHECKOUT_GUIDED_STEPS
+    steps = tuple(getattr(experiment_plan, "steps", ()) or ())
+    if not steps:
+        return ECOMMERCE_CHECKOUT_GUIDED_STEPS
+    lines = [ECOMMERCE_CHECKOUT_GUIDED_STEPS, "Configured milestone hints:"]
+    for step in steps:
+        step_id = str(getattr(step, "step_id", "unspecified_step"))
+        instruction = str(getattr(step, "instruction", ""))
+        lines.append(f"- {step_id}: {instruction}")
     return "\n".join(lines)
 
 
@@ -111,6 +125,7 @@ def build_ecommerce_checkout_stagehand_goal(
     allow_final_order: bool = False,
     benchmark_context: BenchmarkTaskContext | None = None,
     current_step: object | None = None,
+    experiment_plan: object | None = None,
 ) -> str:
     safety_boundary = (
         "This is an explicit test-site completion run; final confirmation is "
@@ -124,7 +139,7 @@ def build_ecommerce_checkout_stagehand_goal(
             f"Benchmark context:\n{_render_benchmark_context(benchmark_context)}",
             f"Test data policy:\n{ECOMMERCE_CHECKOUT_TEST_DATA_POLICY}",
             f"Configured experiment step:\n{_render_current_step(current_step)}",
-            f"Guided checkout steps:\n{ECOMMERCE_CHECKOUT_GUIDED_STEPS}",
+            f"Milestone guidance:\n{_render_milestone_guidance(experiment_plan)}",
             f"Action policy:\n{ECOMMERCE_CHECKOUT_ACTION_POLICY}",
             f"Safety boundary:\n{safety_boundary}",
         ]

@@ -315,10 +315,10 @@ coverage over every DOM element.
 The goal is to test whether the graph, profile facts, and PDDL/SafeSym chain
 work on different websites.
 
-Keep per-site outputs separated:
+Keep only the latest retained output for each site:
 
 ```text
-outputs/experiments/YYYY-MM-DD/<site_name>/run_XXX/
+outputs/experiments/<site_name>/latest/
 ```
 
 Each run should record:

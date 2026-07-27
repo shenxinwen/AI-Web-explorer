@@ -278,12 +278,15 @@ async def run_ecommerce_stagehand_step(
     def _experiment_step_for(step_number: int):
         return resolved_experiment_plan.step_for_number(step_number)
 
+    stagehand_goal = build_ecommerce_checkout_stagehand_goal(
+        allow_final_order=allow_final_order,
+        benchmark_context=benchmark_context,
+        current_step=None,
+        experiment_plan=resolved_experiment_plan,
+    )
+
     def _stagehand_goal_for(step_number: int) -> str:
-        return build_ecommerce_checkout_stagehand_goal(
-            allow_final_order=allow_final_order,
-            benchmark_context=benchmark_context,
-            current_step=_experiment_step_for(step_number),
-        )
+        return stagehand_goal
 
     def _experiment_metadata_for(step_number: int) -> dict[str, object]:
         step = _experiment_step_for(step_number)
@@ -293,8 +296,6 @@ async def run_ecommerce_stagehand_step(
             "experiment_plan_id": resolved_experiment_plan.plan_id,
             **step.to_metadata(),
         }
-
-    stagehand_goal = _stagehand_goal_for(1)
 
     cdp_port = _pick_free_port() if provider is None else None
     launch_args = (

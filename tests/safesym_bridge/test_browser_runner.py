@@ -541,9 +541,12 @@ async def test_run_ecommerce_stagehand_step_wires_default_experiment_steps(
     )
 
     first_goal = captured["goal_provider"](1)
+    second_goal = captured["goal_provider"](2)
     second_metadata = captured["metadata_provider"](2)
     assert "Configured experiment step:" in first_goal
-    assert "step_id: establish_session_or_product_listing" in first_goal
+    assert "Milestone guidance:" in first_goal
+    assert "guidance, not a mandatory fixed sequence" in first_goal
+    assert first_goal == second_goal
     assert second_metadata["experiment_step_id"] == "add_product_to_cart"
     assert second_metadata["expected_added_facts"] == ["cart_has_items"]
 

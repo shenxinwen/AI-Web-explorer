@@ -274,10 +274,10 @@ Verifier 的目标不是替代 profile，而是判断哪些 candidate facts 可�
 
 目标是验证图结构、profile facts 和 PDDL/SafeSym 链路是否能在不同网站上工作。
 
-每个网站要单独保存实验结果，不覆盖历史目录：
+每个网站只保留最新一次实验结果：
 
 ```text
-outputs/experiments/YYYY-MM-DD/<site_name>/run_XXX/
+outputs/experiments/<site_name>/latest/
 ```
 
 每轮实验结束后记录：
