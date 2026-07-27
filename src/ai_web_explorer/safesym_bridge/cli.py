@@ -23,6 +23,7 @@ from ai_web_explorer.safesym_bridge.web_kobe_pddl_smoke import (
 from ai_web_explorer.safesym_bridge.web_kobe_safesym_smoke import (
     write_web_kobe_safesym_smoke,
 )
+from ai_web_explorer.grounded_web.stagehand_prompt import BenchmarkTaskContext
 
 
 def _clean_output_dir_for(paths: list[Path | None]) -> Path:
@@ -42,6 +43,33 @@ def _clean_output_dir_for(paths: list[Path | None]) -> Path:
         else:
             child.unlink()
     return output_dir
+
+
+def _build_ecommerce_benchmark_context(args) -> BenchmarkTaskContext:
+    checkout_data = {
+        "first_name": args.checkout_first_name,
+        "last_name": args.checkout_last_name,
+        "postal_code": args.checkout_postal_code,
+    }
+    if args.benchmark == "saucedemo":
+        return build_saucedemo_stagehand_benchmark_context(
+            test_username=args.test_username or "standard_user",
+            test_password=args.test_password or "secret_sauce",
+            checkout_first_name=args.checkout_first_name,
+            checkout_last_name=args.checkout_last_name,
+            checkout_postal_code=args.checkout_postal_code,
+        )
+    test_credentials = {}
+    if args.test_username and args.test_password:
+        test_credentials = {
+            "username": args.test_username,
+            "password": args.test_password,
+        }
+    return BenchmarkTaskContext(
+        site_label="public demo e-commerce site",
+        test_credentials=test_credentials,
+        checkout_data=checkout_data,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -219,7 +247,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     ecommerce_stagehand_parser.add_argument(
         "--benchmark",
-        choices=["saucedemo"],
+        choices=["saucedemo", "custom"],
         default="saucedemo",
         help="Benchmark config to use for start URL and test context.",
     )
@@ -307,12 +335,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     ecommerce_stagehand_parser.add_argument(
         "--test-username",
-        default="standard_user",
+        default=None,
         help="Benchmark test username to expose through Stagehand task context.",
     )
     ecommerce_stagehand_parser.add_argument(
         "--test-password",
-        default="secret_sauce",
+        default=None,
         help="Benchmark test password to expose through Stagehand task context.",
     )
     ecommerce_stagehand_parser.add_argument(
@@ -409,17 +437,13 @@ def main(argv: list[str] | None = None) -> int:
             )
             output_path = result.report_path
         elif args.mode == "web-kobe-ecommerce-stagehand-smoke":
+            if args.benchmark == "custom" and not args.start_url:
+                raise ValueError("--start-url is required for --benchmark custom.")
             if args.clean_output_dir:
                 _clean_output_dir_for(
                     [args.output, args.stagehand_trace, args.screenshot_dir]
                 )
-            benchmark_context = build_saucedemo_stagehand_benchmark_context(
-                test_username=args.test_username,
-                test_password=args.test_password,
-                checkout_first_name=args.checkout_first_name,
-                checkout_last_name=args.checkout_last_name,
-                checkout_postal_code=args.checkout_postal_code,
-            )
+            benchmark_context = _build_ecommerce_benchmark_context(args)
             output_path = asyncio.run(
                 run_ecommerce_stagehand_step(
                     args.output,

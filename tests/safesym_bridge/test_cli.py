@@ -599,6 +599,91 @@ def test_main_web_kobe_ecommerce_stagehand_smoke_wires_benchmark_runner(
     ]
 
 
+def test_main_web_kobe_ecommerce_stagehand_smoke_supports_custom_benchmark(
+    monkeypatch,
+    tmp_path,
+):
+    output = tmp_path / "graph.json"
+    trace = tmp_path / "trace.json"
+    calls = []
+
+    async def fake_run_ecommerce_stagehand_step(
+        output_path,
+        *,
+        start_url,
+        app_name="ecommerce",
+        stagehand_trace_path=None,
+        benchmark_context=None,
+        **kwargs,
+    ):
+        calls.append(
+            (
+                output_path,
+                start_url,
+                app_name,
+                stagehand_trace_path,
+                benchmark_context.site_label,
+                benchmark_context.test_credentials,
+                benchmark_context.checkout_data,
+            )
+        )
+        output_path.write_text("{}", encoding="utf-8")
+        return output_path
+
+    monkeypatch.setattr(
+        cli,
+        "run_ecommerce_stagehand_step",
+        fake_run_ecommerce_stagehand_step,
+        raising=False,
+    )
+
+    exit_code = main(
+        [
+            "web-kobe-ecommerce-stagehand-smoke",
+            "--benchmark",
+            "custom",
+            "--start-url",
+            "https://example.test/shop",
+            "--app-name",
+            "example_shop",
+            "--output",
+            str(output),
+            "--stagehand-trace",
+            str(trace),
+        ]
+    )
+
+    assert exit_code == 0
+    assert calls == [
+        (
+            output,
+            "https://example.test/shop",
+            "example_shop",
+            trace,
+            "public demo e-commerce site",
+            {},
+            {
+                "first_name": "Test",
+                "last_name": "User",
+                "postal_code": "12345",
+            },
+        )
+    ]
+
+
+def test_main_web_kobe_ecommerce_stagehand_smoke_requires_custom_start_url():
+    assert (
+        main(
+            [
+                "web-kobe-ecommerce-stagehand-smoke",
+                "--benchmark",
+                "custom",
+            ]
+        )
+        == 1
+    )
+
+
 def test_main_web_kobe_ecommerce_stagehand_smoke_cleans_latest_output_dir(
     monkeypatch,
     tmp_path,
