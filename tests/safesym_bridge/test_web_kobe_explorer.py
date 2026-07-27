@@ -305,6 +305,31 @@ class ScreenshotAdapter(FakeAdapter):
         return f"outputs/{label}.png"
 
 
+class StagehandThinkingFailureVisualChangeAdapter(ScreenshotAdapter):
+    def __init__(self):
+        super().__init__()
+        self.states = [
+            StateSnapshot(
+                page_id="listing",
+                url="https://example.test/listing",
+                title="Listing",
+                signature={"url_path": "/listing"},
+            ),
+            StateSnapshot(
+                page_id="listing",
+                url="https://example.test/listing",
+                title="Listing",
+                signature={"url_path": "/listing"},
+            ),
+        ]
+        self.last_execution_error = None
+
+    async def execute(self, action: BrowserAction):
+        self.executed.append(action)
+        self.last_execution_error = "Thinking mode does not support this tool_choice"
+        return False
+
+
 @pytest.mark.anyio
 async def test_explore_one_step_records_optional_before_after_screenshots():
     adapter = ScreenshotAdapter()
@@ -320,6 +345,38 @@ async def test_explore_one_step_records_optional_before_after_screenshots():
     assert adapter.captured_labels == ["before_0001", "after_0001"]
     assert metadata["before_screenshot_path"] == "outputs/before_0001.png"
     assert metadata["after_screenshot_path"] == "outputs/after_0001.png"
+
+
+@pytest.mark.anyio
+async def test_explore_one_step_accepts_stagehand_tool_choice_error_with_visual_change():
+    adapter = StagehandThinkingFailureVisualChangeAdapter()
+
+    def visual_provider(prompt, *, before_screenshot_path, after_screenshot_path):
+        return (
+            '{"visible_change_summary":"The product now shows In cart: 1.",'
+            '"candidate_added_facts":["cart_has_items"],'
+            '"candidate_removed_facts":[],'
+            '"evidence":["product card shows In cart: 1"],'
+            '"confidence":0.8}'
+        )
+
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        business_profile=ecommerce_checkout_profile(),
+        capture_screenshots=True,
+        visual_delta_provider=visual_provider,
+    )
+
+    graph = await explorer.explore_one_step()
+
+    edge = graph.edges[0]
+    assert edge.status == "succeeded_with_observed_change"
+    assert edge.execution_trace.success is True
+    assert edge.execution_trace.error == "Thinking mode does not support this tool_choice"
+    assert edge.execution_trace.metadata["backend_reported_success"] is False
+    assert edge.planning_transition is not None
+    assert edge.planning_transition.added_facts == ["cart_has_items"]
 
 
 @pytest.mark.anyio

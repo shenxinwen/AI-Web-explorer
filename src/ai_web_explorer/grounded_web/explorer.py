@@ -158,6 +158,21 @@ def _merge_planning_deltas(
     )
 
 
+def _planning_delta_has_fact_change(delta: PlanningDelta | None) -> bool:
+    if delta is None:
+        return False
+    return bool(
+        delta.candidate_added_facts
+        or delta.candidate_removed_facts
+        or delta.verified_added_facts
+        or delta.verified_removed_facts
+    )
+
+
+def _is_ignorable_stagehand_tool_choice_error(error: str | None) -> bool:
+    return bool(error and "Thinking mode does not support this tool_choice" in error)
+
+
 class WebKobeExplorer:
     def __init__(
         self,
@@ -305,6 +320,16 @@ class WebKobeExplorer:
                         ),
                         provider=self.semantic_naming_provider,
                     )
+        planning_delta = _merge_planning_deltas(
+            structured_planning_delta,
+            visual_planning_delta,
+        )
+        if (
+            edge_status == "failed_execution"
+            and _is_ignorable_stagehand_tool_choice_error(execution_error)
+            and _planning_delta_has_fact_change(planning_delta)
+        ):
+            edge_status = "succeeded_with_observed_change"
         edge = WebKobeEdge(
             source_node_id=source_id,
             target_node_id=target_id,
@@ -325,10 +350,7 @@ class WebKobeExplorer:
                 error=execution_error,
                 metadata=execution_metadata,
             ),
-            planning_delta=_merge_planning_deltas(
-                structured_planning_delta,
-                visual_planning_delta,
-            ),
+            planning_delta=planning_delta,
             status=edge_status,
             evidence=[Evidence(source="web_kobe_explorer", url=before.url)],
         )
