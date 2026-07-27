@@ -23,6 +23,17 @@ ECOMMERCE_CHECKOUT_ACTION_POLICY = (
     "complete and report what milestone was completed with visible evidence."
 )
 
+ECOMMERCE_CHECKOUT_GUIDED_STEPS = (
+    "Use this site-agnostic business sequence as guidance for choosing the next "
+    "milestone. Open a product listing if needed. Add one available product to "
+    "the cart. Open the cart or basket. Start checkout. Fill required checkout, "
+    "contact, or shipping fields using benchmark checkout data when provided. "
+    "Continue to order review or checkout overview. Do not place the final "
+    "order unless the safety boundary explicitly allows final confirmation. "
+    "Do not use CSS selectors, XPath, or site-specific button scripts; choose "
+    "from visible page evidence."
+)
+
 
 @dataclass(frozen=True)
 class BenchmarkTaskContext:
@@ -69,6 +80,7 @@ def build_ecommerce_checkout_stagehand_goal(
         [
             f"Domain guidance:\n{ECOMMERCE_CHECKOUT_DOMAIN_GUIDANCE}",
             f"Benchmark context:\n{_render_benchmark_context(benchmark_context)}",
+            f"Guided checkout steps:\n{ECOMMERCE_CHECKOUT_GUIDED_STEPS}",
             f"Action policy:\n{ECOMMERCE_CHECKOUT_ACTION_POLICY}",
             f"Safety boundary:\n{safety_boundary}",
         ]

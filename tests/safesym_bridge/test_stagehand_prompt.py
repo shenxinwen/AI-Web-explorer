@@ -65,3 +65,18 @@ def test_ecommerce_stagehand_goal_uses_business_milestone_boundary_by_default():
     assert "Do not execute multiple milestones in one call" in goal
     assert "Choose exactly one low-level browser action" not in goal
     assert "logging in" in goal
+
+
+def test_ecommerce_stagehand_goal_includes_site_agnostic_guided_steps():
+    goal = build_ecommerce_checkout_stagehand_goal()
+
+    assert "Guided checkout steps:" in goal
+    assert "Open the cart or basket" in goal
+    assert "Start checkout" in goal
+    assert "Fill required checkout, contact, or shipping fields" in goal
+    assert "Continue to order review or checkout overview" in goal
+    assert "Do not use CSS selectors" in goal
+    assert "#checkout" not in goal
+    assert ".cart" not in goal
+    assert "SauceDemo" not in goal
+    assert "TestDino" not in goal
