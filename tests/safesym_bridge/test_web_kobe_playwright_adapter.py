@@ -229,58 +229,8 @@ async def test_list_interactables_uses_dom_candidates(monkeypatch):
     ]
 
 
-@pytest.mark.anyio
-async def test_saucedemo_adapter_reuses_saucedemo_state_observer(monkeypatch):
-    async def fake_observe_saucedemo_state(page):
-        return StateSnapshot(
-            page_id="inventory",
-            url="https://www.saucedemo.com/inventory.html",
-            title="Swag Labs",
-            signature={"is_logged_in": True, "cart_count": 0},
-        )
-
-    monkeypatch.setattr(
-        "ai_web_explorer.safesym_bridge.web_kobe_playwright_adapter.observe_saucedemo_state",
-        fake_observe_saucedemo_state,
-    )
-    adapter = WebKobePlaywrightAdapter(FakePage(), app_name="saucedemo")
-
-    snapshot = await adapter.observe_state()
-
-    assert snapshot.page_id == "inventory"
-    assert snapshot.signature == {"is_logged_in": True, "cart_count": 0}
 
 
-@pytest.mark.anyio
-async def test_saucedemo_adapter_uses_static_action_profile():
-    adapter = WebKobePlaywrightAdapter(FakePage(), app_name="saucedemo")
-    state = StateSnapshot(
-        page_id="login",
-        url="https://www.saucedemo.com/",
-        title="Swag Labs",
-        signature={"is_logged_in": False},
-    )
-
-    interactables = await adapter.list_interactables(state)
-
-    assert interactables == [
-        {
-            "semantic_id": "login_submit",
-            "description": "Click the Login button",
-            "locator": "#login-button",
-            "locator_strategy": None,
-            "action_kind": "fill_then_click",
-            "input_values": {
-                "#user-name": "standard_user",
-                "#password": "secret_sauce",
-            },
-            "action_label": "Click the Login button",
-            "canonical_action_name": "login_submit",
-            "naming_provenance": {"source": "saucedemo_action_catalog"},
-            "metadata": {},
-            "explored": False,
-        }
-    ]
 
 
 @pytest.mark.anyio

@@ -111,15 +111,16 @@ Older fixed `WebObservedGraph` and capability-graph commands are no longer part
 of the default CLI surface. Their source modules may remain temporarily as
 legacy/reference code, but new work should not extend them as the mainline.
 
-### Stagehand-Backed SauceDemo Graph Smoke
+### Stagehand-Backed E-Commerce Graph Smoke
 
 ```powershell
 $env:STAGEHAND_SERVER = "local"
 $env:STAGEHAND_MODEL = "deepseek/<your-model-name>"
 $env:MODEL_API_KEY = "<your-deepseek-key>"
-python -m ai_web_explorer.safesym_bridge.cli web-kobe-saucedemo-stagehand-smoke `
-  --output outputs/saucedemo_stagehand_graph.json `
-  --stagehand-trace outputs/saucedemo_stagehand_trace.json `
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-ecommerce-stagehand-smoke `
+  --benchmark saucedemo `
+  --output outputs/latest/ecommerce_stagehand_graph.json `
+  --stagehand-trace outputs/latest/ecommerce_stagehand_trace.json `
   --steps 10
 ```
 
@@ -143,10 +144,11 @@ For the SauceDemo test site only, the runner can explicitly continue through
 the final confirmation action:
 
 ```powershell
-python -m ai_web_explorer.safesym_bridge.cli web-kobe-saucedemo-stagehand-smoke `
-  --output outputs/saucedemo_stagehand_final_order_graph.json `
-  --stagehand-trace outputs/saucedemo_stagehand_final_order_trace.json `
-  --screenshot-dir outputs/saucedemo_stagehand_final_order_screenshots `
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-ecommerce-stagehand-smoke `
+  --benchmark saucedemo `
+  --output outputs/latest/ecommerce_stagehand_graph.json `
+  --stagehand-trace outputs/latest/ecommerce_stagehand_trace.json `
+  --screenshot-dir outputs/latest/screenshots `
   --openai-visual-delta `
   --visual-delta-model gpt-4o `
   --steps 12 `

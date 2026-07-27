@@ -189,7 +189,8 @@ naming_provenance
   edge trace 中，不直接成为 planner-facing graph edge；
 - 推荐使用 benchmark-driven 的电商 Stagehand smoke 入口：
   `web-kobe-ecommerce-stagehand-smoke --benchmark saucedemo`。旧的
-  `web-kobe-saucedemo-stagehand-smoke` 命令保留为兼容 wrapper，方便已有脚本继续使用；
+  SauceDemo-specific adapter/catalog/resolver 代码和 CLI wrapper 已移除；
+  SauceDemo 只保留为 benchmark config；
 - WebKobeGraph 可以投影成 PDDL；
 - PDDL 投影当前会把 candidate 和 verified planning-delta facts 都视作可信 effects，
   用于先跑通 VLM/LLM-to-PDDL 端到端链路；
@@ -664,9 +665,9 @@ src/ai_web_explorer/safesym_bridge/web_kobe_pddl_projector.py
 src/ai_web_explorer/safesym_bridge/web_kobe_pddl_smoke.py
   PDDL planning-readiness smoke。
 
-src/ai_web_explorer/safesym_bridge/state_observer.py
-src/ai_web_explorer/safesym_bridge/saucedemo_adapter.py
-  legacy SauceDemo-specific 观察和回归支持。它们不是通用 Stagehand 探索 observer。
+src/ai_web_explorer/safesym_bridge/web_kobe_playwright_adapter.py
+  兼容导入 wrapper。它不再注入 SauceDemo-specific state observer 或静态 action
+  provider；通用行为在 grounded_web 中实现。
 
 docs/safesym-bridge.md
   SafeSym bridge 命令参考。

@@ -51,7 +51,7 @@ web-kobe-explore
 web-kobe-pddl-from-graph
 web-kobe-pddl-smoke
 web-kobe-safesym-smoke
-web-kobe-saucedemo-stagehand-smoke
+web-kobe-ecommerce-stagehand-smoke
 ```
 
 Debug helpers:

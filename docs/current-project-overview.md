@@ -204,10 +204,10 @@ Completed and validated:
   boundary: each graph step asks Stagehand to advance one meaningful checkout
   milestone, while low-level clicks/fills stay inside the edge trace instead of
   becoming planner-facing graph edges.
-- The preferred e-commerce Stagehand smoke entrypoint is now benchmark-driven:
-  `web-kobe-ecommerce-stagehand-smoke --benchmark saucedemo`. The older
-  `web-kobe-saucedemo-stagehand-smoke` command remains as a compatibility
-  wrapper for existing scripts.
+- The preferred e-commerce Stagehand smoke entrypoint is benchmark-driven:
+  `web-kobe-ecommerce-stagehand-smoke --benchmark saucedemo`. Older
+  SauceDemo-specific adapter/catalog/resolver code and CLI wrappers have been
+  removed; SauceDemo remains only as a benchmark config.
 - WebKobeGraph can be projected into PDDL.
 - PDDL projection currently treats candidate and verified planning-delta facts
   as trusted effects so the VLM/LLM-to-PDDL chain can be validated end to end.
@@ -726,10 +726,9 @@ src/ai_web_explorer/safesym_bridge/web_kobe_pddl_projector.py
 src/ai_web_explorer/safesym_bridge/web_kobe_pddl_smoke.py
   PDDL planning-readiness smoke.
 
-src/ai_web_explorer/safesym_bridge/state_observer.py
-src/ai_web_explorer/safesym_bridge/saucedemo_adapter.py
-  Legacy SauceDemo-specific observation and regression support. These modules
-  are not the generic Stagehand exploration observer.
+src/ai_web_explorer/safesym_bridge/web_kobe_playwright_adapter.py
+  Compatibility import wrapper. It no longer injects SauceDemo-specific state
+  observers or static action providers; generic behavior lives in grounded_web.
 
 docs/safesym-bridge.md
   Practical SafeSym bridge command reference.

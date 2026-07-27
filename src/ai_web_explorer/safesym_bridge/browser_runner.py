@@ -21,19 +21,12 @@ from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
 from ai_web_explorer.grounded_web.playwright_backend import (
     WebKobePlaywrightAdapter,
 )
-from ai_web_explorer.safesym_bridge.web_kobe_playwright_adapter import (
-    WebKobePlaywrightAdapter as SauceDemoProfilePlaywrightAdapter,
-)
 from ai_web_explorer.grounded_web.semantic_assistor import (
     DeterministicSemanticAssistor,
 )
 from ai_web_explorer.grounded_web.llm_action_selector import (
     LlmActionSelectionRequest,
     LlmActionSelectionResult,
-    select_action_with_llm,
-)
-from ai_web_explorer.grounded_web.openai_action_selector import (
-    create_openai_chat_selection_provider_from_env,
 )
 from ai_web_explorer.grounded_web.openai_visual_delta import (
     create_openai_visual_delta_provider_from_env,
@@ -231,133 +224,6 @@ async def run_web_kobe_exploration(
             return output_path
         finally:
             await browser.close()
-
-
-async def _bootstrap_saucedemo_login(page) -> None:
-    await page.goto("https://www.saucedemo.com/")
-    await page.fill("#user-name", "standard_user")
-    await page.fill("#password", "secret_sauce")
-    await page.click("#login-button")
-    await page.wait_for_url("**/inventory.html")
-
-
-async def run_saucedemo_llm_selector_step(
-    output_path: Path,
-    *,
-    selector_trace_path: Path | None = None,
-    headless: bool = True,
-    steps: int = 1,
-    action_selector: Callable[
-        [LlmActionSelectionRequest],
-        LlmActionSelectionResult,
-    ],
-) -> Path:
-    from playwright.async_api import async_playwright
-
-    async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=headless)
-        page = await browser.new_page()
-        try:
-            await _bootstrap_saucedemo_login(page)
-            adapter = SauceDemoProfilePlaywrightAdapter(
-                page,
-                app_name="saucedemo",
-            )
-            explorer = WebKobeExplorer(
-                adapter=adapter,
-                semantic_assistor=DeterministicSemanticAssistor(app="saucedemo"),
-                goal="Complete a SauceDemo checkout order.",
-                action_selector=action_selector,
-            )
-            controller = WebKobeExplorationController(explorer)
-            result = await controller.run(max_steps=max(steps, 1))
-            write_web_kobe_graph(result.graph, output_path)
-            if selector_trace_path is not None:
-                selector_trace_path.parent.mkdir(parents=True, exist_ok=True)
-                selector_trace_path.write_text(
-                    json.dumps(
-                        explorer.selection_traces,
-                        indent=2,
-                        ensure_ascii=False,
-                    ),
-                    encoding="utf-8",
-                )
-            return output_path
-        finally:
-            await browser.close()
-
-
-async def run_saucedemo_openai_selector_step(
-    output_path: Path,
-    *,
-    selector_trace_path: Path | None = None,
-    headless: bool = True,
-    model: str | None = None,
-    steps: int = 1,
-) -> Path:
-    provider = create_openai_chat_selection_provider_from_env(model=model)
-
-    def action_selector(
-        request: LlmActionSelectionRequest,
-    ) -> LlmActionSelectionResult:
-        return select_action_with_llm(request, provider=provider)
-
-    return await run_saucedemo_llm_selector_step(
-        output_path,
-        selector_trace_path=selector_trace_path,
-        headless=headless,
-        steps=steps,
-        action_selector=action_selector,
-    )
-
-
-async def run_saucedemo_stagehand_step(
-    output_path: Path,
-    *,
-    stagehand_trace_path: Path | None = None,
-    headless: bool = True,
-    steps: int = 8,
-    provider=None,
-    model: str | None = None,
-    screenshot_dir: Path | None = None,
-    visual_delta_provider=None,
-    use_openai_visual_delta: bool = False,
-    visual_delta_model: str | None = None,
-    semantic_naming_provider=None,
-    use_deepseek_semantic_naming: bool = False,
-    semantic_naming_model: str | None = None,
-    allow_final_order: bool = False,
-    test_username: str = "standard_user",
-    test_password: str = "secret_sauce",
-    checkout_first_name: str = "Test",
-    checkout_last_name: str = "User",
-    checkout_postal_code: str = "12345",
-) -> Path:
-    return await run_ecommerce_stagehand_step(
-        output_path,
-        start_url=SAUCEDEMO_BENCHMARK_START_URL,
-        app_name="saucedemo",
-        stagehand_trace_path=stagehand_trace_path,
-        headless=headless,
-        steps=steps,
-        provider=provider,
-        model=model,
-        screenshot_dir=screenshot_dir,
-        visual_delta_provider=visual_delta_provider,
-        use_openai_visual_delta=use_openai_visual_delta,
-        visual_delta_model=visual_delta_model,
-        semantic_naming_provider=semantic_naming_provider,
-        use_deepseek_semantic_naming=use_deepseek_semantic_naming,
-        semantic_naming_model=semantic_naming_model,
-        allow_final_order=allow_final_order,
-        benchmark_context=build_saucedemo_stagehand_benchmark_context(
-            test_username=test_username,
-            test_password=test_password,
-            checkout_first_name=checkout_first_name,
-            checkout_last_name=checkout_last_name,
-            checkout_postal_code=checkout_postal_code,
-        ),
-    )
 
 
 async def run_ecommerce_stagehand_step(
