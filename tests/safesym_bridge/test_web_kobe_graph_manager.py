@@ -1,4 +1,7 @@
+from dataclasses import replace
+
 from ai_web_explorer.grounded_web.business_profile import PlanningDelta
+from ai_web_explorer.grounded_web.business_profile import PlanningState
 from ai_web_explorer.grounded_web.business_profile import PlanningTransition
 from ai_web_explorer.grounded_web.business_profile import ecommerce_checkout_profile
 from ai_web_explorer.grounded_web.capability_graph import (
@@ -215,3 +218,43 @@ def test_propagate_planning_state_filters_to_profile_facts():
     assert updated_edge.planning_transition.added_facts == ["cart_page_visible"]
     assert updated_edge.planning_transition.removed_facts == []
     assert updated_edge.planning_transition.post_facts == ["cart_page_visible"]
+
+
+def test_propagate_planning_state_omits_already_active_added_facts():
+    manager = WebKobeGraphManager(app="example")
+    manager.identify_or_add_node(_node("products", {}, interactables=[]))
+    manager.identify_or_add_node(_node("products_after", {}, interactables=[]))
+    manager._nodes["products"] = replace(
+        manager._nodes["products"],
+        planning_state=PlanningState(active_facts=["cart_has_items"]),
+    )
+    edge = WebKobeEdge(
+        source_node_id="products",
+        target_node_id="products_after",
+        instruction="add another item",
+        action=BrowserAction("business_intent", None, "add_item_to_cart"),
+        capability=None,
+        target_observation="products page",
+        observed_delta=[],
+        schema_delta={},
+        execution_trace=ExecutionTrace(
+            "business_intent",
+            None,
+            "add_item_to_cart",
+            {},
+            "products",
+            "products_after",
+            True,
+        ),
+        planning_delta=PlanningDelta(candidate_added_facts=["cart_has_items"]),
+    )
+
+    updated_edge = manager.propagate_planning_state(
+        edge,
+        profile=ecommerce_checkout_profile(),
+    )
+
+    assert updated_edge.planning_transition is not None
+    assert updated_edge.planning_transition.pre_facts == ["cart_has_items"]
+    assert updated_edge.planning_transition.added_facts == []
+    assert updated_edge.planning_transition.post_facts == ["cart_has_items"]

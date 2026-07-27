@@ -179,6 +179,7 @@ class WebKobeGraphManager:
             _trusted_added_facts(edge.planning_delta),
             allowed_facts=allowed_facts,
         )
+        added_facts = [fact for fact in added_facts if fact not in active_set]
 
         next_facts = [fact for fact in active_facts if fact not in removed_facts]
         for fact in added_facts:
