@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from ai_web_explorer.grounded_web.stagehand_prompt import (
     BenchmarkTaskContext,
     ECOMMERCE_CHECKOUT_DOMAIN_GUIDANCE,
@@ -80,3 +82,33 @@ def test_ecommerce_stagehand_goal_includes_site_agnostic_guided_steps():
     assert ".cart" not in goal
     assert "SauceDemo" not in goal
     assert "TestDino" not in goal
+
+
+def test_ecommerce_stagehand_goal_includes_test_data_policy():
+    goal = build_ecommerce_checkout_stagehand_goal()
+
+    assert "Test data policy:" in goal
+    assert "clearly fictional demo/test values" in goal
+    assert "test@example.com" in goal
+    assert "4111111111111111" in goal
+    assert "Do not use real personal or payment information" in goal
+
+
+def test_ecommerce_stagehand_goal_can_target_configured_experiment_step():
+    goal = build_ecommerce_checkout_stagehand_goal(
+        benchmark_context=BenchmarkTaskContext(site_label="demo shop"),
+        current_step=SimpleNamespace(
+            step_id="fill_payment_info",
+            instruction=(
+                "Fill required payment fields if the visible checkout flow "
+                "requires them."
+            ),
+            expected_added_facts=("payment_info_complete",),
+        ),
+    )
+
+    assert "Configured experiment step:" in goal
+    assert "step_id: fill_payment_info" in goal
+    assert "Fill required payment fields" in goal
+    assert "expected_added_facts: payment_info_complete" in goal
+    assert "Execute only this configured step" in goal

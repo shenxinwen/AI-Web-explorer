@@ -240,11 +240,58 @@ def ecommerce_checkout_profile() -> BusinessFlowProfile:
             safety_relevance="information_verification",
         ),
         PlanningFactSpec(
-            fact_id="checkout_info_complete",
-            meaning="Required checkout, contact, or shipping information appears complete.",
+            fact_id="checkout_user_info_complete",
+            meaning=(
+                "Required non-payment checkout information appears complete, "
+                "such as contact, shipping, delivery, billing identity, or "
+                "address fields."
+            ),
+            related_stages=["checkout_info"],
+            evidence_hints=[
+                _hint(
+                    "form",
+                    "Visible required non-payment checkout fields appear filled or valid.",
+                ),
+                _hint(
+                    "control",
+                    "A continue, payment, or review action becomes available after user information entry.",
+                ),
+            ],
+            safety_relevance="information_verification",
+        ),
+        PlanningFactSpec(
+            fact_id="payment_info_complete",
+            meaning=(
+                "Required payment method or payment credential information "
+                "appears complete when the visible checkout flow requires it."
+            ),
             related_stages=["checkout_info", "order_review"],
             evidence_hints=[
-                _hint("form", "Required checkout fields have non-empty values."),
+                _hint(
+                    "form",
+                    "Visible required payment fields appear filled or valid.",
+                ),
+                _hint(
+                    "control",
+                    "A payment, continue, review, or final confirmation action becomes available after payment entry.",
+                ),
+            ],
+            safety_relevance="information_verification",
+        ),
+        PlanningFactSpec(
+            fact_id="checkout_info_complete",
+            meaning=(
+                "All required checkout information for the current flow appears "
+                "complete, including user/contact/shipping/billing information "
+                "and payment information when required, or the page has advanced "
+                "to order review or confirmation."
+            ),
+            related_stages=["checkout_info", "order_review"],
+            evidence_hints=[
+                _hint(
+                    "form",
+                    "All visible required checkout sections appear filled or valid.",
+                ),
                 _hint("control", "A continue or review action becomes available."),
                 _hint(
                     "navigation", "The flow advances from information entry to review."

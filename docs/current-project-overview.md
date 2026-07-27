@@ -142,6 +142,12 @@ Recent graph/PDDL hardening already completed:
   present in `pre_facts`.
 - `edge.planning_transition.pre_facts`, `added_facts`, and `removed_facts` are
   the preferred inputs for PDDL action mapping.
+- The e-commerce profile now distinguishes `checkout_user_info_complete` from
+  `payment_info_complete`, while keeping `checkout_info_complete` as a summary
+  fact for the whole checkout flow.
+- A lightweight experiment-plan module now provides configured business steps
+  for Stagehand runs. Stagehand executes the current configured step instead of
+  being asked to plan the whole checkout flow itself.
 
 ## Current Experiment Status
 
@@ -215,25 +221,27 @@ problem. State abstraction remains the main bottleneck.
 
 ## Current Main Problems
 
-### 1. Profile facts are still too coarse
+### 1. Profile facts still need experiment-driven tuning
 
-`checkout_info_complete` currently mixes contact, shipping, and payment
-information. That can make the system believe checkout information is complete
-when the page still cannot reach order review.
+The first refinement has landed: `checkout_user_info_complete` and
+`payment_info_complete` now separate non-payment checkout information from
+payment information. `checkout_info_complete` remains a summary fact meaning
+that all currently required checkout information is complete or that the page
+has advanced to order review/confirmation.
 
-Near-term profile refinement should split this into facts such as:
+The next question is empirical: do these facts cover enough real checkout
+variants without becoming a brittle form schema? Multi-site experiments should
+watch for cases such as:
 
 ```text
-checkout_contact_info_complete
-checkout_shipping_info_complete
-payment_info_complete
-order_review_ready
-order_place_pending_sensitive
-order_completed
+user info complete but payment info missing
+payment section absent or deferred to another provider
+order review reached without explicit payment fields
+checkout_info_complete emitted too early
 ```
 
-This is not a generic schema design exercise. It is about making profile facts
-match the business states SafeSym/PDDL needs.
+Profile changes should continue to be driven by observed transition failures,
+not by trying to model every possible form field.
 
 ### 2. The verifier is not real yet
 
@@ -326,8 +334,17 @@ Each run should record:
 
 ### P1: Refine e-commerce profile facts
 
-The highest-impact profile issue is `checkout_info_complete` being too broad.
-Fixing this should improve sites like Practice Automated Testing.
+The first split has been implemented:
+
+```text
+checkout_user_info_complete
+payment_info_complete
+checkout_info_complete
+```
+
+The next step is to validate this split on Practice Automated Testing, TestDino,
+and at least one more checkout-like site. Only add more facts if repeated
+experiments show that the current three cannot express important transitions.
 
 ### P2: Design the verifier interface
 
@@ -370,6 +387,10 @@ src/ai_web_explorer/grounded_web/
 
 src/ai_web_explorer/grounded_web/business_profile.py
   BusinessFlowProfile and planning fact definitions.
+
+src/ai_web_explorer/grounded_web/experiment_plan.py
+  ExperimentPlan and ExperimentStep definitions for configured business-step
+  experiments.
 
 src/ai_web_explorer/grounded_web/graph.py
 src/ai_web_explorer/grounded_web/graph_manager.py

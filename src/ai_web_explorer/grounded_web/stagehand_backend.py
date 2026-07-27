@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from typing import Callable
 from typing import Literal
 
 from ai_web_explorer.grounded_web.automation_backend import AutomationBackend
@@ -28,16 +29,23 @@ class StagehandAutomationBackend:
             "observed_action"
         ),
         business_milestone_max_steps: int = 5,
+        goal_provider: Callable[[int], str] | None = None,
+        business_step_metadata_provider: Callable[[int], dict[str, Any]]
+        | None = None,
     ) -> None:
         self.base_backend = base_backend
         self.provider = provider
         self.goal = goal
         self.execution_mode = execution_mode
         self.business_milestone_max_steps = business_milestone_max_steps
+        self.goal_provider = goal_provider
+        self.business_step_metadata_provider = business_step_metadata_provider
         self.app_name = base_backend.app_name
         self.last_execution_error: str | None = None
         self.last_execution_metadata: dict[str, Any] = {}
         self._observed_actions_by_id: dict[str, StagehandObservedAction] = {}
+        self._business_goals_by_id: dict[str, str] = {}
+        self._business_metadata_by_id: dict[str, dict[str, Any]] = {}
         self._business_milestone_counter = 0
 
     async def observe_state(self) -> StateSnapshot:
@@ -52,23 +60,44 @@ class StagehandAutomationBackend:
     ) -> list[dict[str, Any]]:
         if self.execution_mode == "business_milestone":
             self._business_milestone_counter += 1
+            step_number = self._business_milestone_counter
+            semantic_id = f"stagehand_business_milestone_{step_number:03d}"
+            goal = (
+                self.goal_provider(step_number)
+                if self.goal_provider is not None
+                else self.goal
+            )
+            step_metadata = (
+                dict(self.business_step_metadata_provider(step_number))
+                if self.business_step_metadata_provider is not None
+                else {}
+            )
+            self._business_goals_by_id[semantic_id] = goal
+            self._business_metadata_by_id[semantic_id] = step_metadata
+            experiment_step_id = step_metadata.get("experiment_step_id")
+            canonical_action_name = str(
+                experiment_step_id or "advance_business_milestone"
+            )
+            action_label = (
+                canonical_action_name.replace("_", " ")
+                if experiment_step_id
+                else "Advance one business milestone"
+            )
             return [
                 {
-                    "semantic_id": (
-                        "stagehand_business_milestone_"
-                        f"{self._business_milestone_counter:03d}"
-                    ),
-                    "description": self.goal,
+                    "semantic_id": semantic_id,
+                    "description": goal,
                     "locator": None,
                     "action_kind": "business_intent",
                     "input_values": {},
-                    "action_label": "Advance one business milestone",
-                    "canonical_action_name": "advance_business_milestone",
+                    "action_label": action_label,
+                    "canonical_action_name": canonical_action_name,
                     "naming_provenance": {"source": "stagehand_business_milestone"},
                     "explored": False,
                     "metadata": {
                         "action_source": "stagehand",
                         "stagehand_execution_mode": "business_milestone",
+                        **step_metadata,
                     },
                 }
             ]
@@ -112,7 +141,9 @@ class StagehandAutomationBackend:
         if self.execution_mode == "business_milestone" and semantic_id.startswith(
             "stagehand_business_milestone_"
         ):
-            return await self._execute_business_milestone()
+            goal = self._business_goals_by_id.get(semantic_id, self.goal)
+            metadata = self._business_metadata_by_id.get(semantic_id, {})
+            return await self._execute_business_milestone(goal, metadata)
 
         stagehand_action = self._observed_actions_by_id.get(semantic_id)
         if stagehand_action is None:
@@ -143,21 +174,25 @@ class StagehandAutomationBackend:
         self.last_execution_error = None if result.success else result.message
         return result.success
 
-    async def _execute_business_milestone(self) -> bool:
+    async def _execute_business_milestone(
+        self,
+        goal: str,
+        step_metadata: dict[str, Any],
+    ) -> bool:
         try:
             execute_instruction = getattr(self.provider, "execute_instruction", None)
             if execute_instruction is not None:
                 result = await execute_instruction(
-                    self.goal,
+                    goal,
                     max_steps=self.business_milestone_max_steps,
                 )
             else:
                 act_instruction = getattr(self.provider, "act_instruction")
-                result = await act_instruction(self.goal)
+                result = await act_instruction(goal)
         except Exception as error:
             self.last_execution_error = str(error)
             trace = StagehandStepTrace(
-                instruction=self.goal,
+                instruction=goal,
                 observed_action=None,
                 act_result=None,
                 error=self.last_execution_error,
@@ -166,14 +201,16 @@ class StagehandAutomationBackend:
             self.last_execution_metadata["stagehand_execution_mode"] = (
                 "business_milestone"
             )
+            self.last_execution_metadata.update(step_metadata)
             return False
         trace = StagehandStepTrace(
-            instruction=self.goal,
+            instruction=goal,
             observed_action=None,
             act_result=result,
         )
         self.last_execution_metadata = stagehand_trace_metadata(trace)
         self.last_execution_metadata["stagehand_execution_mode"] = "business_milestone"
+        self.last_execution_metadata.update(step_metadata)
         self.last_execution_error = None if result.success else result.message
         return result.success
 

@@ -123,6 +123,10 @@ Stagehand 返回的自然语言描述可以作为证据，但不能直接决定�
 - PDDL 默认不再投影 `region_N_visible` 等 UI/schema facts。
 - `planning_transition.added_facts` 已收紧，只记录相对 `pre_facts` 真正新增的 profile facts。
 - `edge.planning_transition.pre_facts/add_facts/remove_facts` 已成为 PDDL action 映射的优先输入。
+- 电商 profile 已区分 `checkout_user_info_complete` 和 `payment_info_complete`，
+  同时保留 `checkout_info_complete` 作为整个 checkout flow 的 summary fact。
+- 轻量实验计划模块已经加入，Stagehand run 可以按配置好的 business step 执行，
+  而不是让模型自己规划完整 checkout 流程。
 
 ## 当前实验状态
 
@@ -184,23 +188,24 @@ https://storedemo.testdino.com/
 
 ## 当前主要问题
 
-### 1. Profile facts 粒度仍然不够好
+### 1. Profile facts 仍需要通过实验继续调优
 
-当前 `checkout_info_complete` 过粗，把联系信息、地址信息和支付信息混在一起。
-这会导致系统以为 checkout 信息已完成，但网页实际还不能进入 order review。
+第一轮粒度调整已经落地：`checkout_user_info_complete` 和
+`payment_info_complete` 用来区分非付款 checkout 信息和付款信息。
+`checkout_info_complete` 仍保留为 summary fact，表示当前 checkout flow 要求的信息整体完成，
+或者页面已经进入 order review / confirmation。
 
-短期建议把电商 profile 拆得更清楚，例如：
+接下来要通过多网站实验验证这些 facts 是否够用，而不是继续凭想象拆 schema。
+重点观察：
 
 ```text
-checkout_contact_info_complete
-checkout_shipping_info_complete
-payment_info_complete
-order_review_ready
-order_place_pending_sensitive
-order_completed
+用户信息完成但付款信息缺失
+付款步骤不存在或跳转到第三方
+没有显式付款字段但已经进入 order review
+checkout_info_complete 是否仍然过早出现
 ```
 
-这不是为了设计通用 schema，而是为了让 profile facts 更符合 SafeSym/PDDL 需要理解的业务状态。
+后续 profile 变更应来自真实 transition 失败，而不是试图枚举所有表单字段。
 
 ### 2. Verifier 还没有真正建立
 
@@ -288,8 +293,16 @@ outputs/experiments/YYYY-MM-DD/<site_name>/run_XXX/
 
 ### P1：收紧电商 profile facts
 
-优先解决 `checkout_info_complete` 过粗的问题。
-这会直接影响 Practice Automated Testing 这类网站能否正确到达 order review。
+第一步拆分已经完成：
+
+```text
+checkout_user_info_complete
+payment_info_complete
+checkout_info_complete
+```
+
+下一步是在 Practice Automated Testing、TestDino 和至少一个新的 checkout-like 网站上验证。
+只有当多轮实验反复说明这三个 facts 不能表达关键 transition 时，再继续增加新 fact。
 
 ### P2：设计 verifier 接口
 
@@ -326,6 +339,9 @@ src/ai_web_explorer/grounded_web/
 
 src/ai_web_explorer/grounded_web/business_profile.py
   BusinessFlowProfile 和 planning facts 定义。
+
+src/ai_web_explorer/grounded_web/experiment_plan.py
+  ExperimentPlan 和 ExperimentStep，用于配置化 business-step 实验。
 
 src/ai_web_explorer/grounded_web/graph.py
 src/ai_web_explorer/grounded_web/graph_manager.py

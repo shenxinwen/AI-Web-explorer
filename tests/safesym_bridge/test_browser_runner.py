@@ -365,7 +365,16 @@ async def test_run_ecommerce_stagehand_step_uses_generic_start_url_and_context(
             return None
 
     class FakeStagehandBackend:
-        def __init__(self, *, base_backend, provider, goal, execution_mode):
+        def __init__(
+            self,
+            *,
+            base_backend,
+            provider,
+            goal,
+            execution_mode,
+            goal_provider=None,
+            business_step_metadata_provider=None,
+        ):
             calls.append(("stagehand_goal", goal))
             calls.append(("stagehand_execution_mode", execution_mode))
             self.app_name = base_backend.app_name
@@ -435,6 +444,111 @@ async def test_run_ecommerce_stagehand_step_uses_generic_start_url_and_context(
 
 
 @pytest.mark.anyio
+async def test_run_ecommerce_stagehand_step_wires_default_experiment_steps(
+    tmp_path,
+    monkeypatch,
+):
+    import playwright.async_api as playwright_async_api
+
+    output_path = tmp_path / "stagehand_graph.json"
+    captured = {}
+
+    class FakePage:
+        async def goto(self, url):
+            pass
+
+    class FakeBrowser:
+        async def new_page(self):
+            return FakePage()
+
+        async def close(self):
+            pass
+
+    class FakeChromium:
+        async def launch(self, *, headless=True, args=None):
+            return FakeBrowser()
+
+    class FakePlaywright:
+        chromium = FakeChromium()
+
+    class FakePlaywrightContext:
+        async def __aenter__(self):
+            return FakePlaywright()
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+    class FakeStagehandBackend:
+        def __init__(
+            self,
+            *,
+            base_backend,
+            provider,
+            goal,
+            execution_mode,
+            goal_provider=None,
+            business_step_metadata_provider=None,
+        ):
+            captured["goal_provider"] = goal_provider
+            captured["metadata_provider"] = business_step_metadata_provider
+            self.app_name = base_backend.app_name
+
+    class FakeBaseAdapter:
+        def __init__(self, page, *, app_name, page_id=None, screenshot_dir=None):
+            self.app_name = app_name
+
+    class FakeController:
+        def __init__(self, explorer):
+            pass
+
+        async def run(self, *, max_steps=1):
+            return WebKobeExplorationResult(
+                graph=WebKobeGraph(
+                    app="demo_shop",
+                    start_node_id="start",
+                    total_steps_completed=max_steps,
+                ),
+                summary=WebKobeExplorationSummary(
+                    requested_steps=max_steps,
+                    steps_completed=max_steps,
+                    stop_reason="max_steps",
+                    node_count=0,
+                    edge_count=0,
+                    failed_edge_count=0,
+                ),
+            )
+
+    monkeypatch.setattr(
+        playwright_async_api,
+        "async_playwright",
+        lambda: FakePlaywrightContext(),
+    )
+    monkeypatch.setattr(
+        browser_runner,
+        "StagehandAutomationBackend",
+        FakeStagehandBackend,
+        raising=False,
+    )
+    monkeypatch.setattr(browser_runner, "WebKobePlaywrightAdapter", FakeBaseAdapter)
+    monkeypatch.setattr(browser_runner, "WebKobeExplorationController", FakeController)
+
+    await browser_runner.run_ecommerce_stagehand_step(
+        output_path,
+        start_url="https://example.test/shop",
+        app_name="demo_shop",
+        provider=object(),
+        steps=2,
+    )
+
+    first_goal = captured["goal_provider"](1)
+    second_metadata = captured["metadata_provider"](2)
+    assert "Configured experiment step:" in first_goal
+    assert "step_id: establish_session_or_product_listing" in first_goal
+    assert second_metadata["experiment_step_id"] == "add_product_to_cart"
+    assert second_metadata["expected_added_facts"] == ["cart_has_items"]
+
+
+@pytest.mark.anyio
 async def test_run_ecommerce_stagehand_step_wires_terminal_condition(
     tmp_path,
     monkeypatch,
@@ -470,7 +584,16 @@ async def test_run_ecommerce_stagehand_step_wires_terminal_condition(
             return None
 
     class FakeStagehandBackend:
-        def __init__(self, *, base_backend, provider, goal, execution_mode):
+        def __init__(
+            self,
+            *,
+            base_backend,
+            provider,
+            goal,
+            execution_mode,
+            goal_provider=None,
+            business_step_metadata_provider=None,
+        ):
             self.app_name = base_backend.app_name
 
     class FakeBaseAdapter:

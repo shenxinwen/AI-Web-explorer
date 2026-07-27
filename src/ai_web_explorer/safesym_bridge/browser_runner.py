@@ -17,6 +17,10 @@ from ai_web_explorer.grounded_web.controller import (
     WebKobeExplorationController,
 )
 from ai_web_explorer.grounded_web.business_profile import ecommerce_checkout_profile
+from ai_web_explorer.grounded_web.experiment_plan import (
+    ExperimentPlan,
+    ecommerce_checkout_experiment_plan,
+)
 from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
 from ai_web_explorer.grounded_web.playwright_backend import (
     WebKobePlaywrightAdapter,
@@ -245,6 +249,7 @@ async def run_ecommerce_stagehand_step(
     semantic_naming_model: str | None = None,
     allow_final_order: bool = False,
     benchmark_context: BenchmarkTaskContext | None = None,
+    experiment_plan: ExperimentPlan | None = None,
 ) -> Path:
     from playwright.async_api import async_playwright
 
@@ -266,10 +271,30 @@ async def run_ecommerce_stagehand_step(
             text_provider
         )
 
-    stagehand_goal = build_ecommerce_checkout_stagehand_goal(
+    resolved_experiment_plan = experiment_plan or ecommerce_checkout_experiment_plan(
         allow_final_order=allow_final_order,
-        benchmark_context=benchmark_context,
     )
+
+    def _experiment_step_for(step_number: int):
+        return resolved_experiment_plan.step_for_number(step_number)
+
+    def _stagehand_goal_for(step_number: int) -> str:
+        return build_ecommerce_checkout_stagehand_goal(
+            allow_final_order=allow_final_order,
+            benchmark_context=benchmark_context,
+            current_step=_experiment_step_for(step_number),
+        )
+
+    def _experiment_metadata_for(step_number: int) -> dict[str, object]:
+        step = _experiment_step_for(step_number)
+        if step is None:
+            return {"experiment_plan_id": resolved_experiment_plan.plan_id}
+        return {
+            "experiment_plan_id": resolved_experiment_plan.plan_id,
+            **step.to_metadata(),
+        }
+
+    stagehand_goal = _stagehand_goal_for(1)
 
     cdp_port = _pick_free_port() if provider is None else None
     launch_args = (
@@ -303,6 +328,8 @@ async def run_ecommerce_stagehand_step(
                 provider=resolved_provider,
                 goal=stagehand_goal,
                 execution_mode="business_milestone",
+                goal_provider=_stagehand_goal_for,
+                business_step_metadata_provider=_experiment_metadata_for,
             )
             explorer = WebKobeExplorer(
                 adapter=adapter,

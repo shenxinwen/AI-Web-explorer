@@ -274,3 +274,32 @@ async def test_stagehand_backend_business_milestone_ids_are_runtime_unique():
 
     assert first[0]["semantic_id"] == "stagehand_business_milestone_001"
     assert second[0]["semantic_id"] == "stagehand_business_milestone_002"
+
+
+@pytest.mark.anyio
+async def test_stagehand_backend_business_milestone_uses_step_specific_goal():
+    provider = FakeStagehandProvider()
+    backend = StagehandAutomationBackend(
+        base_backend=FakeBaseBackend(),
+        provider=provider,
+        goal="Fallback milestone.",
+        execution_mode="business_milestone",
+        goal_provider=lambda step_number: f"Configured step {step_number}.",
+        business_step_metadata_provider=lambda step_number: {
+            "experiment_step_id": f"step_{step_number}",
+            "expected_added_facts": [f"fact_{step_number}"],
+        },
+    )
+    state = await backend.observe_state()
+
+    first = (await backend.list_interactables(state))[0]
+    second = (await backend.list_interactables(state))[0]
+    success = await backend.execute(second)
+
+    assert success is True
+    assert first["description"] == "Configured step 1."
+    assert first["metadata"]["experiment_step_id"] == "step_1"
+    assert first["canonical_action_name"] == "step_1"
+    assert provider.executed_instructions == [("Configured step 2.", 5)]
+    assert backend.last_execution_metadata["experiment_step_id"] == "step_2"
+    assert backend.last_execution_metadata["expected_added_facts"] == ["fact_2"]
