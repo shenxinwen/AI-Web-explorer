@@ -309,11 +309,6 @@ def _state_predicates(graph: WebKobeGraph) -> list[str]:
     for node in graph.nodes:
         if node.planning_state is not None:
             names.update(_predicate(fact) for fact in node.planning_state.active_facts)
-            continue
-        for key, value in node.last_state_snapshot.items():
-            predicate = _state_predicate_for_value(key, value)
-            if predicate is not None:
-                names.add(predicate)
     return sorted(names)
 
 
@@ -340,12 +335,6 @@ def _initial_predicates(
         predicates.extend(
             _predicate(fact) for fact in start.planning_state.active_facts
         )
-        return sorted(set(predicates))
-    for key, value in start.last_state_snapshot.items():
-        if isinstance(value, bool) and value is True:
-            predicates.append(_predicate(key))
-        elif _is_positive_number(value):
-            predicates.append(_positive_predicate(key))
     return sorted(set(predicates))
 
 

@@ -61,7 +61,7 @@ def _node(
     )
 
 
-def test_compile_web_kobe_graph_to_pddl_uses_page_and_boolean_delta():
+def test_compile_web_kobe_graph_to_pddl_can_include_observed_delta_when_requested():
     graph = WebKobeGraph(
         app="example",
         start_node_id="listing_empty",
@@ -104,6 +104,7 @@ def test_compile_web_kobe_graph_to_pddl_uses_page_and_boolean_delta():
     artifacts = compile_web_kobe_graph_to_pddl(
         graph,
         goal_node_id="listing_nonempty",
+        options=PddlProjectionOptions(include_observed_delta_facts=True),
     )
 
     assert "(:action edge_001_add_to_cart_product" in artifacts.domain
@@ -121,7 +122,7 @@ def test_compile_web_kobe_graph_to_pddl_uses_custom_start_node():
         total_steps_completed=0,
         nodes=[
             _node("landing", "landing", {"cart_has_items": False}),
-            _node("cart", "cart", {"cart_has_items": True}),
+            _node("cart", "cart", {"cart_has_items": True}, ["cart_has_items"]),
         ],
         edges=[],
     )
@@ -592,7 +593,12 @@ def test_compile_web_kobe_graph_to_pddl_maps_order_completion_for_safesym():
         total_steps_completed=1,
         nodes=[
             _node("checkout_overview", "checkout_overview", {"order_created": False}),
-            _node("checkout_complete", "checkout_complete", {"order_created": True}),
+            _node(
+                "checkout_complete",
+                "checkout_complete",
+                {"order_created": True},
+                ["order_completed"],
+            ),
         ],
         edges=[
             WebKobeEdge(
@@ -625,6 +631,12 @@ def test_compile_web_kobe_graph_to_pddl_maps_order_completion_for_safesym():
                     "checkout_complete",
                     True,
                 ),
+                planning_transition=PlanningTransition(
+                    pre_facts=[],
+                    added_facts=["order_completed"],
+                    removed_facts=[],
+                    post_facts=["order_completed"],
+                ),
             )
         ],
     )
@@ -638,7 +650,8 @@ def test_compile_web_kobe_graph_to_pddl_maps_order_completion_for_safesym():
     assert "(:action stagehand_000_click_finish_button_on_checkout_overview" not in (
         artifacts.domain
     )
-    assert "(order_created)" in artifacts.domain
+    assert "(order_completed)" in artifacts.domain
+    assert "(order_created)" not in artifacts.domain
 
 
 def test_compile_web_kobe_graph_to_pddl_excludes_non_projectable_edges():
@@ -691,6 +704,66 @@ def test_compile_web_kobe_graph_to_pddl_excludes_non_projectable_edges():
     assert "(:action go_failed" not in artifacts.domain
     assert "(:action go_no_change" not in artifacts.domain
     assert "(:action go_unexpected" not in artifacts.domain
+
+
+def test_compile_web_kobe_graph_to_pddl_excludes_ui_schema_facts_by_default():
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="home",
+        total_steps_completed=1,
+        nodes=[
+            _node("home", "home", {"region_1_visible": True}),
+            _node(
+                "products",
+                "products",
+                {"region_1_visible": True},
+                planning_facts=["product_list_visible"],
+            ),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="home",
+                target_node_id="products",
+                instruction="view products",
+                action=BrowserAction(
+                    "business_intent",
+                    None,
+                    "view_products",
+                    canonical_action_name="view_products",
+                ),
+                capability=None,
+                target_observation="products page",
+                observed_delta=[],
+                schema_delta={},
+                execution_trace=ExecutionTrace(
+                    "business_intent",
+                    None,
+                    "view_products",
+                    {},
+                    "home",
+                    "products",
+                    True,
+                ),
+                planning_transition=PlanningTransition(
+                    pre_facts=[],
+                    added_facts=["product_list_visible"],
+                    removed_facts=[],
+                    post_facts=["product_list_visible"],
+                ),
+                status="succeeded_with_observed_change",
+            )
+        ],
+    )
+
+    artifacts = compile_web_kobe_graph_to_pddl(
+        graph,
+        goal_node_id="products",
+        goal_fact="product_list_visible",
+    )
+
+    assert "(product_list_visible)" in artifacts.domain
+    assert "region_1_visible" not in artifacts.domain
+    assert "region_1_visible" not in artifacts.problem
 
 
 def test_compile_web_kobe_graph_to_pddl_prefers_business_canonical_action_name():
