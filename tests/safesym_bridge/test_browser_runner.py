@@ -761,6 +761,8 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
         def __init__(self, explorer):
             assert explorer.enable_exploration_memory is True
             assert explorer.state_embedding_provider("x") == [1.0, 0.0]
+            assert explorer.business_profile is not None
+            assert explorer.business_profile.site_type == "ecommerce_checkout"
 
         async def run(self, *, max_steps):
             return WebKobeExplorationResult(
@@ -797,6 +799,7 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
         state_embedding_provider=lambda text: [1.0, 0.0],
         embedding_path=embedding_path,
         site_purpose="demo store",
+        business_profile="ecommerce_checkout",
     )
 
     assert result == output_path

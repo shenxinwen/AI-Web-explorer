@@ -16,7 +16,10 @@ from ai_web_explorer.grounded_web.graph import (
 from ai_web_explorer.grounded_web.controller import (
     WebKobeExplorationController,
 )
-from ai_web_explorer.grounded_web.business_profile import ecommerce_checkout_profile
+from ai_web_explorer.grounded_web.business_profile import (
+    BusinessFlowProfile,
+    ecommerce_checkout_profile,
+)
 from ai_web_explorer.grounded_web.experiment_plan import (
     ExperimentPlan,
     ecommerce_checkout_experiment_plan,
@@ -73,6 +76,18 @@ ECOMMERCE_CHECKOUT_COMPLETE_EXPLORER_GOAL = (
     "Complete an e-commerce test checkout flow through the confirmation page."
 )
 SAUCEDEMO_BENCHMARK_START_URL = "https://www.saucedemo.com/"
+
+
+def _resolve_business_profile(
+    profile: str | BusinessFlowProfile | None,
+) -> BusinessFlowProfile | None:
+    if profile is None or profile == "none":
+        return None
+    if isinstance(profile, BusinessFlowProfile):
+        return profile
+    if profile == "ecommerce_checkout":
+        return ecommerce_checkout_profile()
+    raise ValueError(f"Unsupported business profile: {profile}")
 
 
 def build_saucedemo_stagehand_benchmark_context(
@@ -399,6 +414,7 @@ async def run_stagehand_exploration(
     embedding_model: str | None = None,
     embedding_dimension: int | None = None,
     site_purpose: str | None = None,
+    business_profile: str | BusinessFlowProfile | None = None,
 ) -> Path:
     from playwright.async_api import async_playwright
 
@@ -416,6 +432,7 @@ async def run_stagehand_exploration(
     stagehand_goal = build_generic_stagehand_exploration_goal(
         site_purpose=site_purpose,
     )
+    resolved_business_profile = _resolve_business_profile(business_profile)
     cdp_port = _pick_free_port() if provider is None else None
     launch_args = (
         [f"--remote-debugging-port={cdp_port}"] if cdp_port is not None else None
@@ -454,6 +471,7 @@ async def run_stagehand_exploration(
                 semantic_assistor=DeterministicSemanticAssistor(app=app_name),
                 goal="Explore useful website functionality.",
                 capture_screenshots=screenshot_dir is not None,
+                business_profile=resolved_business_profile,
                 enable_exploration_memory=resolved_embedding_provider is not None,
                 state_embedding_provider=resolved_embedding_provider,
                 state_embedding_records=embedding_records,

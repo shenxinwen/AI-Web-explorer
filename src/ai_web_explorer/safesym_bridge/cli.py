@@ -395,6 +395,11 @@ def main(argv: list[str] | None = None) -> int:
     stagehand_explore_parser.add_argument("--embedding-model", default=None)
     stagehand_explore_parser.add_argument("--embedding-dimension", type=int, default=None)
     stagehand_explore_parser.add_argument("--site-purpose", default=None)
+    stagehand_explore_parser.add_argument(
+        "--business-profile",
+        choices=["none", "ecommerce_checkout"],
+        default=None,
+    )
     stagehand_explore_parser.add_argument("--headed", action="store_true")
     args = parser.parse_args(argv)
 
@@ -511,6 +516,7 @@ def main(argv: list[str] | None = None) -> int:
                     embedding_model=args.embedding_model,
                     embedding_dimension=args.embedding_dimension,
                     site_purpose=args.site_purpose,
+                    business_profile=args.business_profile,
                 )
             )
         else:

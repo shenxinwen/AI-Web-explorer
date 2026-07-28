@@ -766,6 +766,7 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
         embedding_model=None,
         embedding_dimension=None,
         site_purpose=None,
+        business_profile=None,
     ):
         calls.append(
             (
@@ -782,6 +783,7 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
                 embedding_model,
                 embedding_dimension,
                 site_purpose,
+                business_profile,
             )
         )
         output_path.write_text("{}", encoding="utf-8")
@@ -820,6 +822,8 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
             "512",
             "--site-purpose",
             "demo store",
+            "--business-profile",
+            "ecommerce_checkout",
             "--headed",
         ]
     )
@@ -840,5 +844,6 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
             "text-embedding-test",
             512,
             "demo store",
+            "ecommerce_checkout",
         )
     ]
