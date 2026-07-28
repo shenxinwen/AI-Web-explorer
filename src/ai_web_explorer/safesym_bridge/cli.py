@@ -400,6 +400,13 @@ def main(argv: list[str] | None = None) -> int:
         choices=["none", "ecommerce_checkout"],
         default=None,
     )
+    stagehand_explore_parser.add_argument("--openai-visual-delta", action="store_true")
+    stagehand_explore_parser.add_argument("--visual-delta-model", default=None)
+    stagehand_explore_parser.add_argument(
+        "--stagehand-execution-mode",
+        choices=["business_milestone", "observed_action"],
+        default="business_milestone",
+    )
     stagehand_explore_parser.add_argument("--headed", action="store_true")
     args = parser.parse_args(argv)
 
@@ -517,6 +524,9 @@ def main(argv: list[str] | None = None) -> int:
                     embedding_dimension=args.embedding_dimension,
                     site_purpose=args.site_purpose,
                     business_profile=args.business_profile,
+                    use_openai_visual_delta=args.openai_visual_delta,
+                    visual_delta_model=args.visual_delta_model,
+                    stagehand_execution_mode=args.stagehand_execution_mode,
                 )
             )
         else:

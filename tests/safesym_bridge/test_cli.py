@@ -767,6 +767,9 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
         embedding_dimension=None,
         site_purpose=None,
         business_profile=None,
+        use_openai_visual_delta=False,
+        visual_delta_model=None,
+        stagehand_execution_mode="business_milestone",
     ):
         calls.append(
             (
@@ -784,6 +787,9 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
                 embedding_dimension,
                 site_purpose,
                 business_profile,
+                use_openai_visual_delta,
+                visual_delta_model,
+                stagehand_execution_mode,
             )
         )
         output_path.write_text("{}", encoding="utf-8")
@@ -824,6 +830,11 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
             "demo store",
             "--business-profile",
             "ecommerce_checkout",
+            "--openai-visual-delta",
+            "--visual-delta-model",
+            "gpt-4o-mini",
+            "--stagehand-execution-mode",
+            "observed_action",
             "--headed",
         ]
     )
@@ -845,5 +856,8 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
             512,
             "demo store",
             "ecommerce_checkout",
+            True,
+            "gpt-4o-mini",
+            "observed_action",
         )
     ]

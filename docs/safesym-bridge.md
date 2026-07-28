@@ -170,6 +170,35 @@ inserted:
 check_human_confirmation_order_place_confirm
 ```
 
+### Generic Stagehand Exploration
+
+The generic Stagehand runner is the bounded-exploration integration surface. It
+can now reuse the existing profile, visual-delta, embedding, and Stagehand
+candidate-action capabilities:
+
+```powershell
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-stagehand-explore `
+  --url https://www.saucedemo.com/ `
+  --app-name saucedemo `
+  --output outputs/experiments/saucedemo/latest/stagehand_explore_graph.json `
+  --stagehand-trace outputs/experiments/saucedemo/latest/stagehand_explore_trace.json `
+  --screenshot-dir outputs/experiments/saucedemo/latest/screenshots `
+  --business-profile ecommerce_checkout `
+  --openai-visual-delta `
+  --visual-delta-model gpt-4o `
+  --stagehand-execution-mode observed_action `
+  --state-embeddings `
+  --embedding-model text-embedding-v4 `
+  --embedding-dimension 1024 `
+  --model deepseek/deepseek-v4-flash `
+  --steps 8
+```
+
+`business_milestone` mode asks Stagehand to advance one useful milestone.
+`observed_action` mode asks Stagehand to observe candidate actions and lets
+Web-KOBE select one from the returned candidates. Visual delta requires
+`--screenshot-dir` because it compares before/after screenshots.
+
 ## SauceDemo Role
 
 SauceDemo remains useful as an app-specific regression target, especially for

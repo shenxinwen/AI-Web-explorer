@@ -154,7 +154,7 @@ outputs/experiments/saucedemo/latest/
 - Stagehand 是按“选择一个有用站点功能动作”的 generic prompt 推进了一条业务路径；
 - 没有显式枚举几十个页面候选动作，也没有分支扩展或回溯；
 - embedding 已触发，但只用于 prompt memory，没有触发 embedding-based node merge；
-- `planning_state.facts` 为空，`planning_transition.added/removed_facts` 也为空；
+- 当未启用 visual delta 时，`planning_state.facts` 和 `planning_transition.added/removed_facts` 仍可能为空；
 - PDDL/SafeSym 可以结构性消费，但语义上主要是 location/action path，不是 business-state transition。
 
 客观结论：
@@ -214,9 +214,11 @@ https://storedemo.testdino.com/
 
 这是当前最大问题。
 
-`web-kobe-stagehand-explore` 可以跑出页面路径，但 `planning_state` 和
-`planning_transition` 为空。这样生成的 PDDL 可以被 SafeSym 消费，但只能表达位置迁移，
-不能表达 `cart_has_items`、`checkout_started`、`payment_info_complete` 等业务状态变化。
+`web-kobe-stagehand-explore` 已经可以显式接入 `ecommerce_checkout` profile，
+并可以复用已有 visual delta/VLM 链路。下一步要验证的是：在 generic / bounded
+exploration 模式下，VLM candidate facts 能否稳定进入 `planning_state` 和
+`planning_transition`，从而让 PDDL 表达 `cart_has_items`、`checkout_started`、
+`payment_info_complete` 等业务状态变化。
 
 下一阶段必须让 generic exploration 路径接入 profile-bounded state observation：
 
@@ -346,8 +348,8 @@ Verifier 的目标不是替代 profile，而是判断 candidate facts 是否能�
 
 ### 短期优先级
 
-1. 让 generic exploration 接入 profile facts 和 planning_transition。
-2. 把 Stagehand 从单个虚拟 milestone 推向候选动作模式，优先评估 `observe` 是否可用。
+1. 验证 generic exploration 的 visual delta/profile facts 链路。
+2. 把 Stagehand 从单个虚拟 milestone 推向候选动作模式，优先评估 `observed_action` 是否可用。
 3. 明确 embedding memory 的职责：相似检索和重复惩罚，不直接进入 PDDL。
 4. 给每轮 experiment report 增加 stop reason、prompt mode、memory hit、facts count。
 5. 再跑 SauceDemo、Practice Automated Testing、TestDino，比较 task-guided 和 bounded exploration 的差异。
@@ -425,7 +427,7 @@ src/ai_web_explorer/grounded_web/explorer.py
 
 src/ai_web_explorer/grounded_web/stagehand_backend.py
 src/ai_web_explorer/grounded_web/stagehand_prompt.py
-  Stagehand 后端和 prompt。当前 generic exploration 仍使用 business_milestone 执行模式。
+  Stagehand 后端和 prompt。generic exploration 可选择 business_milestone 或 observed_action 执行模式。
 
 src/ai_web_explorer/grounded_web/state_summary.py
 src/ai_web_explorer/grounded_web/state_embedding.py
@@ -459,6 +461,6 @@ docs/safesym-bridge.md
 - 当前阶段正在从 task-guided benchmark 转向 bounded exploration；
 - PDDL 只能消费 node identity 和 profile planning facts，不能消费 UI/schema facts；
 - Stagehand 是候选动作/执行/trace 来源，不是状态真相；
-- 最新 generic exploration 不是完整自由探索，只是单路径弱探索；
-- 当前最大风险是 generic path 没有 profile facts、探索仍靠虚拟 milestone、verifier 缺失；
+- 最新 generic exploration 已能接入 business profile、VLM visual delta 和 `observed_action` 模式；
+- 当前最大风险是 bounded exploration 策略还未成型、verifier 缺失、候选动作质量仍需实验验证；
 - 下一步优先做 bounded exploration V1 的最小闭环。

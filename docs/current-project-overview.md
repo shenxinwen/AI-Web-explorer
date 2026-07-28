@@ -175,8 +175,8 @@ This did not prove that free exploration works:
   backtrack;
 - embeddings were generated, but no embedding-based node merge or revisit prompt
   was observed;
-- `planning_state.facts` and `planning_transition.added/removed_facts` were
-  empty;
+- without visual delta, `planning_state.facts` and
+  `planning_transition.added/removed_facts` may still be empty;
 - PDDL/SafeSym could consume the artifacts structurally, but the PDDL was mostly
   a location/action path rather than a business-state transition model.
 
@@ -244,10 +244,12 @@ State abstraction remains the main bottleneck.
 
 This is the largest current issue.
 
-`web-kobe-stagehand-explore` can produce a page path, but `planning_state` and
-`planning_transition` are empty. The generated PDDL can be consumed by SafeSym,
-but it expresses location movement rather than business facts such as
-`cart_has_items`, `checkout_started`, or `payment_info_complete`.
+`web-kobe-stagehand-explore` can now explicitly connect the
+`ecommerce_checkout` profile and reuse the existing visual-delta/VLM chain. The
+next validation question is whether VLM candidate facts reliably enter
+`planning_state` and `planning_transition` in generic / bounded exploration, so
+PDDL can express business facts such as `cart_has_items`, `checkout_started`, or
+`payment_info_complete`.
 
 The next phase must connect generic exploration to profile-bounded state
 observation:
@@ -386,9 +388,9 @@ The design can borrow from OpenMobile/SEE without overbuilding:
 
 ### Short-term priorities
 
-1. Connect generic exploration to profile facts and `planning_transition`.
+1. Validate the generic exploration visual-delta/profile-facts chain.
 2. Move Stagehand from one virtual milestone toward candidate-action mode,
-   starting by evaluating whether `observe` can supply candidates.
+   starting by evaluating whether `observed_action` is reliable.
 3. Keep embedding memory responsible for similar-state lookup and repetition
    penalty, not PDDL facts.
 4. Add stop reason, prompt mode, memory hit, and fact counts to every experiment
@@ -474,8 +476,8 @@ src/ai_web_explorer/grounded_web/explorer.py
 
 src/ai_web_explorer/grounded_web/stagehand_backend.py
 src/ai_web_explorer/grounded_web/stagehand_prompt.py
-  Stagehand backend and prompts. Generic exploration currently still uses
-  business_milestone execution mode.
+  Stagehand backend and prompts. Generic exploration can choose
+  business_milestone or observed_action execution mode.
 
 src/ai_web_explorer/grounded_web/state_summary.py
 src/ai_web_explorer/grounded_web/state_embedding.py
@@ -511,8 +513,8 @@ Before starting new architecture or implementation work, confirm:
   exploration;
 - PDDL consumes node identity and profile planning facts, not UI/schema facts;
 - Stagehand is a candidate-action / execution / trace source, not state truth;
-- the latest generic exploration run is weak single-path exploration, not full
-  free exploration;
-- the biggest current risks are missing profile facts in the generic path,
-  virtual-milestone execution, and missing verifier;
+- the latest generic exploration path can now connect business profiles, VLM
+  visual delta, and `observed_action` mode;
+- the biggest current risks are immature bounded-exploration policy, missing
+  verifier, and candidate-action quality;
 - the next priority is the minimal bounded exploration V1 loop.

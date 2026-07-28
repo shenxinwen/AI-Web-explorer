@@ -408,6 +408,9 @@ async def run_stagehand_exploration(
     provider=None,
     model: str | None = None,
     screenshot_dir: Path | None = None,
+    visual_delta_provider=None,
+    use_openai_visual_delta: bool = False,
+    visual_delta_model: str | None = None,
     state_embedding_provider=None,
     embedding_path: Path | None = None,
     use_state_embeddings: bool = False,
@@ -415,9 +418,19 @@ async def run_stagehand_exploration(
     embedding_dimension: int | None = None,
     site_purpose: str | None = None,
     business_profile: str | BusinessFlowProfile | None = None,
+    stagehand_execution_mode: str = "business_milestone",
 ) -> Path:
     from playwright.async_api import async_playwright
 
+    if (visual_delta_provider is not None or use_openai_visual_delta) and (
+        screenshot_dir is None
+    ):
+        raise ValueError("screenshot_dir is required for visual delta analysis.")
+    resolved_visual_delta_provider = visual_delta_provider
+    if resolved_visual_delta_provider is None and use_openai_visual_delta:
+        resolved_visual_delta_provider = create_openai_visual_delta_provider_from_env(
+            model=visual_delta_model,
+        )
     resolved_embedding_provider = state_embedding_provider
     if resolved_embedding_provider is None and use_state_embeddings:
         resolved_embedding_provider = create_embedding_provider_from_env(
@@ -464,7 +477,7 @@ async def run_stagehand_exploration(
                 base_backend=base_adapter,
                 provider=resolved_provider,
                 goal=stagehand_goal,
-                execution_mode="business_milestone",
+                execution_mode=stagehand_execution_mode,
             )
             explorer = WebKobeExplorer(
                 adapter=adapter,
@@ -472,6 +485,7 @@ async def run_stagehand_exploration(
                 goal="Explore useful website functionality.",
                 capture_screenshots=screenshot_dir is not None,
                 business_profile=resolved_business_profile,
+                visual_delta_provider=resolved_visual_delta_provider,
                 enable_exploration_memory=resolved_embedding_provider is not None,
                 state_embedding_provider=resolved_embedding_provider,
                 state_embedding_records=embedding_records,

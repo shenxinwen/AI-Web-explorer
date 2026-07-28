@@ -763,6 +763,7 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
             assert explorer.state_embedding_provider("x") == [1.0, 0.0]
             assert explorer.business_profile is not None
             assert explorer.business_profile.site_type == "ecommerce_checkout"
+            assert explorer.visual_delta_provider("prompt") == '{"visible_change_summary":"changed","candidate_added_facts":[],"candidate_removed_facts":[],"evidence":[],"confidence":0.5}'
 
         async def run(self, *, max_steps):
             return WebKobeExplorationResult(
@@ -798,15 +799,31 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
         steps=3,
         state_embedding_provider=lambda text: [1.0, 0.0],
         embedding_path=embedding_path,
+        screenshot_dir=tmp_path / "screenshots",
         site_purpose="demo store",
         business_profile="ecommerce_checkout",
+        visual_delta_provider=lambda prompt, **kwargs: '{"visible_change_summary":"changed","candidate_added_facts":[],"candidate_removed_facts":[],"evidence":[],"confidence":0.5}',
+        stagehand_execution_mode="observed_action",
     )
 
     assert result == output_path
     assert ("goto", "https://shop.test/") in calls
     assert any(
-        call[0] == "stagehand" and call[2] == "business_milestone"
+        call[0] == "stagehand" and call[2] == "observed_action"
         for call in calls
     )
     assert output_path.exists()
     assert embedding_path.exists()
+
+
+@pytest.mark.anyio
+async def test_run_stagehand_exploration_requires_screenshots_for_visual_delta(
+    tmp_path,
+):
+    with pytest.raises(ValueError, match="screenshot_dir"):
+        await browser_runner.run_stagehand_exploration(
+            tmp_path / "graph.json",
+            start_url="https://shop.test/",
+            provider=object(),
+            visual_delta_provider=lambda prompt, **kwargs: "{}",
+        )
