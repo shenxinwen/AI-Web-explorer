@@ -709,3 +709,101 @@ async def test_run_ecommerce_stagehand_step_wires_terminal_condition(
 
     assert controllers[0].terminal_condition is not None
     assert controllers[0].terminal_condition(terminal_graph) is True
+
+
+@pytest.mark.anyio
+async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
+    tmp_path,
+    monkeypatch,
+):
+    import playwright.async_api as playwright_async_api
+
+    output_path = tmp_path / "graph.json"
+    embedding_path = tmp_path / "state_embeddings.json"
+    calls = []
+
+    class FakePage:
+        async def goto(self, url):
+            calls.append(("goto", url))
+
+    class FakeBrowser:
+        async def new_page(self):
+            return FakePage()
+
+        async def close(self):
+            calls.append(("close", None))
+
+    class FakeChromium:
+        async def launch(self, *, headless=True, args=None):
+            calls.append(("launch", headless, args))
+            return FakeBrowser()
+
+    class FakePlaywright:
+        chromium = FakeChromium()
+
+    class FakePlaywrightContext:
+        async def __aenter__(self):
+            return FakePlaywright()
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+    class FakeBaseAdapter:
+        def __init__(self, page, *, app_name, page_id=None, screenshot_dir=None):
+            self.app_name = app_name
+
+    class FakeStagehandBackend:
+        def __init__(self, *, base_backend, provider, goal, execution_mode, **kwargs):
+            calls.append(("stagehand", goal, execution_mode))
+            self.app_name = base_backend.app_name
+
+    class FakeController:
+        def __init__(self, explorer):
+            assert explorer.enable_exploration_memory is True
+            assert explorer.state_embedding_provider("x") == [1.0, 0.0]
+
+        async def run(self, *, max_steps):
+            return WebKobeExplorationResult(
+                graph=WebKobeGraph(
+                    app="demo",
+                    start_node_id="start",
+                    total_steps_completed=max_steps,
+                ),
+                summary=WebKobeExplorationSummary(
+                    requested_steps=max_steps,
+                    steps_completed=max_steps,
+                    stop_reason="max_steps",
+                    node_count=0,
+                    edge_count=0,
+                    failed_edge_count=0,
+                ),
+            )
+
+    monkeypatch.setattr(
+        playwright_async_api,
+        "async_playwright",
+        lambda: FakePlaywrightContext(),
+    )
+    monkeypatch.setattr(browser_runner, "WebKobePlaywrightAdapter", FakeBaseAdapter)
+    monkeypatch.setattr(browser_runner, "StagehandAutomationBackend", FakeStagehandBackend)
+    monkeypatch.setattr(browser_runner, "WebKobeExplorationController", FakeController)
+
+    result = await browser_runner.run_stagehand_exploration(
+        output_path,
+        start_url="https://shop.test/",
+        app_name="demo",
+        provider=object(),
+        steps=3,
+        state_embedding_provider=lambda text: [1.0, 0.0],
+        state_embedding_path=embedding_path,
+        site_purpose="demo store",
+    )
+
+    assert result == output_path
+    assert ("goto", "https://shop.test/") in calls
+    assert any(
+        call[0] == "stagehand" and call[2] == "business_milestone"
+        for call in calls
+    )
+    assert output_path.exists()
+    assert embedding_path.exists()

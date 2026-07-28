@@ -35,6 +35,9 @@ from ai_web_explorer.grounded_web.llm_action_selector import (
 from ai_web_explorer.grounded_web.openai_visual_delta import (
     create_openai_visual_delta_provider_from_env,
 )
+from ai_web_explorer.grounded_web.openai_state_embedding import (
+    create_openai_state_embedding_provider_from_env,
+)
 from ai_web_explorer.grounded_web.semantic_naming import (
     create_deepseek_semantic_naming_provider_from_env,
     semantic_naming_provider_from_text_provider,
@@ -45,10 +48,15 @@ from ai_web_explorer.grounded_web.stagehand_backend import (
 from ai_web_explorer.grounded_web.stagehand_prompt import (
     BenchmarkTaskContext,
     ECOMMERCE_CHECKOUT_DOMAIN_GUIDANCE,
+    build_generic_stagehand_exploration_goal,
     build_ecommerce_checkout_stagehand_goal,
 )
 from ai_web_explorer.grounded_web.stagehand_sdk_provider import (
     create_async_stagehand_provider_from_env,
+)
+from ai_web_explorer.grounded_web.state_embedding import (
+    read_state_embedding_records,
+    write_state_embedding_records,
 )
 
 
@@ -364,6 +372,105 @@ async def run_ecommerce_stagehand_step(
                         if edge.execution_trace.metadata.get("action_source")
                         == "stagehand"
                     ]
+                stagehand_trace_path.parent.mkdir(parents=True, exist_ok=True)
+                stagehand_trace_path.write_text(
+                    json.dumps(traces, indent=2, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+            return output_path
+        finally:
+            await browser.close()
+
+
+async def run_stagehand_exploration(
+    output_path: Path,
+    *,
+    start_url: str,
+    app_name: str = "web",
+    stagehand_trace_path: Path | None = None,
+    headless: bool = True,
+    steps: int = 8,
+    provider=None,
+    model: str | None = None,
+    screenshot_dir: Path | None = None,
+    state_embedding_provider=None,
+    state_embedding_path: Path | None = None,
+    use_openai_state_embeddings: bool = False,
+    state_embedding_model: str | None = None,
+    site_purpose: str | None = None,
+) -> Path:
+    from playwright.async_api import async_playwright
+
+    resolved_embedding_provider = state_embedding_provider
+    if resolved_embedding_provider is None and use_openai_state_embeddings:
+        resolved_embedding_provider = create_openai_state_embedding_provider_from_env(
+            model=state_embedding_model,
+        )
+    embedding_records = (
+        read_state_embedding_records(state_embedding_path)
+        if state_embedding_path is not None
+        else []
+    )
+    stagehand_goal = build_generic_stagehand_exploration_goal(
+        site_purpose=site_purpose,
+    )
+    cdp_port = _pick_free_port() if provider is None else None
+    launch_args = (
+        [f"--remote-debugging-port={cdp_port}"] if cdp_port is not None else None
+    )
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(
+            headless=headless,
+            args=launch_args,
+        )
+        local_cdp_url = (
+            _read_cdp_websocket_url(cdp_port) if cdp_port is not None else None
+        )
+        page = await browser.new_page()
+        try:
+            await page.goto(start_url)
+            resolved_provider = provider
+            if resolved_provider is None:
+                resolved_provider = await create_async_stagehand_provider_from_env(
+                    model_name=model,
+                    page=page,
+                    local_cdp_url=local_cdp_url,
+                )
+            base_adapter = WebKobePlaywrightAdapter(
+                page,
+                app_name=app_name,
+                screenshot_dir=screenshot_dir,
+            )
+            adapter = StagehandAutomationBackend(
+                base_backend=base_adapter,
+                provider=resolved_provider,
+                goal=stagehand_goal,
+                execution_mode="business_milestone",
+            )
+            explorer = WebKobeExplorer(
+                adapter=adapter,
+                semantic_assistor=DeterministicSemanticAssistor(app=app_name),
+                goal="Explore useful website functionality.",
+                capture_screenshots=screenshot_dir is not None,
+                enable_exploration_memory=resolved_embedding_provider is not None,
+                state_embedding_provider=resolved_embedding_provider,
+                state_embedding_records=embedding_records,
+            )
+            controller = WebKobeExplorationController(explorer)
+            result = await controller.run(max_steps=max(steps, 1))
+            write_web_kobe_graph(result.graph, output_path)
+            if state_embedding_path is not None:
+                write_state_embedding_records(
+                    state_embedding_path,
+                    explorer.state_embedding_records,
+                )
+            if stagehand_trace_path is not None:
+                traces = [
+                    edge.execution_trace.metadata
+                    for edge in result.graph.edges
+                    if edge.execution_trace.metadata.get("action_source")
+                    == "stagehand"
+                ]
                 stagehand_trace_path.parent.mkdir(parents=True, exist_ok=True)
                 stagehand_trace_path.write_text(
                     json.dumps(traces, indent=2, ensure_ascii=False),

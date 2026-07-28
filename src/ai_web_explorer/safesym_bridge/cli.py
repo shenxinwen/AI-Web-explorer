@@ -10,6 +10,7 @@ from ai_web_explorer.safesym_bridge.browser_runner import (
     build_saucedemo_stagehand_benchmark_context,
     build_debug_web_kobe_graph,
     run_ecommerce_stagehand_step,
+    run_stagehand_exploration,
     run_web_kobe_exploration,
     write_web_kobe_graph,
 )
@@ -363,6 +364,37 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Show the browser window while running the smoke.",
     )
+    stagehand_explore_parser = subparsers.add_parser(
+        "web-kobe-stagehand-explore",
+        help="Run generic Stagehand-backed Web-KOBE exploration with graph memory.",
+    )
+    stagehand_explore_parser.add_argument("--url", required=True)
+    stagehand_explore_parser.add_argument("--app-name", default="web")
+    stagehand_explore_parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("outputs/latest/stagehand_explore_graph.json"),
+    )
+    stagehand_explore_parser.add_argument(
+        "--stagehand-trace",
+        type=Path,
+        default=Path("outputs/latest/stagehand_explore_trace.json"),
+    )
+    stagehand_explore_parser.add_argument("--model", default=None)
+    stagehand_explore_parser.add_argument("--steps", type=int, default=8)
+    stagehand_explore_parser.add_argument("--screenshot-dir", type=Path, default=None)
+    stagehand_explore_parser.add_argument(
+        "--state-embedding-path",
+        type=Path,
+        default=Path("outputs/latest/state_embeddings.json"),
+    )
+    stagehand_explore_parser.add_argument(
+        "--openai-state-embeddings",
+        action="store_true",
+    )
+    stagehand_explore_parser.add_argument("--state-embedding-model", default=None)
+    stagehand_explore_parser.add_argument("--site-purpose", default=None)
+    stagehand_explore_parser.add_argument("--headed", action="store_true")
     args = parser.parse_args(argv)
 
     try:
@@ -460,6 +492,23 @@ def main(argv: list[str] | None = None) -> int:
                     semantic_naming_model=args.semantic_naming_model,
                     allow_final_order=args.allow_final_order,
                     benchmark_context=benchmark_context,
+                )
+            )
+        elif args.mode == "web-kobe-stagehand-explore":
+            output_path = asyncio.run(
+                run_stagehand_exploration(
+                    args.output,
+                    start_url=args.url,
+                    app_name=args.app_name,
+                    stagehand_trace_path=args.stagehand_trace,
+                    model=args.model,
+                    steps=args.steps,
+                    headless=not args.headed,
+                    screenshot_dir=args.screenshot_dir,
+                    state_embedding_path=args.state_embedding_path,
+                    use_openai_state_embeddings=args.openai_state_embeddings,
+                    state_embedding_model=args.state_embedding_model,
+                    site_purpose=args.site_purpose,
                 )
             )
         else:

@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from ai_web_explorer.grounded_web.stagehand_prompt import (
     BenchmarkTaskContext,
     ECOMMERCE_CHECKOUT_DOMAIN_GUIDANCE,
+    build_generic_stagehand_exploration_goal,
     build_ecommerce_checkout_stagehand_goal,
 )
 
@@ -123,3 +124,13 @@ def test_ecommerce_stagehand_goal_allows_flexible_milestone_guidance():
     assert "guidance, not a mandatory fixed sequence" in goal
     assert "skip or merge milestones" in goal
     assert "Do not repeat a milestone that is already visibly satisfied" in goal
+
+
+def test_generic_stagehand_exploration_goal_is_not_checkout_specific():
+    goal = build_generic_stagehand_exploration_goal(site_purpose="demo store")
+
+    assert "demo store" in goal
+    assert "Choose one useful site-function action" in goal
+    assert "Avoid low-value footer, legal, social, theme, and language actions" in goal
+    assert "checkout" not in goal.lower()
+    assert "payment" not in goal.lower()

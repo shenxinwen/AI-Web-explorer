@@ -46,6 +46,14 @@ ECOMMERCE_CHECKOUT_TEST_DATA_POLICY = (
     "placement is allowed."
 )
 
+GENERIC_EXPLORATION_ACTION_POLICY = (
+    "Choose one useful site-function action from visible page evidence. "
+    "Prefer actions that reveal product, search, filtering, account, cart, form, "
+    "settings, content, or workflow functionality. Avoid low-value footer, legal, "
+    "social, theme, and language actions unless they are central to the site. "
+    "Stop after one meaningful transition and report visible evidence."
+)
+
 
 @dataclass(frozen=True)
 class BenchmarkTaskContext:
@@ -142,5 +150,22 @@ def build_ecommerce_checkout_stagehand_goal(
             f"Milestone guidance:\n{_render_milestone_guidance(experiment_plan)}",
             f"Action policy:\n{ECOMMERCE_CHECKOUT_ACTION_POLICY}",
             f"Safety boundary:\n{safety_boundary}",
+        ]
+    )
+
+
+def build_generic_stagehand_exploration_goal(
+    *,
+    site_purpose: str | None = None,
+) -> str:
+    purpose = site_purpose or "the current website"
+    return "\n\n".join(
+        [
+            f"Site purpose:\n{purpose}",
+            f"Action policy:\n{GENERIC_EXPLORATION_ACTION_POLICY}",
+            (
+                "Memory policy:\nWeb-KOBE may append exploration memory below. "
+                "Use it to avoid repeated or no-op actions."
+            ),
         ]
     )

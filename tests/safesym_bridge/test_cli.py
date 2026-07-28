@@ -743,3 +743,97 @@ def test_clean_output_dir_requires_shared_parent(tmp_path):
 
     with pytest.raises(ValueError):
         cli._clean_output_dir_for([output, trace])
+
+
+def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
+    output = tmp_path / "graph.json"
+    trace = tmp_path / "trace.json"
+    embeddings = tmp_path / "state_embeddings.json"
+    calls = []
+
+    async def fake_run_stagehand_exploration(
+        output_path,
+        *,
+        start_url,
+        app_name,
+        stagehand_trace_path=None,
+        model=None,
+        steps=8,
+        headless=True,
+        screenshot_dir=None,
+        state_embedding_path=None,
+        use_openai_state_embeddings=False,
+        state_embedding_model=None,
+        site_purpose=None,
+    ):
+        calls.append(
+            (
+                output_path,
+                start_url,
+                app_name,
+                stagehand_trace_path,
+                model,
+                steps,
+                headless,
+                screenshot_dir,
+                state_embedding_path,
+                use_openai_state_embeddings,
+                state_embedding_model,
+                site_purpose,
+            )
+        )
+        output_path.write_text("{}", encoding="utf-8")
+        return output_path
+
+    monkeypatch.setattr(
+        cli,
+        "run_stagehand_exploration",
+        fake_run_stagehand_exploration,
+        raising=False,
+    )
+
+    exit_code = main(
+        [
+            "web-kobe-stagehand-explore",
+            "--url",
+            "https://shop.test/",
+            "--app-name",
+            "demo",
+            "--output",
+            str(output),
+            "--stagehand-trace",
+            str(trace),
+            "--steps",
+            "4",
+            "--model",
+            "deepseek/test",
+            "--screenshot-dir",
+            str(tmp_path / "screenshots"),
+            "--state-embedding-path",
+            str(embeddings),
+            "--openai-state-embeddings",
+            "--state-embedding-model",
+            "text-embedding-test",
+            "--site-purpose",
+            "demo store",
+            "--headed",
+        ]
+    )
+
+    assert exit_code == 0
+    assert calls == [
+        (
+            output,
+            "https://shop.test/",
+            "demo",
+            trace,
+            "deepseek/test",
+            4,
+            False,
+            tmp_path / "screenshots",
+            embeddings,
+            True,
+            "text-embedding-test",
+            "demo store",
+        )
+    ]
