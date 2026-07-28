@@ -270,7 +270,20 @@ Verifier 的目标不是替代 profile，而是判断哪些 candidate facts 可�
 
 ## 近期方向
 
-### P0：继续多网站 task-guided 实验
+### P0：构建有边界的 OpenMobile/SEE 风格探索 V1
+
+近期实现方向加入 OpenMobile/SEE 风格的探索 V1。graph 仍然是唯一持久化记忆。
+embedding 和 exploration index 只是用于重复状态识别和动作去重的查询辅助，
+不会进入 PDDL。第一目标是有边界的通用 Stagehand 探索闭环，不是完整自由探索覆盖率。
+
+这个 V1 要让当前 graph 真正具备记忆查询能力：
+
+- 判断当前状态是否像历史访问过的节点；
+- 总结同一或相似状态下已经尝试过的动作；
+- 引导 Stagehand 避免重复动作和 no-op 动作；
+- 保持 graph 产物可读，并且仍然能被 SafeSym 消费。
+
+### P1：继续多网站 task-guided 实验
 
 目标是验证图结构、profile facts 和 PDDL/SafeSym 链路是否能在不同网站上工作。
 
@@ -291,7 +304,7 @@ outputs/experiments/<site_name>/latest/
 - 异常和失败边；
 - 截图上可人工验证的状态变化。
 
-### P1：收紧电商 profile facts
+### P2：收紧电商 profile facts
 
 第一步拆分已经完成：
 
@@ -304,20 +317,20 @@ checkout_info_complete
 下一步是在 Practice Automated Testing、TestDino 和至少一个新的 checkout-like 网站上验证。
 只有当多轮实验反复说明这三个 facts 不能表达关键 transition 时，再继续增加新 fact。
 
-### P2：设计 verifier 接口
+### P3：设计 verifier 接口
 
 Verifier 可以在多网站实验之后引入，但现在设计时要给它留位置。
 它应该接收 candidate facts 和多源证据，输出 verified/uncertain/rejected。
 
-### P3：处理重复动作和 no-op transition
+### P4：处理重复动作和 no-op transition
 
 先保留失败边作为实验诊断证据。
 等我们确认哪些 no-op 对 SafeSym 有价值后，再决定是否在图层过滤。
 
-### P4：探索覆盖率
+### P5：探索覆盖率
 
-短期不做完整探索系统。
-后续方向是 business-state coverage，而不是 raw click coverage。
+短期不做完整探索系统。探索 V1 是有边界的 memory-guided loop。
+后续方向仍然是 business-state coverage，而不是 raw click coverage。
 
 ## 当前判断
 

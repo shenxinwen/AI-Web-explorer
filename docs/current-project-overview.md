@@ -310,7 +310,22 @@ coverage over every DOM element.
 
 ## Near-term Direction
 
-### P0: Run more task-guided multi-site experiments
+### P0: Build bounded OpenMobile/SEE-style exploration V1
+
+The near-term implementation direction now includes an OpenMobile/SEE-style
+exploration V1. The graph remains the only persistent memory. Embeddings and
+the exploration index are query aids for revisit detection and action
+de-duplication; they do not enter PDDL. The first target is a bounded generic
+Stagehand exploration loop, not full free exploration coverage.
+
+This V1 should make the current graph useful as memory:
+
+- detect whether the current state looks like a previously visited node;
+- summarize actions already tried from the same or similar state;
+- guide Stagehand away from repeated/no-op actions;
+- keep generated graph artifacts readable and SafeSym-consumable.
+
+### P1: Run more task-guided multi-site experiments
 
 The goal is to test whether the graph, profile facts, and PDDL/SafeSym chain
 work on different websites.
@@ -332,7 +347,7 @@ Each run should record:
 - anomalies and failed edges;
 - screenshot-backed human-verifiable state changes.
 
-### P1: Refine e-commerce profile facts
+### P2: Refine e-commerce profile facts
 
 The first split has been implemented:
 
@@ -346,22 +361,23 @@ The next step is to validate this split on Practice Automated Testing, TestDino,
 and at least one more checkout-like site. Only add more facts if repeated
 experiments show that the current three cannot express important transitions.
 
-### P2: Design the verifier interface
+### P3: Design the verifier interface
 
 The verifier can be implemented after more multi-site experiments, but the
 current data structures should leave room for it. It should accept candidate
 facts plus evidence and return verified/uncertain/rejected facts.
 
-### P3: Decide repeated-action and no-op policy
+### P4: Decide repeated-action and no-op policy
 
 Keep failed edges for diagnosis until we know whether they are useful to
 SafeSym. Then decide whether to filter them at graph construction, frontier
 selection, or PDDL projection.
 
-### P4: Expand exploration coverage later
+### P5: Expand exploration coverage later
 
-Do not build the full exploration system yet. The future direction is
-business-state coverage rather than raw click coverage.
+Do not build the full exploration system yet. Exploration V1 is a bounded
+memory-guided loop. The later direction remains business-state coverage rather
+than raw click coverage.
 
 ## Current Assessment
 

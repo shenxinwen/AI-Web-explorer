@@ -766,6 +766,80 @@ def test_compile_web_kobe_graph_to_pddl_excludes_ui_schema_facts_by_default():
     assert "region_1_visible" not in artifacts.problem
 
 
+def test_compile_web_kobe_graph_to_pddl_excludes_exploration_metadata():
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="start",
+        total_steps_completed=1,
+        nodes=[
+            WebKobeNode(
+                node_id="start",
+                page_description="start",
+                page_frame=PageFrame(
+                    page_id="start",
+                    page_type="start",
+                    url="https://example.test/",
+                    url_pattern="https://example.test/",
+                    title="Start",
+                ),
+                state_schema={},
+                last_state_snapshot={},
+                state_summary="url_path: / start embedding text",
+            ),
+            WebKobeNode(
+                node_id="cart",
+                page_description="cart",
+                page_frame=PageFrame(
+                    page_id="cart",
+                    page_type="cart",
+                    url="https://example.test/cart",
+                    url_pattern="https://example.test/cart",
+                    title="Cart",
+                ),
+                state_schema={},
+                last_state_snapshot={},
+            ),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="start",
+                target_node_id="cart",
+                instruction="open cart",
+                action=BrowserAction("click", "#cart", "open_cart"),
+                capability=None,
+                target_observation="cart",
+                observed_delta=[],
+                schema_delta={"ui_region": {"before": "home", "after": "cart"}},
+                execution_trace=ExecutionTrace(
+                    "click",
+                    "#cart",
+                    "open_cart",
+                    {},
+                    "start",
+                    "cart",
+                    True,
+                    metadata={
+                        "exploration_context": (
+                            "Avoid repeating actions: theme_toggle"
+                        ),
+                        "state_similarity": 0.94,
+                    },
+                ),
+                status="succeeded_with_navigation",
+            )
+        ],
+        meta={"state_embeddings": [[0.1, 0.2, 0.3]]},
+    )
+
+    artifacts = compile_web_kobe_graph_to_pddl(graph, goal_node_id="cart")
+
+    combined = artifacts.domain + "\n" + artifacts.problem
+    assert "embedding" not in combined
+    assert "theme_toggle" not in combined
+    assert "state_similarity" not in combined
+    assert "ui_region" not in combined
+
+
 def test_compile_web_kobe_graph_to_pddl_prefers_business_canonical_action_name():
     graph = WebKobeGraph(
         app="example",
