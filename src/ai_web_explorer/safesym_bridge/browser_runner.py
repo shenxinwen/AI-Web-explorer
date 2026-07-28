@@ -35,8 +35,8 @@ from ai_web_explorer.grounded_web.llm_action_selector import (
 from ai_web_explorer.grounded_web.openai_visual_delta import (
     create_openai_visual_delta_provider_from_env,
 )
-from ai_web_explorer.grounded_web.openai_state_embedding import (
-    create_openai_state_embedding_provider_from_env,
+from ai_web_explorer.grounded_web.embedding_provider import (
+    create_embedding_provider_from_env,
 )
 from ai_web_explorer.grounded_web.semantic_naming import (
     create_deepseek_semantic_naming_provider_from_env,
@@ -394,21 +394,23 @@ async def run_stagehand_exploration(
     model: str | None = None,
     screenshot_dir: Path | None = None,
     state_embedding_provider=None,
-    state_embedding_path: Path | None = None,
-    use_openai_state_embeddings: bool = False,
-    state_embedding_model: str | None = None,
+    embedding_path: Path | None = None,
+    use_state_embeddings: bool = False,
+    embedding_model: str | None = None,
+    embedding_dimension: int | None = None,
     site_purpose: str | None = None,
 ) -> Path:
     from playwright.async_api import async_playwright
 
     resolved_embedding_provider = state_embedding_provider
-    if resolved_embedding_provider is None and use_openai_state_embeddings:
-        resolved_embedding_provider = create_openai_state_embedding_provider_from_env(
-            model=state_embedding_model,
+    if resolved_embedding_provider is None and use_state_embeddings:
+        resolved_embedding_provider = create_embedding_provider_from_env(
+            model=embedding_model,
+            dimension=embedding_dimension,
         )
     embedding_records = (
-        read_state_embedding_records(state_embedding_path)
-        if state_embedding_path is not None
+        read_state_embedding_records(embedding_path)
+        if embedding_path is not None
         else []
     )
     stagehand_goal = build_generic_stagehand_exploration_goal(
@@ -459,9 +461,9 @@ async def run_stagehand_exploration(
             controller = WebKobeExplorationController(explorer)
             result = await controller.run(max_steps=max(steps, 1))
             write_web_kobe_graph(result.graph, output_path)
-            if state_embedding_path is not None:
+            if embedding_path is not None:
                 write_state_embedding_records(
-                    state_embedding_path,
+                    embedding_path,
                     explorer.state_embedding_records,
                 )
             if stagehand_trace_path is not None:

@@ -761,9 +761,10 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
         steps=8,
         headless=True,
         screenshot_dir=None,
-        state_embedding_path=None,
-        use_openai_state_embeddings=False,
-        state_embedding_model=None,
+        embedding_path=None,
+        use_state_embeddings=False,
+        embedding_model=None,
+        embedding_dimension=None,
         site_purpose=None,
     ):
         calls.append(
@@ -776,9 +777,10 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
                 steps,
                 headless,
                 screenshot_dir,
-                state_embedding_path,
-                use_openai_state_embeddings,
-                state_embedding_model,
+                embedding_path,
+                use_state_embeddings,
+                embedding_model,
+                embedding_dimension,
                 site_purpose,
             )
         )
@@ -809,11 +811,13 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
             "deepseek/test",
             "--screenshot-dir",
             str(tmp_path / "screenshots"),
-            "--state-embedding-path",
+            "--embedding-path",
             str(embeddings),
-            "--openai-state-embeddings",
-            "--state-embedding-model",
+            "--state-embeddings",
+            "--embedding-model",
             "text-embedding-test",
+            "--embedding-dimension",
+            "512",
             "--site-purpose",
             "demo store",
             "--headed",
@@ -834,6 +838,7 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
             embeddings,
             True,
             "text-embedding-test",
+            512,
             "demo store",
         )
     ]

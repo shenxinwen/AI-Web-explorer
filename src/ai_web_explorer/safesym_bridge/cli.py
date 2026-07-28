@@ -384,15 +384,16 @@ def main(argv: list[str] | None = None) -> int:
     stagehand_explore_parser.add_argument("--steps", type=int, default=8)
     stagehand_explore_parser.add_argument("--screenshot-dir", type=Path, default=None)
     stagehand_explore_parser.add_argument(
-        "--state-embedding-path",
+        "--embedding-path",
         type=Path,
         default=Path("outputs/latest/state_embeddings.json"),
     )
     stagehand_explore_parser.add_argument(
-        "--openai-state-embeddings",
+        "--state-embeddings",
         action="store_true",
     )
-    stagehand_explore_parser.add_argument("--state-embedding-model", default=None)
+    stagehand_explore_parser.add_argument("--embedding-model", default=None)
+    stagehand_explore_parser.add_argument("--embedding-dimension", type=int, default=None)
     stagehand_explore_parser.add_argument("--site-purpose", default=None)
     stagehand_explore_parser.add_argument("--headed", action="store_true")
     args = parser.parse_args(argv)
@@ -505,9 +506,10 @@ def main(argv: list[str] | None = None) -> int:
                     steps=args.steps,
                     headless=not args.headed,
                     screenshot_dir=args.screenshot_dir,
-                    state_embedding_path=args.state_embedding_path,
-                    use_openai_state_embeddings=args.openai_state_embeddings,
-                    state_embedding_model=args.state_embedding_model,
+                    embedding_path=args.embedding_path,
+                    use_state_embeddings=args.state_embeddings,
+                    embedding_model=args.embedding_model,
+                    embedding_dimension=args.embedding_dimension,
                     site_purpose=args.site_purpose,
                 )
             )

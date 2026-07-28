@@ -795,7 +795,7 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
         provider=object(),
         steps=3,
         state_embedding_provider=lambda text: [1.0, 0.0],
-        state_embedding_path=embedding_path,
+        embedding_path=embedding_path,
         site_purpose="demo store",
     )
 
