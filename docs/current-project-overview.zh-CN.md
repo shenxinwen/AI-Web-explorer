@@ -6,54 +6,43 @@
 
 ## 一句话目标
 
-这个项目不是要做一个通用 web agent 产品，而是要服务 SafeSym：
+这个项目不是要做通用 web agent 产品，而是要服务 SafeSym：
 
 ```text
 真实网站交互
   -> 观察动作前后的状态变化
   -> 构建 WebKobeGraph
+  -> 抽象为 profile planning facts
   -> 投影成 planner-facing PDDL
   -> 交给 SafeSym 做解析、安全检查注入和规划验证
 ```
 
-项目真正有价值的部分是：
+项目真正要解决的问题是：如何把网页交互变成稳定、可验证、可规划的状态图。
+Stagehand、Playwright、VLM/LLM 和 embedding 都是工具或证据来源，不是图真相本身。
 
-- 如何把网页交互抽象成稳定的状态图；
-- 如何把动作造成的变化表示成 profile planning facts；
-- 如何把图和状态变化投影到 PDDL；
-- 如何让 SafeSym 消费这些模型并插入安全检查。
+## 当前阶段判断
 
-Stagehand、Playwright、VLM/LLM 都是工具和证据来源，不是最终的图真相来源。
-
-## 当前主线
-
-当前主线是 task-guided partial website modeling：
+项目已经从“证明 task-guided checkout 链路可跑通”进入下一阶段：
 
 ```text
-真实网页
-  -> grounded observation
-  -> Stagehand/Playwright 执行动作
-  -> before/after observation
-  -> visual/structured delta
-  -> profile planning facts
-  -> WebKobeGraph
-  -> PDDL
-  -> SafeSym
+task-guided benchmark baseline
+  -> bounded exploration V1
+  -> profile-fact state modeling
+  -> PDDL/SafeSym semantic consumption
 ```
 
-短期我们不追求自由探索整个网站，而是先用业务目标引导探索，验证完整链路是否稳定。
-以电商 checkout 为例，当前目标路径是：
+我们不应该继续把主要时间花在让某个 checkout prompt 更会完成任务上。
+下一阶段重点是：让系统真的具备基础探索能力，同时保持 PDDL/SafeSym 链路可消费。
+
+当前最准确的定位是：
 
 ```text
-session setup / login
-  -> product selection
-  -> cart
-  -> checkout information
-  -> order review
-  -> pending sensitive order placement
+有真实浏览器执行能力；
+有 graph/PDDL/SafeSym 端到端链路；
+有初步 embedding memory；
+但还没有稳定的自由探索策略；
+也还没有可靠的 profile fact verifier。
 ```
-
-未来会逐步向探索式覆盖扩展，但现在必须先把状态抽象、图结构和 PDDL 映射做稳。
 
 ## 架构边界
 
@@ -65,9 +54,9 @@ session setup / login
 - `AutomationBackend` 接口；
 - Playwright 和 Stagehand 后端；
 - before/after 状态记录；
-- visual delta 和 structured delta；
-- `WebKobeGraph` 的节点、边和 planning state 管理；
-- LLM/VLM/Stagehand trace 的证据边界。
+- visual delta、structured delta 和未来 verifier；
+- `WebKobeGraph` 的节点、边、planning state 和 transition 管理；
+- exploration memory、embedding、frontier 相关能力。
 
 它不应该包含 SafeSym-specific 规划逻辑，也不应该包含 SauceDemo-only 规则。
 
@@ -80,57 +69,54 @@ session setup / login
 - SafeSym parser / safety injection / planner smoke；
 - 必要的本地 fixture 和回归测试。
 
-它不应该继续生长成通用探索 runtime。之前残留的 SauceDemo-specific adapter/catalog/resolver
-已经移除，SauceDemo 现在应被视为 benchmark config，而不是主架构路径。
+它不应该继续生长成通用探索 runtime。SauceDemo 应被视为 benchmark config，
+不是主架构路径。
 
 ### Stagehand
 
 Stagehand 的定位是：
 
 ```text
-Stagehand = 动作发现 / 动作执行 / 低层交互 trace
-Web-KOBE = 状态观察 / 图结构 / planning facts
+Stagehand = 候选动作发现 / 低层动作执行 / interaction trace
+Web-KOBE = 状态观察 / 图结构 / planning facts / memory
 SafeSym bridge = PDDL 投影 / 安全规则消费
 ```
 
-Stagehand 返回的自然语言描述可以作为证据，但不能直接决定：
+Stagehand 可以辅助选择和执行动作，但不能直接决定：
 
 - node identity；
 - planning facts；
 - PDDL predicates/effects；
 - safety triggers；
-- 任务是否真正成功。
-
-我们现在已经把 `Thinking mode does not support this tool_choice` 视为后端异常：
-如果页面或 planning facts 发生了可观察变化，边可以被标记为
-`succeeded_with_observed_change`，同时保留 Stagehand 原始失败信息。
+- 探索是否完成。
 
 ## 图结构原则
 
-当前图结构需要遵守以下原则：
+当前图结构继续遵守这些原则：
 
 1. `node` 表示可回到、可继续探索的页面/上下文状态。
-2. `node.planning_state` 记录该节点聚合看到过的 profile facts，用于分析、终止判断和未来 frontier 选择。
-3. `edge` 表示一次具体动作或业务里程碑。
-4. `edge.planning_transition` 记录这次动作开始前后的事实变化，是 PDDL action prediction 的主要来源。
+2. `node.planning_state` 记录该节点已知的 profile facts，用于分析、frontier 和终止判断。
+3. `edge` 表示一次动作或业务里程碑。
+4. `edge.planning_transition` 记录动作前后的 profile fact 变化，是 PDDL action prediction 的主要来源。
 5. PDDL 默认只能消费 graph location predicates 和预设 profile facts。
-6. DOM/UI/schema facts 只能作为证据留在图里，不能默认进入 PDDL。
-7. readable names 只是辅助审阅，不能作为运行时 identity。
+6. DOM/UI/schema facts 只能作为证据，不能默认进入 PDDL。
+7. readable names 只是审阅辅助，不能作为运行时 identity。
+8. embedding memory 只能辅助判断重复状态和动作选择，不能直接进入 PDDL。
 
-目前已经完成的关键修正：
+已经完成的关键修正：
 
-- PDDL action identity 由代码生成，避免 LLM-readable action name 重复导致 PDDL action 重名。
+- PDDL action identity 由代码生成，避免 readable action name 重复导致 PDDL action 重名。
 - PDDL 默认不再投影 `region_N_visible` 等 UI/schema facts。
 - `planning_transition.added_facts` 已收紧，只记录相对 `pre_facts` 真正新增的 profile facts。
-- `edge.planning_transition.pre_facts/add_facts/remove_facts` 已成为 PDDL action 映射的优先输入。
+- `edge.planning_transition.pre_facts/added_facts/removed_facts` 已成为 PDDL action 映射的优先输入。
 - 电商 profile 已区分 `checkout_user_info_complete` 和 `payment_info_complete`，
-  同时保留 `checkout_info_complete` 作为整个 checkout flow 的 summary fact。
-- 轻量实验计划模块已经加入，Stagehand run 可以按配置好的 business step 执行，
-  而不是让模型自己规划完整 checkout 流程。
+  同时保留 `checkout_info_complete` 作为 checkout flow 的 summary fact。
+- embedding 配置已改成通用 `EMBEDDING_*`，不再依赖 Qwen-specific fallback。
+- 初版 state summary、state embedding、exploration index 已加入。
 
-## 当前实验状态
+## 当前实验结论
 
-### SauceDemo
+### SauceDemo task-guided baseline
 
 SauceDemo 仍然是主要回归 benchmark。它验证过：
 
@@ -140,7 +126,46 @@ SauceDemo 仍然是主要回归 benchmark。它验证过：
 - SafeSym 可以 parse/inject；
 - 在允许 final order 的 benchmark 模式下，可以验证订单提交前的人类确认安全检查。
 
-注意：SauceDemo 证明的是受控 benchmark 链路可跑通，不证明任意网站泛化能力。
+这个 baseline 证明的是受控 checkout 链路可跑通，不证明任意网站泛化能力。
+
+### SauceDemo generic exploration latest
+
+最新 generic exploration 实验路径：
+
+```text
+outputs/experiments/saucedemo/latest/
+```
+
+结果摘要：
+
+- 使用 `web-kobe-stagehand-explore`；
+- Stagehand 模型需要 `deepseek/deepseek-v4-flash`，裸 `deepseek-v4-flash` 会被 Stagehand v3 拒绝；
+- 运行步数 `--steps 8`；
+- graph 有 7 个节点、8 条边；
+- 页面走到 `checkout-complete`；
+- embedding records 有 6 条，维度 1024；
+- PDDL smoke ready；
+- SafeSym parse/inject/base/safe smoke ready。
+
+但这次实验没有证明“真正自由探索”已经完成：
+
+- 停止原因实际是达到 `max_steps=8`，不是 coverage 达成；
+- 底层执行仍是 `business_milestone` 模式，每步只有一个虚拟动作 `advance_business_milestone`；
+- Stagehand 是按“选择一个有用站点功能动作”的 generic prompt 推进了一条业务路径；
+- 没有显式枚举几十个页面候选动作，也没有分支扩展或回溯；
+- embedding 已触发，但只用于 prompt memory，没有触发 embedding-based node merge；
+- `planning_state.facts` 为空，`planning_transition.added/removed_facts` 也为空；
+- PDDL/SafeSym 可以结构性消费，但语义上主要是 location/action path，不是 business-state transition。
+
+客观结论：
+
+```text
+浏览器探索链路：可运行
+embedding 存储：可运行
+PDDL/SafeSym 结构消费：可运行
+profile facts 语义链路：不足
+自由探索能力：尚未成立
+```
 
 ### Practice Automated Testing
 
@@ -150,7 +175,7 @@ SauceDemo 仍然是主要回归 benchmark。它验证过：
 https://practiceautomatedtesting.com/shopping
 ```
 
-最新有效实验结果是 partial checkout-flow success，并且 SafeSym 可以消费生成产物。
+最新有效结果是 partial checkout-flow success，并且 SafeSym 可以消费生成产物。
 
 结果摘要：
 
@@ -161,14 +186,11 @@ https://practiceautomatedtesting.com/shopping
 - SafeSym parse/inject/base/safe smoke 可用；
 - 没有到达 `order_review_ready` 或 `order_completed`。
 
-没有完成支付/下单的原因：
+暴露问题：
 
-- 实验安全边界要求不要 place final order，最多停在 order review / checkout overview；
-- 页面上 payment 表单没有完全填完，但 VLM 过早判断了 `checkout_info_complete`；
-- 第 5 步 Stagehand 选择点击购物车按钮，没有继续填写支付字段或进入 review；
-- before/after 截图无变化，所以该边被记录为 `failed_execution`。
-
-这个实验说明跨站链路已有价值，但也暴露出 checkout profile 粒度太粗。
+- payment 表单没有完全填完，但 VLM 过早判断 `checkout_info_complete`；
+- Stagehand 后续动作选择不稳定；
+- profile 粒度和 verifier 缺失会直接影响 PDDL 语义质量。
 
 ### TestDino Store
 
@@ -181,37 +203,99 @@ https://storedemo.testdino.com/
 实验结果是 partial success：
 
 - 一轮实验能得到 `product_list_visible`、`cart_has_items` 并被 SafeSym 消费；
-- 另一轮 guided prompt 反而更浅，出现 products 节点重复；
+- guided prompt 反而可能更浅，出现 products 节点重复；
 - 暴露出节点去重、状态抽象和 Stagehand 执行稳定性问题。
 
-这个实验说明 prompt 更明确不一定带来更好图结构，底层状态抽象仍是主要瓶颈。
+这个实验说明：更明确的 prompt 不一定带来更好的图结构，底层状态抽象仍是主要瓶颈。
 
 ## 当前主要问题
 
-### 1. Profile facts 仍需要通过实验继续调优
+### P0：generic exploration 没有接上 profile facts
 
-第一轮粒度调整已经落地：`checkout_user_info_complete` 和
-`payment_info_complete` 用来区分非付款 checkout 信息和付款信息。
-`checkout_info_complete` 仍保留为 summary fact，表示当前 checkout flow 要求的信息整体完成，
-或者页面已经进入 order review / confirmation。
+这是当前最大问题。
 
-接下来要通过多网站实验验证这些 facts 是否够用，而不是继续凭想象拆 schema。
-重点观察：
+`web-kobe-stagehand-explore` 可以跑出页面路径，但 `planning_state` 和
+`planning_transition` 为空。这样生成的 PDDL 可以被 SafeSym 消费，但只能表达位置迁移，
+不能表达 `cart_has_items`、`checkout_started`、`payment_info_complete` 等业务状态变化。
+
+下一阶段必须让 generic exploration 路径接入 profile-bounded state observation：
 
 ```text
-用户信息完成但付款信息缺失
-付款步骤不存在或跳转到第三方
-没有显式付款字段但已经进入 order review
-checkout_info_complete 是否仍然过早出现
+before profile facts
+  -> action
+  -> after profile facts
+  -> edge.planning_transition
+  -> target node.planning_state
 ```
 
-后续 profile 变更应来自真实 transition 失败，而不是试图枚举所有表单字段。
+### P1：当前探索仍偏单路径任务推进
 
-### 2. Verifier 还没有真正建立
+最新 SauceDemo generic run 的 prompt 是探索式的，但执行机制仍是 milestone-like：
 
-目前我们暂时信任 profile-bounded VLM/LLM candidate facts，用来跑通链路。
-这适合 MVP，但不能长期作为图真相。
+```text
+每步生成一个虚拟 business_intent 动作
+  -> Stagehand 内部决定低层动作
+  -> Web-KOBE 记录一个 edge
+```
 
+这还不是 OpenMobile/SEE 风格的探索，因为系统没有显式管理：
+
+- 候选动作集合；
+- 动作优先级；
+- 重复惩罚；
+- frontier；
+- 回溯；
+- coverage stop condition。
+
+### P1：embedding memory 已接入，但能力还浅
+
+embedding 已经能生成和保存状态向量。
+当前用途是：
+
+- 当前状态 summary 与历史 embedding 做相似检索；
+- 如果判断为 revisit，把“已尝试动作/避免动作”写入 Stagehand prompt。
+
+但目前它不负责：
+
+- 直接合并节点；
+- 修改 GraphManager 的 node identity；
+- 进入 PDDL；
+- 判断探索完成。
+
+这符合“先低耦合接入”的原则，但后续需要明确 embedding memory 和 graph merge 的边界。
+
+### P2：终止条件还是步数，不是覆盖率
+
+generic exploration 当前主要靠 `max_steps` 停止。
+这适合 smoke，但不适合作为真正探索系统。
+
+后续至少需要基本终止指标：
+
+- 当前 frontier 为空；
+- 最近 N 步都是 no-op 或重复状态；
+- 达到业务状态覆盖目标；
+- 达到预算上限。
+
+### P2：Stagehand 成功信号不可靠
+
+trace 中可能出现 `backend_reported_success=false`，但页面确实发生变化。
+当前更可靠的判断应该是 before/after observation，而不是 Stagehand 返回值。
+
+短期保留原始 trace，长期需要对 Stagehand result 做归一化解释。
+
+### P2：DeepSeek/Stagehand responseFormat warning
+
+`deepseek/deepseek-v4-flash` 可以执行，但会出现：
+
+```text
+responseFormat setting is not supported by this model
+```
+
+短期可记录为非阻塞异常。长期如果依赖结构化 Stagehand 输出，需要重新评估模型/接口。
+
+### P3：Verifier 还没有真正建立
+
+目前 profile facts 仍主要来自轻量结构规则或 VLM/LLM candidate。
 未来 verifier 应该综合：
 
 - DOM；
@@ -222,127 +306,103 @@ checkout_info_complete 是否仍然过早出现
 - profile evidence hints；
 - before/after facts。
 
-Verifier 的目标不是替代 profile，而是判断哪些 candidate facts 可以升级为 planner-facing truth。
+Verifier 的目标不是替代 profile，而是判断 candidate facts 是否能升级为 planner-facing truth。
 
-### 3. 节点去重和状态身份仍然偏弱
+## 下一阶段方向
 
-当前 node identity 仍偏页面/上下文级别，不足以稳定地区分：
+### 目标：bounded exploration V1
 
-- 同一页面上 cart 空/非空；
-- checkout 表单填了一半/填完；
-- 产品列表不同交互后的等价状态；
-- modal 打开/关闭。
-
-我们暂时不做大改。原则上：
-
-- `node.planning_state` 保留当前上下文已知 profile facts；
-- `edge.planning_transition` 表示动作引发的变化；
-- 后续需要在 node merge 策略中更明确哪些 facts 会影响节点等价性。
-
-### 4. 重复动作和 no-op edge 还需要处理
-
-现在可能出现：
-
-- 同一个动作重复尝试；
-- Stagehand 选择无效动作；
-- 页面无变化但仍产生 trace；
-- 已经存在的 fact 被重复加入 transition。
-
-我们已经先修了最后一项：`planning_transition.added_facts` 不再记录已经存在的 facts。
-后续还需要讨论：
-
-- 是否在 graph 层跳过 no-op edge；
-- 是否在 frontier 层避免重复动作；
-- 是否保留 failed/no-change edge 作为负样本。
-
-### 5. 探索覆盖率还不是当前重点
-
-自由探索很容易状态爆炸。当前更合理的阶段目标是：
+下一阶段不是继续优化 checkout task prompt，而是实现一个最小可用的探索闭环：
 
 ```text
-先用 task-guided benchmark 验证多网站链路
-  -> 丰富 profile facts
-  -> 稳定 verifier 和 PDDL projection
-  -> 再考虑 frontier/replay/backtracking 提升覆盖率
+观察当前状态
+  -> 生成候选动作
+  -> 用 graph memory / embedding memory / 重复惩罚选择一个动作
+  -> 执行动作
+  -> 观察 before/after profile facts
+  -> 更新 node / edge / planning_transition
+  -> 根据 frontier 或预算决定是否继续
 ```
 
-提高覆盖率时，应优先考虑业务状态覆盖，而不是点击所有 DOM 元素。
+第一版不追求完整覆盖率，只要具备基本功能：
 
-## 近期方向
+- 每步从多个候选动作中选一个；
+- 避免明显重复和 no-op；
+- 记录为什么选择这个动作；
+- 能从 graph 中看出哪些动作已尝试；
+- 保持 PDDL/SafeSym 可消费；
+- 保持各模块低耦合。
 
-### P0：构建有边界的 OpenMobile/SEE 风格探索 V1
+### 设计取向
 
-近期实现方向加入 OpenMobile/SEE 风格的探索 V1。graph 仍然是唯一持久化记忆。
-embedding 和 exploration index 只是用于重复状态识别和动作去重的查询辅助，
-不会进入 PDDL。第一目标是有边界的通用 Stagehand 探索闭环，不是完整自由探索覆盖率。
+我们可以贴近 OpenMobile/SEE 的思想，但不要过度复刻论文系统：
 
-这个 V1 要让当前 graph 真正具备记忆查询能力：
+- 用 graph 作为主记忆；
+- 用 embedding 做相似状态索引；
+- 用候选动作和 frontier 控制探索；
+- 用 profile facts 作为 planner-facing 状态；
+- 用失败/no-op edge 作为诊断和负样本；
+- 先做单站点短链路，再扩展多网站。
 
-- 判断当前状态是否像历史访问过的节点；
-- 总结同一或相似状态下已经尝试过的动作；
-- 引导 Stagehand 避免重复动作和 no-op 动作；
-- 保持 graph 产物可读，并且仍然能被 SafeSym 消费。
+### 短期优先级
 
-### P1：继续多网站 task-guided 实验
+1. 让 generic exploration 接入 profile facts 和 planning_transition。
+2. 把 Stagehand 从单个虚拟 milestone 推向候选动作模式，优先评估 `observe` 是否可用。
+3. 明确 embedding memory 的职责：相似检索和重复惩罚，不直接进入 PDDL。
+4. 给每轮 experiment report 增加 stop reason、prompt mode、memory hit、facts count。
+5. 再跑 SauceDemo、Practice Automated Testing、TestDino，比较 task-guided 和 bounded exploration 的差异。
 
-目标是验证图结构、profile facts 和 PDDL/SafeSym 链路是否能在不同网站上工作。
+## 实验管理规则
 
-每个网站只保留最新一次实验结果：
+每个网站只保留最新一次有效实验结果：
 
 ```text
 outputs/experiments/<site_name>/latest/
 ```
 
-每轮实验结束后记录：
+每轮实验报告至少记录：
 
-- 是否到达目标状态；
+- 命令和模型；
+- prompt mode；
+- stop reason；
+- 是否是 task-guided / generic / bounded exploration；
 - graph 节点/边数量；
-- projectable edges；
+- node merge/visit_count 情况；
+- embedding records 和 memory hit 情况；
 - final planning facts；
 - PDDL smoke 是否 ready；
 - SafeSym 是否可消费；
 - 异常和失败边；
-- 截图上可人工验证的状态变化。
-
-### P2：收紧电商 profile facts
-
-第一步拆分已经完成：
-
-```text
-checkout_user_info_complete
-payment_info_complete
-checkout_info_complete
-```
-
-下一步是在 Practice Automated Testing、TestDino 和至少一个新的 checkout-like 网站上验证。
-只有当多轮实验反复说明这三个 facts 不能表达关键 transition 时，再继续增加新 fact。
-
-### P3：设计 verifier 接口
-
-Verifier 可以在多网站实验之后引入，但现在设计时要给它留位置。
-它应该接收 candidate facts 和多源证据，输出 verified/uncertain/rejected。
-
-### P4：处理重复动作和 no-op transition
-
-先保留失败边作为实验诊断证据。
-等我们确认哪些 no-op 对 SafeSym 有价值后，再决定是否在图层过滤。
-
-### P5：探索覆盖率
-
-短期不做完整探索系统。探索 V1 是有边界的 memory-guided loop。
-后续方向仍然是 business-state coverage，而不是 raw click coverage。
+- 截图上可人工验证的状态变化；
+- 客观结论：结构链路、语义链路、探索能力分别是否成立。
 
 ## 当前判断
 
-项目现在处在一个不错但不成熟的阶段：
+项目完成得不错，但不能高估。
 
-- 已经有从真实网站到 SafeSym 的完整链路；
-- 已经能在不止一个网站上产生可消费产物；
-- 已经清理掉部分站点耦合和 PDDL 泄露问题；
-- 但状态理解仍然浅，profile facts 和 verifier 是最大风险；
-- Stagehand 能提供行动能力，但不能替代项目自己的状态建模。
+已经成立的是：
 
-换句话说：链路已经打通，接下来重点不是“让 agent 更会点网页”，而是让图结构和状态事实更可信、更可规划、更能被 SafeSym 稳定消费。
+- 真实网页到 graph 的工程链路；
+- embedding 配置和存储；
+- PDDL 投影；
+- SafeSym smoke；
+- 多网站 partial success 的实验管理方式。
+
+尚未成立的是：
+
+- 稳定的 profile fact state observation；
+- 真正的候选动作探索策略；
+- 基于 coverage/frontier 的终止条件；
+- embedding-based revisit 对探索行为的显著影响；
+- verifier-backed planner truth。
+
+下一阶段的核心不是“让模型更聪明”，而是把探索控制权逐步拿回到 Web-KOBE：
+
+```text
+Stagehand 负责看见和执行；
+Web-KOBE 负责记忆、选择、状态和规划语义；
+SafeSym 负责消费 PDDL 并验证安全约束。
+```
 
 ## 重要文件
 
@@ -361,11 +421,17 @@ src/ai_web_explorer/grounded_web/graph_manager.py
   WebKobeGraph、node、edge、planning_state、planning_transition。
 
 src/ai_web_explorer/grounded_web/explorer.py
-  主探索循环。
+  主探索循环，负责 before/after、edge、planning delta 和 memory context。
 
 src/ai_web_explorer/grounded_web/stagehand_backend.py
 src/ai_web_explorer/grounded_web/stagehand_prompt.py
-  Stagehand 后端和业务里程碑 prompt。
+  Stagehand 后端和 prompt。当前 generic exploration 仍使用 business_milestone 执行模式。
+
+src/ai_web_explorer/grounded_web/state_summary.py
+src/ai_web_explorer/grounded_web/state_embedding.py
+src/ai_web_explorer/grounded_web/embedding_provider.py
+src/ai_web_explorer/grounded_web/exploration_index.py
+  状态摘要、embedding provider、相似状态查询和探索记忆。
 
 src/ai_web_explorer/grounded_web/visual_delta.py
 src/ai_web_explorer/grounded_web/openai_visual_delta.py
@@ -390,8 +456,9 @@ docs/safesym-bridge.md
 新会话开始前，应先确认这些点：
 
 - 项目服务 SafeSym，不是通用 web-agent 产品；
-- 当前阶段是 task-guided partial graph，不是完整网站探索；
+- 当前阶段正在从 task-guided benchmark 转向 bounded exploration；
 - PDDL 只能消费 node identity 和 profile planning facts，不能消费 UI/schema facts；
-- Stagehand 是执行器和 trace 来源，不是状态真相；
-- 当前最大风险是 profile facts 粒度和 verifier 缺失；
-- 下一步优先做多网站实验和电商 profile facts 收紧。
+- Stagehand 是候选动作/执行/trace 来源，不是状态真相；
+- 最新 generic exploration 不是完整自由探索，只是单路径弱探索；
+- 当前最大风险是 generic path 没有 profile facts、探索仍靠虚拟 milestone、verifier 缺失；
+- 下一步优先做 bounded exploration V1 的最小闭环。
