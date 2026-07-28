@@ -43,10 +43,14 @@ class StagehandAutomationBackend:
         self.app_name = base_backend.app_name
         self.last_execution_error: str | None = None
         self.last_execution_metadata: dict[str, Any] = {}
+        self._exploration_context_prompt: str | None = None
         self._observed_actions_by_id: dict[str, StagehandObservedAction] = {}
         self._business_goals_by_id: dict[str, str] = {}
         self._business_metadata_by_id: dict[str, dict[str, Any]] = {}
         self._business_milestone_counter = 0
+
+    def set_exploration_context(self, prompt_block: str | None) -> None:
+        self._exploration_context_prompt = prompt_block
 
     async def observe_state(self) -> StateSnapshot:
         state = await self.base_backend.observe_state()
@@ -179,20 +183,23 @@ class StagehandAutomationBackend:
         goal: str,
         step_metadata: dict[str, Any],
     ) -> bool:
+        instruction = goal
+        if self._exploration_context_prompt:
+            instruction = "\n\n".join([goal, self._exploration_context_prompt])
         try:
             execute_instruction = getattr(self.provider, "execute_instruction", None)
             if execute_instruction is not None:
                 result = await execute_instruction(
-                    goal,
+                    instruction,
                     max_steps=self.business_milestone_max_steps,
                 )
             else:
                 act_instruction = getattr(self.provider, "act_instruction")
-                result = await act_instruction(goal)
+                result = await act_instruction(instruction)
         except Exception as error:
             self.last_execution_error = str(error)
             trace = StagehandStepTrace(
-                instruction=goal,
+                instruction=instruction,
                 observed_action=None,
                 act_result=None,
                 error=self.last_execution_error,
@@ -204,7 +211,7 @@ class StagehandAutomationBackend:
             self.last_execution_metadata.update(step_metadata)
             return False
         trace = StagehandStepTrace(
-            instruction=goal,
+            instruction=instruction,
             observed_action=None,
             act_result=result,
         )

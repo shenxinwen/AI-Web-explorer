@@ -25,6 +25,10 @@ from ai_web_explorer.grounded_web.llm_action_selector import (
 from ai_web_explorer.grounded_web.graph_manager import WebKobeGraphManager
 from ai_web_explorer.grounded_web.business_profile import BusinessFlowProfile
 from ai_web_explorer.grounded_web.business_profile import PlanningDelta
+from ai_web_explorer.grounded_web.exploration_index import (
+    ExplorationContext,
+    build_exploration_context,
+)
 from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.grounded_web.planning_fact_verifier import verify_planning_delta
 from ai_web_explorer.grounded_web.semantic_assistor import SemanticAssistor
@@ -38,6 +42,12 @@ from ai_web_explorer.grounded_web.typed_delta import (
     observed_deltas_from_typed,
     typed_deltas_from_facts,
 )
+from ai_web_explorer.grounded_web.state_embedding import (
+    EmbeddingProvider,
+    StateEmbeddingRecord,
+    find_best_state_match,
+)
+from ai_web_explorer.grounded_web.state_summary import build_state_summary
 from ai_web_explorer.grounded_web.visual_delta import (
     VisualDeltaProvider,
     VisualDeltaRequest,
@@ -187,6 +197,9 @@ class WebKobeExplorer:
         capture_screenshots: bool = False,
         visual_delta_provider: VisualDeltaProvider | None = None,
         semantic_naming_provider: SemanticNamingProvider | None = None,
+        state_embedding_provider: EmbeddingProvider | None = None,
+        state_embedding_records: list[StateEmbeddingRecord] | None = None,
+        enable_exploration_memory: bool = False,
     ):
         self.adapter = adapter
         self.semantic_assistor = semantic_assistor
@@ -196,6 +209,9 @@ class WebKobeExplorer:
         self.capture_screenshots = capture_screenshots
         self.visual_delta_provider = visual_delta_provider
         self.semantic_naming_provider = semantic_naming_provider
+        self.state_embedding_provider = state_embedding_provider
+        self.state_embedding_records = list(state_embedding_records or [])
+        self.enable_exploration_memory = enable_exploration_memory
         self.selection_traces: list[dict] = []
         self.manager = WebKobeGraphManager(app=adapter.app_name)
         self._start_node_id: str | None = None
@@ -212,8 +228,20 @@ class WebKobeExplorer:
         if self._start_node_id is None:
             self._start_node_id = source_id
         source_interactables = self.manager.interactables_for_node(source_id)
+        exploration_context = self._exploration_context_for_source(
+            before=before,
+            source_id=source_id,
+            source_interactables=source_interactables,
+        )
+        set_context = getattr(self.adapter, "set_exploration_context", None)
+        if set_context is not None:
+            set_context(exploration_context.to_prompt_block())
 
-        selected = self._select_action(before, source_interactables)
+        selected = self._select_action(
+            before,
+            source_interactables,
+            exploration_context=exploration_context,
+        )
         if selected is None:
             return self.manager.to_graph(start_node_id=self._start_node_id)
 
@@ -320,6 +348,12 @@ class WebKobeExplorer:
                         ),
                         provider=self.semantic_naming_provider,
                     )
+        self._record_target_embedding(
+            target_id=target_id,
+            after=after,
+            after_interactables=after_interactables,
+            visual_summary=execution_metadata.get("visual_change_summary"),
+        )
         planning_delta = _merge_planning_deltas(
             structured_planning_delta,
             visual_planning_delta,
@@ -430,10 +464,77 @@ class WebKobeExplorer:
             return "failed_execution"
         return "no_observed_change"
 
+    def _exploration_context_for_source(
+        self,
+        *,
+        before: StateSnapshot,
+        source_id: str,
+        source_interactables: list[dict[str, Any]],
+    ) -> ExplorationContext:
+        graph_before_action = self.manager.to_graph(start_node_id=self._start_node_id)
+        nodes_by_id = {node.node_id: node for node in graph_before_action.nodes}
+        source_node = nodes_by_id.get(source_id)
+        active_facts = (
+            list(source_node.planning_state.active_facts)
+            if source_node is not None and source_node.planning_state is not None
+            else []
+        )
+        source_summary = build_state_summary(
+            snapshot=before,
+            interactables=source_interactables,
+            active_planning_facts=active_facts,
+        )
+        state_match = None
+        if self.enable_exploration_memory and self.state_embedding_provider is not None:
+            state_match = find_best_state_match(
+                source_summary,
+                self.state_embedding_records,
+                embedding_provider=self.state_embedding_provider,
+            )
+        return build_exploration_context(
+            graph_before_action,
+            current_node_id=source_id,
+            state_match=state_match,
+        )
+
+    def _record_target_embedding(
+        self,
+        *,
+        target_id: str,
+        after: StateSnapshot,
+        after_interactables: list[dict[str, Any]],
+        visual_summary: str | None,
+    ) -> None:
+        if not self.enable_exploration_memory or self.state_embedding_provider is None:
+            return
+        target_summary = build_state_summary(
+            snapshot=after,
+            interactables=after_interactables,
+            active_planning_facts=[],
+            visual_summary=visual_summary,
+        )
+        target_embedding = self.state_embedding_provider(target_summary.text)
+        self.state_embedding_records = [
+            record
+            for record in self.state_embedding_records
+            if record.node_id != target_id
+        ]
+        self.state_embedding_records.append(
+            StateEmbeddingRecord(
+                node_id=target_id,
+                summary_text=target_summary.text,
+                embedding=list(target_embedding),
+                planning_facts=target_summary.planning_facts,
+                context_markers=target_summary.context_markers,
+            )
+        )
+
     def _select_action(
         self,
         state,
         interactables: list[dict],
+        *,
+        exploration_context: ExplorationContext,
     ) -> BrowserAction | None:
         if self.action_selector is None:
             return _first_unexplored_action(interactables)
@@ -451,6 +552,11 @@ class WebKobeExplorer:
                 goal=self.goal,
                 state=state,
                 candidate_actions=candidate_actions,
+                exploration_context={
+                    "prompt_block": exploration_context.to_prompt_block(),
+                    "avoid_action_ids": list(exploration_context.avoid_action_ids),
+                    "tried_action_ids": list(exploration_context.tried_action_ids),
+                },
             )
         )
         self.selection_traces.append(result.trace.to_dict())

@@ -114,3 +114,32 @@ def test_select_action_with_llm_returns_no_candidates_failure():
     assert result.selected_action is None
     assert result.trace.status == "failed"
     assert result.trace.error_type == "no_candidates"
+
+
+def test_select_action_prompt_includes_exploration_context():
+    prompts = []
+
+    def provider(prompt: str) -> str:
+        prompts.append(prompt)
+        return '{"selected_action_id":"open_search"}'
+
+    request = LlmActionSelectionRequest(
+        goal="Explore useful website functionality.",
+        state=StateSnapshot("home", "https://shop.test/", "Home", {}),
+        candidate_actions=[
+            BrowserAction("click", "#search", "open_search", description="Open search")
+        ],
+        exploration_context={
+            "prompt_block": "Avoid repeating actions: theme_toggle",
+            "avoid_action_ids": ["theme_toggle"],
+        },
+    )
+
+    result = select_action_with_llm(request, provider=provider)
+
+    assert result.selected_action.semantic_id == "open_search"
+    assert "Avoid repeating actions: theme_toggle" in prompts[0]
+    assert result.trace.exploration_context == {
+        "prompt_block": "Avoid repeating actions: theme_toggle",
+        "avoid_action_ids": ["theme_toggle"],
+    }

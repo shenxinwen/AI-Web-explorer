@@ -15,6 +15,7 @@ class LlmActionSelectionRequest:
     goal: str
     state: StateSnapshot
     candidate_actions: list[BrowserAction]
+    exploration_context: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,7 @@ class LlmActionSelectionTrace:
     raw_response: str
     llm_response: dict[str, Any] | None
     status: str
+    exploration_context: dict[str, Any] | None = None
     error_type: str | None = None
     error_message: str | None = None
 
@@ -40,6 +42,11 @@ class LlmActionSelectionTrace:
                 dict(self.llm_response) if self.llm_response is not None else None
             ),
             "status": self.status,
+            "exploration_context": (
+                dict(self.exploration_context)
+                if self.exploration_context is not None
+                else None
+            ),
             "error_type": self.error_type,
             "error_message": self.error_message,
         }
@@ -79,6 +86,7 @@ def _prompt_for_request(request: LlmActionSelectionRequest) -> str:
         ),
         "goal": request.goal,
         "current_state": _state_payload(request.state),
+        "exploration_context": request.exploration_context or {},
         "candidate_actions": [
             _action_payload(action) for action in request.candidate_actions
         ],
@@ -106,6 +114,7 @@ def _trace(
         raw_response=raw_response,
         llm_response=llm_response,
         status=status,
+        exploration_context=request.exploration_context,
         error_type=error_type,
         error_message=error_message,
     )

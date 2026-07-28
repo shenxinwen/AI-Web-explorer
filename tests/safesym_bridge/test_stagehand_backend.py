@@ -303,3 +303,23 @@ async def test_stagehand_backend_business_milestone_uses_step_specific_goal():
     assert provider.executed_instructions == [("Configured step 2.", 5)]
     assert backend.last_execution_metadata["experiment_step_id"] == "step_2"
     assert backend.last_execution_metadata["expected_added_facts"] == ["fact_2"]
+
+
+@pytest.mark.anyio
+async def test_stagehand_business_milestone_appends_exploration_context():
+    provider = FakeStagehandProvider()
+    backend = StagehandAutomationBackend(
+        base_backend=FakeBaseBackend(),
+        provider=provider,
+        goal="Explore one useful action.",
+        execution_mode="business_milestone",
+    )
+    state = await backend.observe_state()
+    actions = await backend.list_interactables(state)
+
+    backend.set_exploration_context("Avoid repeating actions: theme_toggle")
+    success = await backend.execute(actions[0])
+
+    assert success is True
+    assert "Explore one useful action." in provider.executed_instructions[0][0]
+    assert "Avoid repeating actions: theme_toggle" in provider.executed_instructions[0][0]

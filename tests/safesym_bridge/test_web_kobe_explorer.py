@@ -11,6 +11,7 @@ from ai_web_explorer.grounded_web.llm_action_selector import (
     LlmActionSelectionResult,
     LlmActionSelectionTrace,
 )
+from ai_web_explorer.grounded_web.state_embedding import StateEmbeddingRecord
 from ai_web_explorer.grounded_web.state_facts import AbstractStateFact
 from ai_web_explorer.grounded_web.structure import StructureEvidence
 
@@ -738,3 +739,41 @@ async def test_explore_one_step_applies_transition_naming_from_visual_summary():
         "source": "llm_transition_naming",
         "confidence": 0.9,
     }
+
+
+class RevisitMemoryAdapter(RepeatedStateAdapter):
+    def __init__(self):
+        super().__init__()
+        self.exploration_contexts = []
+
+    def set_exploration_context(self, prompt_block):
+        self.exploration_contexts.append(prompt_block)
+
+
+@pytest.mark.anyio
+async def test_explore_one_step_builds_memory_context_for_revisited_state():
+    adapter = RevisitMemoryAdapter()
+
+    def embed(text):
+        return [1.0, 0.0, 0.0]
+
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        enable_exploration_memory=True,
+        state_embedding_provider=embed,
+        state_embedding_records=[
+            StateEmbeddingRecord(
+                node_id="listing__existing",
+                summary_text="listing state",
+                embedding=[1.0, 0.0, 0.0],
+            )
+        ],
+    )
+
+    await explorer.explore_one_step()
+    await explorer.explore_one_step()
+
+    assert adapter.exploration_contexts
+    assert any("Exploration memory:" in item for item in adapter.exploration_contexts)
+    assert explorer.state_embedding_records
