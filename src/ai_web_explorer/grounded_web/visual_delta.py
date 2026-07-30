@@ -67,8 +67,11 @@ def _prompt_for_request(request: VisualDeltaRequest) -> str:
             "action. Return JSON only. Prefer candidate planning facts from "
             "the provided profile when they fit, but you may propose new "
             "candidate facts for meaningful business states not covered by "
-            "the profile. Do not mark anything verified."
+            "the profile. Do not mark anything verified. The "
+            "business_relevance field must be exactly one enum value from "
+            "business_relevance_enum, not an explanation sentence."
         ),
+        "business_relevance_enum": ["core", "supporting", "low_value", "unknown"],
         "goal": request.goal,
         "action": request.action.to_dict(),
         "profile": request.profile.to_dict(),
@@ -170,6 +173,45 @@ def _business_relevance(value: Any) -> str:
     relevance = str(value or "unknown").strip().lower()
     if relevance in {"core", "supporting", "low_value", "unknown"}:
         return relevance
+    if "low_value" in relevance or "low value" in relevance:
+        return "low_value"
+    if any(
+        token in relevance
+        for token in (
+            "minor",
+            "cosmetic",
+            "sort",
+            "filter",
+            "preference",
+            "does not affect",
+        )
+    ):
+        return "low_value"
+    if any(
+        token in relevance
+        for token in (
+            "supporting",
+            "auxiliary",
+            "navigation",
+            "helps",
+            "assist",
+        )
+    ):
+        return "supporting"
+    if any(
+        token in relevance
+        for token in (
+            "core",
+            "key",
+            "primary",
+            "purchase",
+            "checkout",
+            "cart",
+            "product selection",
+            "order",
+        )
+    ):
+        return "core"
     return "unknown"
 
 

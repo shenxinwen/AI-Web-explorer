@@ -384,6 +384,14 @@ def main(argv: list[str] | None = None) -> int:
     stagehand_explore_parser.add_argument("--steps", type=int, default=8)
     stagehand_explore_parser.add_argument("--screenshot-dir", type=Path, default=None)
     stagehand_explore_parser.add_argument(
+        "--clean-output-dir",
+        action="store_true",
+        help=(
+            "Delete existing files in the shared output directory before the "
+            "run. Intended for per-site latest experiment directories."
+        ),
+    )
+    stagehand_explore_parser.add_argument(
         "--embedding-path",
         type=Path,
         default=Path("outputs/latest/state_embeddings.json"),
@@ -393,7 +401,9 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
     )
     stagehand_explore_parser.add_argument("--embedding-model", default=None)
-    stagehand_explore_parser.add_argument("--embedding-dimension", type=int, default=None)
+    stagehand_explore_parser.add_argument(
+        "--embedding-dimension", type=int, default=None
+    )
     stagehand_explore_parser.add_argument("--site-purpose", default=None)
     stagehand_explore_parser.add_argument(
         "--business-profile",
@@ -508,6 +518,15 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
         elif args.mode == "web-kobe-stagehand-explore":
+            if args.clean_output_dir:
+                _clean_output_dir_for(
+                    [
+                        args.output,
+                        args.stagehand_trace,
+                        args.screenshot_dir,
+                        args.embedding_path,
+                    ]
+                )
             output_path = asyncio.run(
                 run_stagehand_exploration(
                     args.output,

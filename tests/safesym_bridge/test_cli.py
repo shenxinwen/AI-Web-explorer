@@ -861,3 +861,69 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
             "observed_action",
         )
     ]
+
+
+def test_main_web_kobe_stagehand_explore_cleans_latest_output_dir(
+    monkeypatch,
+    tmp_path,
+):
+    output_dir = tmp_path / "latest"
+    output_dir.mkdir()
+    stale_file = output_dir / "stale.json"
+    stale_file.write_text("old", encoding="utf-8")
+    stale_screenshot_dir = output_dir / "screenshots"
+    stale_screenshot_dir.mkdir()
+    (stale_screenshot_dir / "after_0009.png").write_text("old", encoding="utf-8")
+    output = output_dir / "graph.json"
+    trace = output_dir / "stagehand_trace.json"
+    embeddings = output_dir / "state_embeddings.json"
+    calls = []
+
+    async def fake_run_stagehand_exploration(
+        output_path,
+        *,
+        start_url,
+        app_name,
+        stagehand_trace_path=None,
+        screenshot_dir=None,
+        embedding_path=None,
+        **kwargs,
+    ):
+        calls.append(
+            (output_path, stagehand_trace_path, screenshot_dir, embedding_path)
+        )
+        assert not stale_file.exists()
+        assert not stale_screenshot_dir.exists()
+        output_path.write_text("{}", encoding="utf-8")
+        stagehand_trace_path.write_text("[]", encoding="utf-8")
+        embedding_path.write_text('{"records":[]}', encoding="utf-8")
+        return output_path
+
+    monkeypatch.setattr(
+        cli,
+        "run_stagehand_exploration",
+        fake_run_stagehand_exploration,
+        raising=False,
+    )
+
+    exit_code = main(
+        [
+            "web-kobe-stagehand-explore",
+            "--url",
+            "https://shop.test/",
+            "--app-name",
+            "demo",
+            "--output",
+            str(output),
+            "--stagehand-trace",
+            str(trace),
+            "--screenshot-dir",
+            str(stale_screenshot_dir),
+            "--embedding-path",
+            str(embeddings),
+            "--clean-output-dir",
+        ]
+    )
+
+    assert exit_code == 0
+    assert calls == [(output, trace, stale_screenshot_dir, embeddings)]

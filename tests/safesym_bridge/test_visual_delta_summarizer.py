@@ -88,6 +88,34 @@ def test_summarize_visual_delta_maps_business_transition_fields():
     assert result.business_transition.confidence == 0.9
 
 
+def test_summarize_visual_delta_normalizes_explanatory_business_relevance():
+    request = VisualDeltaRequest(
+        goal="Open product details.",
+        action=BrowserAction("business_intent", None, "view_product_details"),
+        profile=ecommerce_checkout_profile(),
+        before_screenshot_path="before.png",
+        after_screenshot_path="after.png",
+    )
+
+    def provider(prompt, *, before_screenshot_path, after_screenshot_path):
+        assert "business_relevance_enum" in prompt
+        return (
+            '{"visible_change_summary":"A product detail modal opened.",'
+            '"business_action_name":"view_product_details",'
+            '"business_relevance":"This is a key product selection step.",'
+            '"meaningful_change":true,'
+            '"candidate_added_facts":["product_details_visible"],'
+            '"candidate_removed_facts":[],'
+            '"evidence":["product detail modal is visible"],'
+            '"confidence":0.8}'
+        )
+
+    result = summarize_visual_delta(request, provider=provider)
+
+    assert result.business_transition is not None
+    assert result.business_transition.relevance == "core"
+
+
 def test_summarize_visual_delta_records_generated_facts_without_failing():
     request = VisualDeltaRequest(
         goal="Open product details.",
