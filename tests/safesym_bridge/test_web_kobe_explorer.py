@@ -714,6 +714,91 @@ async def test_explore_one_step_uses_embedding_match_as_current_business_node(
 
 
 @pytest.mark.anyio
+async def test_explore_one_step_uses_near_threshold_embedding_match_as_source(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "ai_web_explorer.grounded_web.explorer.OBSERVATION_WAIT_TIMEOUT_MS",
+        0,
+    )
+    adapter = SameUrlBusinessRevisitAdapter()
+
+    def visual_provider(prompt, *, before_screenshot_path, after_screenshot_path):
+        return (
+            '{"visible_change_summary":"The cart badge now shows one item.",'
+            '"business_action_name":"add_to_cart",'
+            '"business_relevance":"core",'
+            '"meaningful_change":true,'
+            '"candidate_added_facts":["cart_has_items"],'
+            '"candidate_removed_facts":[],"evidence":["cart badge shows 1"],'
+            '"confidence":0.85}'
+        )
+
+    def embed(text):
+        if "cart badge now shows one item" in text:
+            return [1.0, 0.0]
+        if "Open checkout" in text:
+            return [0.89, 0.455961]
+        return [0.0, 1.0]
+
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        business_profile=ecommerce_checkout_profile(),
+        capture_screenshots=True,
+        visual_delta_provider=visual_provider,
+        enable_exploration_memory=True,
+        state_embedding_provider=embed,
+    )
+
+    first_graph = await explorer.explore_one_step()
+    first_target_id = first_graph.edges[0].target_node_id
+    second_graph = await explorer.explore_one_step()
+
+    assert second_graph.edges[1].source_node_id == first_target_id
+
+
+@pytest.mark.anyio
+async def test_explore_one_step_uses_one_embedding_match_for_source_and_memory():
+    class ContextAdapter(ExhaustedNodeBackAdapter):
+        def __init__(self):
+            super().__init__()
+            self.exploration_contexts = []
+
+        def set_exploration_context(self, prompt_block):
+            self.exploration_contexts.append(prompt_block)
+
+    adapter = ContextAdapter()
+    calls = []
+
+    def embed(text):
+        calls.append(text)
+        if len(calls) == 1:
+            return [0.0, 1.0]
+        return [1.0, 0.0]
+
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        enable_exploration_memory=True,
+        state_embedding_provider=embed,
+        state_embedding_records=[
+            StateEmbeddingRecord(
+                node_id="listing__existing",
+                summary_text="existing listing",
+                embedding=[1.0, 0.0],
+            )
+        ],
+    )
+
+    await explorer.explore_one_step()
+
+    assert len(calls) == 1
+    assert adapter.exploration_contexts
+    assert "This state appears to revisit node" not in adapter.exploration_contexts[0]
+
+
+@pytest.mark.anyio
 async def test_explore_one_step_records_target_embedding_planning_facts(monkeypatch):
     monkeypatch.setattr(
         "ai_web_explorer.grounded_web.explorer.OBSERVATION_WAIT_TIMEOUT_MS",

@@ -53,6 +53,7 @@ from ai_web_explorer.grounded_web.typed_delta import (
 )
 from ai_web_explorer.grounded_web.state_embedding import (
     EmbeddingProvider,
+    StateMatch,
     StateEmbeddingRecord,
     find_best_state_match,
 )
@@ -66,6 +67,7 @@ from ai_web_explorer.grounded_web.visual_delta import (
 
 OBSERVATION_WAIT_TIMEOUT_MS = 1200
 OBSERVATION_WAIT_INTERVAL_MS = 200
+CURRENT_NODE_MATCH_THRESHOLD = 0.88
 
 
 def _node_from_draft(draft) -> WebKobeNode:
@@ -280,10 +282,13 @@ class WebKobeExplorer:
         source_id = self.manager.identify_or_add_node(_node_from_draft(before_draft))
         if self._start_node_id is None:
             self._start_node_id = source_id
-        source_id = self._resolve_current_source_id(
-            default_source_id=source_id,
+        source_match = self._match_current_state(
             before=before,
             before_interactables=before_interactables,
+        )
+        source_id, accepted_source_match = self._resolve_current_source_id(
+            default_source_id=source_id,
+            source_match=source_match,
         )
         if source_id != before_draft.node_id:
             self._refresh_matched_source_node(
@@ -302,6 +307,7 @@ class WebKobeExplorer:
             before=before,
             source_id=source_id,
             source_interactables=source_interactables,
+            state_match=accepted_source_match,
         )
         set_context = getattr(self.adapter, "set_exploration_context", None)
         if set_context is not None:
@@ -365,6 +371,14 @@ class WebKobeExplorer:
             getattr(self.adapter, "last_execution_metadata", {}) or {}
         )
         execution_metadata["backend_reported_success"] = execution_success
+        if source_match is not None:
+            execution_metadata["source_state_match"] = {
+                "status": source_match.status,
+                "node_id": source_match.node_id,
+                "score": source_match.score,
+                "blocked_reason": source_match.blocked_reason,
+                "accepted": accepted_source_match is not None,
+            }
         if before_screenshot_path is not None:
             execution_metadata["before_screenshot_path"] = before_screenshot_path
         if after_screenshot_path is not None:
@@ -604,6 +618,7 @@ class WebKobeExplorer:
         before: StateSnapshot,
         source_id: str,
         source_interactables: list[dict[str, Any]],
+        state_match: StateMatch | None,
     ) -> ExplorationContext:
         graph_before_action = self.manager.to_graph(start_node_id=self._start_node_id)
         nodes_by_id = {node.node_id: node for node in graph_before_action.nodes}
@@ -613,54 +628,51 @@ class WebKobeExplorer:
             if source_node is not None and source_node.planning_state is not None
             else []
         )
-        source_summary = build_state_summary(
-            snapshot=before,
-            interactables=source_interactables,
-            active_planning_facts=active_facts,
-        )
-        state_match = None
-        if self.enable_exploration_memory and self.state_embedding_provider is not None:
-            state_match = find_best_state_match(
-                source_summary,
-                self.state_embedding_records,
-                embedding_provider=self.state_embedding_provider,
-            )
         return build_exploration_context(
             graph_before_action,
             current_node_id=source_id,
             state_match=state_match,
         )
 
-    def _resolve_current_source_id(
+    def _match_current_state(
         self,
         *,
-        default_source_id: str,
         before: StateSnapshot,
         before_interactables: list[dict[str, Any]],
-    ) -> str:
+    ) -> StateMatch | None:
         if (
             not self.enable_exploration_memory
             or self.state_embedding_provider is None
             or not self.state_embedding_records
         ):
-            return default_source_id
+            return None
         current_summary = build_state_summary(
             snapshot=before,
             interactables=before_interactables,
             active_planning_facts=[],
         )
-        match = find_best_state_match(
+        return find_best_state_match(
             current_summary,
             self.state_embedding_records,
             embedding_provider=self.state_embedding_provider,
+            same_threshold=CURRENT_NODE_MATCH_THRESHOLD,
         )
-        if match.status == "same" and match.node_id is not None:
+
+    def _resolve_current_source_id(
+        self,
+        *,
+        default_source_id: str,
+        source_match: StateMatch | None,
+    ) -> tuple[str, StateMatch | None]:
+        if source_match is None:
+            return default_source_id, None
+        if source_match.status == "same" and source_match.node_id is not None:
             try:
-                self.manager.node_for_id(match.node_id)
+                self.manager.node_for_id(source_match.node_id)
             except KeyError:
-                return default_source_id
-            return match.node_id
-        return default_source_id
+                return default_source_id, None
+            return source_match.node_id, source_match
+        return default_source_id, None
 
     def _refresh_matched_source_node(
         self,
