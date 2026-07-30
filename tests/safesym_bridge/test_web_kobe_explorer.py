@@ -424,6 +424,49 @@ class SamePageBusinessChangeAdapter(ScreenshotAdapter):
         ]
 
 
+class SameUrlBusinessRevisitAdapter(ScreenshotAdapter):
+    def __init__(self):
+        super().__init__()
+        self.states = [
+            StateSnapshot(
+                page_id="shopping",
+                url="https://example.test/shopping",
+                title="Shopping",
+                signature={"url_path": "/shopping"},
+            ),
+            StateSnapshot(
+                page_id="shopping",
+                url="https://example.test/shopping",
+                title="Shopping",
+                signature={"url_path": "/shopping"},
+            ),
+        ]
+
+    async def observe_state(self):
+        return self.states[min(len(self.executed), 1)]
+
+    async def list_interactables(self, state):
+        if self.executed:
+            return [
+                {
+                    "semantic_id": "open_checkout",
+                    "description": "Open checkout",
+                    "locator": "#checkout",
+                    "action_kind": "click",
+                    "explored": False,
+                }
+            ]
+        return [
+            {
+                "semantic_id": "add_to_cart",
+                "description": "Add to cart",
+                "locator": "#add",
+                "action_kind": "click",
+                "explored": False,
+            }
+        ]
+
+
 @pytest.mark.anyio
 async def test_explore_one_step_records_optional_before_after_screenshots():
     adapter = ScreenshotAdapter()
@@ -623,6 +666,91 @@ async def test_explore_one_step_materializes_same_page_business_change(monkeypat
     assert target.node_id.startswith("listing__business_")
     assert target.planning_state is not None
     assert target.planning_state.active_facts == ["cart_has_items"]
+
+
+@pytest.mark.anyio
+async def test_explore_one_step_uses_embedding_match_as_current_business_node(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "ai_web_explorer.grounded_web.explorer.OBSERVATION_WAIT_TIMEOUT_MS",
+        0,
+    )
+    adapter = SameUrlBusinessRevisitAdapter()
+
+    def visual_provider(prompt, *, before_screenshot_path, after_screenshot_path):
+        return (
+            '{"visible_change_summary":"The cart badge now shows one item.",'
+            '"business_action_name":"add_to_cart",'
+            '"business_relevance":"core",'
+            '"meaningful_change":true,'
+            '"candidate_added_facts":["cart_has_items"],'
+            '"candidate_removed_facts":[],"evidence":["cart badge shows 1"],'
+            '"confidence":0.85}'
+        )
+
+    def embed(text):
+        if "Open checkout" in text or "cart badge now shows one item" in text:
+            return [1.0, 0.0]
+        return [0.0, 1.0]
+
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        business_profile=ecommerce_checkout_profile(),
+        capture_screenshots=True,
+        visual_delta_provider=visual_provider,
+        enable_exploration_memory=True,
+        state_embedding_provider=embed,
+    )
+
+    first_graph = await explorer.explore_one_step()
+    first_target_id = first_graph.edges[0].target_node_id
+    second_graph = await explorer.explore_one_step()
+
+    assert second_graph.edges[1].source_node_id == first_target_id
+    assert second_graph.edges[1].planning_transition is not None
+    assert second_graph.edges[1].planning_transition.pre_facts == ["cart_has_items"]
+
+
+@pytest.mark.anyio
+async def test_explore_one_step_records_target_embedding_planning_facts(monkeypatch):
+    monkeypatch.setattr(
+        "ai_web_explorer.grounded_web.explorer.OBSERVATION_WAIT_TIMEOUT_MS",
+        0,
+    )
+    adapter = SamePageBusinessChangeAdapter()
+
+    def visual_provider(prompt, *, before_screenshot_path, after_screenshot_path):
+        return (
+            '{"visible_change_summary":"The cart badge now shows one item.",'
+            '"business_action_name":"add_item_to_cart",'
+            '"business_relevance":"core",'
+            '"meaningful_change":true,'
+            '"candidate_added_facts":["cart_has_items"],'
+            '"candidate_removed_facts":[],"evidence":["cart badge shows 1"],'
+            '"confidence":0.85}'
+        )
+
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        business_profile=ecommerce_checkout_profile(),
+        capture_screenshots=True,
+        visual_delta_provider=visual_provider,
+        enable_exploration_memory=True,
+        state_embedding_provider=lambda text: [1.0, 0.0],
+    )
+
+    graph = await explorer.explore_one_step()
+
+    target_id = graph.edges[0].target_node_id
+    target_record = next(
+        record
+        for record in explorer.state_embedding_records
+        if record.node_id == target_id
+    )
+    assert target_record.planning_facts == ("cart_has_items",)
 
 
 @pytest.mark.anyio

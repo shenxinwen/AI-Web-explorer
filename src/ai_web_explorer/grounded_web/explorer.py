@@ -280,6 +280,16 @@ class WebKobeExplorer:
         source_id = self.manager.identify_or_add_node(_node_from_draft(before_draft))
         if self._start_node_id is None:
             self._start_node_id = source_id
+        source_id = self._resolve_current_source_id(
+            default_source_id=source_id,
+            before=before,
+            before_interactables=before_interactables,
+        )
+        if source_id != before_draft.node_id:
+            self._refresh_matched_source_node(
+                source_id=source_id,
+                before_draft=before_draft,
+            )
         before_screenshot_path = await self._capture_screenshot("before")
         if before_screenshot_path is not None:
             self._record_source_business_affordances(
@@ -442,6 +452,11 @@ class WebKobeExplorer:
             after=after,
             after_interactables=after_interactables,
             visual_summary=execution_metadata.get("visual_change_summary"),
+            active_planning_facts=(
+                planning_transition.post_facts
+                if planning_transition is not None
+                else []
+            ),
         )
         edge = WebKobeEdge(
             source_node_id=source_id,
@@ -616,6 +631,59 @@ class WebKobeExplorer:
             state_match=state_match,
         )
 
+    def _resolve_current_source_id(
+        self,
+        *,
+        default_source_id: str,
+        before: StateSnapshot,
+        before_interactables: list[dict[str, Any]],
+    ) -> str:
+        if (
+            not self.enable_exploration_memory
+            or self.state_embedding_provider is None
+            or not self.state_embedding_records
+        ):
+            return default_source_id
+        current_summary = build_state_summary(
+            snapshot=before,
+            interactables=before_interactables,
+            active_planning_facts=[],
+        )
+        match = find_best_state_match(
+            current_summary,
+            self.state_embedding_records,
+            embedding_provider=self.state_embedding_provider,
+        )
+        if match.status == "same" and match.node_id is not None:
+            try:
+                self.manager.node_for_id(match.node_id)
+            except KeyError:
+                return default_source_id
+            return match.node_id
+        return default_source_id
+
+    def _refresh_matched_source_node(
+        self,
+        *,
+        source_id: str,
+        before_draft,
+    ) -> None:
+        existing = self.manager.node_for_id(source_id)
+        self.manager.identify_or_add_node(
+            replace(
+                existing,
+                page_frame=before_draft.page_frame,
+                state_schema=before_draft.state_schema,
+                last_state_snapshot=before_draft.last_state_snapshot,
+                interactable_elements=before_draft.interactable_elements,
+                reference_observation=ReferenceObservation(
+                    url=before_draft.page_frame.url,
+                    title=before_draft.page_frame.title,
+                ),
+                evidence=before_draft.evidence,
+            )
+        )
+
     def _record_target_embedding(
         self,
         *,
@@ -623,13 +691,14 @@ class WebKobeExplorer:
         after: StateSnapshot,
         after_interactables: list[dict[str, Any]],
         visual_summary: str | None,
+        active_planning_facts: list[str],
     ) -> None:
         if not self.enable_exploration_memory or self.state_embedding_provider is None:
             return
         target_summary = build_state_summary(
             snapshot=after,
             interactables=after_interactables,
-            active_planning_facts=[],
+            active_planning_facts=active_planning_facts,
             visual_summary=visual_summary,
         )
         target_embedding = self.state_embedding_provider(target_summary.text)
