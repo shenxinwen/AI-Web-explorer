@@ -57,6 +57,29 @@ class StagehandAutomationBackend:
             self.last_state_facts = getattr(self.base_backend, "last_state_facts")
         return state
 
+    async def go_back(self) -> bool:
+        go_back = getattr(self.base_backend, "go_back", None)
+        if go_back is None:
+            self.last_execution_error = "browser_back_unavailable"
+            self.last_execution_metadata = {
+                "action_source": "stagehand",
+                "stagehand_execution_mode": "browser_back",
+                "stagehand_error": self.last_execution_error,
+            }
+            return False
+        success = await go_back()
+        self.last_execution_error = getattr(
+            self.base_backend,
+            "last_execution_error",
+            None,
+        )
+        self.last_execution_metadata = {
+            "action_source": "stagehand",
+            "stagehand_execution_mode": "browser_back",
+            "backend_reported_success": success,
+        }
+        return success
+
     async def list_interactables(
         self,
         state: StateSnapshot,

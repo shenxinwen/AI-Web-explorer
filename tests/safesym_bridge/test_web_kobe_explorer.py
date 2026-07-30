@@ -98,6 +98,33 @@ class RepeatedStateAdapter:
         return True
 
 
+class ExhaustedNodeBackAdapter:
+    app_name = "fake"
+
+    def __init__(self):
+        self.back_calls = 0
+        self.executed = []
+
+    async def observe_state(self):
+        return StateSnapshot(
+            page_id="listing",
+            url="https://example.test/listing",
+            title="Listing",
+            signature={"url_path": "/listing"},
+        )
+
+    async def list_interactables(self, state):
+        return []
+
+    async def execute(self, action: BrowserAction):
+        self.executed.append(action)
+        return True
+
+    async def go_back(self):
+        self.back_calls += 1
+        return True
+
+
 @pytest.mark.anyio
 async def test_explore_one_step_records_self_loop_delta():
     explorer = WebKobeExplorer(
@@ -204,6 +231,23 @@ async def test_explore_one_step_skips_previously_explored_self_loop_action():
         "first_action",
         "second_action",
     ]
+
+
+@pytest.mark.anyio
+async def test_explore_one_step_goes_back_when_current_node_has_no_available_action():
+    adapter = ExhaustedNodeBackAdapter()
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+    )
+
+    graph = await explorer.explore_one_step()
+
+    assert adapter.back_calls == 1
+    assert adapter.executed == []
+    assert graph.total_steps_completed == 0
+    assert graph.edges == []
+    assert len(graph.nodes) == 1
 
 
 class FailingDiagnosticAdapter(FakeAdapter):

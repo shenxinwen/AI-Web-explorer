@@ -295,6 +295,7 @@ class WebKobeExplorer:
             exploration_context=exploration_context,
         )
         if selected is None:
+            await self._try_backtrack()
             return self.manager.to_graph(start_node_id=self._start_node_id)
 
         if (
@@ -469,6 +470,12 @@ class WebKobeExplorer:
             locator=selected.locator,
         )
         return self.manager.to_graph(start_node_id=self._start_node_id)
+
+    async def _try_backtrack(self) -> bool:
+        go_back = getattr(self.adapter, "go_back", None)
+        if go_back is None:
+            return False
+        return await go_back()
 
     def _record_source_business_affordances(
         self,

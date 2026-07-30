@@ -99,6 +99,8 @@ class FakePage:
         self.waits = []
         self.load_state_waits = []
         self.screenshots = []
+        self.back_calls = 0
+        self.go_back_result = object()
 
     async def title(self):
         return "Fixture Shop"
@@ -119,6 +121,11 @@ class FakePage:
 
     async def wait_for_load_state(self, state, timeout=None):
         self.load_state_waits.append((state, timeout))
+
+    async def go_back(self, wait_until=None, timeout=None):
+        self.back_calls += 1
+        self.load_state_waits.append((wait_until, timeout))
+        return self.go_back_result
 
     async def screenshot(self, *, path):
         self.screenshots.append(path)
@@ -229,10 +236,6 @@ async def test_list_interactables_uses_dom_candidates(monkeypatch):
     ]
 
 
-
-
-
-
 @pytest.mark.anyio
 async def test_execute_click_fill_and_select_actions():
     page = FakePage()
@@ -284,6 +287,32 @@ async def test_execute_scrolls_target_and_waits_for_page_settle():
     assert page.load_state_waits == [("domcontentloaded", 1000)]
     assert page.waits == [100]
     assert adapter.last_execution_error is None
+
+
+@pytest.mark.anyio
+async def test_go_back_uses_browser_history_and_settles_page():
+    page = FakePage()
+    adapter = WebKobePlaywrightAdapter(page, page_id="fixture_shop")
+
+    result = await adapter.go_back()
+
+    assert result is True
+    assert page.back_calls == 1
+    assert page.load_state_waits == [("domcontentloaded", 1000)]
+    assert page.waits == [100]
+    assert adapter.last_execution_error is None
+
+
+@pytest.mark.anyio
+async def test_go_back_reports_unavailable_browser_history():
+    page = FakePage()
+    page.go_back_result = None
+    adapter = WebKobePlaywrightAdapter(page, page_id="fixture_shop")
+
+    result = await adapter.go_back()
+
+    assert result is False
+    assert adapter.last_execution_error == "browser_back_unavailable"
 
 
 @pytest.mark.anyio

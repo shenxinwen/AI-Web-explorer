@@ -19,6 +19,9 @@ def anyio_backend():
 class FakeBaseBackend:
     app_name = "saucedemo"
 
+    def __init__(self):
+        self.back_calls = 0
+
     async def observe_state(self):
         return StateSnapshot(
             page_id="login",
@@ -32,6 +35,10 @@ class FakeBaseBackend:
 
     async def execute(self, action):
         raise AssertionError("Stagehand wrapper must execute through provider")
+
+    async def go_back(self):
+        self.back_calls += 1
+        return True
 
 
 class ScreenshotBaseBackend(FakeBaseBackend):
@@ -193,6 +200,19 @@ async def test_stagehand_backend_delegates_screenshot_capture_to_base_backend():
 
     assert path == "outputs/before_0001.png"
     assert base.captured == ["before_0001"]
+
+
+@pytest.mark.anyio
+async def test_stagehand_backend_delegates_go_back_to_base_backend():
+    base = FakeBaseBackend()
+    backend = StagehandAutomationBackend(
+        base_backend=base,
+        provider=FakeStagehandProvider(),
+        goal="Explore shopping capabilities.",
+    )
+
+    assert await backend.go_back() is True
+    assert base.back_calls == 1
 
 
 @pytest.mark.anyio

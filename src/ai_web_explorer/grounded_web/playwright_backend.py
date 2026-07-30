@@ -170,6 +170,20 @@ class WebKobePlaywrightAdapter:
         except Exception as exc:
             return self._fail_execution(f"playwright_error:{type(exc).__name__}")
 
+    async def go_back(self) -> bool:
+        self.last_execution_error = None
+        try:
+            response = await self.page.go_back(
+                wait_until="domcontentloaded",
+                timeout=1000,
+            )
+            if response is None:
+                return self._fail_execution("browser_back_unavailable")
+            await self.page.wait_for_timeout(100)
+            return True
+        except Exception as exc:
+            return self._fail_execution(f"browser_back_error:{type(exc).__name__}")
+
     async def capture_screenshot(self, label: str) -> str | None:
         if self.screenshot_dir is None:
             return None
