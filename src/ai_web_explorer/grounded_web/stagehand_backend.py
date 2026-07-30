@@ -30,8 +30,7 @@ class StagehandAutomationBackend:
         ),
         business_milestone_max_steps: int = 5,
         goal_provider: Callable[[int], str] | None = None,
-        business_step_metadata_provider: Callable[[int], dict[str, Any]]
-        | None = None,
+        business_step_metadata_provider: Callable[[int], dict[str, Any]] | None = None,
     ) -> None:
         self.base_backend = base_backend
         self.provider = provider
@@ -142,12 +141,27 @@ class StagehandAutomationBackend:
             if isinstance(action, BrowserAction)
             else str(action.get("semantic_id", ""))
         )
+        action_kind = (
+            action.action_kind
+            if isinstance(action, BrowserAction)
+            else str(action.get("action_kind", ""))
+        )
         if self.execution_mode == "business_milestone" and semantic_id.startswith(
             "stagehand_business_milestone_"
         ):
             goal = self._business_goals_by_id.get(semantic_id, self.goal)
             metadata = self._business_metadata_by_id.get(semantic_id, {})
             return await self._execute_business_milestone(goal, metadata)
+        if action_kind == "business_intent":
+            instruction = (
+                action.description
+                if isinstance(action, BrowserAction)
+                else str(action.get("description") or semantic_id)
+            )
+            return await self._execute_business_intent(
+                instruction or semantic_id,
+                {"business_action_id": semantic_id},
+            )
 
         stagehand_action = self._observed_actions_by_id.get(semantic_id)
         if stagehand_action is None:
@@ -178,14 +192,37 @@ class StagehandAutomationBackend:
         self.last_execution_error = None if result.success else result.message
         return result.success
 
+    async def _execute_business_intent(
+        self,
+        instruction: str,
+        step_metadata: dict[str, Any],
+    ) -> bool:
+        return await self._execute_instruction(
+            instruction,
+            execution_mode="business_intent",
+            step_metadata=step_metadata,
+        )
+
     async def _execute_business_milestone(
         self,
         goal: str,
         step_metadata: dict[str, Any],
     ) -> bool:
-        instruction = goal
+        return await self._execute_instruction(
+            goal,
+            execution_mode="business_milestone",
+            step_metadata=step_metadata,
+        )
+
+    async def _execute_instruction(
+        self,
+        instruction: str,
+        *,
+        execution_mode: str,
+        step_metadata: dict[str, Any],
+    ) -> bool:
         if self._exploration_context_prompt:
-            instruction = "\n\n".join([goal, self._exploration_context_prompt])
+            instruction = "\n\n".join([instruction, self._exploration_context_prompt])
         try:
             execute_instruction = getattr(self.provider, "execute_instruction", None)
             if execute_instruction is not None:
@@ -205,9 +242,7 @@ class StagehandAutomationBackend:
                 error=self.last_execution_error,
             )
             self.last_execution_metadata = stagehand_trace_metadata(trace)
-            self.last_execution_metadata["stagehand_execution_mode"] = (
-                "business_milestone"
-            )
+            self.last_execution_metadata["stagehand_execution_mode"] = execution_mode
             self.last_execution_metadata.update(step_metadata)
             return False
         trace = StagehandStepTrace(
@@ -216,7 +251,7 @@ class StagehandAutomationBackend:
             act_result=result,
         )
         self.last_execution_metadata = stagehand_trace_metadata(trace)
-        self.last_execution_metadata["stagehand_execution_mode"] = "business_milestone"
+        self.last_execution_metadata["stagehand_execution_mode"] = execution_mode
         self.last_execution_metadata.update(step_metadata)
         self.last_execution_error = None if result.success else result.message
         return result.success

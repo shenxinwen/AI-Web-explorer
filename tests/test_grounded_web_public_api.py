@@ -1,11 +1,15 @@
 from ai_web_explorer.grounded_web import (
     AutomationBackend,
+    BusinessAffordance,
     BrowserAction,
     BusinessFlowProfile,
+    BusinessTransition,
     OpenAIVisualDeltaProvider,
     PlanningDelta,
     PlanningState,
     PlanningTransition,
+    VisualAffordanceProvider,
+    VisualAffordanceRequest,
     VisualDeltaProvider,
     VisualDeltaRequest,
     WebKobeExplorationController,
@@ -14,6 +18,7 @@ from ai_web_explorer.grounded_web import (
     WebKobePlaywrightAdapter,
     create_openai_visual_delta_provider_from_env,
     ecommerce_checkout_profile,
+    summarize_visual_affordances,
     summarize_visual_delta,
     verify_planning_delta,
 )
@@ -27,12 +32,16 @@ from ai_web_explorer.grounded_web.state_signature import schema_delta
 
 def test_grounded_web_package_exposes_mainline_api():
     assert AutomationBackend.__name__ == "AutomationBackend"
+    assert BusinessAffordance.__name__ == "BusinessAffordance"
     assert BrowserAction.__name__ == "BrowserAction"
     assert BusinessFlowProfile.__name__ == "BusinessFlowProfile"
+    assert BusinessTransition.__name__ == "BusinessTransition"
     assert OpenAIVisualDeltaProvider.__name__ == "OpenAIVisualDeltaProvider"
     assert PlanningDelta.__name__ == "PlanningDelta"
     assert PlanningState.__name__ == "PlanningState"
     assert PlanningTransition.__name__ == "PlanningTransition"
+    assert VisualAffordanceProvider is not None
+    assert VisualAffordanceRequest.__name__ == "VisualAffordanceRequest"
     assert VisualDeltaProvider is not None
     assert VisualDeltaRequest.__name__ == "VisualDeltaRequest"
     assert WebKobeExplorationController.__name__ == "WebKobeExplorationController"
@@ -42,6 +51,7 @@ def test_grounded_web_package_exposes_mainline_api():
     assert PlaywrightBackend is WebKobePlaywrightAdapter
     assert callable(create_openai_visual_delta_provider_from_env)
     assert ecommerce_checkout_profile().site_type == "ecommerce_checkout"
+    assert callable(summarize_visual_affordances)
     assert callable(summarize_visual_delta)
     assert callable(verify_planning_delta)
 

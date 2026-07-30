@@ -331,6 +331,55 @@ class StagehandThinkingFailureVisualChangeAdapter(ScreenshotAdapter):
         return False
 
 
+class SamePageLowValueChangeAdapter(ScreenshotAdapter):
+    def __init__(self):
+        super().__init__()
+        self.states = [
+            StateSnapshot(
+                page_id="listing",
+                url="https://example.test/listing",
+                title="Listing",
+                signature={"url_path": "/listing", "sort": "name"},
+            ),
+            StateSnapshot(
+                page_id="listing",
+                url="https://example.test/listing",
+                title="Listing",
+                signature={"url_path": "/listing", "sort": "price"},
+            ),
+        ]
+
+    async def list_interactables(self, state):
+        return [
+            {
+                "semantic_id": "sort_by_price",
+                "description": "Sort by price",
+                "locator": "#sort",
+                "action_kind": "click",
+                "explored": False,
+            }
+        ]
+
+
+class SamePageBusinessChangeAdapter(ScreenshotAdapter):
+    def __init__(self):
+        super().__init__()
+        self.states = [
+            StateSnapshot(
+                page_id="listing",
+                url="https://example.test/listing",
+                title="Listing",
+                signature={"url_path": "/listing"},
+            ),
+            StateSnapshot(
+                page_id="listing",
+                url="https://example.test/listing",
+                title="Listing",
+                signature={"url_path": "/listing"},
+            ),
+        ]
+
+
 @pytest.mark.anyio
 async def test_explore_one_step_records_optional_before_after_screenshots():
     adapter = ScreenshotAdapter()
@@ -346,6 +395,190 @@ async def test_explore_one_step_records_optional_before_after_screenshots():
     assert adapter.captured_labels == ["before_0001", "after_0001"]
     assert metadata["before_screenshot_path"] == "outputs/before_0001.png"
     assert metadata["after_screenshot_path"] == "outputs/after_0001.png"
+
+
+@pytest.mark.anyio
+async def test_explore_one_step_records_visual_business_affordances_on_source_node():
+    adapter = ScreenshotAdapter()
+    provider_calls = []
+
+    def visual_provider(
+        prompt,
+        *,
+        current_screenshot_path=None,
+        before_screenshot_path=None,
+        after_screenshot_path=None,
+    ):
+        provider_calls.append(
+            {
+                "current": current_screenshot_path,
+                "before": before_screenshot_path,
+                "after": after_screenshot_path,
+            }
+        )
+        if current_screenshot_path is not None:
+            return (
+                '{"business_affordances":['
+                '{"action_name":"add_item_to_cart",'
+                '"relevance_hint":"core",'
+                '"target_hint":"button labeled Add to cart",'
+                '"evidence":"A product card contains an Add to cart button.",'
+                '"confidence":0.9}'
+                "],"
+                '"state_summary":"Product listing page with add-to-cart controls."}'
+            )
+        return (
+            '{"visible_change_summary":"Cart count changed.",'
+            '"business_action_name":"add_item_to_cart",'
+            '"business_relevance":"core",'
+            '"meaningful_change":true,'
+            '"candidate_added_facts":["cart_has_items"],'
+            '"candidate_removed_facts":[],"evidence":["cart badge changed"],'
+            '"confidence":0.8}'
+        )
+
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        business_profile=ecommerce_checkout_profile(),
+        capture_screenshots=True,
+        visual_delta_provider=visual_provider,
+    )
+
+    graph = await explorer.explore_one_step()
+
+    assert provider_calls[0]["current"] == "outputs/before_0001.png"
+    source = {node.node_id: node for node in graph.nodes}[graph.edges[0].source_node_id]
+    assert len(source.business_affordances) == 1
+    assert source.business_affordances[0].action_name == "add_item_to_cart"
+    assert source.business_affordances[0].target_hint == "button labeled Add to cart"
+
+
+@pytest.mark.anyio
+async def test_explore_one_step_prefers_untried_visual_business_affordance():
+    adapter = ScreenshotAdapter()
+
+    def visual_provider(
+        prompt,
+        *,
+        current_screenshot_path=None,
+        before_screenshot_path=None,
+        after_screenshot_path=None,
+    ):
+        if current_screenshot_path is not None:
+            return (
+                '{"business_affordances":['
+                '{"action_name":"open_cart",'
+                '"relevance_hint":"core",'
+                '"target_hint":"shopping cart link",'
+                '"evidence":"A cart link is visible in the header.",'
+                '"confidence":0.8},'
+                '{"action_name":"add_item_to_cart",'
+                '"relevance_hint":"core",'
+                '"target_hint":"button labeled Add to cart",'
+                '"evidence":"A product card contains an Add to cart button.",'
+                '"confidence":0.9}'
+                "],"
+                '"state_summary":"Product listing page."}'
+            )
+        return (
+            '{"visible_change_summary":"Cart count changed.",'
+            '"business_action_name":"add_item_to_cart",'
+            '"business_relevance":"core",'
+            '"meaningful_change":true,'
+            '"candidate_added_facts":["cart_has_items"],'
+            '"candidate_removed_facts":[],"evidence":["cart badge changed"],'
+            '"confidence":0.8}'
+        )
+
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        business_profile=ecommerce_checkout_profile(),
+        capture_screenshots=True,
+        visual_delta_provider=visual_provider,
+    )
+    await explorer.explore_one_step()
+    graph = await explorer.explore_one_step()
+
+    assert adapter.executed[1].action_kind == "business_intent"
+    assert adapter.executed[1].semantic_id == "open_cart"
+    assert adapter.executed[1].canonical_action_name == "open_cart"
+    assert "shopping cart link" in adapter.executed[1].description
+    assert [edge.action.semantic_id for edge in graph.edges] == [
+        "add_item_to_cart",
+        "open_cart",
+    ]
+
+
+@pytest.mark.anyio
+async def test_explore_one_step_collapses_low_value_same_page_visual_change():
+    adapter = SamePageLowValueChangeAdapter()
+
+    def visual_provider(prompt, *, before_screenshot_path, after_screenshot_path):
+        return (
+            '{"visible_change_summary":"The product list sort order changed.",'
+            '"business_action_name":"sort_products",'
+            '"business_relevance":"low_value",'
+            '"meaningful_change":false,'
+            '"candidate_added_facts":[],"candidate_removed_facts":[],'
+            '"evidence":["sort dropdown changed"],"confidence":0.8}'
+        )
+
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        business_profile=ecommerce_checkout_profile(),
+        capture_screenshots=True,
+        visual_delta_provider=visual_provider,
+    )
+
+    graph = await explorer.explore_one_step()
+
+    assert len(graph.nodes) == 1
+    edge = graph.edges[0]
+    assert edge.source_node_id == edge.target_node_id
+    assert edge.business_transition is not None
+    assert edge.business_transition.relevance == "low_value"
+
+
+@pytest.mark.anyio
+async def test_explore_one_step_materializes_same_page_business_change(monkeypatch):
+    monkeypatch.setattr(
+        "ai_web_explorer.grounded_web.explorer.OBSERVATION_WAIT_TIMEOUT_MS",
+        0,
+    )
+    adapter = SamePageBusinessChangeAdapter()
+
+    def visual_provider(prompt, *, before_screenshot_path, after_screenshot_path):
+        return (
+            '{"visible_change_summary":"The cart badge now shows one item.",'
+            '"business_action_name":"add_item_to_cart",'
+            '"business_relevance":"core",'
+            '"meaningful_change":true,'
+            '"candidate_added_facts":["cart_has_items"],'
+            '"candidate_removed_facts":[],"evidence":["cart badge shows 1"],'
+            '"confidence":0.85}'
+        )
+
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        business_profile=ecommerce_checkout_profile(),
+        capture_screenshots=True,
+        visual_delta_provider=visual_provider,
+    )
+
+    graph = await explorer.explore_one_step()
+
+    assert len(graph.nodes) == 2
+    edge = graph.edges[0]
+    assert edge.source_node_id != edge.target_node_id
+    assert edge.status == "succeeded_with_observed_change"
+    target = {node.node_id: node for node in graph.nodes}[edge.target_node_id]
+    assert target.node_id.startswith("listing__business_")
+    assert target.planning_state is not None
+    assert target.planning_state.active_facts == ["cart_has_items"]
 
 
 @pytest.mark.anyio
@@ -374,7 +607,9 @@ async def test_explore_one_step_accepts_stagehand_tool_choice_error_with_visual_
     edge = graph.edges[0]
     assert edge.status == "succeeded_with_observed_change"
     assert edge.execution_trace.success is True
-    assert edge.execution_trace.error == "Thinking mode does not support this tool_choice"
+    assert (
+        edge.execution_trace.error == "Thinking mode does not support this tool_choice"
+    )
     assert edge.execution_trace.metadata["backend_reported_success"] is False
     assert edge.planning_transition is not None
     assert edge.planning_transition.added_facts == ["cart_has_items"]
@@ -389,6 +624,9 @@ async def test_explore_one_step_records_visual_delta_candidates_without_verifyin
         provider_calls.append((before_screenshot_path, after_screenshot_path))
         return (
             '{"visible_change_summary":"Final confirmation control appears.",'
+            '"business_action_name":"prepare_order_confirmation",'
+            '"business_relevance":"core",'
+            '"meaningful_change":true,'
             '"candidate_added_facts":["order_place_pending_sensitive"],'
             '"candidate_removed_facts":[],'
             '"evidence":["final confirmation control appears visible"],'
@@ -417,6 +655,12 @@ async def test_explore_one_step_records_visual_delta_candidates_without_verifyin
         == "Final confirmation control appears."
     )
     assert edge.execution_trace.metadata["visual_delta_trace"]["status"] == "summarized"
+    assert edge.business_transition is not None
+    assert edge.business_transition.action_name == "prepare_order_confirmation"
+    assert edge.business_transition.relevance == "core"
+    assert edge.business_transition.meaningful_change is True
+    assert edge.business_transition.judge_source == "vlm"
+    assert edge.business_transition.summary == "Final confirmation control appears."
 
 
 class TypedFactsAdapter(FakeAdapter):

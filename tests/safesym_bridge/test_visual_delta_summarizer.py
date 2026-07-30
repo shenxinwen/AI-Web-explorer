@@ -45,6 +45,49 @@ def test_summarize_visual_delta_maps_provider_json_to_candidate_planning_delta()
     )
 
 
+def test_summarize_visual_delta_maps_business_transition_fields():
+    request = VisualDeltaRequest(
+        goal="Add one item to the cart.",
+        action=BrowserAction(
+            action_kind="click",
+            locator="button.add",
+            semantic_id="add_to_cart",
+            description="Add to cart",
+        ),
+        profile=ecommerce_checkout_profile(),
+        before_screenshot_path="before.png",
+        after_screenshot_path="after.png",
+    )
+
+    def provider(prompt, *, before_screenshot_path, after_screenshot_path):
+        assert "business_action_name" in prompt
+        assert "business_relevance" in prompt
+        assert "meaningful_change" in prompt
+        return (
+            '{"visible_change_summary":"Bluetooth Headphones were added to cart.",'
+            '"business_action_name":"add_item_to_cart",'
+            '"business_relevance":"core",'
+            '"meaningful_change":true,'
+            '"candidate_added_facts":["cart_has_items"],'
+            '"candidate_removed_facts":[],'
+            '"evidence":["cart badge changed from 0 to 1"],'
+            '"confidence":0.9}'
+        )
+
+    result = summarize_visual_delta(request, provider=provider)
+
+    assert result.business_transition is not None
+    assert result.business_transition.action_name == "add_item_to_cart"
+    assert result.business_transition.relevance == "core"
+    assert result.business_transition.meaningful_change is True
+    assert result.business_transition.judge_source == "vlm"
+    assert result.business_transition.summary == (
+        "Bluetooth Headphones were added to cart."
+    )
+    assert result.business_transition.evidence == ["cart badge changed from 0 to 1"]
+    assert result.business_transition.confidence == 0.9
+
+
 def test_summarize_visual_delta_rejects_unknown_profile_facts():
     request = VisualDeltaRequest(
         goal="Add one item to the cart.",

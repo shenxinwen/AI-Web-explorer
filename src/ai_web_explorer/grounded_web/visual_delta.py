@@ -9,6 +9,7 @@ from ai_web_explorer.grounded_web.business_profile import (
     PlanningDelta,
 )
 from ai_web_explorer.grounded_web.graph import BrowserAction
+from ai_web_explorer.grounded_web.graph import BusinessTransition
 
 VisualDeltaProvider = Callable[..., str]
 
@@ -52,6 +53,7 @@ class VisualDeltaTrace:
 class VisualDeltaResult:
     planning_delta: PlanningDelta
     trace: VisualDeltaTrace
+    business_transition: BusinessTransition | None = None
 
 
 def _fact_ids(profile: BusinessFlowProfile) -> set[str]:
@@ -72,6 +74,9 @@ def _prompt_for_request(request: VisualDeltaRequest) -> str:
         "after_signature": dict(request.after_signature or {}),
         "required_json_fields": [
             "visible_change_summary",
+            "business_action_name",
+            "business_relevance",
+            "meaningful_change",
             "candidate_added_facts",
             "candidate_removed_facts",
             "evidence",
@@ -145,6 +150,54 @@ def _evidence_list(value: Any) -> list[str]:
         else:
             evidence.append(str(item))
     return evidence
+
+
+def _meaningful_change(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"true", "yes", "meaningful", "changed"}:
+            return True
+        if lowered in {"false", "no", "no_change", "unchanged"}:
+            return False
+    return None
+
+
+def _business_relevance(value: Any) -> str:
+    relevance = str(value or "unknown").strip().lower()
+    if relevance in {"core", "supporting", "low_value", "unknown"}:
+        return relevance
+    return "unknown"
+
+
+def _business_transition_from_response(
+    parsed: dict[str, Any],
+    *,
+    visual_change_summary: str,
+    evidence: list[str],
+) -> BusinessTransition | None:
+    action_name = parsed.get("business_action_name")
+    relevance = parsed.get("business_relevance")
+    meaningful_change = parsed.get("meaningful_change")
+    if action_name is None and relevance is None and meaningful_change is None:
+        return None
+    confidence = parsed.get("confidence")
+    if confidence is not None:
+        try:
+            confidence = float(confidence)
+        except (TypeError, ValueError):
+            confidence = None
+    return BusinessTransition(
+        action_name=str(action_name).strip() if action_name is not None else None,
+        relevance=_business_relevance(relevance),
+        meaningful_change=_meaningful_change(meaningful_change),
+        judge_source="vlm",
+        summary=_summary_text(parsed.get("business_change_summary"))
+        or visual_change_summary,
+        evidence=evidence,
+        confidence=confidence,
+    )
 
 
 def summarize_visual_delta(
@@ -228,14 +281,20 @@ def summarize_visual_delta(
             ),
         )
 
+    evidence = _evidence_list(parsed.get("evidence"))
     delta = PlanningDelta(
         candidate_added_facts=candidate_added,
         candidate_removed_facts=candidate_removed,
         verified_added_facts=[],
         verified_removed_facts=[],
-        evidence=_evidence_list(parsed.get("evidence")),
+        evidence=evidence,
         confidence=parsed.get("confidence"),
         uncertainty_reason="visual delta has not been structurally verified",
+    )
+    business_transition = _business_transition_from_response(
+        parsed,
+        visual_change_summary=visual_change_summary,
+        evidence=evidence,
     )
     return VisualDeltaResult(
         planning_delta=delta,
@@ -246,6 +305,7 @@ def summarize_visual_delta(
             status="summarized",
             visual_change_summary=visual_change_summary,
         ),
+        business_transition=business_transition,
     )
 
 

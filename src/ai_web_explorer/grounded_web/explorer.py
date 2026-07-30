@@ -12,6 +12,7 @@ from ai_web_explorer.grounded_web.capability_graph import (
 )
 from ai_web_explorer.grounded_web.state_signature import schema_delta
 from ai_web_explorer.grounded_web.graph import (
+    BusinessAffordance,
     BrowserAction,
     ReferenceObservation,
     WebKobeEdge,
@@ -25,6 +26,14 @@ from ai_web_explorer.grounded_web.llm_action_selector import (
 from ai_web_explorer.grounded_web.graph_manager import WebKobeGraphManager
 from ai_web_explorer.grounded_web.business_profile import BusinessFlowProfile
 from ai_web_explorer.grounded_web.business_profile import PlanningDelta
+from ai_web_explorer.grounded_web.business_affordance import (
+    VisualAffordanceRequest,
+    summarize_visual_affordances,
+)
+from ai_web_explorer.grounded_web.business_state_policy import (
+    resolve_business_target_node,
+    should_materialize_business_state,
+)
 from ai_web_explorer.grounded_web.exploration_index import (
     ExplorationContext,
     build_exploration_context,
@@ -98,6 +107,42 @@ def _first_unexplored_action(
         if not item.get("explored"):
             return _browser_action_from_interactable(item)
     return None
+
+
+def _business_action_from_affordance(affordance: BusinessAffordance) -> BrowserAction:
+    details = [f"Business action: {affordance.action_name}."]
+    if affordance.target_hint:
+        details.append(f"Target hint: {affordance.target_hint}.")
+    if affordance.evidence:
+        details.append(f"Evidence: {affordance.evidence}.")
+    return BrowserAction(
+        action_kind="business_intent",
+        locator=None,
+        semantic_id=affordance.action_name,
+        input_values={},
+        description=" ".join(details),
+        action_label=affordance.label
+        or affordance.action_name.replace("_", " ").title(),
+        canonical_action_name=affordance.action_name,
+        naming_provenance={
+            "source": "business_affordance",
+            "affordance_source": affordance.source,
+            "confidence": affordance.confidence,
+        },
+    )
+
+
+def _affordance_rank(affordance: BusinessAffordance) -> tuple[int, float]:
+    relevance_rank = {
+        "core": 3,
+        "supporting": 2,
+        "unknown": 1,
+        "low_value": 0,
+    }
+    return (
+        relevance_rank.get(affordance.relevance_hint, 1),
+        affordance.confidence or 0.0,
+    )
 
 
 def _schema_observed_delta(
@@ -227,6 +272,13 @@ class WebKobeExplorer:
         source_id = self.manager.identify_or_add_node(_node_from_draft(before_draft))
         if self._start_node_id is None:
             self._start_node_id = source_id
+        before_screenshot_path = await self._capture_screenshot("before")
+        if before_screenshot_path is not None:
+            self._record_source_business_affordances(
+                source_id=source_id,
+                before=before,
+                before_screenshot_path=before_screenshot_path,
+            )
         source_interactables = self.manager.interactables_for_node(source_id)
         exploration_context = self._exploration_context_for_source(
             before=before,
@@ -260,7 +312,6 @@ class WebKobeExplorer:
             source_node = _node_from_draft(before_draft)
             self.manager.identify_or_add_node(replace(source_node, **node_fields))
 
-        before_screenshot_path = await self._capture_screenshot("before")
         execution_success = await self.adapter.execute(selected)
         execution_error = getattr(self.adapter, "last_execution_error", None)
         after = await self._observe_after_action(
@@ -274,7 +325,6 @@ class WebKobeExplorer:
             snapshot=after,
             interactables=after_interactables,
         )
-        target_id = self.manager.identify_or_add_node(_node_from_draft(after_draft))
 
         delta = schema_delta(
             before_draft.last_state_snapshot,
@@ -292,11 +342,6 @@ class WebKobeExplorer:
             execution_error=execution_error,
             observed_delta=observed_delta,
         )
-        if source_id != target_id and edge_status in {
-            "no_observed_change",
-            "failed_execution",
-        }:
-            edge_status = "succeeded_with_navigation"
         execution_metadata = dict(
             getattr(self.adapter, "last_execution_metadata", {}) or {}
         )
@@ -315,6 +360,7 @@ class WebKobeExplorer:
             else None
         )
         visual_planning_delta = None
+        business_transition = None
         if (
             self.business_profile is not None
             and self.visual_delta_provider is not None
@@ -334,6 +380,7 @@ class WebKobeExplorer:
                 provider=self.visual_delta_provider,
             )
             visual_planning_delta = visual_result.planning_delta
+            business_transition = visual_result.business_transition
             execution_metadata["visual_delta_trace"] = visual_result.trace.to_dict()
             if visual_result.trace.visual_change_summary:
                 execution_metadata["visual_change_summary"] = (
@@ -348,22 +395,45 @@ class WebKobeExplorer:
                         ),
                         provider=self.semantic_naming_provider,
                     )
-        self._record_target_embedding(
-            target_id=target_id,
-            after=after,
-            after_interactables=after_interactables,
-            visual_summary=execution_metadata.get("visual_change_summary"),
-        )
         planning_delta = _merge_planning_deltas(
             structured_planning_delta,
             visual_planning_delta,
         )
+        planning_transition = None
+        if self.business_profile is not None:
+            planning_transition = self.manager.build_planning_transition(
+                source_id,
+                planning_delta=planning_delta,
+                profile=self.business_profile,
+            )
+        target_node = resolve_business_target_node(
+            source_node=self.manager.node_for_id(source_id),
+            candidate_node=_node_from_draft(after_draft),
+            business_transition=business_transition,
+            planning_transition=planning_transition,
+        )
+        target_id = self.manager.identify_or_add_node(target_node)
+        if edge_status == "no_observed_change" and should_materialize_business_state(
+            business_transition
+        ):
+            edge_status = "succeeded_with_observed_change"
+        if source_id != target_id and edge_status in {
+            "no_observed_change",
+            "failed_execution",
+        }:
+            edge_status = "succeeded_with_navigation"
         if (
             edge_status == "failed_execution"
             and _is_ignorable_stagehand_tool_choice_error(execution_error)
             and _planning_delta_has_fact_change(planning_delta)
         ):
             edge_status = "succeeded_with_observed_change"
+        self._record_target_embedding(
+            target_id=target_id,
+            after=after,
+            after_interactables=after_interactables,
+            visual_summary=execution_metadata.get("visual_change_summary"),
+        )
         edge = WebKobeEdge(
             source_node_id=source_id,
             target_node_id=target_id,
@@ -385,14 +455,13 @@ class WebKobeExplorer:
                 metadata=execution_metadata,
             ),
             planning_delta=planning_delta,
+            planning_transition=planning_transition,
+            business_transition=business_transition,
             status=edge_status,
             evidence=[Evidence(source="web_kobe_explorer", url=before.url)],
         )
         if self.business_profile is not None:
-            edge = self.manager.propagate_planning_state(
-                edge,
-                profile=self.business_profile,
-            )
+            self.manager.apply_planning_transition(edge)
         self.manager.add_edge(edge)
         self.manager.mark_interactable_explored(
             source_id,
@@ -400,6 +469,41 @@ class WebKobeExplorer:
             locator=selected.locator,
         )
         return self.manager.to_graph(start_node_id=self._start_node_id)
+
+    def _record_source_business_affordances(
+        self,
+        *,
+        source_id: str,
+        before: StateSnapshot,
+        before_screenshot_path: str,
+    ) -> None:
+        if self.business_profile is None or self.visual_delta_provider is None:
+            return
+        source_node = self.manager.node_for_id(source_id)
+        active_facts = (
+            list(source_node.planning_state.active_facts)
+            if source_node.planning_state is not None
+            else []
+        )
+        result = summarize_visual_affordances(
+            VisualAffordanceRequest(
+                goal=self.goal,
+                profile=self.business_profile,
+                current_screenshot_path=before_screenshot_path,
+                current_signature=before.signature,
+                current_planning_facts=active_facts,
+            ),
+            provider=self.visual_delta_provider,
+        )
+        if result.trace.status != "summarized":
+            return
+        self.manager.identify_or_add_node(
+            replace(
+                source_node,
+                business_affordances=result.business_affordances,
+                state_summary=result.state_summary or source_node.state_summary,
+            )
+        )
 
     async def _capture_screenshot(self, phase: str) -> str | None:
         if not self.capture_screenshots:
@@ -536,6 +640,12 @@ class WebKobeExplorer:
         *,
         exploration_context: ExplorationContext,
     ) -> BrowserAction | None:
+        selected_business_action = self._select_business_affordance_action(
+            exploration_context=exploration_context,
+        )
+        if selected_business_action is not None:
+            return selected_business_action
+
         if self.action_selector is None:
             return _first_unexplored_action(interactables)
 
@@ -567,3 +677,56 @@ class WebKobeExplorer:
         ):
             return result.selected_action
         return _first_unexplored_action(interactables)
+
+    def _select_business_affordance_action(
+        self,
+        *,
+        exploration_context: ExplorationContext,
+    ) -> BrowserAction | None:
+        node = self.manager.node_for_id(exploration_context.current_node_id)
+        if not node.business_affordances:
+            return None
+
+        completed_actions = self._completed_business_action_names()
+        local_tried = set(exploration_context.tried_action_ids)
+        local_avoid = set(exploration_context.avoid_action_ids)
+        ranked = sorted(
+            node.business_affordances,
+            key=_affordance_rank,
+            reverse=True,
+        )
+        for affordance in ranked:
+            if affordance.action_name in local_avoid:
+                continue
+            if affordance.action_name in completed_actions:
+                continue
+            if affordance.action_name in local_tried:
+                continue
+            return _business_action_from_affordance(affordance)
+
+        for affordance in ranked:
+            if affordance.action_name not in local_avoid:
+                return _business_action_from_affordance(affordance)
+        return None
+
+    def _completed_business_action_names(self) -> set[str]:
+        completed: set[str] = set()
+        for edge in self.manager.to_graph(start_node_id=self._start_node_id).edges:
+            action_name = (
+                edge.business_transition.action_name
+                if edge.business_transition is not None
+                else None
+            )
+            action_name = (
+                action_name
+                or edge.action.canonical_action_name
+                or edge.action.semantic_id
+            )
+            if edge.status in {
+                "verified",
+                "succeeded",
+                "succeeded_with_observed_change",
+                "succeeded_with_navigation",
+            }:
+                completed.add(action_name)
+        return completed

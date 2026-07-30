@@ -10,6 +10,8 @@ from ai_web_explorer.grounded_web.capability_graph import (
 )
 from ai_web_explorer.grounded_web.graph import (
     ActionTarget,
+    BusinessAffordance,
+    BusinessTransition,
     BrowserAction,
     PddlActionHint,
     ReferenceObservation,
@@ -85,6 +87,15 @@ def test_web_kobe_graph_serializes_node_edge_and_evidence():
                 "explored": False,
             }
         ],
+        business_affordances=[
+            BusinessAffordance(
+                action_name="submit_login_form",
+                relevance_hint="core",
+                target_hint="button labeled Login",
+                evidence="A login form and submit button are visible.",
+                confidence=0.9,
+            )
+        ],
         capabilities=[capability],
         reference_observation=ReferenceObservation(
             url="https://example.test/login",
@@ -151,6 +162,15 @@ def test_web_kobe_graph_serializes_node_edge_and_evidence():
             evidence=["login controls were replaced by shopping controls"],
             confidence=0.95,
         ),
+        business_transition=BusinessTransition(
+            action_name="submit_login_form",
+            relevance="core",
+            meaningful_change=True,
+            judge_source="vlm",
+            summary="The login form was submitted and shopping controls appeared.",
+            evidence=["shopping controls replaced the login controls"],
+            confidence=0.95,
+        ),
         visit_count=1,
         status="verified",
         evidence=evidence,
@@ -182,6 +202,17 @@ def test_web_kobe_graph_serializes_node_edge_and_evidence():
     assert data["edges"][0]["action"]["canonical_action_name"] == "login_submit"
     assert data["edges"][0]["action"]["naming_provenance"] == {"source": "unit_test"}
     assert data["nodes"][0]["action_targets"][0]["target_type"] == "form"
+    assert data["nodes"][0]["business_affordances"] == [
+        {
+            "action_name": "submit_login_form",
+            "label": None,
+            "relevance_hint": "core",
+            "target_hint": "button labeled Login",
+            "source": "vlm",
+            "confidence": 0.9,
+            "evidence": "A login form and submit button are visible.",
+        }
+    ]
     assert data["nodes"][0]["capabilities"][0]["capability_id"] == "submit_login_form"
     assert data["edges"][0]["status"] == "verified"
     assert data["edges"][0]["pddl_hint"]["add_effects"] == ["logged_in", "at_home"]
@@ -192,5 +223,14 @@ def test_web_kobe_graph_serializes_node_edge_and_evidence():
         "removed_facts": ["required_info_missing"],
         "post_facts": ["logged_in"],
         "evidence": ["login controls were replaced by shopping controls"],
+        "confidence": 0.95,
+    }
+    assert data["edges"][0]["business_transition"] == {
+        "action_name": "submit_login_form",
+        "relevance": "core",
+        "meaningful_change": True,
+        "judge_source": "vlm",
+        "summary": "The login form was submitted and shopping controls appeared.",
+        "evidence": ["shopping controls replaced the login controls"],
         "confidence": 0.95,
     }

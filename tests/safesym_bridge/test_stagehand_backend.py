@@ -1,6 +1,7 @@
 import pytest
 
 from ai_web_explorer.grounded_web.models import StateSnapshot
+from ai_web_explorer.grounded_web.graph import BrowserAction
 from ai_web_explorer.grounded_web.stagehand_actions import (
     StagehandActResult,
     StagehandObservedAction,
@@ -260,6 +261,43 @@ async def test_stagehand_backend_business_milestone_falls_back_to_act_instructio
 
 
 @pytest.mark.anyio
+async def test_stagehand_backend_executes_business_intent_action_instruction():
+    provider = FakeStagehandProvider()
+    backend = StagehandAutomationBackend(
+        base_backend=FakeBaseBackend(),
+        provider=provider,
+        goal="Explore shopping capabilities.",
+    )
+
+    success = await backend.execute(
+        BrowserAction(
+            action_kind="business_intent",
+            locator=None,
+            semantic_id="add_item_to_cart",
+            canonical_action_name="add_item_to_cart",
+            description=(
+                "Business action: add_item_to_cart. Target hint: button labeled "
+                "Add to cart. Evidence: A product card contains an Add to cart button."
+            ),
+        )
+    )
+
+    assert success is True
+    assert provider.observed == []
+    assert provider.acted == []
+    assert provider.executed_instructions == [
+        (
+            "Business action: add_item_to_cart. Target hint: button labeled "
+            "Add to cart. Evidence: A product card contains an Add to cart button.",
+            5,
+        )
+    ]
+    assert backend.last_execution_metadata["stagehand_execution_mode"] == (
+        "business_intent"
+    )
+
+
+@pytest.mark.anyio
 async def test_stagehand_backend_business_milestone_ids_are_runtime_unique():
     backend = StagehandAutomationBackend(
         base_backend=FakeBaseBackend(),
@@ -322,4 +360,6 @@ async def test_stagehand_business_milestone_appends_exploration_context():
 
     assert success is True
     assert "Explore one useful action." in provider.executed_instructions[0][0]
-    assert "Avoid repeating actions: theme_toggle" in provider.executed_instructions[0][0]
+    assert (
+        "Avoid repeating actions: theme_toggle" in provider.executed_instructions[0][0]
+    )

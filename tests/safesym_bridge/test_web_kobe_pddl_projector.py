@@ -9,6 +9,8 @@ from ai_web_explorer.grounded_web.capability_graph import (
     PageFrame,
 )
 from ai_web_explorer.grounded_web.graph import (
+    BusinessAffordance,
+    BusinessTransition,
     BrowserAction,
     PddlActionHint,
     ReferenceObservation,
@@ -1369,6 +1371,70 @@ def test_load_web_kobe_graph_json_preserves_planning_transition(tmp_path):
     ]
 
 
+def test_load_web_kobe_graph_json_preserves_business_transition(tmp_path):
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="cart",
+        total_steps_completed=1,
+        nodes=[
+            _node("cart", "cart", {}, planning_facts=["cart_has_items"]),
+            _node(
+                "checkout",
+                "checkout_info",
+                {},
+                planning_facts=["cart_has_items", "checkout_started"],
+            ),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="cart",
+                target_node_id="checkout",
+                instruction="start checkout",
+                action=BrowserAction("click", "button.checkout", "checkout"),
+                capability=None,
+                target_observation="checkout",
+                observed_delta=[],
+                schema_delta={},
+                execution_trace=ExecutionTrace(
+                    "click",
+                    "button.checkout",
+                    "checkout",
+                    {},
+                    "cart",
+                    "checkout",
+                    True,
+                ),
+                business_transition=BusinessTransition(
+                    action_name="start_checkout",
+                    relevance="core",
+                    meaningful_change=True,
+                    judge_source="vlm",
+                    summary="Checkout form became visible.",
+                    evidence=["checkout form became visible"],
+                    confidence=0.8,
+                ),
+            )
+        ],
+    )
+    path = tmp_path / "graph.json"
+    path.write_text(json.dumps(graph.to_dict()), encoding="utf-8")
+
+    loaded = load_web_kobe_graph_json(path)
+
+    assert loaded.edges[0].business_transition is not None
+    assert loaded.edges[0].business_transition.action_name == "start_checkout"
+    assert loaded.edges[0].business_transition.relevance == "core"
+    assert loaded.edges[0].business_transition.meaningful_change is True
+    assert loaded.edges[0].business_transition.judge_source == "vlm"
+    assert (
+        loaded.edges[0].business_transition.summary == "Checkout form became visible."
+    )
+    assert loaded.edges[0].business_transition.evidence == [
+        "checkout form became visible"
+    ]
+    assert loaded.edges[0].business_transition.confidence == 0.8
+
+
 def test_load_web_kobe_graph_json_preserves_node_planning_state(tmp_path):
     graph = WebKobeGraph(
         app="example",
@@ -1394,6 +1460,49 @@ def test_load_web_kobe_graph_json_preserves_node_planning_state(tmp_path):
         "cart_has_items",
         "product_list_visible",
     ]
+
+
+def test_load_web_kobe_graph_json_preserves_node_business_affordances(tmp_path):
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="listing",
+        total_steps_completed=0,
+        nodes=[
+            WebKobeNode(
+                node_id="listing",
+                page_description="listing page",
+                page_frame=PageFrame(
+                    page_id="example:listing",
+                    page_type="listing",
+                    url="https://example.test/listing",
+                    url_pattern="https://example.test/listing",
+                    title="Listing",
+                ),
+                state_schema={},
+                last_state_snapshot={},
+                business_affordances=[
+                    BusinessAffordance(
+                        action_name="add_item_to_cart",
+                        relevance_hint="core",
+                        target_hint="button labeled Add to cart",
+                        evidence="A product card contains an Add to cart button.",
+                        confidence=0.9,
+                    )
+                ],
+            )
+        ],
+        edges=[],
+    )
+    path = tmp_path / "graph.json"
+    path.write_text(json.dumps(graph.to_dict()), encoding="utf-8")
+
+    loaded = load_web_kobe_graph_json(path)
+
+    assert len(loaded.nodes[0].business_affordances) == 1
+    affordance = loaded.nodes[0].business_affordances[0]
+    assert affordance.action_name == "add_item_to_cart"
+    assert affordance.relevance_hint == "core"
+    assert affordance.target_hint == "button labeled Add to cart"
 
 
 def test_load_web_kobe_graph_json_preserves_pddl_action_hint(tmp_path):

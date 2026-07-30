@@ -74,6 +74,22 @@ def test_openai_visual_delta_provider_sends_prompt_and_two_images(tmp_path):
     assert content[2]["type"] == "image_url"
 
 
+def test_openai_visual_delta_provider_can_send_single_current_image(tmp_path):
+    current = tmp_path / "current.png"
+    current.write_bytes(b"current-image")
+    client = _FakeClient()
+    provider = OpenAIVisualDeltaProvider(client=client, model="gpt-vision-test")
+
+    provider("summarize current page", current_screenshot_path=str(current))
+
+    content = client.chat.completions.calls[0]["messages"][1]["content"]
+    assert content[0] == {"type": "text", "text": "summarize current page"}
+    assert len(content) == 2
+    assert content[1]["image_url"]["url"] == (
+        "data:image/png;base64," + base64.b64encode(b"current-image").decode("ascii")
+    )
+
+
 def test_create_openai_visual_delta_provider_uses_separate_env_model(monkeypatch):
     created = []
 

@@ -12,6 +12,8 @@ from ai_web_explorer.grounded_web.capability_graph import (
     PageFrame,
 )
 from ai_web_explorer.grounded_web.graph import (
+    BusinessAffordance,
+    BusinessTransition,
     BrowserAction,
     PddlActionHint,
     ReferenceObservation,
@@ -80,6 +82,24 @@ def _reference_observation_from_dict(
     )
 
 
+def _business_affordance_from_dict(data: dict[str, Any]) -> BusinessAffordance:
+    confidence = data.get("confidence")
+    if confidence is not None:
+        try:
+            confidence = float(confidence)
+        except (TypeError, ValueError):
+            confidence = None
+    return BusinessAffordance(
+        action_name=str(data.get("action_name", "")),
+        label=data.get("label"),
+        relevance_hint=str(data.get("relevance_hint", "unknown")),
+        target_hint=data.get("target_hint"),
+        source=str(data.get("source", "json")),
+        confidence=confidence,
+        evidence=data.get("evidence"),
+    )
+
+
 def _node_from_dict(data: dict[str, Any]) -> WebKobeNode:
     return WebKobeNode(
         node_id=str(data["node_id"]),
@@ -100,6 +120,11 @@ def _node_from_dict(data: dict[str, Any]) -> WebKobeNode:
         state_summary=data.get("state_summary"),
         naming_provenance=data.get("naming_provenance"),
         planning_state=_planning_state_from_dict(data.get("planning_state")),
+        business_affordances=[
+            _business_affordance_from_dict(item)
+            for item in data.get("business_affordances", [])
+            if isinstance(item, dict)
+        ],
     )
 
 
@@ -179,6 +204,39 @@ def _planning_transition_from_dict(
     )
 
 
+def _business_transition_from_dict(
+    data: dict[str, Any] | None,
+) -> BusinessTransition | None:
+    if data is None:
+        return None
+    meaningful_change = data.get("meaningful_change")
+    if isinstance(meaningful_change, str):
+        lowered = meaningful_change.strip().lower()
+        if lowered in {"true", "yes", "meaningful", "changed"}:
+            meaningful_change = True
+        elif lowered in {"false", "no", "no_change", "unchanged"}:
+            meaningful_change = False
+        else:
+            meaningful_change = None
+    elif meaningful_change is not None:
+        meaningful_change = bool(meaningful_change)
+    confidence = data.get("confidence")
+    if confidence is not None:
+        try:
+            confidence = float(confidence)
+        except (TypeError, ValueError):
+            confidence = None
+    return BusinessTransition(
+        action_name=data.get("action_name"),
+        relevance=str(data.get("relevance", "unknown")),
+        meaningful_change=meaningful_change,
+        judge_source=str(data.get("judge_source", "vlm")),
+        summary=data.get("summary"),
+        evidence=list(data.get("evidence", [])),
+        confidence=confidence,
+    )
+
+
 def _pddl_action_hint_from_dict(data: dict[str, Any] | None) -> PddlActionHint | None:
     if data is None:
         return None
@@ -209,6 +267,9 @@ def _edge_from_dict(data: dict[str, Any]) -> WebKobeEdge:
         planning_delta=_planning_delta_from_dict(data.get("planning_delta")),
         planning_transition=_planning_transition_from_dict(
             data.get("planning_transition")
+        ),
+        business_transition=_business_transition_from_dict(
+            data.get("business_transition")
         ),
         visit_count=int(data.get("visit_count", 1)),
         status=str(data.get("status", "verified")),

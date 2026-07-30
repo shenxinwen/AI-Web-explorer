@@ -111,6 +111,50 @@ class PddlActionHint:
 
 
 @dataclass(frozen=True)
+class BusinessAffordance:
+    action_name: str
+    label: str | None = None
+    relevance_hint: str = "unknown"
+    target_hint: str | None = None
+    source: str = "vlm"
+    confidence: float | None = None
+    evidence: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "action_name": self.action_name,
+            "label": self.label,
+            "relevance_hint": self.relevance_hint,
+            "target_hint": self.target_hint,
+            "source": self.source,
+            "confidence": self.confidence,
+            "evidence": self.evidence,
+        }
+
+
+@dataclass(frozen=True)
+class BusinessTransition:
+    action_name: str | None = None
+    relevance: str = "unknown"
+    meaningful_change: bool | None = None
+    judge_source: str = "vlm"
+    summary: str | None = None
+    evidence: list[str] = field(default_factory=list)
+    confidence: float | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "action_name": self.action_name,
+            "relevance": self.relevance,
+            "meaningful_change": self.meaningful_change,
+            "judge_source": self.judge_source,
+            "summary": self.summary,
+            "evidence": list(self.evidence),
+            "confidence": self.confidence,
+        }
+
+
+@dataclass(frozen=True)
 class WebKobeNode:
     node_id: str
     page_description: str
@@ -120,6 +164,7 @@ class WebKobeNode:
     state_indicators: list[StateIndicator] = field(default_factory=list)
     action_targets: list[ActionTarget] = field(default_factory=list)
     interactable_elements: list[dict[str, Any]] = field(default_factory=list)
+    business_affordances: list[BusinessAffordance] = field(default_factory=list)
     capabilities: list[Capability] = field(default_factory=list)
     reference_observation: ReferenceObservation | None = None
     visit_count: int = 0
@@ -144,6 +189,7 @@ class WebKobeNode:
             "interactable_elements": [
                 dict(item) for item in self.interactable_elements
             ],
+            "business_affordances": _list_to_dict(self.business_affordances),
             "capabilities": _list_to_dict(self.capabilities),
             "reference_observation": (
                 self.reference_observation.to_dict()
@@ -182,6 +228,7 @@ class WebKobeEdge:
     pddl_hint: PddlActionHint | None = None
     planning_delta: PlanningDelta | None = None
     planning_transition: PlanningTransition | None = None
+    business_transition: BusinessTransition | None = None
     visit_count: int = 1
     status: str = "verified"
     evidence: list[Evidence] = field(default_factory=list)
@@ -214,6 +261,11 @@ class WebKobeEdge:
             "planning_transition": (
                 self.planning_transition.to_dict()
                 if self.planning_transition is not None
+                else None
+            ),
+            "business_transition": (
+                self.business_transition.to_dict()
+                if self.business_transition is not None
                 else None
             ),
             "visit_count": self.visit_count,

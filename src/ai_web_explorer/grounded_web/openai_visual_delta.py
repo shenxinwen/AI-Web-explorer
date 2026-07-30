@@ -28,9 +28,20 @@ class OpenAIVisualDeltaProvider:
         self,
         prompt: str,
         *,
-        before_screenshot_path: str,
-        after_screenshot_path: str,
+        before_screenshot_path: str | None = None,
+        after_screenshot_path: str | None = None,
+        current_screenshot_path: str | None = None,
     ) -> str:
+        if current_screenshot_path is not None:
+            image_paths = [current_screenshot_path]
+        elif before_screenshot_path is not None and after_screenshot_path is not None:
+            image_paths = [before_screenshot_path, after_screenshot_path]
+        else:
+            raise ValueError(
+                "Provide either current_screenshot_path or both "
+                "before_screenshot_path and after_screenshot_path."
+            )
+
         completion = self.client.chat.completions.create(
             model=self.model,
             messages=[
@@ -43,22 +54,16 @@ class OpenAIVisualDeltaProvider:
                 },
                 {
                     "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
+                    "content": [{"type": "text", "text": prompt}]
+                    + [
                         {
                             "type": "image_url",
                             "image_url": {
-                                "url": _image_data_url(before_screenshot_path),
+                                "url": _image_data_url(image_path),
                                 "detail": "high",
                             },
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": _image_data_url(after_screenshot_path),
-                                "detail": "high",
-                            },
-                        },
+                        }
+                        for image_path in image_paths
                     ],
                 },
             ],

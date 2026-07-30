@@ -66,6 +66,16 @@ def _merge_interactables(
     return merged
 
 
+def _merge_business_affordances(existing, incoming):
+    merged = list(existing)
+    seen = {item.action_name for item in merged}
+    for item in incoming:
+        if item.action_name not in seen:
+            merged.append(item)
+            seen.add(item.action_name)
+    return merged
+
+
 def _profile_fact_ids(profile: BusinessFlowProfile) -> set[str]:
     return {fact.fact_id for fact in profile.planning_facts}
 
@@ -121,6 +131,10 @@ class WebKobeGraphManager:
                 existing.interactable_elements,
                 node.interactable_elements,
             ),
+            business_affordances=_merge_business_affordances(
+                existing.business_affordances,
+                node.business_affordances,
+            ),
             capabilities=list(node.capabilities or existing.capabilities),
             reference_observation=node.reference_observation
             or existing.reference_observation,
@@ -146,10 +160,15 @@ class WebKobeGraphManager:
                 planning_delta=edge.planning_delta or existing.planning_delta,
                 planning_transition=edge.planning_transition
                 or existing.planning_transition,
+                business_transition=edge.business_transition
+                or existing.business_transition,
                 execution_trace=edge.execution_trace,
                 evidence=list(existing.evidence or edge.evidence),
             )
         self.total_steps_completed += 1
+
+    def node_for_id(self, node_id: str) -> WebKobeNode:
+        return self._nodes[node_id]
 
     def propagate_planning_state(
         self,
@@ -157,10 +176,24 @@ class WebKobeGraphManager:
         *,
         profile: BusinessFlowProfile,
     ) -> WebKobeEdge:
-        source = self._nodes[edge.source_node_id]
-        target = self._nodes[edge.target_node_id]
-        allowed_facts = _profile_fact_ids(profile)
+        transition = self.build_planning_transition(
+            edge.source_node_id,
+            planning_delta=edge.planning_delta,
+            profile=profile,
+        )
+        updated_edge = replace(edge, planning_transition=transition)
+        self.apply_planning_transition(updated_edge)
+        return updated_edge
 
+    def build_planning_transition(
+        self,
+        source_node_id: str,
+        *,
+        planning_delta: PlanningDelta | None,
+        profile: BusinessFlowProfile,
+    ) -> PlanningTransition:
+        source = self._nodes[source_node_id]
+        allowed_facts = _profile_fact_ids(profile)
         active_facts = (
             list(source.planning_state.active_facts)
             if source.planning_state is not None
@@ -170,13 +203,13 @@ class WebKobeGraphManager:
         removed_facts = [
             fact
             for fact in _filtered_facts(
-                _trusted_removed_facts(edge.planning_delta),
+                _trusted_removed_facts(planning_delta),
                 allowed_facts=allowed_facts,
             )
             if fact in active_set
         ]
         added_facts = _filtered_facts(
-            _trusted_added_facts(edge.planning_delta),
+            _trusted_added_facts(planning_delta),
             allowed_facts=allowed_facts,
         )
         added_facts = [fact for fact in added_facts if fact not in active_set]
@@ -186,39 +219,42 @@ class WebKobeGraphManager:
             if fact not in next_facts:
                 next_facts.append(fact)
 
-        evidence = (
-            list(source.planning_state.evidence)
-            if source.planning_state is not None
-            else []
-        )
-        if added_facts or removed_facts:
-            evidence.append(f"propagated from edge {edge.edge_id}")
-
-        transition = PlanningTransition(
+        return PlanningTransition(
             pre_facts=active_facts,
             added_facts=added_facts,
             removed_facts=removed_facts,
             post_facts=next_facts,
             evidence=(
-                list(edge.planning_delta.evidence)
-                if edge.planning_delta is not None
-                else []
+                list(planning_delta.evidence) if planning_delta is not None else []
             ),
             confidence=(
-                edge.planning_delta.confidence
-                if edge.planning_delta is not None
-                else None
+                planning_delta.confidence if planning_delta is not None else None
             ),
         )
+
+    def apply_planning_transition(self, edge: WebKobeEdge) -> None:
+        if edge.planning_transition is None:
+            return
+        source = self._nodes[edge.source_node_id]
+        target = self._nodes[edge.target_node_id]
+        evidence = (
+            list(source.planning_state.evidence)
+            if source.planning_state is not None
+            else []
+        )
+        if (
+            edge.planning_transition.added_facts
+            or edge.planning_transition.removed_facts
+        ):
+            evidence.append(f"propagated from edge {edge.edge_id}")
 
         self._nodes[edge.target_node_id] = replace(
             target,
             planning_state=PlanningState(
-                active_facts=next_facts,
+                active_facts=list(edge.planning_transition.post_facts),
                 evidence=evidence,
             ),
         )
-        return replace(edge, planning_transition=transition)
 
     def mark_interactable_explored(
         self,
