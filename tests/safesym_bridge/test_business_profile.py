@@ -67,6 +67,21 @@ def test_planning_delta_separates_candidate_and_verified_facts():
 
     assert data["candidate_added_facts"] == ["cart_has_items"]
     assert data["verified_added_facts"] == []
+    assert data["profile_fact_ids"] == []
+    assert data["generated_fact_ids"] == []
     assert data["uncertainty_reason"] == (
         "structured cart evidence did not confirm the claim"
     )
+
+
+def test_planning_delta_serializes_profile_and_generated_fact_sources():
+    delta = PlanningDelta(
+        candidate_added_facts=["cart_has_items", "product_details_visible"],
+        profile_fact_ids=["cart_has_items"],
+        generated_fact_ids=["product_details_visible"],
+    )
+
+    data = delta.to_dict()
+
+    assert data["profile_fact_ids"] == ["cart_has_items"]
+    assert data["generated_fact_ids"] == ["product_details_visible"]

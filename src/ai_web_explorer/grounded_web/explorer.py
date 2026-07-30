@@ -207,6 +207,14 @@ def _merge_planning_deltas(
         ),
         verified_added_facts=list(structured.verified_added_facts),
         verified_removed_facts=list(structured.verified_removed_facts),
+        profile_fact_ids=_merged_unique(
+            visual.profile_fact_ids,
+            structured.profile_fact_ids,
+        ),
+        generated_fact_ids=_merged_unique(
+            visual.generated_fact_ids,
+            structured.generated_fact_ids,
+        ),
         evidence=list(visual.evidence) + list(structured.evidence),
         confidence=structured.confidence or visual.confidence,
         uncertainty_reason=visual.uncertainty_reason,

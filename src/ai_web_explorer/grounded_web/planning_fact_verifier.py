@@ -82,6 +82,7 @@ def verify_planning_delta(
         candidate_removed_facts=candidate_removed,
         verified_added_facts=verified_added,
         verified_removed_facts=verified_removed,
+        profile_fact_ids=sorted(set(candidate_added + candidate_removed)),
         evidence=evidence,
         confidence=1.0 if verified_added or verified_removed else None,
         uncertainty_reason=None,

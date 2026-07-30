@@ -174,6 +174,8 @@ def _planning_delta_from_dict(data: dict[str, Any] | None) -> PlanningDelta | No
         candidate_removed_facts=list(data.get("candidate_removed_facts", [])),
         verified_added_facts=list(data.get("verified_added_facts", [])),
         verified_removed_facts=list(data.get("verified_removed_facts", [])),
+        profile_fact_ids=list(data.get("profile_fact_ids", [])),
+        generated_fact_ids=list(data.get("generated_fact_ids", [])),
         evidence=list(data.get("evidence", [])),
         confidence=data.get("confidence"),
         uncertainty_reason=data.get("uncertainty_reason"),

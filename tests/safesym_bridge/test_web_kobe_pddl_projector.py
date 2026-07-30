@@ -1296,8 +1296,13 @@ def test_load_web_kobe_graph_json_preserves_planning_delta(tmp_path):
                     True,
                 ),
                 planning_delta=PlanningDelta(
-                    candidate_added_facts=["cart_has_items"],
+                    candidate_added_facts=[
+                        "cart_has_items",
+                        "product_details_visible",
+                    ],
                     verified_added_facts=["cart_has_items"],
+                    profile_fact_ids=["cart_has_items"],
+                    generated_fact_ids=["product_details_visible"],
                     evidence=["cart count indicates one or more items"],
                     confidence=0.9,
                 ),
@@ -1311,6 +1316,10 @@ def test_load_web_kobe_graph_json_preserves_planning_delta(tmp_path):
 
     assert loaded.edges[0].planning_delta is not None
     assert loaded.edges[0].planning_delta.verified_added_facts == ["cart_has_items"]
+    assert loaded.edges[0].planning_delta.profile_fact_ids == ["cart_has_items"]
+    assert loaded.edges[0].planning_delta.generated_fact_ids == [
+        "product_details_visible"
+    ]
 
 
 def test_load_web_kobe_graph_json_preserves_planning_transition(tmp_path):

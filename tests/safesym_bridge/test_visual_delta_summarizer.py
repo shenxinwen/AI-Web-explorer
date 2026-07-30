@@ -88,10 +88,10 @@ def test_summarize_visual_delta_maps_business_transition_fields():
     assert result.business_transition.confidence == 0.9
 
 
-def test_summarize_visual_delta_rejects_unknown_profile_facts():
+def test_summarize_visual_delta_records_generated_facts_without_failing():
     request = VisualDeltaRequest(
-        goal="Add one item to the cart.",
-        action=BrowserAction("click", "button.add", "add_to_cart"),
+        goal="Open product details.",
+        action=BrowserAction("business_intent", None, "view_product_details"),
         profile=ecommerce_checkout_profile(),
         before_screenshot_path="before.png",
         after_screenshot_path="after.png",
@@ -99,18 +99,60 @@ def test_summarize_visual_delta_rejects_unknown_profile_facts():
 
     def provider(prompt, *, before_screenshot_path, after_screenshot_path):
         return (
-            '{"visible_change_summary":"Cart badge changed.",'
-            '"candidate_added_facts":["made_up_fact"],'
+            '{"visible_change_summary":"A product detail modal opened.",'
+            '"business_action_name":"view_product_details",'
+            '"business_relevance":"core",'
+            '"meaningful_change":true,'
+            '"candidate_added_facts":["product_details_visible"],'
             '"candidate_removed_facts":[],'
-            '"evidence":["cart badge changed"],'
-            '"confidence":0.6}'
+            '"evidence":["product detail modal is visible"],'
+            '"confidence":0.8}'
         )
 
     result = summarize_visual_delta(request, provider=provider)
 
-    assert result.trace.status == "failed"
-    assert result.trace.error_type == "unknown_fact"
-    assert result.planning_delta.candidate_added_facts == []
+    assert result.trace.status == "summarized"
+    assert result.trace.error_type is None
+    assert result.planning_delta.candidate_added_facts == ["product_details_visible"]
+    assert result.planning_delta.profile_fact_ids == []
+    assert result.planning_delta.generated_fact_ids == ["product_details_visible"]
+    assert result.business_transition is not None
+    assert result.business_transition.action_name == "view_product_details"
+    assert result.business_transition.relevance == "core"
+    assert result.business_transition.meaningful_change is True
+
+
+def test_summarize_visual_delta_splits_profile_and_generated_facts():
+    request = VisualDeltaRequest(
+        goal="Open product details.",
+        action=BrowserAction("business_intent", None, "view_product_details"),
+        profile=ecommerce_checkout_profile(),
+        before_screenshot_path="before.png",
+        after_screenshot_path="after.png",
+    )
+
+    def provider(prompt, *, before_screenshot_path, after_screenshot_path):
+        return (
+            '{"visible_change_summary":"Product details show an add-to-cart button.",'
+            '"candidate_added_facts":["cart_has_items","product_details_visible"],'
+            '"candidate_removed_facts":["modal_absent"],'
+            '"evidence":["product detail modal is visible"],'
+            '"confidence":0.8}'
+        )
+
+    result = summarize_visual_delta(request, provider=provider)
+
+    assert result.trace.status == "summarized"
+    assert result.planning_delta.candidate_added_facts == [
+        "cart_has_items",
+        "product_details_visible",
+    ]
+    assert result.planning_delta.candidate_removed_facts == ["modal_absent"]
+    assert result.planning_delta.profile_fact_ids == ["cart_has_items"]
+    assert result.planning_delta.generated_fact_ids == [
+        "product_details_visible",
+        "modal_absent",
+    ]
 
 
 def test_summarize_visual_delta_requires_visible_change_summary():

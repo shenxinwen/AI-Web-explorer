@@ -64,8 +64,10 @@ def _prompt_for_request(request: VisualDeltaRequest) -> str:
     payload = {
         "instruction": (
             "Compare the before and after screenshots for the executed web "
-            "action. Return JSON only. Propose candidate planning facts from "
-            "the provided profile, but do not mark anything verified."
+            "action. Return JSON only. Prefer candidate planning facts from "
+            "the provided profile when they fit, but you may propose new "
+            "candidate facts for meaningful business states not covered by "
+            "the profile. Do not mark anything verified."
         ),
         "goal": request.goal,
         "action": request.action.to_dict(),
@@ -265,21 +267,12 @@ def summarize_visual_delta(
 
     candidate_added = _fact_id_list(parsed.get("candidate_added_facts"))
     candidate_removed = _fact_id_list(parsed.get("candidate_removed_facts"))
-    unknown = sorted(
-        {fact for fact in candidate_added + candidate_removed if fact not in allowed}
-    )
-    if unknown:
-        return VisualDeltaResult(
-            planning_delta=_empty_delta(),
-            trace=_trace(
-                prompt=prompt,
-                raw_response=raw_response,
-                llm_response=parsed,
-                status="failed",
-                error_type="unknown_fact",
-                error_message=f"Unknown profile facts: {', '.join(unknown)}",
-            ),
-        )
+    profile_facts = [
+        fact for fact in candidate_added + candidate_removed if fact in allowed
+    ]
+    generated_facts = [
+        fact for fact in candidate_added + candidate_removed if fact not in allowed
+    ]
 
     evidence = _evidence_list(parsed.get("evidence"))
     delta = PlanningDelta(
@@ -287,6 +280,8 @@ def summarize_visual_delta(
         candidate_removed_facts=candidate_removed,
         verified_added_facts=[],
         verified_removed_facts=[],
+        profile_fact_ids=list(dict.fromkeys(profile_facts)),
+        generated_fact_ids=list(dict.fromkeys(generated_facts)),
         evidence=evidence,
         confidence=parsed.get("confidence"),
         uncertainty_reason="visual delta has not been structurally verified",

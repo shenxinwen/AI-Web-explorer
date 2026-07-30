@@ -90,6 +90,8 @@ class PlanningDelta:
     candidate_removed_facts: list[str] = field(default_factory=list)
     verified_added_facts: list[str] = field(default_factory=list)
     verified_removed_facts: list[str] = field(default_factory=list)
+    profile_fact_ids: list[str] = field(default_factory=list)
+    generated_fact_ids: list[str] = field(default_factory=list)
     evidence: list[str] = field(default_factory=list)
     confidence: float | None = None
     uncertainty_reason: str | None = None
@@ -100,6 +102,8 @@ class PlanningDelta:
             "candidate_removed_facts": list(self.candidate_removed_facts),
             "verified_added_facts": list(self.verified_added_facts),
             "verified_removed_facts": list(self.verified_removed_facts),
+            "profile_fact_ids": list(self.profile_fact_ids),
+            "generated_fact_ids": list(self.generated_fact_ids),
             "evidence": list(self.evidence),
             "confidence": self.confidence,
             "uncertainty_reason": self.uncertainty_reason,
