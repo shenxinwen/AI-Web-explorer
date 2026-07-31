@@ -108,8 +108,9 @@ web-kobe-pddl
 ```
 
 Older fixed `WebObservedGraph` and capability-graph commands are no longer part
-of the default CLI surface. Their source modules may remain temporarily as
-legacy/reference code, but new work should not extend them as the mainline.
+of the default CLI surface. The old `WebObservedGraph` exploration stack has
+been removed from the active source tree; historical notes remain only in
+archival design documents.
 
 ### Stagehand-Backed E-Commerce Graph Smoke
 
@@ -242,5 +243,5 @@ be run with local browser execution permission.
 - `safesym_bridge` consumes graph artifacts and writes PDDL/smoke outputs.
 - SauceDemo-specific helpers are regression scaffolding, not the generic
   exploration architecture.
-- Legacy original-explorer and WebObservedGraph code should be treated as
-  reference material unless a future task explicitly revives it.
+- Legacy original-explorer and WebObservedGraph designs are archival reference
+  material only. Active code should use `WebKobeGraph`.

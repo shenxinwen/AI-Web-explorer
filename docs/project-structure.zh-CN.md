@@ -1,32 +1,41 @@
-# Project Structure
+# 项目结构
 
-This file records the active project structure. Keep it synchronized with
-`docs/project-structure.zh-CN.md` when pipeline boundaries or module ownership
-change.
+这份文档记录当前 active code 的结构、pipeline、模块职责和主要函数。英文版
+`docs/project-structure.md` 用于 AI/代码接力；中文版用于人工审阅。项目结构变化时，两份文档需要同步更新。
 
-## Active Direction
+## 当前主线
 
-The repository is centered on the SafeSym-oriented Web-KOBE mainline:
+项目当前围绕 SafeSym-oriented Web-KOBE 主线展开：
 
 ```text
-real browser operation
-  -> observation and state interpretation
-  -> WebKobeGraph memory
-  -> bounded exploration policy
-  -> PDDL projection
-  -> SafeSym smoke / safety validation
+真实浏览器操作
+  -> 观察与状态解释
+  -> WebKobeGraph 记忆
+  -> bounded exploration 策略
+  -> PDDL 投影
+  -> SafeSym smoke / 安全验证
 ```
 
-The old upstream `explore` runtime and the old `WebObservedGraph` exploration
-stack are not active code paths.
+旧 upstream `explore` runtime 和旧 `WebObservedGraph` 探索栈已经不属于 active code path。
 
-## Layer Map
+## 分层结构
 
-### Operation Layer
+你说的“操作层、观察层、PDDL 映射层”是对的，但为了让结构更清楚，我建议当前按 6 层理解：
 
-Owns browser execution and low-level interaction.
+```text
+操作层
+观察与状态层
+图与记忆层
+探索策略层
+PDDL 映射与 SafeSym bridge 层
+实验运行层
+```
 
-Main modules:
+### 操作层
+
+负责浏览器执行和底层交互。
+
+主要模块：
 
 - `src/ai_web_explorer/grounded_web/automation_backend.py`
 - `src/ai_web_explorer/grounded_web/playwright_backend.py`
@@ -34,18 +43,17 @@ Main modules:
 - `src/ai_web_explorer/grounded_web/stagehand_sdk_provider.py`
 - `src/ai_web_explorer/grounded_web/stagehand_prompt.py`
 
-Main responsibilities:
+主要职责：
 
-- observe browser state;
-- list executable low-level or Stagehand-observed actions;
-- execute one selected action;
-- capture screenshots;
-- preserve low-level execution traces.
+- 观察浏览器状态；
+- 列出可执行的底层动作或 Stagehand-observed actions；
+- 执行一个已选择动作；
+- 截图；
+- 保存底层 execution trace。
 
-Stagehand belongs here as an execution/candidate-action backend. It should not
-own graph identity, planning facts, or PDDL semantics.
+Stagehand 属于这一层。它可以看页面、生成候选、执行动作，但不应该决定 graph identity、planning facts 或 PDDL 语义。
 
-Main functions/classes:
+主要函数/类：
 
 - `AutomationBackend.observe_state`
 - `AutomationBackend.list_interactables`
@@ -56,11 +64,11 @@ Main functions/classes:
 - `create_async_stagehand_provider_from_env`
 - `build_generic_stagehand_exploration_goal`
 
-### Observation And State Layer
+### 观察与状态层
 
-Owns page state extraction, visual comparison, and candidate business facts.
+负责页面状态抽取、视觉变化比较和候选业务 facts。
 
-Main modules:
+主要模块：
 
 - `src/ai_web_explorer/grounded_web/state_signature.py`
 - `src/ai_web_explorer/grounded_web/state_facts.py`
@@ -72,19 +80,18 @@ Main modules:
 - `src/ai_web_explorer/grounded_web/openai_visual_delta.py`
 - `src/ai_web_explorer/grounded_web/planning_fact_verifier.py`
 
-Main responsibilities:
+主要职责：
 
-- build deterministic state snapshots and signatures;
-- summarize current state for review and embeddings;
-- ask VLM for current business affordances;
-- compare before/after screenshots;
-- produce `BusinessTransition`, `PlanningDelta`, and evidence;
-- provide lightweight structured verification.
+- 构造确定性的 state snapshot 和 signature；
+- 为人工审查和 embedding 生成 state summary；
+- 让 VLM 总结当前页面可执行的业务候选动作；
+- 比较 before/after 截图；
+- 生成 `BusinessTransition`、`PlanningDelta` 和 evidence；
+- 提供轻量结构化 verifier。
 
-Profile facts live here as preferred observation targets and candidate PDDL
-predicate vocabulary, not as the full set of possible website states.
+profile facts 位于这一层。它们的定位是“优先观察目标 + PDDL 候选谓词词表”，不是网页所有可能状态的全集。
 
-Main functions/classes:
+主要函数/类：
 
 - `StateSnapshot`
 - `DeterministicSemanticAssistor.describe_state`
@@ -95,11 +102,11 @@ Main functions/classes:
 - `verify_planning_delta`
 - `build_state_summary`
 
-### Graph And Memory Layer
+### 图与记忆层
 
-Owns the active semantic graph and state memory.
+负责 active semantic graph 和状态记忆。
 
-Main modules:
+主要模块：
 
 - `src/ai_web_explorer/grounded_web/graph.py`
 - `src/ai_web_explorer/grounded_web/graph_manager.py`
@@ -108,20 +115,18 @@ Main modules:
 - `src/ai_web_explorer/grounded_web/embedding_provider.py`
 - `src/ai_web_explorer/grounded_web/exploration_index.py`
 
-Main responsibilities:
+主要职责：
 
-- define `WebKobeGraph`, `WebKobeNode`, `WebKobeEdge`;
-- record `BusinessAffordance`, `BusinessTransition`, `PlanningDelta`,
-  `PlanningState`, and `PlanningTransition`;
-- decide whether a business transition should materialize a new node;
-- propagate source-aware planning state;
-- store state embeddings;
-- detect revisits and provide memory context.
+- 定义 `WebKobeGraph`、`WebKobeNode`、`WebKobeEdge`；
+- 记录 `BusinessAffordance`、`BusinessTransition`、`PlanningDelta`、`PlanningState`、`PlanningTransition`；
+- 判断一次业务变化是否应该生成新节点；
+- 传播 source-aware planning state；
+- 存储 state embeddings；
+- 判断 revisit，并给探索策略提供 memory context。
 
-Embeddings help locate similar states and avoid repeated actions. They should
-not directly enter PDDL.
+embedding memory 只辅助定位和避免重复，不直接进入 PDDL。
 
-Main functions/classes:
+主要函数/类：
 
 - `WebKobeGraph`
 - `WebKobeNode`
@@ -133,31 +138,29 @@ Main functions/classes:
 - `find_best_state_match`
 - `build_exploration_context`
 
-### Exploration Policy Layer
+### 探索策略层
 
-Owns the step loop and action choice.
+负责 step loop 和动作选择。
 
-Main modules:
+主要模块：
 
 - `src/ai_web_explorer/grounded_web/explorer.py`
 - `src/ai_web_explorer/grounded_web/controller.py`
 - `src/ai_web_explorer/grounded_web/llm_action_selector.py`
 - `src/ai_web_explorer/grounded_web/openai_action_selector.py`
 
-Main responsibilities:
+主要职责：
 
-- run one exploration step;
-- choose one business or fallback action;
-- apply memory context and repetition avoidance;
-- call operation and observation layers;
-- update graph state;
-- stop by budget or controller terminal condition.
+- 执行一轮 exploration step；
+- 选择一个业务动作或 fallback action；
+- 使用 memory context 和重复惩罚；
+- 调用操作层和观察层；
+- 更新 graph；
+- 按 step budget 或 terminal condition 停止。
 
-`WebKobeExplorer` is currently the largest coordination class. New exploration
-features should avoid further enlarging it when a small policy/observer/recorder
-component would keep coupling lower.
+`WebKobeExplorer` 目前是最大的协调类。后续新增探索策略时，应尽量拆成小组件，不要继续把所有逻辑堆进 `explore_one_step`。
 
-Main functions/classes:
+主要函数/类：
 
 - `WebKobeExplorer.explore_one_step`
 - `WebKobeExplorer._select_action`
@@ -167,29 +170,28 @@ Main functions/classes:
 - `WebKobeExplorationController.run`
 - `select_action_with_llm`
 
-### PDDL Mapping And SafeSym Bridge
+### PDDL 映射与 SafeSym Bridge 层
 
-Owns planner-facing projection and validation.
+负责 planner-facing 投影和验证。
 
-Main modules:
+主要模块：
 
 - `src/ai_web_explorer/safesym_bridge/web_kobe_pddl_projector.py`
 - `src/ai_web_explorer/safesym_bridge/web_kobe_pddl_smoke.py`
 - `src/ai_web_explorer/safesym_bridge/web_kobe_safesym_smoke.py`
 - `src/ai_web_explorer/safesym_bridge/cli.py`
 
-Main responsibilities:
+主要职责：
 
-- load `WebKobeGraph` JSON;
-- project graph locations, profile facts, and planning transitions into PDDL;
-- write domain/problem artifacts;
-- run PDDL readiness checks;
-- run SafeSym parser, safety injection, and planner smoke checks.
+- 读取 `WebKobeGraph` JSON；
+- 把 graph location、profile facts、planning transitions 投影为 PDDL；
+- 写出 domain/problem；
+- 运行 PDDL readiness smoke；
+- 运行 SafeSym parser、safety injection、planner smoke。
 
-This layer should be deterministic. It should consume graph semantics, not call
-LLM/VLM directly.
+这一层应保持确定性。它应该消费 graph 中已经记录的语义，不应该直接调用 LLM/VLM。
 
-Main functions/classes:
+主要函数/类：
 
 - `load_web_kobe_graph_json`
 - `compile_web_kobe_graph_to_pddl`
@@ -197,27 +199,26 @@ Main functions/classes:
 - `write_web_kobe_safesym_smoke`
 - `main`
 
-### Experiment Runtime
+### 实验运行层
 
-Owns CLI-facing experiment setup.
+负责 CLI-facing 的实验编排。
 
-Main modules:
+主要模块：
 
 - `src/ai_web_explorer/safesym_bridge/browser_runner.py`
 - `src/ai_web_explorer/grounded_web/experiment_plan.py`
 
-Main responsibilities:
+主要职责：
 
-- launch Playwright;
-- configure Stagehand;
-- configure VLM and embedding providers;
-- wire benchmark/test context;
-- write graph, trace, screenshot, embedding, PDDL, and smoke outputs.
+- 启动 Playwright；
+- 配置 Stagehand；
+- 配置 VLM 和 embedding provider；
+- 注入 benchmark/test context；
+- 写出 graph、trace、screenshots、embedding、PDDL、smoke outputs。
 
-This layer is practical glue. Keep it from growing into the source of graph or
-planning semantics.
+这一层是工程 glue。它不应该成为 graph 语义或 planning 语义的来源。
 
-Main functions/classes:
+主要函数/类：
 
 - `run_web_kobe_exploration`
 - `run_stagehand_exploration`
@@ -225,7 +226,7 @@ Main functions/classes:
 - `write_web_kobe_graph`
 - `ecommerce_checkout_experiment_plan`
 
-## Current Recommended Commands
+## 当前推荐命令
 
 ```text
 web-kobe-explore
@@ -236,14 +237,14 @@ web-kobe-pddl-smoke
 web-kobe-safesym-smoke
 ```
 
-Debug helpers:
+Debug helpers：
 
 ```text
 web-kobe-graph
 web-kobe-pddl
 ```
 
-## Important Data Flow
+## 关键数据流
 
 ```text
 WebKobeExplorer.explore_one_step
@@ -263,21 +264,20 @@ WebKobeExplorer.explore_one_step
   -> PDDL projector consumes graph JSON
 ```
 
-## Documentation Files
+## 相关文档
 
 ```text
 docs/current-project-overview.md
 docs/current-project-overview.zh-CN.md
-  Current project direction and issues.
+  当前项目方向和问题。
 
 docs/project-decisions.zh-CN.md
-  Project decision record. Update it after meaningful architecture or pipeline
-  changes.
+  项目决策记录。每次做有意义的架构、pipeline、数据结构调整后都要更新。
 
 docs/project-structure.md
 docs/project-structure.zh-CN.md
-  Current pipeline, module boundaries, and major functions.
+  当前 pipeline、模块边界和主要函数。
 
 docs/safesym-bridge.md
-  SafeSym bridge commands and experiment usage.
+  SafeSym bridge 命令和实验使用说明。
 ```

@@ -1,520 +1,255 @@
 # Current Project Overview
 
-This document is the project handoff and planning overview. The Chinese version,
-`docs/current-project-overview.zh-CN.md`, is for human review. Keep both files
-synchronized whenever architecture, project direction, or experiment conclusions
-change.
+This is the high-level project handoff. It records the current direction,
+phase, main problems, and next priorities. Detailed module structure lives in
+`docs/project-structure.md`; decision rationale lives in
+`docs/project-decisions.zh-CN.md`. The Chinese version,
+`docs/current-project-overview.zh-CN.md`, is for human review.
 
 ## One-line Goal
 
-This project is not a general-purpose web-agent product. It serves SafeSym:
+This project is not a general-purpose web-agent product. It is a SafeSym-facing
+web exploration and planning-modeling system:
 
 ```text
 real website interaction
-  -> observe state changes before and after actions
+  -> observe page and business-state changes before and after actions
   -> build WebKobeGraph
-  -> abstract profile planning facts
-  -> project into planner-facing PDDL
+  -> abstract planner-facing states and actions
+  -> project into PDDL
   -> let SafeSym parse, inject safety checks, and validate planning artifacts
 ```
 
-The core problem is turning web interaction into a stable, verifiable, plannable
-state graph. Stagehand, Playwright, VLM/LLM providers, and embeddings are tools
-or evidence sources. They are not the final source of graph truth.
+The core problem is not making a model finish one website task. The core problem
+is:
+
+```text
+turn real web interaction into a stable, reviewable, plannable state graph that
+SafeSym can consume.
+```
+
+Stagehand, Playwright, VLM/LLM providers, and embeddings are tools or evidence
+sources. Web-KOBE must own graph structure, state memory, PDDL semantics, and
+exploration control.
 
 ## Current Phase
 
-The project has moved beyond proving that a task-guided checkout chain can run:
+The project has completed the early end-to-end validation chain:
 
 ```text
-task-guided benchmark baseline
-  -> bounded exploration V1
-  -> profile-fact state modeling
-  -> PDDL/SafeSym semantic consumption
+real browser execution -> graph -> PDDL -> SafeSym smoke
 ```
 
-The next phase should not spend most of its time making one checkout prompt more
-capable. The priority is to give the system basic exploration ability while
-keeping the PDDL/SafeSym chain consumable.
-
-Current position:
-
-```text
-real browser execution works;
-graph/PDDL/SafeSym end-to-end chain exists;
-basic embedding memory exists;
-free exploration strategy is not stable yet;
-profile fact verification is not reliable yet.
-```
-
-## Architecture Boundaries
-
-### grounded_web
-
-`src/ai_web_explorer/grounded_web/` is the generic web exploration layer. It
-owns:
-
-- browser observation and DOM/screenshot/form evidence collection;
-- the `AutomationBackend` interface;
-- Playwright and Stagehand backends;
-- before/after state records;
-- visual delta, structured delta, and future verifier integration;
-- `WebKobeGraph` node, edge, planning-state, and transition management;
-- exploration memory, embeddings, and frontier-related capabilities.
-
-It should not contain SafeSym-specific planning logic or SauceDemo-only rules.
-
-### safesym_bridge
-
-`src/ai_web_explorer/safesym_bridge/` is the planner/SafeSym bridge. It owns:
-
-- WebKobeGraph-to-PDDL projection;
-- PDDL smoke checks;
-- SafeSym parser, safety-injection, and planner smoke checks;
-- local fixtures and regression tests.
-
-It should not grow into the generic exploration runtime. SauceDemo should be a
-benchmark config, not a main architecture path.
-
-### Stagehand
-
-Stagehand is:
-
-```text
-Stagehand = candidate action discovery / low-level execution / interaction trace
-Web-KOBE = state observation / graph structure / planning facts / memory
-SafeSym bridge = PDDL projection / safety-rule consumption
-```
-
-Stagehand can help choose and execute actions, but it should not directly
-decide:
-
-- node identity;
-- planning facts;
-- PDDL predicates or effects;
-- safety triggers;
-- whether exploration is complete.
-
-## Graph Principles
-
-The graph should keep following these principles:
-
-1. A `node` represents a page/context state that can be revisited or explored
-   from.
-2. `node.planning_state` records known profile facts for analysis, frontier
-   selection, and terminal checks.
-3. An `edge` represents one action or business milestone.
-4. `edge.planning_transition` records before/after profile fact changes and is
-   the primary source for PDDL action prediction.
-5. PDDL consumes graph location predicates and preset profile facts by default.
-6. DOM/UI/schema facts remain evidence and should not enter PDDL by default.
-7. Readable names are review aids, not runtime identity.
-8. Embedding memory can help detect revisits and choose actions, but it does not
-   enter PDDL.
-
-Completed hardening:
-
-- PDDL action identity is generated by code, avoiding duplicate actions from
-  repeated readable names.
-- PDDL no longer projects UI/schema facts such as `region_N_visible` by default.
-- `planning_transition.added_facts` records only facts not already present in
-  `pre_facts`.
-- `edge.planning_transition.pre_facts`, `added_facts`, and `removed_facts` are
-  the preferred inputs for PDDL action mapping.
-- The e-commerce profile distinguishes `checkout_user_info_complete` and
-  `payment_info_complete`, while keeping `checkout_info_complete` as a summary
-  fact.
-- Embedding configuration is now generic `EMBEDDING_*`; there is no Qwen-specific
-  fallback.
-- Initial state summary, state embedding, and exploration index modules exist.
-
-## Experiment Findings
-
-### SauceDemo task-guided baseline
-
-SauceDemo remains the main regression benchmark. It has validated that:
-
-- Stagehand can operate a real browser;
-- milestone-level graphs can be built;
-- PDDL can be generated;
-- SafeSym can parse and inject safety checks;
-- final-order benchmark mode can verify human-confirmation safety injection
-  before order submission.
-
-This proves the controlled checkout chain, not arbitrary-site generality.
-
-### SauceDemo generic exploration latest
-
-Latest generic exploration output:
-
-```text
-outputs/experiments/saucedemo/latest/
-```
-
-Summary:
-
-- used `web-kobe-stagehand-explore`;
-- Stagehand v3 required `deepseek/deepseek-v4-flash`; bare
-  `deepseek-v4-flash` was rejected;
-- ran with `--steps 8`;
-- graph had 7 nodes and 8 edges;
-- page flow reached `checkout-complete`;
-- embedding records: 6, dimension 1024;
-- PDDL smoke was ready;
-- SafeSym parse/inject/base/safe smoke was ready.
-
-This did not prove that free exploration works:
-
-- the run stopped because it reached `max_steps=8`, not because coverage was
-  complete;
-- execution still used `business_milestone` mode, with one virtual action
-  `advance_business_milestone` per step;
-- Stagehand followed a generic "choose one useful site-function action" prompt
-  and advanced along one business path;
-- the system did not explicitly enumerate many page actions, branch, or
-  backtrack;
-- embeddings were generated, but no embedding-based node merge or revisit prompt
-  was observed;
-- without visual delta, `planning_state.facts` and
-  `planning_transition.added/removed_facts` may still be empty;
-- PDDL/SafeSym could consume the artifacts structurally, but the PDDL was mostly
-  a location/action path rather than a business-state transition model.
-
-Objective conclusion:
-
-```text
-browser exploration chain: works
-embedding storage: works
-PDDL/SafeSym structural consumption: works
-profile-fact semantic chain: insufficient
-free exploration: not established
-```
-
-### Practice Automated Testing
-
-Site:
-
-```text
-https://practiceautomatedtesting.com/shopping
-```
-
-The latest useful run was a partial checkout-flow success and produced
-SafeSym-consumable artifacts.
-
-Summary:
-
-- 1 graph node and 5 edges;
-- 4 projectable edges;
-- final facts included `cart_has_items`, `checkout_started`, and
-  `checkout_info_complete`;
-- PDDL smoke was ready;
-- SafeSym parse/inject/base/safe smoke was ready;
-- the run did not reach `order_review_ready` or `order_completed`.
-
-Exposed issues:
-
-- payment fields were not complete, but the VLM judged
-  `checkout_info_complete` too early;
-- later Stagehand action choice was unstable;
-- profile granularity and missing verification directly affect PDDL semantic
-  quality.
-
-### TestDino Store
-
-Site:
-
-```text
-https://storedemo.testdino.com/
-```
-
-The result is partial success:
-
-- one run produced `product_list_visible` and `cart_has_items` and was
-  SafeSym-consumable;
-- a guided-prompt run was shallower and produced duplicate product nodes;
-- it exposed node deduplication, state abstraction, and Stagehand execution
-  stability issues.
-
-This suggests better prompting alone will not solve the architecture problem.
-State abstraction remains the main bottleneck.
-
-## Main Problems
-
-### P0: generic exploration does not yet carry profile facts
-
-This is the largest current issue.
-
-`web-kobe-stagehand-explore` can now explicitly connect the
-`ecommerce_checkout` profile and reuse the existing visual-delta/VLM chain. The
-next validation question is whether VLM candidate facts reliably enter
-`planning_state` and `planning_transition` in generic / bounded exploration, so
-PDDL can express business facts such as `cart_has_items`, `checkout_started`, or
-`payment_info_complete`.
-
-The next phase must connect generic exploration to profile-bounded state
-observation:
-
-```text
-before profile facts
-  -> action
-  -> after profile facts
-  -> edge.planning_transition
-  -> target node.planning_state
-```
-
-### P1: current exploration is still close to single-path task advancement
-
-The latest SauceDemo generic run used an exploration-style prompt, but the
-execution mechanism is still milestone-like:
-
-```text
-one virtual business_intent action per step
-  -> Stagehand chooses low-level actions internally
-  -> Web-KOBE records one edge
-```
-
-This is not OpenMobile/SEE-style exploration yet. The system does not explicitly
-manage:
-
-- candidate action sets;
-- action priority;
-- repetition penalty;
-- frontier;
-- backtracking;
-- coverage stop conditions.
-
-### P1: embedding memory is connected but shallow
-
-Embeddings are generated and stored. Current use:
-
-- summarize the current state;
-- compare against historical state embeddings;
-- if a revisit is detected, add tried/avoid action guidance to the Stagehand
-  prompt.
-
-Embeddings currently do not:
-
-- directly merge nodes;
-- change GraphManager node identity;
-- enter PDDL;
-- decide exploration completion.
-
-This is a good low-coupling first step, but the boundary between embedding
-memory and graph merge needs to stay explicit.
-
-### P2: termination is still step-budget based
-
-Generic exploration mainly stops at `max_steps`. This is fine for smoke tests
-but not enough for a real exploration system.
-
-Future stopping signals should include:
-
-- empty frontier;
-- repeated no-op or duplicate states in recent steps;
-- target business-state coverage reached;
-- budget exhausted.
-
-### P2: Stagehand success signals are unreliable
-
-Trace can report `backend_reported_success=false` while the page actually
-changes. Before/after observation is more reliable than the Stagehand result
-alone.
-
-Keep raw traces for diagnosis, but normalize Stagehand result interpretation
-later.
-
-### P2: DeepSeek/Stagehand responseFormat warning
-
-`deepseek/deepseek-v4-flash` can execute, but Stagehand emits:
-
-```text
-responseFormat setting is not supported by this model
-```
-
-This is a non-blocking experiment anomaly for now. If structured Stagehand
-outputs become important, model/interface selection must be revisited.
-
-### P3: verifier is not real yet
-
-Profile facts are still mostly lightweight rules or VLM/LLM candidates. A future
-verifier should combine:
-
-- DOM;
-- URL;
-- visible controls;
-- form values;
-- screenshot/VLM summary;
-- profile evidence hints;
-- before/after facts.
-
-The verifier should not replace profiles. It should decide whether candidate
-facts can become planner-facing truth.
-
-## Next Direction
-
-### Goal: bounded exploration V1
-
-The next phase should implement a minimal usable exploration loop:
+It is now moving from the task-guided checkout baseline toward bounded
+exploration V1. The current target is a minimal usable exploration loop:
 
 ```text
 observe current state
-  -> generate candidate actions
+  -> generate immediately executable business action candidates
   -> choose one action using graph memory / embedding memory / repetition penalty
-  -> execute action
-  -> observe before/after profile facts
-  -> update node / edge / planning_transition
-  -> continue based on frontier or budget
+  -> execute the action
+  -> observe before/after business changes
+  -> update node, edge, planning_state, and planning_transition
+  -> generate or update PDDL/SafeSym artifacts
+  -> continue or stop based on budget, repetition, frontier, or business coverage
 ```
 
-The first version does not need full coverage. It should provide:
+Current objective status:
 
-- selecting one action from multiple candidates;
-- avoiding obvious repeats and no-ops;
-- recording why an action was chosen;
-- showing tried actions in the graph;
-- keeping PDDL/SafeSym consumable;
-- low coupling between modules.
+```text
+real browser chain: established
+graph/PDDL/SafeSym engineering chain: established
+VLM visual delta: connected
+business affordance generation: initial version exists
+embedding memory: connected for similar-state lookup and repetition guidance
+free exploration strategy: not stable yet
+profile fact verifier: not real yet
+PDDL semantic quality: consumable, but not stable or readable enough
+```
 
-### Design stance
+Detailed pipeline and module ownership are recorded in
+`docs/project-structure.md`.
 
-The design can borrow from OpenMobile/SEE without overbuilding:
+## Current Architectural Judgments
 
-- graph as primary memory;
-- embeddings as a similar-state index;
-- candidate actions and frontier for exploration control;
-- profile facts as planner-facing state;
-- failed/no-op edges as diagnostics and negative samples;
-- start with short single-site runs, then compare across sites.
+### 1. WebKobeGraph is the active graph model
 
-### Short-term priorities
+The old `WebObservedGraph` exploration stack has been removed from the active
+source tree. The active exploration, PDDL, and SafeSym chain should use:
 
-1. Validate the generic exploration visual-delta/profile-facts chain.
-2. Move Stagehand from one virtual milestone toward candidate-action mode,
-   starting by evaluating whether `observed_action` is reliable.
-3. Keep embedding memory responsible for similar-state lookup and repetition
-   penalty, not PDDL facts.
-4. Add stop reason, prompt mode, memory hit, and fact counts to every experiment
-   report.
-5. Rerun SauceDemo, Practice Automated Testing, and TestDino to compare
-   task-guided and bounded-exploration behavior.
+```text
+WebKobeGraph
+WebKobeNode
+WebKobeEdge
+PlanningState
+PlanningTransition
+BusinessAffordance
+BusinessTransition
+```
+
+Historical `WebObservedGraph` designs remain only in old spec/plan documents.
+
+### 2. Profile facts should have lower influence
+
+Profile facts are not the complete set of possible web states. Their new
+position is:
+
+```text
+candidate PDDL predicate vocabulary + preferred observation targets +
+cross-site semantic alignment anchors
+```
+
+The graph should be able to record both profile facts and generated facts. PDDL
+should still conservatively consume profile facts by default. Generated fact
+recording, promotion, and projection remain open design work.
+
+### 3. Stagehand is the operation layer, not state truth
+
+Stagehand can observe, propose candidates, execute actions, and provide traces.
+It should not directly decide:
+
+- node identity;
+- planning facts;
+- PDDL predicates/effects;
+- safety triggers;
+- exploration completion.
+
+State truth should come from Web-KOBE before/after observations, VLM/structured
+evidence, graph memory, and a future verifier.
+
+### 4. PDDL projection should stay deterministic
+
+The PDDL projector should consume graph semantics. It should not call LLM/VLM
+directly and should not freely invent predicates.
+
+Current PDDL inputs are mainly:
+
+```text
+node location
+node.planning_state.active_facts
+edge.action.canonical_action_name
+edge.planning_transition.pre_facts
+edge.planning_transition.added_facts
+edge.planning_transition.removed_facts
+```
+
+Naming work is deferred. The intended boundary is that LLM/VLM may help produce
+semantic labels during exploration, while the projector only normalizes and
+projects stored graph semantics.
+
+## Main Problems
+
+### P0: profile facts still carry too much responsibility
+
+Profile facts currently influence VLM prompts, fact classification, lightweight
+structured verification, planning_state propagation, and PDDL predicates. They
+have not yet been fully downgraded into planner-facing references.
+
+The concrete issue: `planning_transition` is still filtered through profile
+facts, making generated facts hard to carry into node state.
+
+### P0: PDDL semantic quality is still unstable
+
+SafeSym can structurally consume current artifacts, but PDDL quality is not
+stable enough:
+
+- location predicates may still degrade into names such as `at_shopping_002`;
+- action preconditions depend on correct source-node localization;
+- incomplete profile facts make PDDL degrade into a location path;
+- generated facts are not projected by default, so real business states may be
+  lost.
+
+### P1: exploration does not yet have a real frontier
+
+The system has business affordances and embedding memory, but not mature:
+
+- candidate action ranking;
+- tried-action memory;
+- duplicate/no-op penalty;
+- backtracking;
+- coverage stop conditions.
+
+It is closer to bounded single-path exploration than mature free exploration.
+
+### P1: WebKobeExplorer has centralization risk
+
+`WebKobeExplorer` coordinates observation, action choice, VLM, embedding,
+source matching, edge construction, planning transition, and backtracking. It is
+the current mainline core, but new exploration policy should not keep growing
+inside `explore_one_step`.
+
+### P2: graph still mixes business state and low-level UI structure
+
+`interactable_elements`, selectors, and low-level action traces still exist in
+the graph structure. Keep them short term for compatibility and debugging, but
+the business graph should gradually center on:
+
+```text
+business_affordances + business_transition + planning_transition
+```
+
+### P2: verifier is missing
+
+Facts currently come mostly from VLM candidates or lightweight structured rules.
+A future verifier must decide which facts become planner-facing truth.
+
+Short term, preserve provenance and evidence.
+
+## Next Priorities
+
+1. Fix the profile-fact hard-whitelist issue so the graph can record generated
+   facts while PDDL stays conservative by default.
+2. Run an experiment to verify whether embedding source matching affects edge
+   sources correctly.
+3. Inspect graph and PDDL quality, especially source/target,
+   precondition/effect, and node labels.
+4. Revisit PDDL naming strategy after graph semantics are stable.
+5. Once the graph layer stabilizes, refactor or detach `interactable_elements`
+   and other low-level UI fields.
+6. Gradually split `WebKobeExplorer` to avoid further centralization.
 
 ## Experiment Management
 
-Keep only the latest retained output for each site:
+Keep only the latest valid output for each site:
 
 ```text
 outputs/experiments/<site_name>/latest/
 ```
 
-Each run report should record:
+Each experiment report should record:
 
 - command and models;
 - prompt mode;
+- execution mode;
 - stop reason;
-- whether it was task-guided, generic, or bounded exploration;
 - graph node and edge counts;
-- node merge / visit_count behavior;
+- node merge / revisit behavior;
 - embedding records and memory hits;
 - final planning facts;
+- generated facts;
 - PDDL readiness;
 - SafeSym consumability;
-- anomalies and failed edges;
+- anomalies and failed/no-op edges;
 - screenshot-backed human-verifiable state changes;
 - objective conclusion for structural chain, semantic chain, and exploration
   ability.
 
-## Current Assessment
-
-The project is doing well, but should not overclaim.
-
-Established:
-
-- real webpage to graph engineering chain;
-- embedding configuration and storage;
-- PDDL projection;
-- SafeSym smoke;
-- multi-site partial-success experiment management.
-
-Not established yet:
-
-- stable profile-fact state observation;
-- true candidate-action exploration strategy;
-- coverage/frontier-based termination;
-- significant embedding-based revisit influence on exploration behavior;
-- verifier-backed planner truth.
-
-The next phase is not about making the model smarter. It is about moving
-exploration control back into Web-KOBE:
+## Related Documents
 
 ```text
-Stagehand sees and executes;
-Web-KOBE remembers, chooses, models state, and owns planning semantics;
-SafeSym consumes PDDL and validates safety constraints.
-```
+docs/project-structure.md
+  Current pipeline, module boundaries, and major functions.
 
-## Important Files
+docs/project-structure.zh-CN.md
+  Chinese version of the project structure document.
 
-```text
-src/ai_web_explorer/grounded_web/
-  Generic web observation, action execution abstraction, graph construction,
-  and planning-state management.
-
-src/ai_web_explorer/grounded_web/business_profile.py
-  BusinessFlowProfile and planning fact definitions.
-
-src/ai_web_explorer/grounded_web/experiment_plan.py
-  ExperimentPlan and ExperimentStep definitions for configured business-step
-  experiments.
-
-src/ai_web_explorer/grounded_web/graph.py
-src/ai_web_explorer/grounded_web/graph_manager.py
-  WebKobeGraph, nodes, edges, planning_state, and planning_transition.
-
-src/ai_web_explorer/grounded_web/explorer.py
-  Main exploration loop. Owns before/after, edges, planning deltas, and memory
-  context.
-
-src/ai_web_explorer/grounded_web/stagehand_backend.py
-src/ai_web_explorer/grounded_web/stagehand_prompt.py
-  Stagehand backend and prompts. Generic exploration can choose
-  business_milestone or observed_action execution mode.
-
-src/ai_web_explorer/grounded_web/state_summary.py
-src/ai_web_explorer/grounded_web/state_embedding.py
-src/ai_web_explorer/grounded_web/embedding_provider.py
-src/ai_web_explorer/grounded_web/exploration_index.py
-  State summary, embedding provider, similar-state lookup, and exploration
-  memory.
-
-src/ai_web_explorer/grounded_web/visual_delta.py
-src/ai_web_explorer/grounded_web/openai_visual_delta.py
-  Before/after screenshot delta summary and candidate planning facts.
-
-src/ai_web_explorer/grounded_web/planning_fact_verifier.py
-  Current lightweight verifier; it needs later expansion.
-
-src/ai_web_explorer/safesym_bridge/web_kobe_pddl_projector.py
-  Main WebKobeGraph-to-PDDL projection logic.
-
-src/ai_web_explorer/safesym_bridge/web_kobe_pddl_smoke.py
-src/ai_web_explorer/safesym_bridge/web_kobe_safesym_smoke.py
-  PDDL and SafeSym smoke checks.
+docs/project-decisions.zh-CN.md
+  Project decision record. Update it after meaningful architecture, pipeline,
+  data-structure, or mainline cleanup changes.
 
 docs/safesym-bridge.md
-  SafeSym bridge command and experiment reference.
+  SafeSym bridge commands and experiment usage.
+
+docs/current-project-overview.zh-CN.md
+  Chinese version of this overview.
 ```
-
-## Handoff Notes
-
-Before starting new architecture or implementation work, confirm:
-
-- the project serves SafeSym, not a general-purpose web-agent product;
-- the current phase is moving from task-guided benchmarks to bounded
-  exploration;
-- PDDL consumes node identity and profile planning facts, not UI/schema facts;
-- Stagehand is a candidate-action / execution / trace source, not state truth;
-- the latest generic exploration path can now connect business profiles, VLM
-  visual delta, and `observed_action` mode;
-- the biggest current risks are immature bounded-exploration policy, missing
-  verifier, and candidate-action quality;
-- the next priority is the minimal bounded exploration V1 loop.
