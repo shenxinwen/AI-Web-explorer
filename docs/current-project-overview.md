@@ -62,9 +62,12 @@ graph/PDDL/SafeSym engineering chain: established
 VLM visual delta: connected
 business affordance generation: initial version exists
 embedding memory: connected for similar-state lookup and repetition guidance
+generated fact recording: graph layer records them, PDDL excludes them by default
 free exploration strategy: not stable yet
 profile fact verifier: not real yet
 PDDL semantic quality: consumable, but not stable or readable enough
+business node naming: materialized business nodes can derive labels from
+facts/actions
 ```
 
 Detailed pipeline and module ownership are recorded in
@@ -99,9 +102,9 @@ candidate PDDL predicate vocabulary + preferred observation targets +
 cross-site semantic alignment anchors
 ```
 
-The graph should be able to record both profile facts and generated facts. PDDL
-should still conservatively consume profile facts by default. Generated fact
-recording, promotion, and projection remain open design work.
+The graph can record both profile facts and generated facts. PDDL still
+conservatively consumes profile facts by default. Generated fact promotion and
+optional projection remain open design work.
 
 ### 3. Stagehand is the operation layer, not state truth
 
@@ -126,11 +129,9 @@ Current PDDL inputs are mainly:
 
 ```text
 node location
-node.planning_state.active_facts
+node.planning_state.profile_fact_ids by default
 edge.action.canonical_action_name
-edge.planning_transition.pre_facts
-edge.planning_transition.added_facts
-edge.planning_transition.removed_facts
+profile facts from edge.planning_transition pre/added/removed facts
 ```
 
 Naming work is deferred. The intended boundary is that LLM/VLM may help produce
@@ -139,14 +140,16 @@ projects stored graph semantics.
 
 ## Main Problems
 
-### P0: profile facts still carry too much responsibility
+### P0: generated facts do not yet have a promotion strategy
 
-Profile facts currently influence VLM prompts, fact classification, lightweight
-structured verification, planning_state propagation, and PDDL predicates. They
-have not yet been fully downgraded into planner-facing references.
+The graph now records generated facts and preserves fact provenance in
+`PlanningState.profile_fact_ids` / `PlanningState.generated_fact_ids`. The PDDL
+projector excludes generated facts by default so unreviewed VLM facts do not
+pollute SafeSym artifacts.
 
-The concrete issue: `planning_transition` is still filtered through profile
-facts, making generated facts hard to carry into node state.
+The remaining issue is policy: when should generated facts be promoted into
+planner-facing facts, when should an experiment explicitly project them, and how
+should a future verifier confirm them?
 
 ### P0: PDDL semantic quality is still unstable
 
@@ -154,10 +157,12 @@ SafeSym can structurally consume current artifacts, but PDDL quality is not
 stable enough:
 
 - location predicates may still degrade into names such as `at_shopping_002`;
+- materialized business nodes now derive labels from facts/actions, but
+  non-business nodes and repeated labels can still be weak;
 - action preconditions depend on correct source-node localization;
 - incomplete profile facts make PDDL degrade into a location path;
 - generated facts are not projected by default, so real business states may be
-  lost.
+  lost until a promotion/projection policy exists.
 
 ### P1: exploration does not yet have a real frontier
 
@@ -197,13 +202,13 @@ Short term, preserve provenance and evidence.
 
 ## Next Priorities
 
-1. Fix the profile-fact hard-whitelist issue so the graph can record generated
-   facts while PDDL stays conservative by default.
-2. Run an experiment to verify whether embedding source matching affects edge
-   sources correctly.
-3. Inspect graph and PDDL quality, especially source/target,
+1. Run an experiment to verify whether generated facts enter the graph and
+   embedding source matching affects edge sources correctly.
+2. Inspect graph and PDDL quality, especially source/target,
    precondition/effect, and node labels.
-4. Revisit PDDL naming strategy after graph semantics are stable.
+3. Discuss generated fact promotion / optional projection policy.
+4. Revisit PDDL action naming and non-business node naming after graph
+   semantics are stable.
 5. Once the graph layer stabilizes, refactor or detach `interactable_elements`
    and other low-level UI fields.
 6. Gradually split `WebKobeExplorer` to avoid further centralization.

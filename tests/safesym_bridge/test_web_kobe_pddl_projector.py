@@ -34,6 +34,8 @@ def _node(
     values: dict,
     planning_facts: list[str] | None = None,
     node_label: str | None = None,
+    profile_fact_ids: list[str] | None = None,
+    generated_fact_ids: list[str] | None = None,
 ) -> WebKobeNode:
     evidence = [Evidence(source="unit_test")]
     return WebKobeNode(
@@ -56,7 +58,11 @@ def _node(
         evidence=evidence,
         node_label=node_label,
         planning_state=(
-            PlanningState(active_facts=planning_facts)
+            PlanningState(
+                active_facts=planning_facts,
+                profile_fact_ids=profile_fact_ids or [],
+                generated_fact_ids=generated_fact_ids or [],
+            )
             if planning_facts is not None
             else None
         ),
@@ -539,6 +545,82 @@ def test_compile_web_kobe_graph_to_pddl_trusts_candidate_planning_delta():
     assert "(order_place_pending_sensitive)" in artifacts.domain
     assert "(not (checkout_started))" in artifacts.domain
     assert "(order_review_ready) (order_review_ready)" not in artifacts.domain
+
+
+def test_compile_web_kobe_graph_to_pddl_excludes_generated_facts_by_default():
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="products",
+        total_steps_completed=1,
+        nodes=[
+            _node(
+                "products",
+                "products",
+                {},
+                planning_facts=["product_list_visible", "product_details_visible"],
+                profile_fact_ids=["product_list_visible"],
+                generated_fact_ids=["product_details_visible"],
+            ),
+            _node(
+                "details",
+                "details",
+                {},
+                planning_facts=["product_list_visible", "product_details_visible"],
+                profile_fact_ids=["product_list_visible"],
+                generated_fact_ids=["product_details_visible"],
+            ),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="products",
+                target_node_id="details",
+                instruction="open product details",
+                action=BrowserAction(
+                    "business_intent",
+                    None,
+                    "open_product_details",
+                ),
+                capability=None,
+                target_observation="product details",
+                observed_delta=[],
+                schema_delta={},
+                execution_trace=ExecutionTrace(
+                    "business_intent",
+                    None,
+                    "open_product_details",
+                    {},
+                    "products",
+                    "details",
+                    True,
+                ),
+                planning_delta=PlanningDelta(
+                    candidate_added_facts=[
+                        "product_list_visible",
+                        "product_details_visible",
+                    ],
+                    profile_fact_ids=["product_list_visible"],
+                    generated_fact_ids=["product_details_visible"],
+                ),
+                planning_transition=PlanningTransition(
+                    pre_facts=[],
+                    added_facts=["product_list_visible", "product_details_visible"],
+                    removed_facts=[],
+                    post_facts=[
+                        "product_list_visible",
+                        "product_details_visible",
+                    ],
+                ),
+                status="succeeded_with_observed_change",
+            )
+        ],
+    )
+
+    artifacts = compile_web_kobe_graph_to_pddl(graph, goal_node_id="details")
+
+    assert "(product_list_visible)" in artifacts.domain
+    assert "(product_list_visible)" in artifacts.problem
+    assert "product_details_visible" not in artifacts.domain
+    assert "product_details_visible" not in artifacts.problem
 
 
 def test_compile_web_kobe_graph_to_pddl_prefers_pddl_action_hint_name():

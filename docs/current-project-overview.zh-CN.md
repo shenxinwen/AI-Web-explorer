@@ -54,9 +54,11 @@ graph/PDDL/SafeSym 工程链路：已成立
 VLM visual delta：已接入
 business affordance 生成：已有初版
 embedding memory：已接入，用于相似状态定位和重复提示
+generated facts 记录：graph 层已接住，PDDL 默认不投影
 自由探索策略：尚未稳定
 profile fact verifier：尚未真正建立
 PDDL 语义质量：可消费，但还不够稳定和可读
+业务节点命名：materialized business node 已能从 facts/action 推导 label
 ```
 
 详细 pipeline 和模块职责见 `docs/project-structure.zh-CN.md`。
@@ -87,7 +89,7 @@ profile facts 不是网页状态全集。它们的新定位是：
 PDDL 候选谓词词表 + 优先观察目标 + 跨网站语义对齐锚点
 ```
 
-Graph 层应该允许记录 profile facts 和 generated facts；PDDL 层默认仍保守消费 profile facts。后续需要设计 generated facts 的记录、晋升和投影策略。
+Graph 层现在允许记录 profile facts 和 generated facts；PDDL 层默认仍保守消费 profile facts。后续需要设计 generated facts 的晋升和可选投影策略。
 
 ### 3. Stagehand 是操作层，不是状态真相层
 
@@ -109,31 +111,30 @@ PDDL projector 应消费 graph 中已经记录的语义，不应直接调用 LLM
 
 ```text
 node location
-node.planning_state.active_facts
+node.planning_state.profile_fact_ids 默认投影
 edge.action.canonical_action_name
-edge.planning_transition.pre_facts
-edge.planning_transition.added_facts
-edge.planning_transition.removed_facts
+edge.planning_transition 中属于 profile facts 的 pre/added/removed facts
 ```
 
 命名问题暂缓，但方向是：LLM/VLM 可以在探索阶段帮助生成语义 label；PDDL projector 只做确定性规范化和投影。
 
 ## 当前主要问题
 
-### P0: profile facts 职责过重
+### P0: generated facts 还没有晋升策略
 
-当前代码里 profile facts 仍然影响 VLM 提示、fact 归类、structured verifier、planning_state 传播和 PDDL 谓词。它们还没有完全降级成 planner-facing 参考系。
+当前 graph 已能记录 generated facts，并在 `PlanningState` 中保留 `profile_fact_ids` / `generated_fact_ids` 来源信息。PDDL projector 默认只投影 profile facts，避免未审核事实污染 SafeSym。
 
-最直接的问题是：`planning_transition` 仍会被 profile facts 过滤，导致 generated facts 难以进入节点状态。
+剩余问题是：generated facts 何时可以晋升为 planner-facing facts、是否允许某轮实验显式投影、以及如何通过 verifier 确认它们，目前还没有策略。
 
 ### P0: PDDL 语义质量仍不稳定
 
 SafeSym 可以结构性消费当前产物，但 PDDL 的语义质量还不稳定：
 
 - location predicate 仍可能出现 `at_shopping_002` 这类不可读名字；
+- materialized business node 已开始用 facts/action 推导 label，但非业务节点和重复 label 仍可能不够理想；
 - action precondition 依赖 source node 定位，需要继续用实验确认；
 - profile facts 不完整时，PDDL 会退化为 location path；
-- generated facts 默认不进入 PDDL，可能丢失真实业务状态。
+- generated facts 默认不进入 PDDL，可能丢失真实业务状态，需要后续晋升/投影策略弥补。
 
 ### P1: 探索还没有真正形成 frontier
 
@@ -167,10 +168,10 @@ business_affordances + business_transition + planning_transition
 
 ## 下一阶段优先级
 
-1. 修正 profile facts 的硬白名单问题，让 graph 能记录 generated facts，同时让 PDDL 默认保持保守。
-2. 跑一轮实验验证 embedding source matching 是否真正影响 edge source。
-3. 检查 graph 和 PDDL 质量，尤其是 source/target、precondition/effect、node label。
-4. 再讨论 PDDL 命名策略，不急着让 LLM 直接参与 PDDL projector。
+1. 跑一轮实验验证 generated facts 是否进入 graph、embedding source matching 是否真正影响 edge source。
+2. 检查 graph 和 PDDL 质量，尤其是 source/target、precondition/effect、node label。
+3. 讨论 generated facts 的晋升/可选投影策略。
+4. 继续讨论 PDDL action naming 和非业务节点命名策略，不急着让 LLM 直接参与 PDDL projector。
 5. 等 graph 层稳定后，重构或剥离 `interactable_elements` 等底层 UI 字段。
 6. 后续逐步拆分 `WebKobeExplorer`，避免核心协调类继续膨胀。
 

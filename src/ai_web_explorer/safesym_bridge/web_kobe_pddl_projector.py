@@ -42,6 +42,7 @@ class WebKobePddlArtifacts:
 @dataclass(frozen=True)
 class PddlProjectionOptions:
     include_observed_delta_facts: bool = False
+    include_generated_planning_facts: bool = False
 
 
 def _evidence_from_dict(data: dict[str, Any]) -> Evidence:
@@ -187,6 +188,8 @@ def _planning_state_from_dict(data: dict[str, Any] | None) -> PlanningState | No
         return None
     return PlanningState(
         active_facts=list(data.get("active_facts", [])),
+        profile_fact_ids=list(data.get("profile_fact_ids", [])),
+        generated_fact_ids=list(data.get("generated_fact_ids", [])),
         evidence=list(data.get("evidence", [])),
     )
 
@@ -359,6 +362,80 @@ def _trusted_removed_planning_facts(delta: PlanningDelta) -> list[str]:
     return _unique_facts(delta.candidate_removed_facts, delta.verified_removed_facts)
 
 
+def _projectable_delta_facts(
+    facts: list[str],
+    delta: PlanningDelta,
+    *,
+    options: PddlProjectionOptions,
+) -> list[str]:
+    if options.include_generated_planning_facts:
+        return facts
+    if delta.profile_fact_ids:
+        allowed = set(delta.profile_fact_ids)
+        return [fact for fact in facts if fact in allowed]
+    if delta.generated_fact_ids:
+        blocked = set(delta.generated_fact_ids)
+        return [fact for fact in facts if fact not in blocked]
+    return facts
+
+
+def _projectable_state_facts(
+    state: PlanningState,
+    *,
+    options: PddlProjectionOptions,
+) -> list[str]:
+    if options.include_generated_planning_facts:
+        return list(state.active_facts)
+    if state.profile_fact_ids:
+        allowed = set(state.profile_fact_ids)
+        return [fact for fact in state.active_facts if fact in allowed]
+    if state.generated_fact_ids:
+        blocked = set(state.generated_fact_ids)
+        return [fact for fact in state.active_facts if fact not in blocked]
+    return list(state.active_facts)
+
+
+def _projectable_transition_facts(
+    facts: list[str],
+    edge,
+    *,
+    options: PddlProjectionOptions,
+    source_node=None,
+) -> list[str]:
+    if options.include_generated_planning_facts:
+        return facts
+    if (
+        edge.planning_delta is not None
+        and not edge.planning_delta.profile_fact_ids
+        and not edge.planning_delta.generated_fact_ids
+    ):
+        return facts
+    source_facts: set[str] = set()
+    if source_node is not None and source_node.planning_state is not None:
+        source_facts = set(
+            _projectable_state_facts(
+                source_node.planning_state,
+                options=options,
+            )
+        )
+    delta_facts: set[str] = set()
+    if edge.planning_delta is not None:
+        delta_facts = set(
+            _projectable_delta_facts(
+                _unique_facts(
+                    _trusted_added_planning_facts(edge.planning_delta),
+                    _trusted_removed_planning_facts(edge.planning_delta),
+                ),
+                edge.planning_delta,
+                options=options,
+            )
+        )
+    allowed = source_facts | delta_facts
+    if not allowed and edge.planning_delta is None:
+        return facts
+    return [fact for fact in facts if fact in allowed]
+
+
 def _state_predicate_for_value(key: str, value: object) -> str | None:
     if isinstance(value, bool):
         return _predicate(key)
@@ -367,11 +444,21 @@ def _state_predicate_for_value(key: str, value: object) -> str | None:
     return None
 
 
-def _state_predicates(graph: WebKobeGraph) -> list[str]:
+def _state_predicates(
+    graph: WebKobeGraph,
+    *,
+    options: PddlProjectionOptions,
+) -> list[str]:
     names: set[str] = set()
     for node in graph.nodes:
         if node.planning_state is not None:
-            names.update(_predicate(fact) for fact in node.planning_state.active_facts)
+            names.update(
+                _predicate(fact)
+                for fact in _projectable_state_facts(
+                    node.planning_state,
+                    options=options,
+                )
+            )
     return sorted(names)
 
 
@@ -391,12 +478,17 @@ def _initial_predicates(
     *,
     start_node_id: str,
     location_predicates: dict[str, str],
+    options: PddlProjectionOptions,
 ) -> list[str]:
     start = _require_node(graph, start_node_id, role="start")
     predicates = [location_predicates[start.node_id]]
     if start.planning_state is not None:
         predicates.extend(
-            _predicate(fact) for fact in start.planning_state.active_facts
+            _predicate(fact)
+            for fact in _projectable_state_facts(
+                start.planning_state,
+                options=options,
+            )
         )
     return sorted(set(predicates))
 
@@ -500,41 +592,83 @@ def _effect_predicates_for_edge(
         predicates.extend(_observed_effect_predicates_for_edge(edge))
     if edge.planning_transition is not None:
         predicates.extend(
-            _predicate(fact) for fact in edge.planning_transition.pre_facts
+            _predicate(fact)
+            for fact in _projectable_transition_facts(
+                edge.planning_transition.pre_facts,
+                edge,
+                options=options,
+                source_node=source_node,
+            )
         )
         predicates.extend(
-            _predicate(fact) for fact in edge.planning_transition.added_facts
+            _predicate(fact)
+            for fact in _projectable_transition_facts(
+                edge.planning_transition.added_facts,
+                edge,
+                options=options,
+                source_node=source_node,
+            )
         )
         predicates.extend(
-            _predicate(fact) for fact in edge.planning_transition.removed_facts
+            _predicate(fact)
+            for fact in _projectable_transition_facts(
+                edge.planning_transition.removed_facts,
+                edge,
+                options=options,
+                source_node=source_node,
+            )
         )
         return predicates
     if edge.planning_delta is not None:
         predicates.extend(
             _predicate(fact)
-            for fact in _trusted_added_planning_facts(edge.planning_delta)
+            for fact in _projectable_delta_facts(
+                _trusted_added_planning_facts(edge.planning_delta),
+                edge.planning_delta,
+                options=options,
+            )
         )
         predicates.extend(
-            _removed_planning_predicates_for_edge(edge, source_node=source_node)
+            _removed_planning_predicates_for_edge(
+                edge,
+                options=options,
+                source_node=source_node,
+            )
         )
     return predicates
 
 
-def _active_planning_predicates_for_node(node) -> set[str] | None:
+def _active_planning_predicates_for_node(
+    node,
+    *,
+    options: PddlProjectionOptions,
+) -> set[str] | None:
     if node.planning_state is None:
         return None
-    return {_predicate(fact) for fact in node.planning_state.active_facts}
+    return {
+        _predicate(fact)
+        for fact in _projectable_state_facts(node.planning_state, options=options)
+    }
 
 
-def _removed_planning_predicates_for_edge(edge, *, source_node=None) -> list[str]:
+def _removed_planning_predicates_for_edge(
+    edge,
+    *,
+    options: PddlProjectionOptions,
+    source_node=None,
+) -> list[str]:
     if edge.planning_delta is None:
         return []
     predicates = [
         _predicate(fact)
-        for fact in _trusted_removed_planning_facts(edge.planning_delta)
+        for fact in _projectable_delta_facts(
+            _trusted_removed_planning_facts(edge.planning_delta),
+            edge.planning_delta,
+            options=options,
+        )
     ]
     active_predicates = (
-        _active_planning_predicates_for_node(source_node)
+        _active_planning_predicates_for_node(source_node, options=options)
         if source_node is not None
         else None
     )
@@ -553,11 +687,18 @@ def _preconditions_for_edge(
     preconditions = [f"({location_predicates[edge.source_node_id]})"]
     if edge.planning_transition is not None:
         preconditions.extend(
-            f"({_predicate(fact)})" for fact in edge.planning_transition.pre_facts
+            f"({_predicate(fact)})"
+            for fact in _projectable_transition_facts(
+                edge.planning_transition.pre_facts,
+                edge,
+                options=options,
+                source_node=source_node,
+            )
         )
     else:
         for predicate in _removed_planning_predicates_for_edge(
             edge,
+            options=options,
             source_node=source_node,
         ):
             preconditions.append(f"({predicate})")
@@ -594,16 +735,31 @@ def _effects_for_edge(
             else:
                 effects.append(f"(not ({pred}))")
     if edge.planning_transition is not None:
-        for fact in edge.planning_transition.added_facts:
+        for fact in _projectable_transition_facts(
+            edge.planning_transition.added_facts,
+            edge,
+            options=options,
+            source_node=source_node,
+        ):
             effects.append(f"({_predicate(fact)})")
-        for fact in edge.planning_transition.removed_facts:
+        for fact in _projectable_transition_facts(
+            edge.planning_transition.removed_facts,
+            edge,
+            options=options,
+            source_node=source_node,
+        ):
             effects.append(f"(not ({_predicate(fact)}))")
         return _unique_items(effects)
     if edge.planning_delta is not None:
-        for fact in _trusted_added_planning_facts(edge.planning_delta):
+        for fact in _projectable_delta_facts(
+            _trusted_added_planning_facts(edge.planning_delta),
+            edge.planning_delta,
+            options=options,
+        ):
             effects.append(f"({_predicate(fact)})")
         for predicate in _removed_planning_predicates_for_edge(
             edge,
+            options=options,
             source_node=source_node,
         ):
             effects.append(f"(not ({predicate}))")
@@ -633,7 +789,10 @@ def compile_web_kobe_graph_to_pddl(
         goal_node_id=goal_node_id,
         location_predicates=location_predicates,
     )
-    predicate_names = set(list(location_predicates.values()) + _state_predicates(graph))
+    predicate_names = set(
+        list(location_predicates.values())
+        + _state_predicates(graph, options=options)
+    )
     predicate_names.add(goal_predicate)
     nodes_by_id = _nodes_by_id(graph)
     for edge in graph.edges:
@@ -693,6 +852,7 @@ def compile_web_kobe_graph_to_pddl(
             graph,
             start_node_id=selected_start_node_id,
             location_predicates=location_predicates,
+            options=options,
         )
     )
     problem = "\n".join(

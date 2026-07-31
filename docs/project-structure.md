@@ -82,7 +82,8 @@ Main responsibilities:
 - provide lightweight structured verification.
 
 Profile facts live here as preferred observation targets and candidate PDDL
-predicate vocabulary, not as the full set of possible website states.
+predicate vocabulary, not as the full set of possible website states. VLM can
+add generated facts for states that the profile does not cover.
 
 Main functions/classes:
 
@@ -114,7 +115,10 @@ Main responsibilities:
 - record `BusinessAffordance`, `BusinessTransition`, `PlanningDelta`,
   `PlanningState`, and `PlanningTransition`;
 - decide whether a business transition should materialize a new node;
+- derive readable `node_label` values for materialized business nodes;
 - propagate source-aware planning state;
+- preserve `active_facts`, `profile_fact_ids`, and `generated_fact_ids` in
+  `PlanningState`;
 - store state embeddings;
 - detect revisits and provide memory context.
 
@@ -187,7 +191,8 @@ Main responsibilities:
 - run SafeSym parser, safety injection, and planner smoke checks.
 
 This layer should be deterministic. It should consume graph semantics, not call
-LLM/VLM directly.
+LLM/VLM directly. By default it projects only profile facts; generated facts
+remain in the graph for review, promotion, or explicit projection policy.
 
 Main functions/classes:
 

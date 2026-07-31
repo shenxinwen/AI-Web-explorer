@@ -175,7 +175,7 @@ def test_add_edge_merges_planning_transition_for_repeated_edge():
     assert graph.edges[0].planning_transition.pre_facts == ["cart_has_items"]
 
 
-def test_propagate_planning_state_filters_to_profile_facts():
+def test_propagate_planning_state_records_profile_and_generated_facts():
     manager = WebKobeGraphManager(app="example")
     manager.identify_or_add_node(
         _node("inventory", {}, interactables=[]),
@@ -201,6 +201,8 @@ def test_propagate_planning_state_filters_to_profile_facts():
         ),
         planning_delta=PlanningDelta(
             candidate_added_facts=["cart_page_visible", "made_up_fact"],
+            profile_fact_ids=["cart_page_visible"],
+            generated_fact_ids=["made_up_fact"],
         ),
     )
 
@@ -212,12 +214,20 @@ def test_propagate_planning_state_filters_to_profile_facts():
     graph = manager.to_graph(start_node_id="inventory")
     cart = next(node for node in graph.nodes if node.node_id == "cart")
     assert cart.planning_state is not None
-    assert cart.planning_state.active_facts == ["cart_page_visible"]
+    assert cart.planning_state.active_facts == ["cart_page_visible", "made_up_fact"]
+    assert cart.planning_state.profile_fact_ids == ["cart_page_visible"]
+    assert cart.planning_state.generated_fact_ids == ["made_up_fact"]
     assert updated_edge.planning_transition is not None
     assert updated_edge.planning_transition.pre_facts == []
-    assert updated_edge.planning_transition.added_facts == ["cart_page_visible"]
+    assert updated_edge.planning_transition.added_facts == [
+        "cart_page_visible",
+        "made_up_fact",
+    ]
     assert updated_edge.planning_transition.removed_facts == []
-    assert updated_edge.planning_transition.post_facts == ["cart_page_visible"]
+    assert updated_edge.planning_transition.post_facts == [
+        "cart_page_visible",
+        "made_up_fact",
+    ]
 
 
 def test_propagate_planning_state_omits_already_active_added_facts():

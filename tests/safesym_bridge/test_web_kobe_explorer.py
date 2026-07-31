@@ -663,7 +663,8 @@ async def test_explore_one_step_materializes_same_page_business_change(monkeypat
     assert edge.source_node_id != edge.target_node_id
     assert edge.status == "succeeded_with_observed_change"
     target = {node.node_id: node for node in graph.nodes}[edge.target_node_id]
-    assert target.node_id.startswith("listing__business_")
+    assert target.node_id.startswith("cart_with_items__business_")
+    assert target.node_label == "cart_with_items"
     assert target.planning_state is not None
     assert target.planning_state.active_facts == ["cart_has_items"]
 

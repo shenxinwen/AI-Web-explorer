@@ -113,11 +113,15 @@ class PlanningDelta:
 @dataclass(frozen=True)
 class PlanningState:
     active_facts: list[str] = field(default_factory=list)
+    profile_fact_ids: list[str] = field(default_factory=list)
+    generated_fact_ids: list[str] = field(default_factory=list)
     evidence: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "active_facts": list(self.active_facts),
+            "profile_fact_ids": list(self.profile_fact_ids),
+            "generated_fact_ids": list(self.generated_fact_ids),
             "evidence": list(self.evidence),
         }
 

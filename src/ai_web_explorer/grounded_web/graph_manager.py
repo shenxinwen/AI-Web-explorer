@@ -101,8 +101,18 @@ def _trusted_removed_facts(delta: PlanningDelta | None) -> list[str]:
     return _unique_facts(delta.candidate_removed_facts, delta.verified_removed_facts)
 
 
-def _filtered_facts(facts: list[str], *, allowed_facts: set[str]) -> list[str]:
-    return [fact for fact in facts if fact in allowed_facts]
+def _generated_fact_ids(
+    facts: list[str],
+    *,
+    profile_fact_ids: set[str],
+    explicit_generated_fact_ids: list[str],
+) -> list[str]:
+    explicit = set(explicit_generated_fact_ids)
+    return [
+        fact
+        for fact in facts
+        if fact in explicit or fact not in profile_fact_ids
+    ]
 
 
 class WebKobeGraphManager:
@@ -182,7 +192,7 @@ class WebKobeGraphManager:
             profile=profile,
         )
         updated_edge = replace(edge, planning_transition=transition)
-        self.apply_planning_transition(updated_edge)
+        self.apply_planning_transition(updated_edge, profile=profile)
         return updated_edge
 
     def build_planning_transition(
@@ -193,7 +203,6 @@ class WebKobeGraphManager:
         profile: BusinessFlowProfile,
     ) -> PlanningTransition:
         source = self._nodes[source_node_id]
-        allowed_facts = _profile_fact_ids(profile)
         active_facts = (
             list(source.planning_state.active_facts)
             if source.planning_state is not None
@@ -202,16 +211,10 @@ class WebKobeGraphManager:
         active_set = set(active_facts)
         removed_facts = [
             fact
-            for fact in _filtered_facts(
-                _trusted_removed_facts(planning_delta),
-                allowed_facts=allowed_facts,
-            )
+            for fact in _trusted_removed_facts(planning_delta)
             if fact in active_set
         ]
-        added_facts = _filtered_facts(
-            _trusted_added_facts(planning_delta),
-            allowed_facts=allowed_facts,
-        )
+        added_facts = _trusted_added_facts(planning_delta)
         added_facts = [fact for fact in added_facts if fact not in active_set]
 
         next_facts = [fact for fact in active_facts if fact not in removed_facts]
@@ -232,11 +235,64 @@ class WebKobeGraphManager:
             ),
         )
 
-    def apply_planning_transition(self, edge: WebKobeEdge) -> None:
+    def apply_planning_transition(
+        self,
+        edge: WebKobeEdge,
+        *,
+        profile: BusinessFlowProfile | None = None,
+    ) -> None:
         if edge.planning_transition is None:
             return
         source = self._nodes[edge.source_node_id]
         target = self._nodes[edge.target_node_id]
+        known_profile_facts = (
+            _profile_fact_ids(profile) if profile is not None else set()
+        )
+        source_profile_facts = (
+            list(source.planning_state.profile_fact_ids)
+            if source.planning_state is not None
+            else []
+        )
+        source_generated_facts = (
+            list(source.planning_state.generated_fact_ids)
+            if source.planning_state is not None
+            else []
+        )
+        delta_profile_facts = (
+            list(edge.planning_delta.profile_fact_ids)
+            if edge.planning_delta is not None
+            else []
+        )
+        delta_generated_facts = (
+            list(edge.planning_delta.generated_fact_ids)
+            if edge.planning_delta is not None
+            else []
+        )
+        post_facts = list(edge.planning_transition.post_facts)
+        inferred_profile_facts = [
+            fact for fact in post_facts if fact in known_profile_facts
+        ]
+        profile_fact_ids = [
+            fact
+            for fact in _unique_facts(
+                source_profile_facts,
+                delta_profile_facts,
+                inferred_profile_facts,
+            )
+            if fact in post_facts
+        ]
+        generated_fact_ids = [
+            fact
+            for fact in _unique_facts(
+                source_generated_facts,
+                _generated_fact_ids(
+                    post_facts,
+                    profile_fact_ids=set(profile_fact_ids),
+                    explicit_generated_fact_ids=delta_generated_facts,
+                ),
+            )
+            if fact in post_facts and fact not in profile_fact_ids
+        ]
         evidence = (
             list(source.planning_state.evidence)
             if source.planning_state is not None
@@ -251,7 +307,9 @@ class WebKobeGraphManager:
         self._nodes[edge.target_node_id] = replace(
             target,
             planning_state=PlanningState(
-                active_facts=list(edge.planning_transition.post_facts),
+                active_facts=post_facts,
+                profile_fact_ids=profile_fact_ids,
+                generated_fact_ids=generated_fact_ids,
                 evidence=evidence,
             ),
         )

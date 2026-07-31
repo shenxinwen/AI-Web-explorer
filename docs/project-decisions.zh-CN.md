@@ -17,6 +17,47 @@
 - ...
 ```
 
+## 2026-07-31 - 业务节点命名前移到 graph policy
+
+更改：
+
+- `business_state_policy.resolve_business_target_node` 在 materialize 业务节点时，会根据 `planning_transition.added_facts` / `post_facts` 和 `business_transition.action_name` 生成更可读的 `node_label`。
+- 业务节点的 `node_id` 前缀同步使用该语义 label，例如 `cart_with_items__business_*`，而不是退回 `shopping__business_*`。
+- PDDL projector 仍只读取 graph 中已有的 `node_label`，不直接调用 LLM/VLM，也不自行猜测网页含义。
+
+原因：
+
+- PDDL 可读性问题主要来自 graph 语义名不足，而不是 projector 缺少后处理。
+- 如果把命名逻辑放到 PDDL projector，会让 planner-facing 投影层承担语义解释职责，增加耦合。
+- 业务状态是否 materialize 本来就在 graph policy 中判断，因此在这里补充业务节点 label 更自然。
+
+影响：
+
+- 同页业务变化生成的新节点更容易读，PDDL location predicate 也会随之更清楚。
+- `node_label` 继续只服务可读性和投影命名，不承担节点唯一身份；唯一身份仍由 `node_id` 负责。
+- 仍需后续处理非 materialized 节点、重复 label 和 action naming 的整体可读性。
+
+## 2026-07-31 - 让 graph 记录 generated facts，PDDL 默认保守投影
+
+更改：
+
+- `PlanningState` 新增 `profile_fact_ids` 和 `generated_fact_ids`，用于记录 active facts 的来源。
+- `WebKobeGraphManager` 不再用 profile facts 硬过滤 `planning_transition`，而是允许 profile facts 和 generated facts 一起进入 graph 状态。
+- `web_kobe_pddl_projector` 默认只投影 profile facts；generated facts 默认留在 graph 中，不进入 PDDL。
+- `PddlProjectionOptions` 预留 `include_generated_planning_facts` 开关，供后续实验或晋升策略使用。
+
+原因：
+
+- 开放网页探索会遇到 profile 未覆盖的新业务状态，如果 graph 层丢弃这些状态，会损害探索记忆和人工分析。
+- SafeSym 消费的是 planner-facing PDDL，不能让未审核的 VLM-generated facts 默认进入谓词集合。
+- 因此需要把“记录事实”和“投影事实”分开：graph 可以更开放，PDDL 默认更保守。
+
+影响：
+
+- 实验 graph JSON 会更完整地保存 profile/generated 两类 facts。
+- PDDL 默认输出更稳定，不会因为 VLM 新造 fact 直接漂移。
+- 后续仍需要设计 generated facts 的晋升、验证和显式投影策略。
+
 ## 2026-07-31 - 建立项目决策记录和项目结构文档
 
 更改：

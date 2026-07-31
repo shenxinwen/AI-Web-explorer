@@ -196,6 +196,8 @@ def test_web_kobe_graph_serializes_node_edge_and_evidence():
     assert data["nodes"][0]["naming_provenance"] == {"source": "unit_test"}
     assert data["nodes"][0]["planning_state"] == {
         "active_facts": ["required_info_missing"],
+        "profile_fact_ids": [],
+        "generated_fact_ids": [],
         "evidence": ["unit test planning state"],
     }
     assert data["edges"][0]["action"]["action_label"] == "Submit login form"
