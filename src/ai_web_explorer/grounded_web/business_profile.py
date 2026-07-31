@@ -37,6 +37,7 @@ class PlanningFactSpec:
     related_stages: list[str] = field(default_factory=list)
     evidence_hints: list[EvidenceHint] = field(default_factory=list)
     safety_relevance: str = "none"
+    state_label_hint: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -45,6 +46,7 @@ class PlanningFactSpec:
             "related_stages": list(self.related_stages),
             "evidence_hints": [hint.to_dict() for hint in self.evidence_hints],
             "safety_relevance": self.safety_relevance,
+            "state_label_hint": self.state_label_hint,
         }
 
 
@@ -199,6 +201,7 @@ def ecommerce_checkout_profile() -> BusinessFlowProfile:
             fact_id="product_list_visible",
             meaning="A list or collection of purchasable products is visible.",
             related_stages=["product_selection"],
+            state_label_hint="product_list",
             evidence_hints=[
                 _hint("region", "A repeated product or item list is visible."),
                 _hint("control", "Item selection controls are available."),
@@ -208,6 +211,7 @@ def ecommerce_checkout_profile() -> BusinessFlowProfile:
             fact_id="cart_has_items",
             meaning="The user has at least one item selected for purchase.",
             related_stages=["product_selection", "cart"],
+            state_label_hint="cart_with_items",
             evidence_hints=[
                 _hint(
                     "count", "A cart count or item total indicates one or more items."
@@ -220,6 +224,7 @@ def ecommerce_checkout_profile() -> BusinessFlowProfile:
             fact_id="cart_page_visible",
             meaning="The user is viewing a cart or order basket area.",
             related_stages=["cart"],
+            state_label_hint="cart",
             evidence_hints=[
                 _hint("navigation", "The page context changes to cart review."),
                 _hint("region", "A cart summary or selected-item list is visible."),
@@ -229,6 +234,7 @@ def ecommerce_checkout_profile() -> BusinessFlowProfile:
             fact_id="checkout_started",
             meaning="The user has moved from cart review into checkout.",
             related_stages=["checkout_info"],
+            state_label_hint="checkout",
             evidence_hints=[
                 _hint("navigation", "The page context changes from cart to checkout."),
                 _hint("form", "Checkout information fields become visible."),
@@ -255,6 +261,7 @@ def ecommerce_checkout_profile() -> BusinessFlowProfile:
                 "address fields."
             ),
             related_stages=["checkout_info"],
+            state_label_hint="checkout_user_info",
             evidence_hints=[
                 _hint(
                     "form",
@@ -274,6 +281,7 @@ def ecommerce_checkout_profile() -> BusinessFlowProfile:
                 "appears complete when the visible checkout flow requires it."
             ),
             related_stages=["checkout_info", "order_review"],
+            state_label_hint="payment_info",
             evidence_hints=[
                 _hint(
                     "form",
@@ -295,6 +303,7 @@ def ecommerce_checkout_profile() -> BusinessFlowProfile:
                 "to order review or confirmation."
             ),
             related_stages=["checkout_info", "order_review"],
+            state_label_hint="checkout_info",
             evidence_hints=[
                 _hint(
                     "form",
@@ -311,6 +320,7 @@ def ecommerce_checkout_profile() -> BusinessFlowProfile:
             fact_id="order_review_ready",
             meaning="The user is at a review step where the pending order can be inspected.",
             related_stages=["order_review"],
+            state_label_hint="order_review",
             evidence_hints=[
                 _hint(
                     "region", "An order summary, totals, or selected items are visible."
@@ -325,6 +335,7 @@ def ecommerce_checkout_profile() -> BusinessFlowProfile:
             fact_id="order_place_pending_sensitive",
             meaning="The next action may commit a purchase, payment, or externally visible order.",
             related_stages=["order_review"],
+            state_label_hint="order_review",
             evidence_hints=[
                 _hint("control", "A visible action suggests final order confirmation."),
                 _hint("region", "The page presents a final review before submission."),
@@ -335,6 +346,7 @@ def ecommerce_checkout_profile() -> BusinessFlowProfile:
             fact_id="order_completed",
             meaning="The order or purchase appears to have been submitted successfully.",
             related_stages=["order_complete"],
+            state_label_hint="order_complete",
             evidence_hints=[
                 _hint(
                     "message",

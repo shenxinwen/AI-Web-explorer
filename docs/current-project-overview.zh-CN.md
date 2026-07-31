@@ -58,7 +58,7 @@ generated facts 记录：graph 层已接住，PDDL 默认不投影
 自由探索策略：尚未稳定
 profile fact verifier：尚未真正建立
 PDDL 语义质量：可消费，但还不够稳定和可读
-业务节点命名：materialized business node 已能从 facts/action 推导 label
+业务节点命名：materialized business node 已能从 profile hints / facts / action 推导 label
 ```
 
 详细 pipeline 和模块职责见 `docs/project-structure.zh-CN.md`。
@@ -131,7 +131,7 @@ edge.planning_transition 中属于 profile facts 的 pre/added/removed facts
 SafeSym 可以结构性消费当前产物，但 PDDL 的语义质量还不稳定：
 
 - location predicate 仍可能出现 `at_shopping_002` 这类不可读名字；
-- materialized business node 已开始用 facts/action 推导 label，但非业务节点和重复 label 仍可能不够理想；
+- materialized business node 已开始用 profile-provided hints / facts / action 推导 label，但非业务节点和重复 label 仍可能不够理想；
 - action precondition 依赖 source node 定位，需要继续用实验确认；
 - profile facts 不完整时，PDDL 会退化为 location path；
 - generated facts 默认不进入 PDDL，可能丢失真实业务状态，需要后续晋升/投影策略弥补。

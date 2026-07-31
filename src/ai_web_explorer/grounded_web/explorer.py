@@ -234,6 +234,18 @@ def _planning_delta_has_fact_change(delta: PlanningDelta | None) -> bool:
     )
 
 
+def _state_label_hints_from_profile(
+    profile: BusinessFlowProfile | None,
+) -> dict[str, str]:
+    if profile is None:
+        return {}
+    return {
+        fact.fact_id: fact.state_label_hint
+        for fact in profile.planning_facts
+        if fact.state_label_hint
+    }
+
+
 def _is_ignorable_stagehand_tool_choice_error(error: str | None) -> bool:
     return bool(error and "Thinking mode does not support this tool_choice" in error)
 
@@ -444,6 +456,7 @@ class WebKobeExplorer:
             candidate_node=_node_from_draft(after_draft),
             business_transition=business_transition,
             planning_transition=planning_transition,
+            state_label_hints=_state_label_hints_from_profile(self.business_profile),
         )
         target_id = self.manager.identify_or_add_node(target_node)
         if edge_status == "no_observed_change" and should_materialize_business_state(

@@ -17,6 +17,26 @@
 - ...
 ```
 
+## 2026-07-31 - 将业务节点命名 hint 放回 profile
+
+更改：
+
+- `PlanningFactSpec` 新增 `state_label_hint`，由具体 business profile 为 planning fact 声明推荐节点 label。
+- `business_state_policy.resolve_business_target_node` 改为接收 `state_label_hints`，不再硬编码 ecommerce facts。
+- `WebKobeExplorer` 从当前 `BusinessFlowProfile` 提取 hints 后传给 graph policy。
+
+原因：
+
+- profile facts 会根据网站类型变化，通用 graph policy 不应该认识 `cart_page_visible`、`checkout_started` 等具体业务事实。
+- 节点是否 materialize 属于 graph policy；具体 fact 应该怎么命名属于 profile 语义。
+- 这样后续新增非电商 profile 时，不需要修改通用 graph policy。
+
+影响：
+
+- PDDL 可读性仍可通过 `node_label` 改善，但命名知识从通用层移回 profile 层。
+- 不同网站类型可以定义自己的 state label hints。
+- 没有 hint 的 generated/profile facts 仍使用通用后缀规则或 business action fallback。
+
 ## 2026-07-31 - 业务节点命名前移到 graph policy
 
 更改：

@@ -52,6 +52,16 @@ def test_ecommerce_checkout_profile_distinguishes_user_and_payment_info():
     assert checkout_info.safety_relevance == "information_verification"
 
 
+def test_ecommerce_checkout_profile_defines_state_label_hints():
+    profile = ecommerce_checkout_profile()
+    facts = {fact.fact_id: fact for fact in profile.planning_facts}
+
+    assert facts["cart_page_visible"].state_label_hint == "cart"
+    assert facts["cart_has_items"].state_label_hint == "cart_with_items"
+    assert facts["checkout_started"].state_label_hint == "checkout"
+    assert facts["order_completed"].state_label_hint == "order_complete"
+
+
 def test_planning_delta_separates_candidate_and_verified_facts():
     delta = PlanningDelta(
         candidate_added_facts=["cart_has_items"],

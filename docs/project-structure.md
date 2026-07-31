@@ -83,7 +83,9 @@ Main responsibilities:
 
 Profile facts live here as preferred observation targets and candidate PDDL
 predicate vocabulary, not as the full set of possible website states. VLM can
-add generated facts for states that the profile does not cover.
+add generated facts for states that the profile does not cover. Site-type
+profiles can provide business-node naming hints through
+`PlanningFactSpec.state_label_hint`.
 
 Main functions/classes:
 
@@ -115,7 +117,9 @@ Main responsibilities:
 - record `BusinessAffordance`, `BusinessTransition`, `PlanningDelta`,
   `PlanningState`, and `PlanningTransition`;
 - decide whether a business transition should materialize a new node;
-- derive readable `node_label` values for materialized business nodes;
+- derive readable `node_label` values for materialized business nodes from
+  profile-provided state label hints, planning facts, and business-action
+  fallback;
 - propagate source-aware planning state;
 - preserve `active_facts`, `profile_fact_ids`, and `generated_fact_ids` in
   `PlanningState`;

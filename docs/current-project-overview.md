@@ -67,7 +67,7 @@ free exploration strategy: not stable yet
 profile fact verifier: not real yet
 PDDL semantic quality: consumable, but not stable or readable enough
 business node naming: materialized business nodes can derive labels from
-facts/actions
+profile hints / facts / actions
 ```
 
 Detailed pipeline and module ownership are recorded in
@@ -157,8 +157,8 @@ SafeSym can structurally consume current artifacts, but PDDL quality is not
 stable enough:
 
 - location predicates may still degrade into names such as `at_shopping_002`;
-- materialized business nodes now derive labels from facts/actions, but
-  non-business nodes and repeated labels can still be weak;
+- materialized business nodes now derive labels from profile-provided hints /
+  facts / actions, but non-business nodes and repeated labels can still be weak;
 - action preconditions depend on correct source-node localization;
 - incomplete profile facts make PDDL degrade into a location path;
 - generated facts are not projected by default, so real business states may be

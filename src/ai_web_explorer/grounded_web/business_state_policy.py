@@ -45,6 +45,7 @@ def resolve_business_target_node(
     candidate_node: WebKobeNode,
     business_transition: BusinessTransition | None,
     planning_transition: PlanningTransition | None,
+    state_label_hints: dict[str, str] | None = None,
 ) -> WebKobeNode:
     if should_materialize_business_state(business_transition):
         semantic_node = replace(
@@ -53,6 +54,7 @@ def resolve_business_target_node(
                 candidate_node=candidate_node,
                 business_transition=business_transition,
                 planning_transition=planning_transition,
+                state_label_hints=state_label_hints or {},
             ),
         )
         return replace(
@@ -78,19 +80,6 @@ def resolve_business_target_node(
     return candidate_node
 
 
-PROFILE_FACT_STATE_LABELS = {
-    "cart_page_visible": "cart",
-    "cart_has_items": "cart_with_items",
-    "checkout_started": "checkout",
-    "checkout_user_info_complete": "checkout_user_info",
-    "payment_info_complete": "payment_info",
-    "checkout_info_complete": "checkout_info",
-    "order_review_ready": "order_review",
-    "order_place_pending_sensitive": "order_review",
-    "order_completed": "order_complete",
-    "product_list_visible": "product_list",
-}
-
 ACTION_PREFIXES = (
     "open_",
     "view_",
@@ -109,8 +98,12 @@ def _business_state_node_label(
     candidate_node: WebKobeNode,
     business_transition: BusinessTransition | None,
     planning_transition: PlanningTransition | None,
+    state_label_hints: dict[str, str],
 ) -> str:
-    fact_label = _label_from_planning_transition(planning_transition)
+    fact_label = _label_from_planning_transition(
+        planning_transition,
+        state_label_hints=state_label_hints,
+    )
     if fact_label:
         return fact_label
     action_label = _label_from_business_action(business_transition)
@@ -126,12 +119,14 @@ def _business_state_node_label(
 
 def _label_from_planning_transition(
     planning_transition: PlanningTransition | None,
+    *,
+    state_label_hints: dict[str, str],
 ) -> str | None:
     if planning_transition is None:
         return None
     for fact in planning_transition.added_facts + planning_transition.post_facts:
-        if fact in PROFILE_FACT_STATE_LABELS:
-            return PROFILE_FACT_STATE_LABELS[fact]
+        if fact in state_label_hints:
+            return slug_identifier(state_label_hints[fact], fallback="state")
     for fact in planning_transition.added_facts + planning_transition.post_facts:
         label = _generic_fact_label(fact)
         if label:

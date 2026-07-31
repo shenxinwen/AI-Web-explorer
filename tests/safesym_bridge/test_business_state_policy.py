@@ -41,10 +41,30 @@ def test_business_state_node_uses_added_planning_fact_for_readable_label():
             removed_facts=[],
             post_facts=["cart_has_items", "cart_page_visible"],
         ),
+        state_label_hints={"cart_page_visible": "cart"},
     )
 
     assert target.node_label == "cart"
     assert target.node_id.startswith("cart__business_")
+
+
+def test_business_state_node_does_not_hardcode_profile_fact_labels():
+    target = resolve_business_target_node(
+        source_node=_node("shopping"),
+        candidate_node=_node("shopping_after", node_label="shopping"),
+        business_transition=BusinessTransition(
+            action_name="open_cart",
+            relevance="core",
+            meaningful_change=True,
+        ),
+        planning_transition=PlanningTransition(
+            added_facts=["cart_page_visible"],
+            post_facts=["cart_page_visible"],
+        ),
+    )
+
+    assert target.node_label == "cart_page"
+    assert target.node_id.startswith("cart_page__business_")
 
 
 def test_business_state_node_falls_back_to_business_action_name():

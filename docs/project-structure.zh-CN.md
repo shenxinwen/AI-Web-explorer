@@ -89,7 +89,7 @@ Stagehand 属于这一层。它可以看页面、生成候选、执行动作，�
 - 生成 `BusinessTransition`、`PlanningDelta` 和 evidence；
 - 提供轻量结构化 verifier。
 
-profile facts 位于这一层。它们的定位是“优先观察目标 + PDDL 候选谓词词表”，不是网页所有可能状态的全集。VLM 可以补充 profile 未覆盖的 generated facts。
+profile facts 位于这一层。它们的定位是“优先观察目标 + PDDL 候选谓词词表”，不是网页所有可能状态的全集。VLM 可以补充 profile 未覆盖的 generated facts。具体网站类型可以通过 `PlanningFactSpec.state_label_hint` 提供业务节点命名建议。
 
 主要函数/类：
 
@@ -120,7 +120,7 @@ profile facts 位于这一层。它们的定位是“优先观察目标 + PDDL �
 - 定义 `WebKobeGraph`、`WebKobeNode`、`WebKobeEdge`；
 - 记录 `BusinessAffordance`、`BusinessTransition`、`PlanningDelta`、`PlanningState`、`PlanningTransition`；
 - 判断一次业务变化是否应该生成新节点；
-- 为 materialized business node 生成可读 `node_label`；
+- 基于 profile 提供的 state label hints、planning facts 和 business action fallback，为 materialized business node 生成可读 `node_label`；
 - 传播 source-aware planning state；
 - 在 `PlanningState` 中同时保留 `active_facts`、`profile_fact_ids` 和 `generated_fact_ids`；
 - 存储 state embeddings；
