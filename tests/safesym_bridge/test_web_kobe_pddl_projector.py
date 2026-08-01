@@ -23,6 +23,7 @@ from ai_web_explorer.grounded_web.business_profile import PlanningState
 from ai_web_explorer.grounded_web.business_profile import PlanningTransition
 from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
     PddlProjectionOptions,
+    compile_web_kobe_graph_to_domain,
     compile_web_kobe_graph_to_pddl,
     load_web_kobe_graph_json,
 )
@@ -121,6 +122,60 @@ def test_compile_web_kobe_graph_to_pddl_can_include_observed_delta_when_requeste
     assert "(:goal (and (at_listing_nonempty)))" in artifacts.problem
     assert "(not (at_listing_empty))" in artifacts.domain
     assert "(at_listing_nonempty)" in artifacts.domain
+
+
+def test_compile_web_kobe_graph_to_domain_does_not_require_problem_goal():
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="listing_empty",
+        total_steps_completed=1,
+        nodes=[
+            _node("listing_empty", "product_listing", {}, node_label="shopping"),
+            _node(
+                "listing_nonempty",
+                "product_listing",
+                {},
+                planning_facts=["cart_has_items"],
+                profile_fact_ids=["cart_has_items"],
+                node_label="cart_with_items",
+            ),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="listing_empty",
+                target_node_id="listing_nonempty",
+                instruction="add to cart",
+                action=BrowserAction("click", "#add", "add_to_cart"),
+                capability=None,
+                target_observation="cart has item",
+                observed_delta=[],
+                schema_delta={},
+                execution_trace=ExecutionTrace(
+                    "click",
+                    "#add",
+                    "add_to_cart",
+                    {},
+                    "listing_empty",
+                    "listing_nonempty",
+                    True,
+                ),
+                planning_transition=PlanningTransition(
+                    pre_facts=[],
+                    added_facts=["cart_has_items"],
+                    removed_facts=[],
+                    post_facts=["cart_has_items"],
+                ),
+                status="succeeded_with_observed_change",
+            )
+        ],
+    )
+
+    domain = compile_web_kobe_graph_to_domain(graph)
+
+    assert "(define (domain web-kobe)" in domain
+    assert "(:action edge_001_add_to_cart" in domain
+    assert "(cart_has_items)" in domain
+    assert "(define (problem" not in domain
 
 
 def test_compile_web_kobe_graph_to_pddl_uses_custom_start_node():

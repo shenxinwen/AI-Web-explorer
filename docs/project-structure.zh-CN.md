@@ -137,6 +137,7 @@ embedding memory 只辅助定位和避免重复，不直接进入 PDDL。
 - `WebKobeGraphManager.build_planning_transition`
 - `WebKobeGraphManager.apply_planning_transition`
 - `resolve_business_target_node`
+- `WebKobeExplorer._avoid_incompatible_existing_target_state`，用于避免同页面壳但 planning facts 不兼容时污染已有节点。
 - `find_best_state_match`
 - `build_exploration_context`
 
@@ -196,6 +197,7 @@ embedding memory 只辅助定位和避免重复，不直接进入 PDDL。
 主要函数/类：
 
 - `load_web_kobe_graph_json`
+- `compile_web_kobe_graph_to_domain`
 - `compile_web_kobe_graph_to_pddl`
 - `write_web_kobe_pddl_smoke`
 - `write_web_kobe_safesym_smoke`
@@ -234,6 +236,7 @@ embedding memory 只辅助定位和避免重复，不直接进入 PDDL。
 web-kobe-explore
 web-kobe-stagehand-explore
 web-kobe-ecommerce-stagehand-smoke
+web-kobe-domain-from-graph
 web-kobe-pddl-from-graph
 web-kobe-pddl-smoke
 web-kobe-safesym-smoke
@@ -262,6 +265,7 @@ WebKobeExplorer.explore_one_step
   -> summarize_visual_delta / verify_planning_delta
   -> GraphManager.build_planning_transition
   -> resolve_business_target_node
+  -> 拆分同页面但 planning facts 不兼容的状态变体
   -> GraphManager.add_edge
   -> PDDL projector consumes graph JSON
 ```

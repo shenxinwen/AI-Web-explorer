@@ -1,5 +1,22 @@
 # 项目决策记录
 
+## 2026-08-01 - 用执行轨迹约束 source matching，并清理 embedding 摘要
+
+更改：
+- `WebKobeExplorer` 增加轻量级当前节点指针：成功产生有效业务状态转移后，下一步默认从上一条 edge 的 target 节点继续。
+- embedding source match 仍然保留，但当它想把 source 拉回 planning facts 不兼容的旧节点时，会被拒绝，只作为 metadata 参考。
+- `build_state_summary` 对 Stagehand business intent / policy prompt 做摘要清理，embedding 文本优先使用业务动作 label，而不是整段 Stagehand action policy / memory policy。
+
+原因：
+- 实验中已经能识别 `checkout_user_info_complete`、`payment_info_complete` 等状态，但后续动作会被 embedding 拉回较早的 `checkout` 节点，导致 PDDL precondition 过宽。
+- source edge 表示“动作实际从哪里发生”，不应只由页面相似度决定；页面相似度只能辅助纠偏。
+- embedding 应比较页面/业务状态，而不是比较重复的 Stagehand prompt 模板。
+
+影响：
+- 业务链路更接近真实执行轨迹，例如 `checkout -> checkout_user_info -> payment_info`，而不是多条边都从 `checkout` 发散。
+- PDDL 更有机会生成正确前提，后续 `submit_order` 不应只依赖 `at_checkout`。
+- 当前仍未做完整回放/DFS 栈；browser back 后的定位恢复后续还需要单独设计。
+
 这份文档记录项目中的关键调整：改了什么、为什么改、影响范围是什么。后续每次做架构、pipeline、数据结构、实验策略或主线清理时，都应该追加一条简短记录。
 
 记录格式：
@@ -16,6 +33,23 @@
 影响：
 - ...
 ```
+
+## 2026-08-01 - 探索阶段先稳定 domain，并避免同页面状态污染
+
+更改：
+- 新增 `compile_web_kobe_graph_to_domain` 和 CLI 命令 `web-kobe-domain-from-graph`，允许从 `WebKobeGraph` 只生成 `domain.pddl`，不要求指定 `goal_node`。
+- `WebKobeExplorer` 在目标节点已经存在但 `planning_transition.post_facts` 与该节点已有 `PlanningState` 不兼容时，会生成状态变体节点，而不是把新的 facts 写回旧节点。
+- 保留 `web-kobe-pddl-from-graph` 和 `web-kobe-pddl-smoke` 的 problem 生成能力，用作明确 start/goal 后的诊断和 SafeSym smoke。
+
+原因：
+- 当前项目仍处于探索建模阶段，主目标是收集网站业务状态、动作和 effects；`problem.pddl` 属于后续规划查询阶段，不应该强行绑定一次探索的临时目标。
+- 实验中出现过同 URL/同页面壳被复用后，旧 `shopping` 节点被写入 `cart_has_items` 的污染。页面壳相同不代表业务状态相同。
+- domain 可以先作为稳定的、可复用的 planner-facing 模型；problem 应该在用户任务、测试目标或 SafeSym 场景明确后再生成。
+
+影响：
+- 探索主产物更清晰：`graph.json`、`state_embeddings.json`、`domain.pddl` 优先；`problem.pddl` 只作为查询/smoke 产物。
+- 同页面不同业务 facts 会拆成不同状态节点，降低 PDDL 初始态混入后续 facts 的风险。
+- 后续扩大实验步数时，graph 状态边界会更干净，但仍需要继续观察节点数量是否膨胀。
 
 ## 2026-07-31 - 将业务节点命名 hint 放回 profile
 

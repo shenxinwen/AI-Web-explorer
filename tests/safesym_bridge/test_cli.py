@@ -28,6 +28,7 @@ def test_main_help_lists_only_web_kobe_mainline_commands(capsys):
 
     help_output = capsys.readouterr().out
     assert "web-kobe-explore" in help_output
+    assert "web-kobe-domain-from-graph" in help_output
     assert "web-kobe-pddl-from-graph" in help_output
     assert "web-kobe-pddl-smoke" in help_output
     assert "web-kobe-safesym-smoke" in help_output
@@ -262,6 +263,83 @@ def test_main_web_kobe_pddl_from_graph_writes_domain_and_problem(tmp_path):
     assert "(:goal (and (at_filled)))" in (output_dir / "problem.pddl").read_text(
         encoding="utf-8"
     )
+
+
+def test_main_web_kobe_domain_from_graph_writes_only_domain(tmp_path):
+    graph_path = tmp_path / "web_kobe_graph.json"
+    output_dir = tmp_path / "web_kobe_domain"
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="empty",
+        total_steps_completed=1,
+        nodes=[
+            WebKobeNode(
+                node_id="empty",
+                page_description="empty page",
+                page_frame=PageFrame(
+                    page_id="empty",
+                    page_type="listing",
+                    url="https://example.test",
+                    url_pattern="https://example.test",
+                    title="empty",
+                ),
+                state_schema={},
+                last_state_snapshot={},
+            ),
+            WebKobeNode(
+                node_id="filled",
+                page_description="filled page",
+                page_frame=PageFrame(
+                    page_id="filled",
+                    page_type="listing",
+                    url="https://example.test",
+                    url_pattern="https://example.test",
+                    title="filled",
+                ),
+                state_schema={},
+                last_state_snapshot={},
+            ),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="empty",
+                target_node_id="filled",
+                instruction="add to cart",
+                action=BrowserAction("click", "button.add", "add_to_cart"),
+                capability=None,
+                target_observation="filled cart",
+                observed_delta=[],
+                schema_delta={},
+                execution_trace=ExecutionTrace(
+                    "click",
+                    "button.add",
+                    "add",
+                    {},
+                    "empty",
+                    "filled",
+                    True,
+                ),
+                status="succeeded_with_navigation",
+            )
+        ],
+    )
+    graph_path.write_text(json.dumps(graph.to_dict()), encoding="utf-8")
+
+    exit_code = main(
+        [
+            "web-kobe-domain-from-graph",
+            "--graph",
+            str(graph_path),
+            "--output",
+            str(output_dir),
+        ]
+    )
+
+    assert exit_code == 0
+    assert "(:action edge_001_add_to_cart" in (output_dir / "domain.pddl").read_text(
+        encoding="utf-8"
+    )
+    assert not (output_dir / "problem.pddl").exists()
 
 
 def test_main_web_kobe_pddl_from_graph_accepts_goal_fact(tmp_path):

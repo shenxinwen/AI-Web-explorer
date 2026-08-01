@@ -467,6 +467,53 @@ class SameUrlBusinessRevisitAdapter(ScreenshotAdapter):
         ]
 
 
+class SamePageCheckoutFlowAdapter(ScreenshotAdapter):
+    def __init__(self):
+        super().__init__()
+        self.states = [
+            StateSnapshot(
+                page_id="shopping",
+                url="https://example.test/shopping",
+                title="Shopping",
+                signature={"url_path": "/shopping"},
+            )
+        ]
+
+    async def observe_state(self):
+        return self.states[0]
+
+    async def list_interactables(self, state):
+        if len(self.executed) == 0:
+            return [
+                {
+                    "semantic_id": "open_checkout",
+                    "description": "Open checkout",
+                    "locator": "#checkout",
+                    "action_kind": "click",
+                    "explored": False,
+                }
+            ]
+        if len(self.executed) == 1:
+            return [
+                {
+                    "semantic_id": "fill_contact_information",
+                    "description": "Fill contact information",
+                    "locator": "#contact",
+                    "action_kind": "click",
+                    "explored": False,
+                }
+            ]
+        return [
+            {
+                "semantic_id": "choose_payment_method",
+                "description": "Choose payment method",
+                "locator": "#payment",
+                "action_kind": "click",
+                "explored": False,
+            }
+        ]
+
+
 @pytest.mark.anyio
 async def test_explore_one_step_records_optional_before_after_screenshots():
     adapter = ScreenshotAdapter()
@@ -757,6 +804,148 @@ async def test_explore_one_step_uses_near_threshold_embedding_match_as_source(
     second_graph = await explorer.explore_one_step()
 
     assert second_graph.edges[1].source_node_id == first_target_id
+
+
+@pytest.mark.anyio
+async def test_explore_one_step_does_not_pollute_existing_page_node_with_incompatible_planning_state(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "ai_web_explorer.grounded_web.explorer.OBSERVATION_WAIT_TIMEOUT_MS",
+        0,
+    )
+    adapter = SameUrlBusinessRevisitAdapter()
+    visual_responses = iter(
+        [
+            (
+                '{"visible_change_summary":"The cart badge now shows one item.",'
+                '"business_action_name":"add_to_cart",'
+                '"business_relevance":"core",'
+                '"meaningful_change":true,'
+                '"candidate_added_facts":["cart_has_items"],'
+                '"candidate_removed_facts":[],"evidence":["cart badge shows 1"],'
+                '"confidence":0.85}'
+            ),
+            (
+                '{"visible_change_summary":"The page shell is still the product list.",'
+                '"business_action_name":"view_cart",'
+                '"business_relevance":"unknown",'
+                '"meaningful_change":false,'
+                '"candidate_added_facts":[],"candidate_removed_facts":[],'
+                '"evidence":["no cart modal is visible"],"confidence":0.6}'
+            ),
+        ]
+    )
+
+    def visual_provider(prompt, *, before_screenshot_path, after_screenshot_path):
+        return next(visual_responses)
+
+    def embed(text):
+        if "cart badge now shows one item" in text:
+            return [1.0, 0.0]
+        if "Open checkout" in text:
+            return [1.0, 0.0]
+        return [0.0, 1.0]
+
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        business_profile=ecommerce_checkout_profile(),
+        capture_screenshots=True,
+        visual_delta_provider=visual_provider,
+        enable_exploration_memory=True,
+        state_embedding_provider=embed,
+    )
+
+    first_graph = await explorer.explore_one_step()
+    root_id = first_graph.start_node_id
+    second_graph = await explorer.explore_one_step()
+
+    nodes_by_id = {node.node_id: node for node in second_graph.nodes}
+    root = nodes_by_id[root_id]
+    assert root.planning_state is None
+    assert second_graph.edges[1].target_node_id != root_id
+    assert (
+        nodes_by_id[second_graph.edges[1].target_node_id]
+        .planning_state.active_facts
+        == ["cart_has_items"]
+    )
+
+
+@pytest.mark.anyio
+async def test_explore_one_step_keeps_source_on_latest_materialized_business_node(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "ai_web_explorer.grounded_web.explorer.OBSERVATION_WAIT_TIMEOUT_MS",
+        0,
+    )
+    adapter = SamePageCheckoutFlowAdapter()
+    visual_responses = iter(
+        [
+            (
+                '{"visible_change_summary":"Checkout form is now visible.",'
+                '"business_action_name":"start_checkout",'
+                '"business_relevance":"core",'
+                '"meaningful_change":true,'
+                '"candidate_added_facts":["checkout_started"],'
+                '"candidate_removed_facts":[],"evidence":["checkout form visible"],'
+                '"confidence":0.85}'
+            ),
+            (
+                '{"visible_change_summary":"Contact information fields are filled.",'
+                '"business_action_name":"fill_contact_information",'
+                '"business_relevance":"core",'
+                '"meaningful_change":true,'
+                '"candidate_added_facts":["checkout_user_info_complete"],'
+                '"candidate_removed_facts":[],"evidence":["contact fields filled"],'
+                '"confidence":0.85}'
+            ),
+            (
+                '{"visible_change_summary":"Payment method is selected.",'
+                '"business_action_name":"choose_payment_method",'
+                '"business_relevance":"core",'
+                '"meaningful_change":true,'
+                '"candidate_added_facts":["payment_info_complete"],'
+                '"candidate_removed_facts":[],"evidence":["payment method selected"],'
+                '"confidence":0.85}'
+            ),
+        ]
+    )
+
+    def visual_provider(prompt, *, before_screenshot_path, after_screenshot_path):
+        return next(visual_responses)
+
+    def embed(text):
+        if "checkout_user_info_complete" in text:
+            return [0.0, 1.0]
+        if "Choose payment method" in text:
+            return [1.0, 0.0]
+        if "checkout_started" in text or "Open checkout" in text:
+            return [1.0, 0.0]
+        return [0.0, 0.0]
+
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        business_profile=ecommerce_checkout_profile(),
+        capture_screenshots=True,
+        visual_delta_provider=visual_provider,
+        enable_exploration_memory=True,
+        state_embedding_provider=embed,
+    )
+
+    await explorer.explore_one_step()
+    second_graph = await explorer.explore_one_step()
+    checkout_user_info_id = second_graph.edges[1].target_node_id
+    third_graph = await explorer.explore_one_step()
+
+    assert third_graph.edges[2].source_node_id == checkout_user_info_id
+    assert third_graph.edges[2].planning_transition is not None
+    assert third_graph.edges[2].planning_transition.pre_facts == [
+        "checkout_started",
+        "checkout_user_info_complete",
+    ]
 
 
 @pytest.mark.anyio

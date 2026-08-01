@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 from dataclasses import replace
 from typing import Any, Callable
 
@@ -10,7 +12,7 @@ from ai_web_explorer.grounded_web.capability_graph import (
     ExecutionTrace,
     ObservedDelta,
 )
-from ai_web_explorer.grounded_web.state_signature import schema_delta
+from ai_web_explorer.grounded_web.state_signature import schema_delta, slug_identifier
 from ai_web_explorer.grounded_web.graph import (
     BusinessAffordance,
     BrowserAction,
@@ -25,7 +27,7 @@ from ai_web_explorer.grounded_web.llm_action_selector import (
 )
 from ai_web_explorer.grounded_web.graph_manager import WebKobeGraphManager
 from ai_web_explorer.grounded_web.business_profile import BusinessFlowProfile
-from ai_web_explorer.grounded_web.business_profile import PlanningDelta
+from ai_web_explorer.grounded_web.business_profile import PlanningDelta, PlanningTransition
 from ai_web_explorer.grounded_web.business_affordance import (
     VisualAffordanceRequest,
     summarize_visual_affordances,
@@ -250,6 +252,82 @@ def _is_ignorable_stagehand_tool_choice_error(error: str | None) -> bool:
     return bool(error and "Thinking mode does not support this tool_choice" in error)
 
 
+def _planning_transition_has_fact_change(
+    transition: PlanningTransition | None,
+) -> bool:
+    if transition is None:
+        return False
+    return set(transition.pre_facts) != set(transition.post_facts)
+
+
+def _should_advance_current_node(
+    *,
+    source_id: str,
+    target_id: str,
+    edge_status: str,
+    business_transition: BusinessTransition | None,
+    planning_transition: PlanningTransition | None,
+) -> bool:
+    if source_id == target_id:
+        return False
+    if edge_status not in {
+        "succeeded_with_navigation",
+        "succeeded_with_observed_change",
+    }:
+        return False
+    return (
+        should_materialize_business_state(business_transition)
+        or _planning_transition_has_fact_change(planning_transition)
+        or edge_status == "succeeded_with_navigation"
+    )
+
+
+def _facts_compatible(
+    existing_facts: list[str] | None,
+    post_facts: list[str],
+) -> bool:
+    if existing_facts is None:
+        return not post_facts
+    return set(existing_facts) == set(post_facts)
+
+
+def _state_variant_node_id(
+    *,
+    node: WebKobeNode,
+    post_facts: list[str],
+    state_label_hints: dict[str, str],
+) -> tuple[str, str]:
+    label = _state_variant_label(
+        node=node,
+        post_facts=post_facts,
+        state_label_hints=state_label_hints,
+    )
+    payload = {
+        "base_node_id": node.node_id,
+        "post_facts": sorted(post_facts),
+    }
+    digest = hashlib.sha1(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()[:10]
+    return f"{label}__state_{digest}", label
+
+
+def _state_variant_label(
+    *,
+    node: WebKobeNode,
+    post_facts: list[str],
+    state_label_hints: dict[str, str],
+) -> str:
+    for fact in post_facts:
+        hint = state_label_hints.get(fact)
+        if hint:
+            return slug_identifier(hint, fallback="state")
+    return slug_identifier(
+        node.node_label or node.page_frame.page_type or node.node_id,
+        fallback="state",
+    )
+
+
 class WebKobeExplorer:
     def __init__(
         self,
@@ -282,6 +360,7 @@ class WebKobeExplorer:
         self.selection_traces: list[dict] = []
         self.manager = WebKobeGraphManager(app=adapter.app_name)
         self._start_node_id: str | None = None
+        self._current_node_id: str | None = None
 
     async def explore_one_step(self) -> WebKobeGraph:
         before = await self.adapter.observe_state()
@@ -294,6 +373,7 @@ class WebKobeExplorer:
         source_id = self.manager.identify_or_add_node(_node_from_draft(before_draft))
         if self._start_node_id is None:
             self._start_node_id = source_id
+        source_id = self._current_source_id(default_source_id=source_id)
         source_match = self._match_current_state(
             before=before,
             before_interactables=before_interactables,
@@ -458,9 +538,19 @@ class WebKobeExplorer:
             planning_transition=planning_transition,
             state_label_hints=_state_label_hints_from_profile(self.business_profile),
         )
+        target_node = self._avoid_incompatible_existing_target_state(
+            target_node=target_node,
+            planning_transition=planning_transition,
+        )
         target_id = self.manager.identify_or_add_node(target_node)
         if edge_status == "no_observed_change" and should_materialize_business_state(
             business_transition
+        ):
+            edge_status = "succeeded_with_observed_change"
+        if (
+            edge_status == "failed_execution"
+            and _is_ignorable_stagehand_tool_choice_error(execution_error)
+            and _planning_delta_has_fact_change(planning_delta)
         ):
             edge_status = "succeeded_with_observed_change"
         if source_id != target_id and edge_status in {
@@ -468,12 +558,6 @@ class WebKobeExplorer:
             "failed_execution",
         }:
             edge_status = "succeeded_with_navigation"
-        if (
-            edge_status == "failed_execution"
-            and _is_ignorable_stagehand_tool_choice_error(execution_error)
-            and _planning_delta_has_fact_change(planning_delta)
-        ):
-            edge_status = "succeeded_with_observed_change"
         self._record_target_embedding(
             target_id=target_id,
             after=after,
@@ -519,7 +603,44 @@ class WebKobeExplorer:
             selected.semantic_id,
             locator=selected.locator,
         )
+        if _should_advance_current_node(
+            source_id=source_id,
+            target_id=target_id,
+            edge_status=edge_status,
+            business_transition=business_transition,
+            planning_transition=planning_transition,
+        ):
+            self._current_node_id = target_id
+        elif self._current_node_id is None:
+            self._current_node_id = source_id
         return self.manager.to_graph(start_node_id=self._start_node_id)
+
+    def _avoid_incompatible_existing_target_state(
+        self,
+        *,
+        target_node: WebKobeNode,
+        planning_transition: PlanningTransition | None,
+    ) -> WebKobeNode:
+        if planning_transition is None:
+            return target_node
+        try:
+            existing = self.manager.node_for_id(target_node.node_id)
+        except KeyError:
+            return target_node
+        existing_facts = (
+            list(existing.planning_state.active_facts)
+            if existing.planning_state is not None
+            else None
+        )
+        post_facts = list(planning_transition.post_facts)
+        if _facts_compatible(existing_facts, post_facts):
+            return target_node
+        node_id, label = _state_variant_node_id(
+            node=target_node,
+            post_facts=post_facts,
+            state_label_hints=_state_label_hints_from_profile(self.business_profile),
+        )
+        return replace(target_node, node_id=node_id, node_label=label)
 
     async def _try_backtrack(self) -> bool:
         go_back = getattr(self.adapter, "go_back", None)
@@ -684,8 +805,45 @@ class WebKobeExplorer:
                 self.manager.node_for_id(source_match.node_id)
             except KeyError:
                 return default_source_id, None
+            if not self._can_relocate_source(
+                default_source_id=default_source_id,
+                matched_source_id=source_match.node_id,
+            ):
+                return default_source_id, None
             return source_match.node_id, source_match
         return default_source_id, None
+
+    def _current_source_id(self, *, default_source_id: str) -> str:
+        if self._current_node_id is None:
+            return default_source_id
+        try:
+            self.manager.node_for_id(self._current_node_id)
+        except KeyError:
+            self._current_node_id = None
+            return default_source_id
+        return self._current_node_id
+
+    def _can_relocate_source(
+        self,
+        *,
+        default_source_id: str,
+        matched_source_id: str,
+    ) -> bool:
+        if default_source_id == matched_source_id:
+            return True
+        default_node = self.manager.node_for_id(default_source_id)
+        matched_node = self.manager.node_for_id(matched_source_id)
+        default_facts = (
+            list(default_node.planning_state.active_facts)
+            if default_node.planning_state is not None
+            else None
+        )
+        matched_facts = (
+            list(matched_node.planning_state.active_facts)
+            if matched_node.planning_state is not None
+            else None
+        )
+        return _facts_compatible(default_facts, matched_facts or [])
 
     def _refresh_matched_source_node(
         self,

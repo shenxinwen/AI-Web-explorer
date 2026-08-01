@@ -21,11 +21,37 @@ def _normalized_path(snapshot: StateSnapshot) -> str:
     return urlsplit(snapshot.url).path or "/"
 
 
+def _control_description(item: dict[str, Any]) -> str:
+    description = str(item.get("description") or "")
+    if item.get("action_kind") == "business_intent" or _looks_like_policy_text(
+        description
+    ):
+        description = str(
+            item.get("action_label")
+            or item.get("canonical_action_name")
+            or item.get("semantic_id")
+            or ""
+        )
+    if not description:
+        description = str(item.get("semantic_id") or "")
+    return " ".join(description.split())
+
+
+def _looks_like_policy_text(description: str) -> bool:
+    return any(
+        marker in description
+        for marker in (
+            "Action policy:",
+            "Memory policy:",
+            "Site purpose:",
+        )
+    )
+
+
 def _control_descriptions(interactables: list[dict[str, Any]]) -> list[str]:
     controls: list[str] = []
     for item in interactables:
-        description = str(item.get("description") or item.get("semantic_id") or "")
-        description = " ".join(description.split())
+        description = _control_description(item)
         if description and description not in controls:
             controls.append(description)
     return controls[:12]

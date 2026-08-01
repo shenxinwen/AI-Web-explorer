@@ -63,11 +63,17 @@ VLM visual delta: connected
 business affordance generation: initial version exists
 embedding memory: connected for similar-state lookup and repetition guidance
 generated fact recording: graph layer records them, PDDL excludes them by default
+domain-first projection: available through web-kobe-domain-from-graph
+problem generation: diagnostic/query-stage only, requires explicit start/goal
 free exploration strategy: not stable yet
 profile fact verifier: not real yet
 PDDL semantic quality: consumable, but not stable or readable enough
 business node naming: materialized business nodes can derive labels from
 profile hints / facts / actions
+same-page state variants: split when planning facts are incompatible
+latest 8-step real-site run: completed on Practice Automated Testing Shopping;
+graph/domain improved; source matching now has a trajectory guard, but needs
+real-site revalidation
 ```
 
 Detailed pipeline and module ownership are recorded in
@@ -125,6 +131,11 @@ evidence, graph memory, and a future verifier.
 The PDDL projector should consume graph semantics. It should not call LLM/VLM
 directly and should not freely invent predicates.
 
+Exploration should prioritize domain quality first. `domain.pddl` represents
+the observed state/action model and can be generated without a concrete goal.
+`problem.pddl` represents a specific planning query and should be produced only
+for smoke tests, SafeSym checks, or user/task-selected start and goal states.
+
 Current PDDL inputs are mainly:
 
 ```text
@@ -164,6 +175,11 @@ stable enough:
 - generated facts are not projected by default, so real business states may be
   lost until a promotion/projection policy exists.
 
+Recent fix: same-page states with incompatible planning facts are now split
+into state variants instead of overwriting the existing page node. This reduces
+the risk that a later state, such as `cart_has_items`, pollutes the exploration
+start node.
+
 ### P1: exploration does not yet have a real frontier
 
 The system has business affordances and embedding memory, but not mature:
@@ -200,18 +216,54 @@ A future verifier must decide which facts become planner-facing truth.
 
 Short term, preserve provenance and evidence.
 
+## Latest Experiment
+
+The 2026-08-01 8-step run on Practice Automated Testing Shopping completed and
+wrote:
+
+```text
+outputs/experiments/practice_automated_testing/latest/
+```
+
+High-signal result:
+
+- 8 nodes and 8 edges were produced.
+- The root `shopping` node stayed free of later cart/order facts, so the
+  same-page incompatible-state split fixed the earlier pollution failure.
+- `domain_only/domain.pddl` was generated without choosing a concrete
+  `problem.pddl` goal.
+- VLM produced both profile facts and one generated fact
+  (`product_details_visible`), with provenance preserved.
+
+Open problems from this run:
+
+- Source matching previously mapped later actions back to an earlier `checkout`
+  node. A lightweight current-node pointer and planning-fact compatibility
+  guard now prevent this in tests, but the fix still needs a real-site rerun.
+- Embedding summaries previously included repeated Stagehand policy/control
+  boilerplate. Summary generation now prefers business labels for Stagehand
+  business-intent controls, but real traces should be inspected again.
+- Graph edge metadata still embeds large visual prompt/response traces. These
+  should mostly live in trace artifacts, while graph should keep compact
+  evidence and planner-relevant state.
+- Low-value or already-covered actions such as `download_invoice_pdf` can still
+  appear as planner actions.
+
 ## Next Priorities
 
-1. Run an experiment to verify whether generated facts enter the graph and
-   embedding source matching affects edge sources correctly.
-2. Inspect graph and PDDL quality, especially source/target,
-   precondition/effect, and node labels.
-3. Discuss generated fact promotion / optional projection policy.
-4. Revisit PDDL action naming and non-business node naming after graph
+1. Re-run the Practice Automated Testing Shopping experiment to validate the
+   source-matching trajectory guard and cleaned embedding summaries.
+2. Inspect whether checkout substeps now form a sequential chain rather than
+   multiple edges fanning out from `checkout`.
+3. Keep using domain-only projection as the primary exploration artifact;
+   generate `problem.pddl` only for explicit smoke/query checks.
+4. Reduce graph trace bloat by moving verbose prompts/responses to trace files
+   and keeping graph evidence compact.
+5. Discuss generated fact promotion / optional projection policy.
+6. Revisit PDDL action naming and low-value action filtering after graph
    semantics are stable.
-5. Once the graph layer stabilizes, refactor or detach `interactable_elements`
-   and other low-level UI fields.
-6. Gradually split `WebKobeExplorer` to avoid further centralization.
+7. Once the graph layer stabilizes, refactor or detach `interactable_elements`
+   and gradually split `WebKobeExplorer`.
 
 ## Experiment Management
 

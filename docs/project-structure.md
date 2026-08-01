@@ -120,7 +120,11 @@ Main responsibilities:
 - derive readable `node_label` values for materialized business nodes from
   profile-provided state label hints, planning facts, and business-action
   fallback;
+- split same-page state variants when an existing node's planning facts are
+  incompatible with the current transition post-state;
 - propagate source-aware planning state;
+- keep state embedding summaries focused on page/business evidence instead of
+  Stagehand policy prompt boilerplate;
 - preserve `active_facts`, `profile_fact_ids`, and `generated_fact_ids` in
   `PlanningState`;
 - store state embeddings;
@@ -138,6 +142,7 @@ Main functions/classes:
 - `WebKobeGraphManager.build_planning_transition`
 - `WebKobeGraphManager.apply_planning_transition`
 - `resolve_business_target_node`
+- `WebKobeExplorer._avoid_incompatible_existing_target_state`
 - `find_best_state_match`
 - `build_exploration_context`
 
@@ -157,6 +162,10 @@ Main responsibilities:
 - run one exploration step;
 - choose one business or fallback action;
 - apply memory context and repetition avoidance;
+- keep a lightweight current-node pointer so the next action starts from the
+  latest valid materialized business state;
+- reject embedding source matches that would relocate to a planning-fact
+  incompatible node;
 - call operation and observation layers;
 - update graph state;
 - stop by budget or controller terminal condition.
@@ -171,6 +180,7 @@ Main functions/classes:
 - `WebKobeExplorer._select_action`
 - `WebKobeExplorer._select_business_affordance_action`
 - `WebKobeExplorer._match_current_state`
+- `WebKobeExplorer._resolve_current_source_id`
 - `WebKobeExplorer._record_source_business_affordances`
 - `WebKobeExplorationController.run`
 - `select_action_with_llm`
@@ -190,7 +200,8 @@ Main responsibilities:
 
 - load `WebKobeGraph` JSON;
 - project graph locations, profile facts, and planning transitions into PDDL;
-- write domain/problem artifacts;
+- write domain-only artifacts for exploration-stage modeling;
+- write domain/problem artifacts when a concrete planning query is specified;
 - run PDDL readiness checks;
 - run SafeSym parser, safety injection, and planner smoke checks.
 
@@ -201,6 +212,7 @@ remain in the graph for review, promotion, or explicit projection policy.
 Main functions/classes:
 
 - `load_web_kobe_graph_json`
+- `compile_web_kobe_graph_to_domain`
 - `compile_web_kobe_graph_to_pddl`
 - `write_web_kobe_pddl_smoke`
 - `write_web_kobe_safesym_smoke`
@@ -240,6 +252,7 @@ Main functions/classes:
 web-kobe-explore
 web-kobe-stagehand-explore
 web-kobe-ecommerce-stagehand-smoke
+web-kobe-domain-from-graph
 web-kobe-pddl-from-graph
 web-kobe-pddl-smoke
 web-kobe-safesym-smoke
@@ -268,6 +281,7 @@ WebKobeExplorer.explore_one_step
   -> summarize_visual_delta / verify_planning_delta
   -> GraphManager.build_planning_transition
   -> resolve_business_target_node
+  -> split incompatible same-page planning-state variants
   -> GraphManager.add_edge
   -> PDDL projector consumes graph JSON
 ```

@@ -40,3 +40,39 @@ def test_build_state_summary_includes_page_controls_and_planning_facts():
     assert "visual: Cart badge shows 1 item." in summary.text
     assert summary.context_markers == ("cart_non_empty",)
     assert summary.planning_facts == ("cart_has_items",)
+
+
+def test_build_state_summary_uses_business_label_instead_of_stagehand_policy_text():
+    snapshot = StateSnapshot(
+        page_id="shopping",
+        url="https://shop.test/shopping",
+        title="Shopping",
+        signature={"url_path": "/shopping"},
+    )
+    interactables = [
+        {
+            "semantic_id": "stagehand_business_milestone_001",
+            "description": (
+                "Site purpose:\n"
+                "public demo e-commerce shopping site\n\n"
+                "Action policy:\n"
+                "Choose one useful site-function action from visible page evidence.\n\n"
+                "Memory policy:\n"
+                "Web-KOBE may append exploration memory below."
+            ),
+            "action_label": "Advance one business milestone",
+            "canonical_action_name": "advance_business_milestone",
+            "action_kind": "business_intent",
+        }
+    ]
+
+    summary = build_state_summary(
+        snapshot=snapshot,
+        interactables=interactables,
+        active_planning_facts=["checkout_started"],
+    )
+
+    assert "controls: Advance one business milestone" in summary.text
+    assert "Action policy" not in summary.text
+    assert "Memory policy" not in summary.text
+    assert "Choose one useful site-function action" not in summary.text

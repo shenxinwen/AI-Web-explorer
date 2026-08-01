@@ -789,11 +789,60 @@ def compile_web_kobe_graph_to_pddl(
         goal_node_id=goal_node_id,
         location_predicates=location_predicates,
     )
+    domain = _compile_domain(
+        graph,
+        options=options,
+        location_predicates=location_predicates,
+        extra_predicate_names=[goal_predicate],
+    )
+    init_text = " ".join(
+        f"({name})"
+        for name in _initial_predicates(
+            graph,
+            start_node_id=selected_start_node_id,
+            location_predicates=location_predicates,
+            options=options,
+        )
+    )
+    problem = "\n".join(
+        [
+            "(define (problem web-kobe-problem)",
+            "  (:domain web-kobe)",
+            f"  (:init {init_text})",
+            f"  (:goal (and ({goal_predicate})))",
+            ")",
+        ]
+    )
+    return WebKobePddlArtifacts(domain=domain, problem=problem)
+
+
+def compile_web_kobe_graph_to_domain(
+    graph: WebKobeGraph,
+    *,
+    options: PddlProjectionOptions | None = None,
+) -> str:
+    options = options or PddlProjectionOptions()
+    location_predicates = _location_predicates_by_node_id(graph)
+    return _compile_domain(
+        graph,
+        options=options,
+        location_predicates=location_predicates,
+        extra_predicate_names=[],
+    )
+
+
+def _compile_domain(
+    graph: WebKobeGraph,
+    *,
+    options: PddlProjectionOptions,
+    location_predicates: dict[str, str],
+    extra_predicate_names: list[str],
+) -> str:
     predicate_names = set(
         list(location_predicates.values())
         + _state_predicates(graph, options=options)
+        + list(extra_predicate_names)
     )
-    predicate_names.add(goal_predicate)
     nodes_by_id = _nodes_by_id(graph)
     for edge in graph.edges:
         if _is_projectable_edge(edge):
@@ -846,22 +895,4 @@ def compile_web_kobe_graph_to_pddl(
             ")",
         ]
     )
-    init_text = " ".join(
-        f"({name})"
-        for name in _initial_predicates(
-            graph,
-            start_node_id=selected_start_node_id,
-            location_predicates=location_predicates,
-            options=options,
-        )
-    )
-    problem = "\n".join(
-        [
-            "(define (problem web-kobe-problem)",
-            "  (:domain web-kobe)",
-            f"  (:init {init_text})",
-            f"  (:goal (and ({goal_predicate})))",
-            ")",
-        ]
-    )
-    return WebKobePddlArtifacts(domain=domain, problem=problem)
+    return domain

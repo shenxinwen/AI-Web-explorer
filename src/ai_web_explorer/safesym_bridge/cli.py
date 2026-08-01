@@ -15,6 +15,7 @@ from ai_web_explorer.safesym_bridge.browser_runner import (
     write_web_kobe_graph,
 )
 from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
+    compile_web_kobe_graph_to_domain,
     compile_web_kobe_graph_to_pddl,
     load_web_kobe_graph_json,
 )
@@ -176,6 +177,22 @@ def main(argv: list[str] | None = None) -> int:
         "--start-node",
         default=None,
         help="Optional start node override. Defaults to graph.start_node_id.",
+    )
+    web_kobe_domain_from_graph_parser = subparsers.add_parser(
+        "web-kobe-domain-from-graph",
+        help="Write only domain.pddl from an explored Web-KOBE graph JSON.",
+    )
+    web_kobe_domain_from_graph_parser.add_argument(
+        "--graph",
+        type=Path,
+        required=True,
+        help="Path to an explored Web-KOBE graph JSON.",
+    )
+    web_kobe_domain_from_graph_parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("outputs/web_kobe_domain"),
+        help="Directory to write domain.pddl.",
     )
     web_kobe_pddl_smoke_parser = subparsers.add_parser(
         "web-kobe-pddl-smoke",
@@ -472,6 +489,12 @@ def main(argv: list[str] | None = None) -> int:
                 artifacts.problem,
                 encoding="utf-8",
             )
+            output_path = args.output
+        elif args.mode == "web-kobe-domain-from-graph":
+            graph = load_web_kobe_graph_json(args.graph)
+            domain = compile_web_kobe_graph_to_domain(graph)
+            args.output.mkdir(parents=True, exist_ok=True)
+            (args.output / "domain.pddl").write_text(domain, encoding="utf-8")
             output_path = args.output
         elif args.mode == "web-kobe-pddl-smoke":
             graph = load_web_kobe_graph_json(args.graph)

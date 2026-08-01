@@ -39,6 +39,19 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-explore \
 Then check whether the graph can produce planner-facing artifacts:
 
 ```bash
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-domain-from-graph \
+  --graph outputs/local_checkout_web_kobe.json \
+  --output outputs/local_checkout_domain
+```
+
+`web-kobe-domain-from-graph` is the exploration-stage projection path. It writes
+only `domain.pddl`, so it does not require choosing a concrete start/goal
+planning query.
+
+When a diagnostic planning query is needed, generate both `domain.pddl` and
+`problem.pddl` with an explicit goal node:
+
+```bash
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-pddl-smoke \
   --graph outputs/local_checkout_web_kobe.json \
   --output outputs/local_checkout_pddl_smoke \
@@ -95,6 +108,7 @@ Current mainline commands:
 
 ```text
 web-kobe-explore
+web-kobe-domain-from-graph
 web-kobe-pddl-from-graph
 web-kobe-pddl-smoke
 web-kobe-safesym-smoke
