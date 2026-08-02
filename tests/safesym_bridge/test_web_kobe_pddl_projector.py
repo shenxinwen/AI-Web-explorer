@@ -1631,6 +1631,7 @@ def test_load_web_kobe_graph_json_preserves_node_business_affordances(tmp_path):
                         action_name="add_item_to_cart",
                         relevance_hint="core",
                         target_hint="button labeled Add to cart",
+                        expected_change="Cart item count increases.",
                         evidence="A product card contains an Add to cart button.",
                         confidence=0.9,
                     )
@@ -1649,6 +1650,7 @@ def test_load_web_kobe_graph_json_preserves_node_business_affordances(tmp_path):
     assert affordance.action_name == "add_item_to_cart"
     assert affordance.relevance_hint == "core"
     assert affordance.target_hint == "button labeled Add to cart"
+    assert affordance.expected_change == "Cart item count increases."
 
 
 def test_load_web_kobe_graph_json_preserves_pddl_action_hint(tmp_path):

@@ -122,6 +122,8 @@ def _business_action_from_affordance(affordance: BusinessAffordance) -> BrowserA
     ]
     if affordance.target_hint:
         details.append(f"Target hint: {affordance.target_hint}.")
+    if affordance.expected_change:
+        details.append(f"Expected visible change: {affordance.expected_change}.")
     if affordance.evidence:
         details.append(f"Evidence: {affordance.evidence}.")
     return BrowserAction(
@@ -959,7 +961,6 @@ class WebKobeExplorer:
         if not node.business_affordances:
             return None
 
-        completed_actions = self._completed_business_action_names()
         local_tried = set(exploration_context.tried_action_ids)
         local_avoid = set(exploration_context.avoid_action_ids)
         ranked = sorted(
@@ -970,8 +971,6 @@ class WebKobeExplorer:
         for affordance in ranked:
             if affordance.action_name in local_avoid:
                 continue
-            if affordance.action_name in completed_actions:
-                continue
             if affordance.action_name in local_tried:
                 continue
             return _business_action_from_affordance(affordance)
@@ -980,25 +979,3 @@ class WebKobeExplorer:
             if affordance.action_name not in local_avoid:
                 return _business_action_from_affordance(affordance)
         return None
-
-    def _completed_business_action_names(self) -> set[str]:
-        completed: set[str] = set()
-        for edge in self.manager.to_graph(start_node_id=self._start_node_id).edges:
-            action_name = (
-                edge.business_transition.action_name
-                if edge.business_transition is not None
-                else None
-            )
-            action_name = (
-                action_name
-                or edge.action.canonical_action_name
-                or edge.action.semantic_id
-            )
-            if edge.status in {
-                "verified",
-                "succeeded",
-                "succeeded_with_observed_change",
-                "succeeded_with_navigation",
-            }:
-                completed.add(action_name)
-        return completed

@@ -174,7 +174,7 @@ SafeSym 可以结构性消费当前产物，但 PDDL 的语义质量还不稳定
 - backtracking；
 - coverage stop condition。
 
-现在更像 bounded single-path exploration，还不是成熟自由探索。下一版应该让 embedding memory 真正进入动作选择和 revisit 判断，而不是只作为诊断 metadata。
+现在更像 bounded single-path exploration，还不是成熟自由探索。下一版应该让 embedding memory 真正进入动作选择和 revisit 判断，而不是只作为诊断 metadata。最近的清理已经把通用 Stagehand exploration 默认模式改为 `observed_action`，保留 VLM 候选动作的 `expected_change`，并移除了业务候选选择中的全局 completed action 降权；重复策略应基于当前节点或 embedding 命中的相似节点上下文。
 
 ### P1: WebKobeExplorer 有中心化风险
 

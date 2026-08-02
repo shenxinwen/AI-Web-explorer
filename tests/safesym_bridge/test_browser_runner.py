@@ -803,7 +803,6 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
         site_purpose="demo store",
         business_profile="ecommerce_checkout",
         visual_delta_provider=lambda prompt, **kwargs: '{"visible_change_summary":"changed","candidate_added_facts":[],"candidate_removed_facts":[],"evidence":[],"confidence":0.5}',
-        stagehand_execution_mode="observed_action",
     )
 
     assert result == output_path

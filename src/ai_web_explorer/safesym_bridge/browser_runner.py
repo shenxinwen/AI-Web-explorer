@@ -418,7 +418,7 @@ async def run_stagehand_exploration(
     embedding_dimension: int | None = None,
     site_purpose: str | None = None,
     business_profile: str | BusinessFlowProfile | None = None,
-    stagehand_execution_mode: str = "business_milestone",
+    stagehand_execution_mode: str = "observed_action",
 ) -> Path:
     from playwright.async_api import async_playwright
 

@@ -1,5 +1,23 @@
 # 项目决策记录
 
+## 2026-08-02 - 修正通用探索实验入口与动作记忆边界
+
+更改：
+- `web-kobe-stagehand-explore` 的默认 Stagehand execution mode 从 `business_milestone` 改为 `observed_action`，让通用探索入口默认不再生成虚拟 milestone 动作。
+- `BusinessAffordance` 新增 `expected_change` 字段，并在 VLM 候选解析、graph JSON 序列化和 graph JSON 读取中保留。
+- business affordance selector 移除全局 completed action 降权；重复判断回到当前节点或 embedding 命中的相似节点上下文，通过 `tried_action_ids` / `avoid_action_ids` 控制。
+- `docs/safesym-bridge.md` 明确：`observed_action` 是通用 bounded exploration 默认路径，`business_milestone` 只作为 legacy fallback 或 checkout benchmark smoke 使用。
+
+原因：
+- 通用探索的主线应该是 VLM 提候选、本地 graph/embedding memory 选择和去重、Stagehand 执行选中动作；默认 `business_milestone` 会把实验带回旧任务驱动路径。
+- 同名业务动作在不同业务状态下可能合理重复，例如不同商品详情页上的 `add_item_to_cart`，不应被全局 completed action 直接降权。
+- `expected_change` 是候选动作排序和人工审查的重要证据，之前只写在 prompt schema 中但没有进入 graph，会丢失信息。
+
+影响：
+- 下一轮 `web-kobe-stagehand-explore` 实验更接近当前探索方向。
+- embedding-assisted memory 的职责更清楚：定位当前/相似节点，并基于这些节点的 tried actions 做重复控制。
+- 旧 `web-kobe-ecommerce-stagehand-smoke` 仍可保留为任务驱动 benchmark，不再代表主探索实验。
+
 ## 2026-08-02 - 收紧探索职责边界 prompt
 
 更改：

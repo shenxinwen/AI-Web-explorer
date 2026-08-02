@@ -20,10 +20,11 @@ def test_summarize_visual_affordances_maps_provider_json():
         return (
             '{"business_affordances":['
             '{"action_name":"add_item_to_cart",'
-            '"relevance_hint":"core",'
-            '"target_hint":"button labeled Add to cart on a product card",'
-            '"evidence":"The page shows product cards with Add to cart buttons.",'
-            '"confidence":0.9},'
+                '"relevance_hint":"core",'
+                '"target_hint":"button labeled Add to cart on a product card",'
+                '"expected_change":"Cart item count increases.",'
+                '"evidence":"The page shows product cards with Add to cart buttons.",'
+                '"confidence":0.9},'
             '{"action_name":"open_cart",'
             '"relevance_hint":"core",'
             '"target_hint":"shopping cart link",'
@@ -44,6 +45,9 @@ def test_summarize_visual_affordances_maps_provider_json():
     assert result.business_affordances[0].relevance_hint == "core"
     assert result.business_affordances[0].target_hint == (
         "button labeled Add to cart on a product card"
+    )
+    assert result.business_affordances[0].expected_change == (
+        "Cart item count increases."
     )
     assert result.business_affordances[0].evidence == (
         "The page shows product cards with Add to cart buttons."

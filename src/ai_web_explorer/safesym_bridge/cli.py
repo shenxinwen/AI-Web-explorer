@@ -432,7 +432,7 @@ def main(argv: list[str] | None = None) -> int:
     stagehand_explore_parser.add_argument(
         "--stagehand-execution-mode",
         choices=["business_milestone", "observed_action"],
-        default="business_milestone",
+        default="observed_action",
     )
     stagehand_explore_parser.add_argument("--headed", action="store_true")
     args = parser.parse_args(argv)

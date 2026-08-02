@@ -67,7 +67,7 @@ ecommerce profile facts: first quality pass completed with product detail,
 checkout required/complete, cart total, invoice, and availability facts
 exploration responsibility boundary: VLM observes and proposes candidates,
 local graph/embedding memory chooses and deduplicates, Stagehand executes only
-the selected action; first prompt boundary fixes are implemented
+the selected action; first prompt/runner boundary fixes are implemented
 domain-first projection: available through web-kobe-domain-from-graph
 problem generation: diagnostic/query-stage only, requires explicit start/goal
 free exploration strategy: not stable yet
@@ -241,6 +241,11 @@ The system has business affordances and embedding memory, but not mature:
 It is closer to bounded single-path exploration than mature free exploration.
 The next version should make embedding memory operational in selection and
 revisit handling rather than leaving it as diagnostic metadata.
+Recent cleanup moved the generic Stagehand exploration default to
+`observed_action`, preserves VLM candidate `expected_change` in graph
+affordances, and removed global completed-action downranking from business
+affordance selection. Repetition policy should now be based on the current or
+embedding-matched node context.
 
 ### P1: WebKobeExplorer has centralization risk
 

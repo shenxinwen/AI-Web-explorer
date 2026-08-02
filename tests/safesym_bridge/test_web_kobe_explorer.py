@@ -1,8 +1,15 @@
 import pytest
 
+from ai_web_explorer.grounded_web.capability_graph import ExecutionTrace, PageFrame
+from ai_web_explorer.grounded_web.exploration_index import ExplorationContext
 from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
-from ai_web_explorer.grounded_web.graph import BrowserAction
+from ai_web_explorer.grounded_web.graph import (
+    BusinessAffordance,
+    BrowserAction,
+    WebKobeEdge,
+    WebKobeNode,
+)
 from ai_web_explorer.grounded_web.business_profile import ecommerce_checkout_profile
 from ai_web_explorer.grounded_web.semantic_assistor import (
     DeterministicSemanticAssistor,
@@ -58,6 +65,55 @@ class FakeAdapter:
     async def execute(self, action: BrowserAction):
         self.executed.append(action)
         return True
+
+
+def _selection_node(
+    node_id: str,
+    *,
+    business_affordances: list[BusinessAffordance] | None = None,
+) -> WebKobeNode:
+    return WebKobeNode(
+        node_id=node_id,
+        page_description=node_id,
+        page_frame=PageFrame(
+            page_id=node_id,
+            page_type=node_id,
+            url=f"https://example.test/{node_id}",
+            url_pattern=f"https://example.test/{node_id}",
+            title=node_id,
+        ),
+        state_schema={},
+        last_state_snapshot={},
+        business_affordances=list(business_affordances or []),
+    )
+
+
+def _selection_edge(source: str, target: str, action_name: str) -> WebKobeEdge:
+    return WebKobeEdge(
+        source_node_id=source,
+        target_node_id=target,
+        instruction=action_name,
+        action=BrowserAction(
+            action_kind="business_intent",
+            locator=None,
+            semantic_id=action_name,
+            canonical_action_name=action_name,
+        ),
+        capability=None,
+        target_observation=target,
+        observed_delta=[],
+        schema_delta={},
+        execution_trace=ExecutionTrace(
+            concrete_action_kind="business_intent",
+            concrete_locator=None,
+            concrete_target_sample=action_name,
+            input_values_used={},
+            before_observation_id=source,
+            after_observation_id=target,
+            success=True,
+        ),
+        status="succeeded_with_observed_change",
+    )
 
 
 class RepeatedStateAdapter:
@@ -589,7 +645,7 @@ async def test_explore_one_step_records_visual_business_affordances_on_source_no
 
 
 @pytest.mark.anyio
-async def test_explore_one_step_prefers_untried_visual_business_affordance():
+async def test_explore_one_step_prefers_high_ranked_current_business_affordance():
     adapter = ScreenshotAdapter()
 
     def visual_provider(
@@ -636,9 +692,9 @@ async def test_explore_one_step_prefers_untried_visual_business_affordance():
     graph = await explorer.explore_one_step()
 
     assert adapter.executed[1].action_kind == "business_intent"
-    assert adapter.executed[1].semantic_id == "open_cart"
-    assert adapter.executed[1].canonical_action_name == "open_cart"
-    assert "shopping cart link" in adapter.executed[1].description
+    assert adapter.executed[1].semantic_id == "add_item_to_cart"
+    assert adapter.executed[1].canonical_action_name == "add_item_to_cart"
+    assert "button labeled Add to cart" in adapter.executed[1].description
     assert (
         "Execute only this selected business action"
         in adapter.executed[1].description
@@ -649,8 +705,51 @@ async def test_explore_one_step_prefers_untried_visual_business_affordance():
     )
     assert [edge.action.semantic_id for edge in graph.edges] == [
         "add_item_to_cart",
-        "open_cart",
+        "add_item_to_cart",
     ]
+
+
+def test_business_affordance_selection_does_not_downrank_action_completed_elsewhere():
+    explorer = WebKobeExplorer(
+        adapter=FakeAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+    )
+    explorer._start_node_id = "product_list"
+    explorer.manager.identify_or_add_node(_selection_node("product_list"))
+    explorer.manager.identify_or_add_node(_selection_node("cart"))
+    explorer.manager.identify_or_add_node(
+        _selection_node(
+            "product_detail",
+            business_affordances=[
+                BusinessAffordance(
+                    action_name="sort_products",
+                    relevance_hint="low_value",
+                    confidence=0.8,
+                ),
+                BusinessAffordance(
+                    action_name="add_item_to_cart",
+                    relevance_hint="core",
+                    confidence=0.9,
+                ),
+            ],
+        )
+    )
+    explorer.manager.add_edge(
+        _selection_edge("product_list", "cart", "add_item_to_cart")
+    )
+
+    selected = explorer._select_business_affordance_action(
+        exploration_context=ExplorationContext(
+            current_node_id="product_detail",
+            reference_node_id="product_detail",
+            is_revisit=False,
+            tried_action_ids=(),
+            avoid_action_ids=(),
+        )
+    )
+
+    assert selected is not None
+    assert selected.semantic_id == "add_item_to_cart"
 
 
 @pytest.mark.anyio

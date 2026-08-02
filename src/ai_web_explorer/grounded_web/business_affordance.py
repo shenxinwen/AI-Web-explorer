@@ -146,6 +146,7 @@ def _affordances_from_response(parsed: dict[str, Any]) -> list[BusinessAffordanc
                 label=_clean_text(item.get("label")),
                 relevance_hint=_relevance(item.get("relevance_hint")),
                 target_hint=_clean_text(item.get("target_hint")),
+                expected_change=_clean_text(item.get("expected_change")),
                 source="vlm",
                 confidence=_confidence(item.get("confidence")),
                 evidence=_clean_text(item.get("evidence")),

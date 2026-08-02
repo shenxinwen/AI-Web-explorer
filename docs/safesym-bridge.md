@@ -201,7 +201,6 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-stagehand-explore `
   --business-profile ecommerce_checkout `
   --openai-visual-delta `
   --visual-delta-model gpt-4o `
-  --stagehand-execution-mode observed_action `
   --state-embeddings `
   --embedding-model text-embedding-v4 `
   --embedding-dimension 1024 `
@@ -209,9 +208,12 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-stagehand-explore `
   --steps 8
 ```
 
-`business_milestone` mode asks Stagehand to advance one useful milestone.
-`observed_action` mode asks Stagehand to observe candidate actions and lets
-Web-KOBE select one from the returned candidates. Visual delta requires
+`observed_action` is the default mode for generic exploration. In the preferred
+bounded-exploration path, VLM proposes business affordances from screenshots,
+Web-KOBE selects and deduplicates with graph/embedding memory, and Stagehand
+executes the selected business action. `business_milestone` remains available
+as a legacy fallback mode and for checkout benchmark smoke paths, but it should
+not be treated as the main generic exploration path. Visual delta requires
 `--screenshot-dir` because it compares before/after screenshots.
 
 ## SauceDemo Role
