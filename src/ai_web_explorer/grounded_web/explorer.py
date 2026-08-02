@@ -114,7 +114,12 @@ def _first_unexplored_action(
 
 
 def _business_action_from_affordance(affordance: BusinessAffordance) -> BrowserAction:
-    details = [f"Business action: {affordance.action_name}."]
+    details = [
+        "Execute only this selected business action: "
+        f"{affordance.action_name}.",
+        "Stop after the first visible completion or clear failure.",
+        "Do not continue to the next business goal.",
+    ]
     if affordance.target_hint:
         details.append(f"Target hint: {affordance.target_hint}.")
     if affordance.evidence:

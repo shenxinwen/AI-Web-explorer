@@ -1,5 +1,40 @@
 # 项目决策记录
 
+## 2026-08-02 - 收紧探索职责边界 prompt
+
+更改：
+- `business_affordance` 的 VLM 候选动作 prompt 不再要求或暗示 `create new node`、`already tried` 等 graph memory / 建图判断，只要求返回可见业务动作、证据和预期变化。
+- generic Stagehand prompt 改为“执行一个已选中的业务动作并停止”；没有已选动作时才作为 fallback 选择一个明显业务动作。
+- exploration memory prompt 改为只给 Stagehand 提供上下文，不再要求 Stagehand 自己选择动作。
+- 从 VLM 候选动作生成的 `business_intent` 执行指令明确要求只执行该动作，完成或失败后停止，不继续下一个业务目标。
+
+原因：
+- VLM 没有稳定 graph 记忆，不应判断动作是否做过、状态是否新、是否应该建节点。
+- Stagehand 属于操作层，不应同时承担探索规划职责，否则会和本地 graph / embedding memory 的选择逻辑冲突。
+- embedding-assisted memory 才是重复识别、revisit 定位和动作降权的主机制；prompt 只能提供证据和执行约束。
+
+影响：
+- 探索链路职责更清楚：VLM 看，Web-KOBE 选，Stagehand 做。
+- graph / PDDL 语义更不容易被 prompt 自由规划污染。
+- 下一步需要通过真实网站实验验证：VLM 候选动作是否足够好、本地选择是否真正避开重复、Stagehand 是否仍会越界执行多个业务目标。
+
+## 2026-08-02 - 结构化优化电商 profile facts
+
+更改：
+- 在 `ecommerce_checkout_profile()` 中补充更通用的电商状态事实：`product_details_visible`、`checkout_user_info_required`、`payment_info_required`、`cart_total_visible`、`invoice_available`、`out_of_stock_visible`。
+- 将 checkout 的“需要填写/选择”和“已经完成”拆开描述，降低 VLM 把表单出现误判为信息完成的概率。
+- 将 `product_details_visible` 从 generated fact 候选提升为 ecommerce profile fact；VLM 仍可提出未声明的新 generated facts，但默认不进入 PDDL。
+
+原因：
+- 最近实验中商品详情、发票、支付方式等状态反复出现，但 profile 词表覆盖不足，导致 VLM 生成临时 facts 或回落到弱节点命名。
+- `checkout_user_info_complete` / `payment_info_complete` 语义过重，如果缺少 required 层，VLM 容易过早打上 complete facts。
+- 优化 profile facts 可以提升观察质量、节点命名、planning_transition 和 domain PDDL 的稳定性。
+
+影响：
+- 电商 profile 的通用性增强，但 graph policy / PDDL projector 仍只通过 profile 接口读取 facts，没有写入电商专有逻辑。
+- `product_details_visible` 现在会被归类为 profile fact，而不是 generated fact；相关 visual delta 测试已同步。
+- 后续仍需要通过真实实验验证这些 facts 是否减少误判和 `at_product_list_00x` 膨胀。
+
 ## 2026-08-01 - 用执行轨迹约束 source matching，并清理 embedding 摘要
 
 更改：

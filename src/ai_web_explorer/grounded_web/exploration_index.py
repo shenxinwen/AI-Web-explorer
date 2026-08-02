@@ -31,7 +31,8 @@ class ExplorationContext:
         if self.avoid_action_ids:
             lines.append("Avoid repeating actions: " + ", ".join(self.avoid_action_ids))
         lines.append(
-            "Choose one useful site-function action that is not in the avoid list."
+            "Use this memory only as context for the already selected action. "
+            "Do not choose a different business goal from this memory block."
         )
         return "\n".join(lines)
 

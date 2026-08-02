@@ -50,6 +50,30 @@ def test_summarize_visual_affordances_maps_provider_json():
     )
 
 
+def test_visual_affordance_prompt_keeps_vlm_stateless_about_graph_memory():
+    request = VisualAffordanceRequest(
+        goal="Explore shopping capabilities.",
+        profile=ecommerce_checkout_profile(),
+        current_screenshot_path="current.png",
+        current_signature={"url_path": "/inventory"},
+        current_planning_facts=["product_list_visible"],
+    )
+
+    def provider(prompt, *, current_screenshot_path):
+        assert "visible page evidence" in prompt
+        assert "expected_change" in prompt
+        assert "already tried" not in prompt.lower()
+        assert "already_done" not in prompt
+        assert "should_create_node" not in prompt
+        assert "create new node" not in prompt.lower()
+        assert "new business-state node" not in prompt.lower()
+        return '{"business_affordances":[],"state_summary":"Product list."}'
+
+    result = summarize_visual_affordances(request, provider=provider)
+
+    assert result.trace.status == "summarized"
+
+
 def test_summarize_visual_affordances_rejects_non_object_response():
     request = VisualAffordanceRequest(
         goal="Explore shopping capabilities.",

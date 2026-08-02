@@ -56,8 +56,10 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
             f"{request.max_actions} next-step business actions. Return JSON only. "
             "Each action must be immediately executable from the visible current "
             "page, grounded in visible evidence, and useful for discovering the "
-            "site's business flow. Prefer actions that may create or help create "
-            "a new business-state node. Avoid sort, filter, theme, language, "
+            "site's business flow. Focus on visible business capabilities and "
+            "possible next business-state changes, but do not infer graph memory, "
+            "whether an action was previously attempted, or whether Web-KOBE "
+            "should materialize a node. Avoid sort, filter, theme, language, "
             "footer, social, newsletter, or purely decorative actions unless no "
             "better business action exists."
         ),
@@ -74,6 +76,7 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
             "label": "optional visible label",
             "relevance_hint": "core | supporting | low_value | unknown",
             "target_hint": "short visible target hint for Stagehand execution",
+            "expected_change": "short expected visible business change",
             "evidence": "one short sentence grounded in visible page evidence",
             "confidence": "number from 0 to 1",
         },

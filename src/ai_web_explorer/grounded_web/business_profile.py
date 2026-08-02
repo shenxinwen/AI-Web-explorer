@@ -208,6 +208,25 @@ def ecommerce_checkout_profile() -> BusinessFlowProfile:
             ],
         ),
         PlanningFactSpec(
+            fact_id="product_details_visible",
+            meaning=(
+                "A detailed view, modal, or page for a specific purchasable "
+                "product is visible."
+            ),
+            related_stages=["product_selection"],
+            state_label_hint="product_details",
+            evidence_hints=[
+                _hint(
+                    "region",
+                    "A single product detail area shows name, image, price, description, availability, or rating.",
+                ),
+                _hint(
+                    "control",
+                    "Product-specific actions such as add to cart, choose options, or close details are visible.",
+                ),
+            ],
+        ),
+        PlanningFactSpec(
             fact_id="cart_has_items",
             meaning="The user has at least one item selected for purchase.",
             related_stages=["product_selection", "cart"],
@@ -218,6 +237,22 @@ def ecommerce_checkout_profile() -> BusinessFlowProfile:
                 ),
                 _hint("region", "A cart view lists at least one product."),
                 _hint("control", "A selected product can be removed or edited."),
+            ],
+        ),
+        PlanningFactSpec(
+            fact_id="cart_total_visible",
+            meaning="A cart, basket, checkout, or order total is visible.",
+            related_stages=["cart", "checkout_info", "order_review"],
+            state_label_hint="cart_total",
+            evidence_hints=[
+                _hint(
+                    "region",
+                    "Subtotal, shipping, tax, total, or item-price summary is visible.",
+                ),
+                _hint(
+                    "count",
+                    "A cart total or order total displays a monetary amount.",
+                ),
             ],
         ),
         PlanningFactSpec(
@@ -241,6 +276,27 @@ def ecommerce_checkout_profile() -> BusinessFlowProfile:
             ],
         ),
         PlanningFactSpec(
+            fact_id="checkout_user_info_required",
+            meaning=(
+                "Visible checkout contact, shipping, delivery, billing identity, "
+                "or address fields indicate that non-payment user information "
+                "still needs to be provided."
+            ),
+            related_stages=["checkout_info"],
+            state_label_hint="checkout_user_info_required",
+            evidence_hints=[
+                _hint(
+                    "form",
+                    "Empty or required non-payment checkout fields are visible.",
+                ),
+                _hint(
+                    "control",
+                    "The page asks for contact, shipping, delivery, billing identity, or address details.",
+                ),
+            ],
+            safety_relevance="information_verification",
+        ),
+        PlanningFactSpec(
             fact_id="required_info_missing",
             meaning=(
                 "Required checkout, contact, shipping, or account information "
@@ -256,7 +312,7 @@ def ecommerce_checkout_profile() -> BusinessFlowProfile:
         PlanningFactSpec(
             fact_id="checkout_user_info_complete",
             meaning=(
-                "Required non-payment checkout information appears complete, "
+                "Required non-payment checkout information appears filled and complete, "
                 "such as contact, shipping, delivery, billing identity, or "
                 "address fields."
             ),
@@ -270,6 +326,26 @@ def ecommerce_checkout_profile() -> BusinessFlowProfile:
                 _hint(
                     "control",
                     "A continue, payment, or review action becomes available after user information entry.",
+                ),
+            ],
+            safety_relevance="information_verification",
+        ),
+        PlanningFactSpec(
+            fact_id="payment_info_required",
+            meaning=(
+                "A payment method must be selected or payment credentials need "
+                "to be entered for the visible checkout flow."
+            ),
+            related_stages=["checkout_info", "order_review"],
+            state_label_hint="payment_info_required",
+            evidence_hints=[
+                _hint(
+                    "form",
+                    "Payment method options or empty payment credential fields are visible.",
+                ),
+                _hint(
+                    "control",
+                    "The page asks the user to select or provide payment information.",
                 ),
             ],
             safety_relevance="information_verification",
@@ -353,6 +429,41 @@ def ecommerce_checkout_profile() -> BusinessFlowProfile:
                     "A completion, success, or acknowledgement message is visible.",
                 ),
                 _hint("navigation", "The flow moves to a completion or receipt state."),
+            ],
+        ),
+        PlanningFactSpec(
+            fact_id="invoice_available",
+            meaning="An invoice, receipt, or downloadable order document is available.",
+            related_stages=["order_complete"],
+            state_label_hint="invoice_available",
+            evidence_hints=[
+                _hint(
+                    "control",
+                    "A download invoice, receipt, print, or save order document action is visible.",
+                ),
+                _hint(
+                    "region",
+                    "The completion or receipt view references an invoice or order document.",
+                ),
+            ],
+        ),
+        PlanningFactSpec(
+            fact_id="out_of_stock_visible",
+            meaning=(
+                "A product availability state indicates that an item is out of "
+                "stock, unavailable, or cannot currently be purchased."
+            ),
+            related_stages=["product_selection"],
+            state_label_hint="out_of_stock",
+            evidence_hints=[
+                _hint(
+                    "message",
+                    "Out of stock, sold out, unavailable, or backorder text is visible.",
+                ),
+                _hint(
+                    "control",
+                    "Purchase or add-to-cart controls are disabled due to availability.",
+                ),
             ],
         ),
         PlanningFactSpec(

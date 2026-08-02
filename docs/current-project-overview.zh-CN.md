@@ -91,7 +91,33 @@ PDDL 候选谓词词表 + 优先观察目标 + 跨网站语义对齐锚点
 
 Graph 层现在允许记录 profile facts 和 generated facts；PDDL 层默认仍保守消费 profile facts。后续需要设计 generated facts 的晋升和可选投影策略。
 
-### 3. Stagehand 是操作层，不是状态真相层
+### 3. 探索控制权必须留在本地系统
+
+当前长期职责边界固定为：
+
+```text
+VLM 观察当前页面，并提出业务动作候选
+本地 graph / embedding memory 定位当前状态、去重并选择一个候选动作
+Stagehand 只执行被选中的动作
+VLM 总结动作前后的可见业务变化
+graph policy 决定 create / merge / revisit
+PDDL projector 确定性消费 graph 中已经记录的语义
+```
+
+这意味着 VLM 不应该判断“动作是否做过”“当前状态是否是新节点”“是否应该建新节点”。VLM 没有稳定的 graph 记忆，它应该提供的是页面证据、候选业务动作和 before/after 变化摘要。
+
+动作去重不应只依赖 `node_id + action_slug`。这个方式可以作为快速索引，但主机制应是 embedding-assisted memory：
+
+```text
+current state summary
+  -> embedding match 到已有 node / state variant
+  -> 查询相似节点下已经尝试过的业务动作
+  -> 对重复或低价值动作降权或跳过
+```
+
+Profile facts 可以帮助对齐 planner-facing 语义，但不是唯一探索边界。Graph 可以记录 generated facts；默认 PDDL 仍只投影 profile facts，直到后续有晋升或显式投影策略。
+
+### 4. Stagehand 是操作层，不是状态真相层
 
 Stagehand 可以看页面、生成候选、执行动作和提供 trace，但不能直接决定：
 
@@ -103,7 +129,9 @@ Stagehand 可以看页面、生成候选、执行动作和提供 trace，但不�
 
 状态真相应来自 Web-KOBE 的 before/after observation、VLM/结构化证据、graph memory 和后续 verifier。
 
-### 4. PDDL projector 应保持确定性
+在推荐探索链路里，Stagehand 应被视为动作执行器。它的 prompt 应接近“执行这个被选中的业务动作并停止”，而不是“探索网站并自己选择下一个有用目标”。Generic Stagehand exploration prompt 只能作为 fallback。
+
+### 5. PDDL projector 应保持确定性
 
 PDDL projector 应消费 graph 中已经记录的语义，不应直接调用 LLM/VLM，也不应自由发明谓词。
 
@@ -146,7 +174,7 @@ SafeSym 可以结构性消费当前产物，但 PDDL 的语义质量还不稳定
 - backtracking；
 - coverage stop condition。
 
-现在更像 bounded single-path exploration，还不是成熟自由探索。
+现在更像 bounded single-path exploration，还不是成熟自由探索。下一版应该让 embedding memory 真正进入动作选择和 revisit 判断，而不是只作为诊断 metadata。
 
 ### P1: WebKobeExplorer 有中心化风险
 
@@ -169,11 +197,12 @@ business_affordances + business_transition + planning_transition
 ## 下一阶段优先级
 
 1. 跑一轮实验验证 generated facts 是否进入 graph、embedding source matching 是否真正影响 edge source。
-2. 检查 graph 和 PDDL 质量，尤其是 source/target、precondition/effect、node label。
-3. 讨论 generated facts 的晋升/可选投影策略。
-4. 继续讨论 PDDL action naming 和非业务节点命名策略，不急着让 LLM 直接参与 PDDL projector。
-5. 等 graph 层稳定后，重构或剥离 `interactable_elements` 等底层 UI 字段。
-6. 后续逐步拆分 `WebKobeExplorer`，避免核心协调类继续膨胀。
+2. 跑一轮 bounded exploration 实验，验证 VLM 候选动作、本地 embedding-assisted memory 和 Stagehand business-intent 执行是否符合已经确认的职责边界。
+3. 检查 graph 和 PDDL 质量，尤其是 source/target、precondition/effect、node label。
+4. 讨论 generated facts 的晋升/可选投影策略。
+5. 继续讨论 PDDL action naming 和非业务节点命名策略，不急着让 LLM 直接参与 PDDL projector。
+6. 等 graph 层稳定后，重构或剥离 `interactable_elements` 等底层 UI 字段。
+7. 后续逐步拆分 `WebKobeExplorer`，避免核心协调类继续膨胀。
 
 ## 实验管理规则
 

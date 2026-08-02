@@ -69,6 +69,8 @@ def test_build_exploration_context_summarizes_tried_and_avoid_actions():
         "Avoid repeating actions: theme_toggle, bad_button"
         in context.to_prompt_block()
     )
+    assert "Choose one useful site-function action" not in context.to_prompt_block()
+    assert "already selected action" in context.to_prompt_block()
 
 
 def test_build_exploration_context_uses_matched_node_for_revisit_memory():

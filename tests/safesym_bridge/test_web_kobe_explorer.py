@@ -639,6 +639,14 @@ async def test_explore_one_step_prefers_untried_visual_business_affordance():
     assert adapter.executed[1].semantic_id == "open_cart"
     assert adapter.executed[1].canonical_action_name == "open_cart"
     assert "shopping cart link" in adapter.executed[1].description
+    assert (
+        "Execute only this selected business action"
+        in adapter.executed[1].description
+    )
+    assert (
+        "Do not continue to the next business goal"
+        in adapter.executed[1].description
+    )
     assert [edge.action.semantic_id for edge in graph.edges] == [
         "add_item_to_cart",
         "open_cart",

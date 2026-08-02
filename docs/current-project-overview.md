@@ -63,6 +63,11 @@ VLM visual delta: connected
 business affordance generation: initial version exists
 embedding memory: connected for similar-state lookup and repetition guidance
 generated fact recording: graph layer records them, PDDL excludes them by default
+ecommerce profile facts: first quality pass completed with product detail,
+checkout required/complete, cart total, invoice, and availability facts
+exploration responsibility boundary: VLM observes and proposes candidates,
+local graph/embedding memory chooses and deduplicates, Stagehand executes only
+the selected action; first prompt boundary fixes are implemented
 domain-first projection: available through web-kobe-domain-from-graph
 problem generation: diagnostic/query-stage only, requires explicit start/goal
 free exploration strategy: not stable yet
@@ -112,7 +117,45 @@ The graph can record both profile facts and generated facts. PDDL still
 conservatively consumes profile facts by default. Generated fact promotion and
 optional projection remain open design work.
 
-### 3. Stagehand is the operation layer, not state truth
+Recent profile update: ecommerce checkout facts now distinguish required
+checkout/payment information from completed information, and include common
+product/order support states such as product details, cart totals, invoice
+availability, and out-of-stock availability.
+
+### 3. Exploration ownership must stay local
+
+The current long-term exploration boundary is:
+
+```text
+VLM observes the current page and proposes business action candidates
+local graph / embedding memory locates the current state, deduplicates actions,
+and chooses one candidate
+Stagehand executes exactly the selected action
+VLM summarizes before/after visible business change
+graph policy decides create / merge / revisit
+PDDL projector consumes stored graph semantics deterministically
+```
+
+This means VLM should not decide whether an action was already tried, whether a
+state is new, or whether a node should be created. It has no stable graph
+memory. It should provide visible evidence, candidate business actions, and
+before/after change summaries.
+
+Action deduplication should be embedding-assisted, not only
+`node_id + action_slug`. The intended query shape is:
+
+```text
+current state summary
+  -> embedding match against existing nodes / state variants
+  -> inspect tried business actions from similar nodes
+  -> downrank or skip repeated / low-value actions
+```
+
+Profile facts can help align planner-facing semantics, but they are not the
+only exploration boundary. Generated facts may be recorded in graph memory while
+remaining outside default PDDL projection.
+
+### 4. Stagehand is the operation layer, not state truth
 
 Stagehand can observe, propose candidates, execute actions, and provide traces.
 It should not directly decide:
@@ -126,7 +169,12 @@ It should not directly decide:
 State truth should come from Web-KOBE before/after observations, VLM/structured
 evidence, graph memory, and a future verifier.
 
-### 4. PDDL projection should stay deterministic
+In the preferred exploration loop, Stagehand should be treated as an action
+executor. Its prompt should be closer to "execute this selected business action
+and stop" than "explore the site and choose the next useful goal." Generic
+Stagehand exploration prompts should only be fallback behavior.
+
+### 5. PDDL projection should stay deterministic
 
 The PDDL projector should consume graph semantics. It should not call LLM/VLM
 directly and should not freely invent predicates.
@@ -191,6 +239,8 @@ The system has business affordances and embedding memory, but not mature:
 - coverage stop conditions.
 
 It is closer to bounded single-path exploration than mature free exploration.
+The next version should make embedding memory operational in selection and
+revisit handling rather than leaving it as diagnostic metadata.
 
 ### P1: WebKobeExplorer has centralization risk
 
@@ -252,17 +302,21 @@ Open problems from this run:
 ## Next Priorities
 
 1. Re-run the Practice Automated Testing Shopping experiment to validate the
-   source-matching trajectory guard and cleaned embedding summaries.
-2. Inspect whether checkout substeps now form a sequential chain rather than
+   source-matching trajectory guard, cleaned embedding summaries, and updated
+   ecommerce profile facts.
+2. Re-run a bounded exploration experiment to validate that VLM candidates,
+   embedding-assisted memory, and Stagehand business-intent execution follow
+   the confirmed responsibility boundary.
+3. Inspect whether checkout substeps now form a sequential chain rather than
    multiple edges fanning out from `checkout`.
-3. Keep using domain-only projection as the primary exploration artifact;
+4. Keep using domain-only projection as the primary exploration artifact;
    generate `problem.pddl` only for explicit smoke/query checks.
-4. Reduce graph trace bloat by moving verbose prompts/responses to trace files
+5. Reduce graph trace bloat by moving verbose prompts/responses to trace files
    and keeping graph evidence compact.
-5. Discuss generated fact promotion / optional projection policy.
-6. Revisit PDDL action naming and low-value action filtering after graph
+6. Discuss generated fact promotion / optional projection policy.
+7. Revisit PDDL action naming and low-value action filtering after graph
    semantics are stable.
-7. Once the graph layer stabilizes, refactor or detach `interactable_elements`
+8. Once the graph layer stabilizes, refactor or detach `interactable_elements`
    and gradually split `WebKobeExplorer`.
 
 ## Experiment Management

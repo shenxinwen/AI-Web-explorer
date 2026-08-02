@@ -116,7 +116,7 @@ def test_summarize_visual_delta_normalizes_explanatory_business_relevance():
     assert result.business_transition.relevance == "core"
 
 
-def test_summarize_visual_delta_records_generated_facts_without_failing():
+def test_summarize_visual_delta_records_newly_profiled_product_detail_fact():
     request = VisualDeltaRequest(
         goal="Open product details.",
         action=BrowserAction("business_intent", None, "view_product_details"),
@@ -142,8 +142,8 @@ def test_summarize_visual_delta_records_generated_facts_without_failing():
     assert result.trace.status == "summarized"
     assert result.trace.error_type is None
     assert result.planning_delta.candidate_added_facts == ["product_details_visible"]
-    assert result.planning_delta.profile_fact_ids == []
-    assert result.planning_delta.generated_fact_ids == ["product_details_visible"]
+    assert result.planning_delta.profile_fact_ids == ["product_details_visible"]
+    assert result.planning_delta.generated_fact_ids == []
     assert result.business_transition is not None
     assert result.business_transition.action_name == "view_product_details"
     assert result.business_transition.relevance == "core"
@@ -176,11 +176,11 @@ def test_summarize_visual_delta_splits_profile_and_generated_facts():
         "product_details_visible",
     ]
     assert result.planning_delta.candidate_removed_facts == ["modal_absent"]
-    assert result.planning_delta.profile_fact_ids == ["cart_has_items"]
-    assert result.planning_delta.generated_fact_ids == [
+    assert result.planning_delta.profile_fact_ids == [
+        "cart_has_items",
         "product_details_visible",
-        "modal_absent",
     ]
+    assert result.planning_delta.generated_fact_ids == ["modal_absent"]
 
 
 def test_summarize_visual_delta_requires_visible_change_summary():

@@ -17,7 +17,13 @@ def test_ecommerce_checkout_profile_defines_planning_facts_without_site_selector
     assert "cart_nonempty" not in fact_ids
     assert "checkout_info_complete" in fact_ids
     assert "checkout_user_info_complete" in fact_ids
+    assert "checkout_user_info_required" in fact_ids
+    assert "payment_info_required" in fact_ids
     assert "payment_info_complete" in fact_ids
+    assert "product_details_visible" in fact_ids
+    assert "cart_total_visible" in fact_ids
+    assert "invoice_available" in fact_ids
+    assert "out_of_stock_visible" in fact_ids
     assert "required_info_missing" in fact_ids
     assert "required_info_provided" not in fact_ids
     assert "order_place_pending_sensitive" in fact_ids
@@ -52,12 +58,44 @@ def test_ecommerce_checkout_profile_distinguishes_user_and_payment_info():
     assert checkout_info.safety_relevance == "information_verification"
 
 
+def test_ecommerce_checkout_profile_distinguishes_required_and_complete_info():
+    profile = ecommerce_checkout_profile()
+    facts = {fact.fact_id: fact for fact in profile.planning_facts}
+
+    user_required = facts["checkout_user_info_required"]
+    user_complete = facts["checkout_user_info_complete"]
+    payment_required = facts["payment_info_required"]
+    payment_complete = facts["payment_info_complete"]
+
+    assert "need" in user_required.meaning.lower()
+    assert "visible" in user_required.meaning.lower()
+    assert "complete" not in user_required.fact_id
+    assert "filled" in user_complete.meaning.lower()
+    assert "selected" in payment_required.meaning.lower()
+    assert "credential" in payment_complete.meaning.lower()
+    assert user_required.state_label_hint == "checkout_user_info_required"
+    assert payment_required.state_label_hint == "payment_info_required"
+
+
+def test_ecommerce_checkout_profile_defines_product_and_order_support_facts():
+    profile = ecommerce_checkout_profile()
+    facts = {fact.fact_id: fact for fact in profile.planning_facts}
+
+    assert facts["product_details_visible"].state_label_hint == "product_details"
+    assert facts["cart_total_visible"].state_label_hint == "cart_total"
+    assert facts["invoice_available"].state_label_hint == "invoice_available"
+    assert facts["out_of_stock_visible"].state_label_hint == "out_of_stock"
+    assert facts["invoice_available"].related_stages == ["order_complete"]
+    assert "availability" in facts["out_of_stock_visible"].meaning.lower()
+
+
 def test_ecommerce_checkout_profile_defines_state_label_hints():
     profile = ecommerce_checkout_profile()
     facts = {fact.fact_id: fact for fact in profile.planning_facts}
 
     assert facts["cart_page_visible"].state_label_hint == "cart"
     assert facts["cart_has_items"].state_label_hint == "cart_with_items"
+    assert facts["product_details_visible"].state_label_hint == "product_details"
     assert facts["checkout_started"].state_label_hint == "checkout"
     assert facts["order_completed"].state_label_hint == "order_complete"
 

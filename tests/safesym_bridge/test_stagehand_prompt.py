@@ -130,7 +130,8 @@ def test_generic_stagehand_exploration_goal_is_not_checkout_specific():
     goal = build_generic_stagehand_exploration_goal(site_purpose="demo store")
 
     assert "demo store" in goal
-    assert "Choose one useful site-function action" in goal
+    assert "execute exactly one selected business action" in goal.lower()
+    assert "choose one useful site-function action" not in goal.lower()
     assert "Avoid low-value footer, legal, social, theme, and language actions" in goal
     assert "checkout" not in goal.lower()
     assert "payment" not in goal.lower()

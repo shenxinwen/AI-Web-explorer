@@ -47,11 +47,13 @@ ECOMMERCE_CHECKOUT_TEST_DATA_POLICY = (
 )
 
 GENERIC_EXPLORATION_ACTION_POLICY = (
-    "Choose one useful site-function action from visible page evidence. "
-    "Prefer actions that reveal product, search, filtering, account, cart, form, "
-    "settings, content, or workflow functionality. Avoid low-value footer, legal, "
-    "social, theme, and language actions unless they are central to the site. "
-    "Stop after one meaningful transition and report visible evidence."
+    "Execute exactly one selected business action from visible page evidence. "
+    "If Web-KOBE has already selected an action, complete only that action and "
+    "stop after the first visible completion or clear failure. If no selected "
+    "action is supplied, use this only as fallback: choose one obvious business "
+    "action and execute it once. Avoid low-value footer, legal, social, theme, "
+    "and language actions unless they are central to the site. Report visible "
+    "evidence."
 )
 
 
@@ -165,7 +167,8 @@ def build_generic_stagehand_exploration_goal(
             f"Action policy:\n{GENERIC_EXPLORATION_ACTION_POLICY}",
             (
                 "Memory policy:\nWeb-KOBE may append exploration memory below. "
-                "Use it to avoid repeated or no-op actions."
+                "Use it only as context for the already selected action, and do "
+                "not choose a different business goal from memory text."
             ),
         ]
     )
