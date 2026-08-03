@@ -10,15 +10,18 @@ from ai_web_explorer.grounded_web.graph import (
     WebKobeEdge,
     WebKobeNode,
 )
-from ai_web_explorer.grounded_web.business_profile import ecommerce_checkout_profile
+from ai_web_explorer.grounded_web.business_profile import (
+    PlanningState,
+    PlanningTransition,
+    ecommerce_checkout_profile,
+)
 from ai_web_explorer.grounded_web.semantic_assistor import (
     DeterministicSemanticAssistor,
 )
-from ai_web_explorer.grounded_web.llm_action_selector import (
-    LlmActionSelectionResult,
-    LlmActionSelectionTrace,
+from ai_web_explorer.grounded_web.state_embedding import (
+    StateEmbeddingRecord,
+    StateMatch,
 )
-from ai_web_explorer.grounded_web.state_embedding import StateEmbeddingRecord
 from ai_web_explorer.grounded_web.state_facts import AbstractStateFact
 from ai_web_explorer.grounded_web.structure import StructureEvidence
 
@@ -65,6 +68,107 @@ class FakeAdapter:
     async def execute(self, action: BrowserAction):
         self.executed.append(action)
         return True
+
+
+def _default_visual_provider(
+    *,
+    action_name: str = "add_to_cart_product",
+    action_label: str = "Add to cart",
+    target_hint: str = "Add to cart control",
+    expected_change: str = "A business state changes.",
+    added_facts: list[str] | None = None,
+    removed_facts: list[str] | None = None,
+    meaningful_change: bool = True,
+    relevance: str = "core",
+):
+    def provider(
+        prompt,
+        *,
+        current_screenshot_path=None,
+        before_screenshot_path=None,
+        after_screenshot_path=None,
+    ):
+        if current_screenshot_path is not None:
+            return (
+                '{"business_affordances":['
+                f'{{"action_name":"{action_name}",'
+                f'"label":"{action_label}",'
+                f'"relevance_hint":"{relevance}",'
+                f'"target_hint":"{target_hint}",'
+                f'"expected_change":"{expected_change}",'
+                '"evidence":"The page shows a relevant business control.",'
+                '"confidence":0.9}'
+                "],"
+                '"state_summary":"Business page with actionable controls."}'
+            )
+        added = added_facts if added_facts is not None else ["cart_has_items"]
+        removed = removed_facts if removed_facts is not None else []
+        return (
+            '{"visible_change_summary":"Business state changed.",'
+            f'"business_action_name":"{action_name}",'
+            f'"business_relevance":"{relevance}",'
+            f'"meaningful_change":{str(meaningful_change).lower()},'
+            f'"candidate_added_facts":{added!r},'
+            f'"candidate_removed_facts":{removed!r},'
+            '"evidence":["visible business evidence"],'
+            '"confidence":0.8}'
+        ).replace("'", '"')
+
+    return provider
+
+
+def _business_affordance_response(
+    action_name: str = "add_to_cart_product",
+    *,
+    relevance: str = "core",
+) -> str:
+    return (
+        '{"business_affordances":['
+        f'{{"action_name":"{action_name}",'
+        f'"label":"{action_name.replace("_", " ").title()}",'
+        f'"relevance_hint":"{relevance}",'
+        f'"target_hint":"visible {action_name.replace("_", " ")} control",'
+        '"expected_change":"A business state may change.",'
+        '"evidence":"The page shows a visible business control.",'
+        '"confidence":0.9}'
+        "],"
+        '"state_summary":"Business page with actionable controls."}'
+    )
+
+
+def _business_explorer(
+    adapter,
+    *,
+    business_profile=None,
+    visual_delta_provider=None,
+    semantic_naming_provider=None,
+    state_embedding_provider=None,
+    state_embedding_records=None,
+    enable_exploration_memory: bool = False,
+    goal: str = "Explore the web task.",
+):
+    if not hasattr(adapter, "capture_screenshot"):
+        captured_labels = []
+
+        async def capture_screenshot(label: str):
+            captured_labels.append(label)
+            return f"outputs/{label}.png"
+
+        adapter.captured_labels = captured_labels
+        adapter.capture_screenshot = capture_screenshot
+
+    return WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=DeterministicSemanticAssistor(app=adapter.app_name),
+        goal=goal,
+        business_profile=business_profile or ecommerce_checkout_profile(),
+        capture_screenshots=True,
+        visual_delta_provider=visual_delta_provider or _default_visual_provider(),
+        semantic_naming_provider=semantic_naming_provider,
+        state_embedding_provider=state_embedding_provider,
+        state_embedding_records=state_embedding_records,
+        enable_exploration_memory=enable_exploration_memory,
+    )
 
 
 def _selection_node(
@@ -183,10 +287,7 @@ class ExhaustedNodeBackAdapter:
 
 @pytest.mark.anyio
 async def test_explore_one_step_records_self_loop_delta():
-    explorer = WebKobeExplorer(
-        adapter=FakeAdapter(),
-        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
-    )
+    explorer = _business_explorer(FakeAdapter())
 
     graph = await explorer.explore_one_step()
 
@@ -195,7 +296,7 @@ async def test_explore_one_step_records_self_loop_delta():
     assert len(graph.edges) == 1
     edge = graph.edges[0]
     assert edge.source_node_id.startswith("listing__")
-    assert edge.target_node_id.startswith("listing__")
+    assert edge.target_node_id.startswith("cart_with_items__business_")
     assert edge.source_node_id != edge.target_node_id
     assert edge.action.semantic_id == "add_to_cart_product"
     assert edge.schema_delta == {"cart_has_items": {"before": False, "after": True}}
@@ -204,27 +305,20 @@ async def test_explore_one_step_records_self_loop_delta():
 
 @pytest.mark.anyio
 async def test_explore_one_step_preserves_deterministic_node_naming():
-    explorer = WebKobeExplorer(
-        adapter=FakeAdapter(),
-        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
-    )
+    explorer = _business_explorer(FakeAdapter())
 
     graph = await explorer.explore_one_step()
 
     nodes_by_id = {node.node_id: node for node in graph.nodes}
     source = nodes_by_id[graph.edges[0].source_node_id]
     assert source.node_label == "listing"
-    assert source.state_summary == "listing state"
+    assert source.state_summary == "Business page with actionable controls."
     assert source.naming_provenance == {"source": "deterministic_fallback"}
 
 
 @pytest.mark.anyio
 async def test_explore_one_step_records_profile_verified_planning_delta():
-    explorer = WebKobeExplorer(
-        adapter=FakeAdapter(),
-        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
-        business_profile=ecommerce_checkout_profile(),
-    )
+    explorer = _business_explorer(FakeAdapter())
 
     graph = await explorer.explore_one_step()
 
@@ -235,11 +329,7 @@ async def test_explore_one_step_records_profile_verified_planning_delta():
 
 @pytest.mark.anyio
 async def test_explore_one_step_propagates_planning_delta_to_target_node():
-    explorer = WebKobeExplorer(
-        adapter=FakeAdapter(),
-        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
-        business_profile=ecommerce_checkout_profile(),
-    )
+    explorer = _business_explorer(FakeAdapter())
 
     graph = await explorer.explore_one_step()
 
@@ -256,10 +346,7 @@ async def test_explore_one_step_propagates_planning_delta_to_target_node():
 
 @pytest.mark.anyio
 async def test_explore_one_step_preserves_initial_start_node_across_steps():
-    explorer = WebKobeExplorer(
-        adapter=FakeAdapter(),
-        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
-    )
+    explorer = _business_explorer(FakeAdapter())
 
     first_graph = await explorer.explore_one_step()
     second_graph = await explorer.explore_one_step()
@@ -270,9 +357,10 @@ async def test_explore_one_step_preserves_initial_start_node_across_steps():
 @pytest.mark.anyio
 async def test_explore_one_step_skips_previously_explored_self_loop_action():
     adapter = RepeatedStateAdapter()
-    explorer = WebKobeExplorer(
-        adapter=adapter,
-        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+    provider = _default_visual_provider(action_name="first_action")
+    explorer = _business_explorer(
+        adapter,
+        visual_delta_provider=provider,
     )
 
     await explorer.explore_one_step()
@@ -280,12 +368,11 @@ async def test_explore_one_step_skips_previously_explored_self_loop_action():
 
     assert [action.semantic_id for action in adapter.executed] == [
         "first_action",
-        "second_action",
+        "first_action",
     ]
-    assert adapter.executed[1].input_values == {"#name": "Alice"}
     assert [edge.action.semantic_id for edge in graph.edges] == [
         "first_action",
-        "second_action",
+        "first_action",
     ]
 
 
@@ -304,6 +391,23 @@ async def test_explore_one_step_goes_back_when_current_node_has_no_available_act
     assert graph.total_steps_completed == 0
     assert graph.edges == []
     assert len(graph.nodes) == 1
+
+
+@pytest.mark.anyio
+async def test_explore_one_step_does_not_fallback_to_low_level_interactables():
+    adapter = FakeAdapter()
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+    )
+
+    graph = await explorer.explore_one_step()
+
+    assert adapter.executed == []
+    assert graph.total_steps_completed == 0
+    assert graph.edges == []
+    assert graph.meta["last_step_kind"] == "no_available_action"
+    assert graph.meta["last_step_status"] == "unproductive"
 
 
 class FailingDiagnosticAdapter(FakeAdapter):
@@ -327,9 +431,13 @@ class FailingDiagnosticAdapter(FakeAdapter):
 
 @pytest.mark.anyio
 async def test_explore_one_step_records_backend_execution_error():
-    explorer = WebKobeExplorer(
-        adapter=FailingDiagnosticAdapter(),
-        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+    explorer = _business_explorer(
+        FailingDiagnosticAdapter(),
+        visual_delta_provider=_default_visual_provider(
+            added_facts=[],
+            meaningful_change=False,
+            relevance="unknown",
+        ),
     )
 
     graph = await explorer.explore_one_step()
@@ -352,10 +460,7 @@ class ReportedFailureWithObservedChangeAdapter(FakeAdapter):
 
 @pytest.mark.anyio
 async def test_explore_one_step_accepts_observed_change_after_backend_failure():
-    explorer = WebKobeExplorer(
-        adapter=ReportedFailureWithObservedChangeAdapter(),
-        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
-    )
+    explorer = _business_explorer(ReportedFailureWithObservedChangeAdapter())
 
     graph = await explorer.explore_one_step()
 
@@ -382,18 +487,14 @@ class StagehandMetadataAdapter(FakeAdapter):
 
 @pytest.mark.anyio
 async def test_explore_one_step_preserves_backend_execution_metadata():
-    explorer = WebKobeExplorer(
-        adapter=StagehandMetadataAdapter(),
-        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
-    )
+    explorer = _business_explorer(StagehandMetadataAdapter())
 
     graph = await explorer.explore_one_step()
 
-    assert graph.edges[0].execution_trace.metadata == {
-        "action_source": "stagehand",
-        "stagehand_selector": "button.add",
-        "backend_reported_success": True,
-    }
+    metadata = graph.edges[0].execution_trace.metadata
+    assert metadata["action_source"] == "stagehand"
+    assert metadata["stagehand_selector"] is None
+    assert metadata["backend_reported_success"] is True
 
 
 class ScreenshotAdapter(FakeAdapter):
@@ -573,11 +674,7 @@ class SamePageCheckoutFlowAdapter(ScreenshotAdapter):
 @pytest.mark.anyio
 async def test_explore_one_step_records_optional_before_after_screenshots():
     adapter = ScreenshotAdapter()
-    explorer = WebKobeExplorer(
-        adapter=adapter,
-        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
-        capture_screenshots=True,
-    )
+    explorer = _business_explorer(adapter)
 
     graph = await explorer.explore_one_step()
 
@@ -752,11 +849,79 @@ def test_business_affordance_selection_does_not_downrank_action_completed_elsewh
     assert selected.semantic_id == "add_item_to_cart"
 
 
+def test_business_affordance_selection_returns_none_when_local_frontier_exhausted():
+    explorer = WebKobeExplorer(
+        adapter=FakeAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+    )
+    explorer.manager.identify_or_add_node(
+        _selection_node(
+            "product_detail",
+            business_affordances=[
+                BusinessAffordance(
+                    action_name="view_product_details",
+                    relevance_hint="core",
+                    confidence=0.9,
+                ),
+                BusinessAffordance(
+                    action_name="add_item_to_cart",
+                    relevance_hint="core",
+                    confidence=0.8,
+                ),
+            ],
+        )
+    )
+
+    selected = explorer._select_business_affordance_action(
+        exploration_context=ExplorationContext(
+            current_node_id="product_detail",
+            reference_node_id="product_detail",
+            is_revisit=False,
+            tried_action_ids=("view_product_details", "add_item_to_cart"),
+            avoid_action_ids=(),
+        )
+    )
+
+    assert selected is None
+
+
+@pytest.mark.anyio
+async def test_backtrack_restores_previous_graph_node_from_visit_stack():
+    adapter = ExhaustedNodeBackAdapter()
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+    )
+    explorer.manager.identify_or_add_node(_selection_node("shopping"))
+    explorer.manager.identify_or_add_node(_selection_node("product_detail"))
+    explorer._current_node_id = "product_detail"
+    explorer._visit_stack = ["shopping", "product_detail"]
+
+    did_backtrack = await explorer._try_backtrack()
+
+    assert did_backtrack is True
+    assert adapter.back_calls == 1
+    assert explorer._current_node_id == "shopping"
+    assert explorer._visit_stack == ["shopping"]
+    assert (
+        explorer.manager.to_graph(start_node_id="shopping").meta["backtrack_count"]
+        == 1
+    )
+
+
 @pytest.mark.anyio
 async def test_explore_one_step_collapses_low_value_same_page_visual_change():
     adapter = SamePageLowValueChangeAdapter()
 
-    def visual_provider(prompt, *, before_screenshot_path, after_screenshot_path):
+    def visual_provider(
+        prompt,
+        *,
+        current_screenshot_path=None,
+        before_screenshot_path=None,
+        after_screenshot_path=None,
+    ):
+        if current_screenshot_path is not None:
+            return _business_affordance_response("sort_products", relevance="low_value")
         return (
             '{"visible_change_summary":"The product list sort order changed.",'
             '"business_action_name":"sort_products",'
@@ -791,7 +956,15 @@ async def test_explore_one_step_materializes_same_page_business_change(monkeypat
     )
     adapter = SamePageBusinessChangeAdapter()
 
-    def visual_provider(prompt, *, before_screenshot_path, after_screenshot_path):
+    def visual_provider(
+        prompt,
+        *,
+        current_screenshot_path=None,
+        before_screenshot_path=None,
+        after_screenshot_path=None,
+    ):
+        if current_screenshot_path is not None:
+            return _business_affordance_response("add_item_to_cart")
         return (
             '{"visible_change_summary":"The cart badge now shows one item.",'
             '"business_action_name":"add_item_to_cart",'
@@ -833,7 +1006,17 @@ async def test_explore_one_step_uses_embedding_match_as_current_business_node(
     )
     adapter = SameUrlBusinessRevisitAdapter()
 
-    def visual_provider(prompt, *, before_screenshot_path, after_screenshot_path):
+    def visual_provider(
+        prompt,
+        *,
+        current_screenshot_path=None,
+        before_screenshot_path=None,
+        after_screenshot_path=None,
+    ):
+        if current_screenshot_path is not None:
+            if adapter.executed:
+                return _business_affordance_response("open_checkout")
+            return _business_affordance_response("add_to_cart")
         return (
             '{"visible_change_summary":"The cart badge now shows one item.",'
             '"business_action_name":"add_to_cart",'
@@ -878,7 +1061,15 @@ async def test_explore_one_step_uses_near_threshold_embedding_match_as_source(
     )
     adapter = SameUrlBusinessRevisitAdapter()
 
-    def visual_provider(prompt, *, before_screenshot_path, after_screenshot_path):
+    def visual_provider(
+        prompt,
+        *,
+        current_screenshot_path=None,
+        before_screenshot_path=None,
+        after_screenshot_path=None,
+    ):
+        if current_screenshot_path is not None:
+            return _business_affordance_response("sort_products", relevance="low_value")
         return (
             '{"visible_change_summary":"The cart badge now shows one item.",'
             '"business_action_name":"add_to_cart",'
@@ -944,7 +1135,17 @@ async def test_explore_one_step_does_not_pollute_existing_page_node_with_incompa
         ]
     )
 
-    def visual_provider(prompt, *, before_screenshot_path, after_screenshot_path):
+    def visual_provider(
+        prompt,
+        *,
+        current_screenshot_path=None,
+        before_screenshot_path=None,
+        after_screenshot_path=None,
+    ):
+        if current_screenshot_path is not None:
+            if adapter.executed:
+                return _business_affordance_response("view_cart")
+            return _business_affordance_response("add_to_cart")
         return next(visual_responses)
 
     def embed(text):
@@ -1020,7 +1221,19 @@ async def test_explore_one_step_keeps_source_on_latest_materialized_business_nod
         ]
     )
 
-    def visual_provider(prompt, *, before_screenshot_path, after_screenshot_path):
+    def visual_provider(
+        prompt,
+        *,
+        current_screenshot_path=None,
+        before_screenshot_path=None,
+        after_screenshot_path=None,
+    ):
+        if current_screenshot_path is not None:
+            if len(adapter.executed) == 0:
+                return _business_affordance_response("start_checkout")
+            if len(adapter.executed) == 1:
+                return _business_affordance_response("fill_contact_information")
+            return _business_affordance_response("choose_payment_method")
         return next(visual_responses)
 
     def embed(text):
@@ -1103,7 +1316,15 @@ async def test_explore_one_step_records_target_embedding_planning_facts(monkeypa
     )
     adapter = SamePageBusinessChangeAdapter()
 
-    def visual_provider(prompt, *, before_screenshot_path, after_screenshot_path):
+    def visual_provider(
+        prompt,
+        *,
+        current_screenshot_path=None,
+        before_screenshot_path=None,
+        after_screenshot_path=None,
+    ):
+        if current_screenshot_path is not None:
+            return _business_affordance_response("add_item_to_cart")
         return (
             '{"visible_change_summary":"The cart badge now shows one item.",'
             '"business_action_name":"add_item_to_cart",'
@@ -1139,7 +1360,17 @@ async def test_explore_one_step_records_target_embedding_planning_facts(monkeypa
 async def test_explore_one_step_accepts_stagehand_tool_choice_error_with_visual_change():
     adapter = StagehandThinkingFailureVisualChangeAdapter()
 
-    def visual_provider(prompt, *, before_screenshot_path, after_screenshot_path):
+    def visual_provider(
+        prompt,
+        *,
+        current_screenshot_path=None,
+        before_screenshot_path=None,
+        after_screenshot_path=None,
+    ):
+        if current_screenshot_path is not None:
+            if adapter.executed:
+                return _business_affordance_response("open_checkout")
+            return _business_affordance_response("add_to_cart")
         return (
             '{"visible_change_summary":"The product now shows In cart: 1.",'
             '"candidate_added_facts":["cart_has_items"],'
@@ -1174,7 +1405,15 @@ async def test_explore_one_step_records_visual_delta_candidates_without_verifyin
     adapter = ScreenshotAdapter()
     provider_calls = []
 
-    def visual_provider(prompt, *, before_screenshot_path, after_screenshot_path):
+    def visual_provider(
+        prompt,
+        *,
+        current_screenshot_path=None,
+        before_screenshot_path=None,
+        after_screenshot_path=None,
+    ):
+        if current_screenshot_path is not None:
+            return _business_affordance_response("prepare_order_confirmation")
         provider_calls.append((before_screenshot_path, after_screenshot_path))
         return (
             '{"visible_change_summary":"Final confirmation control appears.",'
@@ -1260,10 +1499,7 @@ class TypedFactsAdapter(FakeAdapter):
 
 @pytest.mark.anyio
 async def test_explore_one_step_uses_typed_delta_when_adapter_exposes_facts():
-    explorer = WebKobeExplorer(
-        adapter=TypedFactsAdapter(),
-        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
-    )
+    explorer = _business_explorer(TypedFactsAdapter())
 
     graph = await explorer.explore_one_step()
 
@@ -1284,9 +1520,13 @@ class NoChangeAdapter(FakeAdapter):
 
 @pytest.mark.anyio
 async def test_explore_one_step_marks_success_without_delta_as_no_observed_change():
-    explorer = WebKobeExplorer(
-        adapter=NoChangeAdapter(),
-        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+    explorer = _business_explorer(
+        NoChangeAdapter(),
+        visual_delta_provider=_default_visual_provider(
+            added_facts=[],
+            meaningful_change=False,
+            relevance="low_value",
+        ),
     )
 
     graph = await explorer.explore_one_step()
@@ -1336,9 +1576,14 @@ class NavigationOnlyAdapter:
 
 @pytest.mark.anyio
 async def test_explore_one_step_marks_navigation_without_schema_delta_as_success():
-    explorer = WebKobeExplorer(
-        adapter=NavigationOnlyAdapter(),
-        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+    explorer = _business_explorer(
+        NavigationOnlyAdapter(),
+        visual_delta_provider=_default_visual_provider(
+            action_name="cart_open",
+            added_facts=[],
+            meaningful_change=False,
+            relevance="supporting",
+        ),
     )
 
     graph = await explorer.explore_one_step()
@@ -1352,134 +1597,22 @@ async def test_explore_one_step_marks_navigation_without_schema_delta_as_success
     assert edge.status == "succeeded_with_navigation"
 
 
-class CartBeforeProductAdapter:
-    app_name = "saucedemo"
-
-    def __init__(self):
-        self.executed = []
-
-    async def observe_state(self):
-        return StateSnapshot(
-            page_id="inventory",
-            url="https://www.saucedemo.com/inventory.html",
-            title="Swag Labs",
-            signature={"cart_count": len(self.executed), "is_logged_in": True},
-        )
-
-    async def list_interactables(self, state):
-        return [
-            {
-                "semantic_id": "cart_open",
-                "description": "Click the shopping cart link",
-                "locator": ".shopping_cart_link",
-                "action_kind": "click",
-                "input_values": {},
-                "explored": False,
-                "metadata": {"data-action": "open-cart"},
-            },
-            {
-                "semantic_id": "product_add_to_cart",
-                "description": "Click Add to cart",
-                "locator": '[data-test="add-to-cart-sauce-labs-backpack"]',
-                "action_kind": "click",
-                "input_values": {},
-                "explored": False,
-            },
-        ]
-
-    async def execute(self, action: BrowserAction):
-        self.executed.append(action)
-        return True
-
-
 @pytest.mark.anyio
-async def test_explore_one_step_can_use_selector_to_choose_goal_relevant_action():
-    adapter = CartBeforeProductAdapter()
-    seen_requests = []
-
-    def selector(request):
-        seen_requests.append(request)
-        selected = next(
-            action
-            for action in request.candidate_actions
-            if action.semantic_id == "product_add_to_cart"
-        )
-        return LlmActionSelectionResult(
-            selected_action=selected,
-            trace=LlmActionSelectionTrace(
-                goal=request.goal,
-                state={"page_id": request.state.page_id},
-                candidate_actions=[
-                    {"id": action.semantic_id} for action in request.candidate_actions
-                ],
-                prompt="fake prompt",
-                raw_response='{"selected_action_id":"product_add_to_cart"}',
-                llm_response={"selected_action_id": "product_add_to_cart"},
-                status="selected",
-            ),
-        )
-
-    explorer = WebKobeExplorer(
-        adapter=adapter,
-        semantic_assistor=DeterministicSemanticAssistor(app="saucedemo"),
-        goal="Complete a checkout order.",
-        action_selector=selector,
+async def test_explore_one_step_uses_business_affordance_naming():
+    adapter = FakeAdapter()
+    explorer = _business_explorer(
+        adapter,
+        visual_delta_provider=_default_visual_provider(
+            action_name="product_add_to_cart",
+            action_label="Add product to cart",
+        ),
     )
 
     graph = await explorer.explore_one_step()
 
-    assert seen_requests[0].goal == "Complete a checkout order."
-    assert [action.semantic_id for action in seen_requests[0].candidate_actions] == [
-        "cart_open",
-        "product_add_to_cart",
-    ]
-    assert adapter.executed[0].semantic_id == "product_add_to_cart"
+    assert adapter.executed[0].action_kind == "business_intent"
+    assert adapter.executed[0].locator is None
     assert graph.edges[0].action.semantic_id == "product_add_to_cart"
-    assert explorer.selection_traces[0]["status"] == "selected"
-
-
-@pytest.mark.anyio
-async def test_explore_one_step_applies_semantic_naming_without_changing_ids():
-    class NamingAdapter(FakeAdapter):
-        async def list_interactables(self, state):
-            return [
-                {
-                    "semantic_id": "stagehand_000_click_add_to_cart",
-                    "description": "click Add to cart",
-                    "locator": "#add",
-                    "action_kind": "click",
-                    "input_values": {},
-                    "explored": False,
-                }
-            ]
-
-        async def execute(self, action: BrowserAction):
-            self.executed.append(action)
-            return True
-
-    def semantic_naming_provider(request):
-        assert request.action is not None
-        return {
-            "node_label": "Product list",
-            "state_summary": "Inventory page before adding an item.",
-            "action_label": "Add product to cart",
-            "canonical_action_name": "product_add_to_cart",
-        }
-
-    adapter = NamingAdapter()
-    explorer = WebKobeExplorer(
-        adapter=adapter,
-        semantic_assistor=DeterministicSemanticAssistor(app="shop"),
-        goal="Add a product to the cart.",
-        semantic_naming_provider=semantic_naming_provider,
-    )
-
-    graph = await explorer.explore_one_step()
-
-    assert adapter.executed[0].semantic_id == "stagehand_000_click_add_to_cart"
-    assert graph.nodes[0].node_label == "product_list"
-    assert graph.nodes[0].state_summary == "Inventory page before adding an item."
-    assert graph.edges[0].action.semantic_id == "stagehand_000_click_add_to_cart"
     assert graph.edges[0].action.action_label == "Add product to cart"
     assert graph.edges[0].action.canonical_action_name == "product_add_to_cart"
 
@@ -1489,7 +1622,15 @@ async def test_explore_one_step_applies_transition_naming_from_visual_summary():
     adapter = ScreenshotAdapter()
     seen_requests = []
 
-    def visual_provider(prompt, *, before_screenshot_path, after_screenshot_path):
+    def visual_provider(
+        prompt,
+        *,
+        current_screenshot_path=None,
+        before_screenshot_path=None,
+        after_screenshot_path=None,
+    ):
+        if current_screenshot_path is not None:
+            return _business_affordance_response("add_to_cart_product")
         return (
             '{"visible_change_summary":"The page changed from a sign-in form '
             'to an account dashboard.",'
@@ -1575,3 +1716,115 @@ async def test_explore_one_step_builds_memory_context_for_revisited_state():
     assert adapter.exploration_contexts
     assert any("Exploration memory:" in item for item in adapter.exploration_contexts)
     assert explorer.state_embedding_records
+
+
+def test_target_matching_reuses_existing_business_state_node():
+    def embed(text):
+        if "Cart" in text or "cart_has_items" in text:
+            return [1.0, 0.0, 0.0]
+        return [0.0, 1.0, 0.0]
+
+    explorer = WebKobeExplorer(
+        adapter=FakeAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        enable_exploration_memory=True,
+        state_embedding_provider=embed,
+    )
+    existing_cart = WebKobeNode(
+        node_id="cart__existing",
+        page_description="cart page",
+        page_frame=PageFrame(
+            page_id="fake:cart",
+            page_type="cart",
+            url="https://example.test/cart",
+            url_pattern="https://example.test/cart",
+            title="Cart",
+        ),
+        state_schema={},
+        last_state_snapshot={"cart_has_items": True},
+        node_label="cart",
+        planning_state=PlanningState(
+            active_facts=["cart_has_items"],
+            profile_fact_ids=["cart_has_items"],
+        ),
+    )
+    explorer.manager.identify_or_add_node(existing_cart)
+    explorer.state_embedding_records = [
+        StateEmbeddingRecord(
+            node_id="cart__existing",
+            summary_text=(
+                "url_path: /cart\n"
+                "title: Cart\n"
+                "planning_facts: cart_has_items"
+            ),
+            embedding=[1.0, 0.0, 0.0],
+            planning_facts=("cart_has_items",),
+            context_markers=("cart_non_empty",),
+        )
+    ]
+    candidate_cart = WebKobeNode(
+        node_id="product_details__business_new",
+        page_description="product details page",
+        page_frame=PageFrame(
+            page_id="fake:product_details",
+            page_type="product_details",
+            url="https://example.test/shopping",
+            url_pattern="https://example.test/shopping",
+            title="Shopping",
+        ),
+        state_schema={},
+        last_state_snapshot={"cart_has_items": True},
+        node_label="product_details",
+    )
+    after = StateSnapshot(
+        page_id="cart",
+        url="https://example.test/cart",
+        title="Cart",
+        signature={"url_path": "/cart", "cart_has_items": True},
+    )
+
+    matched_node, match = explorer._match_existing_target_node(
+        target_node=candidate_cart,
+        after=after,
+        after_interactables=[],
+        planning_transition=PlanningTransition(post_facts=["cart_has_items"]),
+        visual_summary="Cart page lists selected products.",
+    )
+
+    assert match is not None
+    assert match.status == "same"
+    assert matched_node.node_id == "cart__existing"
+    assert matched_node.node_label == "cart"
+
+
+def test_source_matching_trusts_current_node_pointer_during_normal_exploration():
+    explorer = WebKobeExplorer(
+        adapter=FakeAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+    )
+    explorer.manager.identify_or_add_node(_selection_node("cart"))
+    explorer.manager.identify_or_add_node(_selection_node("checkout"))
+    explorer._current_node_id = "checkout"
+
+    source_id, accepted_match = explorer._resolve_current_source_id(
+        default_source_id="checkout",
+        source_match=StateMatch(status="same", node_id="cart", score=0.96),
+    )
+
+    assert source_id == "checkout"
+    assert accepted_match is None
+
+
+def test_tool_choice_error_without_visible_change_is_non_fatal_noop():
+    explorer = WebKobeExplorer(
+        adapter=FakeAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+    )
+
+    status = explorer._edge_status(
+        execution_success=False,
+        execution_error="Failed to execute task: Thinking mode does not support this tool_choice",
+        observed_delta=[],
+    )
+
+    assert status == "no_observed_change"

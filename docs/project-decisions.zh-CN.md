@@ -1,5 +1,148 @@
 # 项目决策记录
 
+这份文档记录项目中的关键调整：改了什么、为什么改、影响范围是什么。后续每次做架构、pipeline、数据结构、实验策略或主线清理时，都应该追加一条简短记录。
+
+记录格式：
+
+```text
+## YYYY-MM-DD - 决策标题
+
+更改：
+- ...
+
+原因：
+- ...
+
+影响：
+- ...
+```
+
+## 2026-08-02 - 将探索策略收束为 frontier / DFS
+
+更改：
+- 在 current project overview 中明确 bounded exploration V1 的方向：每个节点维护一组当前可执行业务候选，优先执行未尝试候选。
+- 当前节点候选耗尽时，应回退到仍有 frontier 的历史节点，而不是重复执行已成功但低进展的动作。
+- 短期继续从已有 edges 反查 tried / no-op / failed 状态，不急着新增复杂 memory 表；browser back / DFS recovery 后续再接 embedding source relocalization。
+- 代码层已落地最小行为：business affordance selector 不再在候选耗尽后选择非 avoid 成功动作；browser back 成功后会用轻量 visit stack 恢复 `_current_node_id`。
+
+原因：
+- 最新 Practice Automated Testing Shopping 实验在商品列表和商品详情之间反复切换，说明当前 selector 的“全部尝试后选择非 avoid 成功动作”兜底会制造循环。
+- VLM 可以提出候选动作和证据，但没有稳定图记忆；动作是否做过、是否回退、是否终止应由本地 graph/controller 决定。
+- 这个方向更接近 SEE / UI-KOBE 类探索图构建的 frontier 思路，同时保持第一版实现足够简单。
+
+影响：
+- 下一步优先通过真实网站实验验证最小 frontier/DFS 行为，并补充实验报告中的 frontier 质量指标。
+- embedding 继续服务 target merge、相似节点动作记忆和 recovery，不在正常探索中每步覆盖 source。
+- graph/PDDL 质量评估会增加候选耗尽、回退、重复节点命中等探索过程指标。
+
+## 2026-08-03 - 将 frontier 指标写入 graph meta
+
+更改：
+- `write_web_kobe_graph` 在输出 `graph.json` 时写入 `meta.frontier_metrics`。
+- 指标包括每个节点的候选动作数、已尝试动作、未尝试动作、no-op 动作、失败动作、全局 frontier/exhausted 节点数、重复 target 命中数和 backtrack 次数。
+- `WebKobeGraphManager` 新增轻量 `meta` 字典；`WebKobeExplorer._try_backtrack` 成功同步 visit stack 时递增 `backtrack_count`。
+
+原因：
+- 后续实验不能只看 node/edge 数量，需要知道每个节点的候选动作是否真的被消耗、是否仍有 frontier、重复节点是否被命中。
+- 指标可以由现有 graph 派生，不需要提前引入新的 memory 表或改变 node/edge schema。
+- backtrack 不记录为业务 edge，因此需要在 graph meta 中记录控制层回退次数。
+
+影响：
+- 下一轮实验可以直接从 `graph.json` 判断探索是否卡在某个节点、是否因为候选耗尽触发回退、哪些动作被 no-op/failed。
+- 暂时仍缺 controller 层完整 DFS：当前 controller 会把 no-edge backtrack 视为 `no_available_action` 停止。下一步需要区分“控制性 backtrack，继续探索”和“没有 frontier，终止”。
+- 指标属于诊断/实验质量信息，不进入 PDDL projector。
+
+## 2026-08-03 - controller 改为连续无进展终止
+
+更改：
+- `WebKobeExplorationController` 不再遇到单次 `failed_execution` 就终止。
+- 新增 `max_consecutive_unproductive_steps`，默认值为 3。
+- `failed_execution`、`no_observed_change` 等无进展业务 edge 会累加连续无进展计数；成功业务 edge 会清零。
+- 成功的 `control_backtrack` 不产生业务 edge，但会被视为有效探索控制动作，不再触发 `no_available_action` 立即停止。
+- `graph.meta` 记录 `last_step_kind`、`last_step_status`、`consecutive_unproductive_steps` 和 `max_consecutive_unproductive_steps`。
+
+原因：
+- 开放探索中失败是正常试错信号，不应把系统重新拉回“任务必须每步成功”的执行器逻辑。
+- 用户明确要求业务动作也允许失败，只有连续失败或连续无进展后才终止并记录。
+- backtrack 属于探索控制动作，不应作为 PDDL edge，也不应因为没有新增 edge 就让 controller 停止。
+
+影响：
+- 实验可以继续越过偶发的 Stagehand 执行失败、no-op 或模型适配异常。
+- stop reason 更符合探索语义：`consecutive_unproductive_steps` 表示连续无进展耗尽，`no_available_action` 表示没有 edge 且没有有效控制动作。
+- 后续真实实验需要评估默认阈值 3 是否合适。
+
+## 2026-08-02 - 将 Stagehand thinking/tool_choice 异常视为非致命执行异常
+
+更改：
+- `WebKobeExplorer._edge_status` 遇到 `Thinking mode does not support this tool_choice` 时，不再直接返回 `failed_execution`。
+- 如果该异常伴随 observed delta 或 planning delta fact change，edge 仍记录为 `succeeded_with_observed_change`。
+- 如果没有可见变化，则记录为 `no_observed_change`，让 controller 继续探索并由本地动作记忆避开该 no-op 动作。
+
+原因：
+- 该异常来自所选模型与 Stagehand thinking/tool_choice 参数的适配问题，不一定代表浏览器动作没有执行。
+- 用户已明确该异常应作为非阻塞异常处理；实验不应因为这个已知适配异常提前终止。
+- 将无变化情况记为 no-op，可以保留诊断信息，又能让探索继续尝试其他候选动作。
+
+影响：
+- Practice Automated Testing 这类实验后续不会因为单纯 `Thinking mode does not support this tool_choice` 停在 failed_action。
+- 若页面确实没有变化，该动作会进入当前节点的 no-op/avoid 记忆，后续选择器可以尝试其他业务动作。
+- 真正的未知执行错误仍保持 `failed_execution`，继续作为实验终止信号。
+
+## 2026-08-02 - 正常探索 source 定位信任执行轨迹
+
+更改：
+- `WebKobeExplorer._resolve_current_source_id` 在当前节点指针有效时，不再接受 embedding source match 把 source 拉回其他相似节点。
+- source embedding match 保留为 metadata / recovery 信号；正常探索的 source 默认由上一条成功 edge 的 target 维护。
+- 更新 overview，明确 source 定位、target matching、recovery 的职责边界。
+
+原因：
+- 探索过程中系统自己知道上一条边的 target。只要浏览器没有被外部打断，当前节点指针比每步 embedding 重新定位更可靠。
+- 之前实验出现过 embedding 把后续动作 source 拉回相似旧节点，导致 PDDL precondition 和 graph source 错位。
+- 现有 GUI exploration 工作通常会在动作后识别/匹配 target，并在回退、恢复或离线审查时做状态匹配；不应让相似度每步覆盖执行轨迹。
+
+影响：
+- 常规探索链路变为：current node pointer 决定 source，动作后 target matching 决定是否复用旧节点或创建新节点。
+- embedding 的主职责收窄为 target merge、recovery、相似节点动作记忆和后续图审查。
+- 后续实现 browser back / DFS recovery 时，可以显式进入 recovery 模式再使用 source embedding relocalization。
+
+## 2026-08-02 - 接入动作后 target matching V1
+
+更改：
+- `WebKobeExplorer` 在动作执行后、写入目标节点前，新增 target matching 阶段。
+- target matching 使用动作后的 state summary、planning_transition.post_facts、visual summary 和现有 state embeddings 查找相似目标节点。
+- 只有 embedding 判断为 `same` 且 planning facts 兼容时，才复用已有目标节点；否则保留原有创建/变体逻辑。
+- edge execution metadata 新增 `target_state_match`，用于实验报告审查匹配状态、分数和是否被接受。
+- 同步修正无 business profile 的低层探索推进：当普通 observed delta 成功发生且没有 business/planning transition 时，也允许当前节点指针推进，避免后续边持续从起点发出并覆盖起点快照。
+
+原因：
+- 之前系统有 source matching，但缺少 target matching，导致不同路径到达同一业务状态时容易重复创建节点。
+- “防污染”的 state variant 逻辑只能避免把不兼容 facts 写进旧节点，不能解决“不同 node_id 但同一业务状态”的归并问题。
+- 第一版需要保守，避免误合并；因此必须同时满足 embedding 相似和 planning facts 兼容。
+- Playwright fixture golden path 暴露了另一个基础图质量问题：无 business profile 场景下当前节点不推进，会污染起点节点快照；这与 target matching 不同，但同属 source/target 定位基本质量。
+
+影响：
+- 首页到购物车、商品详情页到购物车等不同路径，后续有机会复用同一个业务节点。
+- PDDL 中 `at_xxx_002` / `at_xxx_003` 膨胀有望减少，但需要真实网站实验验证。
+- target matching 仍是 V1，不替代后续 UI-KOBE 风格的二次图优化。
+- 本地 fixture 探索的 edge source 更接近真实执行轨迹，避免所有低层动作都从 start node 发散。
+
+## 2026-08-02 - 确立 graph 质量评价原则
+
+更改：
+- 在 `docs/current-project-overview.zh-CN.md` 和 `docs/current-project-overview.md` 中新增 graph 质量原则。
+- 明确 graph 质量优先看业务状态唯一性，而不是只看是否生成了节点、边和 PDDL。
+- 将“相同业务状态还没有稳定合并”提升为当前 P0 问题。
+
+原因：
+- 最新 Practice Automated Testing Shopping 8 步实验虽然完整生成了 graph 和 domain，但出现多个 planning facts 相近的节点，例如 `product_details_visible + cart_has_items` 被拆成多个 `product_details` / `cart_with_items` 变体。
+- 用户确认的方向是：不同来源路径可以指向同一个业务状态节点，例如首页到购物车、商品详情页到购物车都应复用同一个购物车节点。
+- 当前问题的关键不是简单降低某些动作权重，而是让 post-action target state 优先匹配并复用已有业务节点。
+
+影响：
+- 后续 graph 质量审查至少要检查：节点唯一性、merge-before-create、边表达路径而节点表达状态、PDDL location predicate 可读性、evidence 可追溯性。
+- embedding 不应只作为 metadata 记录，还应参与目标节点定位和合并。
+- PDDL 中大量 `at_xxx_002` / `at_xxx_003` 应被视为 graph merge 或命名策略的质量信号，而不是单纯 projector 后处理问题。
+
 ## 2026-08-02 - 修正通用探索实验入口与动作记忆边界
 
 更改：
@@ -69,23 +212,6 @@
 - 业务链路更接近真实执行轨迹，例如 `checkout -> checkout_user_info -> payment_info`，而不是多条边都从 `checkout` 发散。
 - PDDL 更有机会生成正确前提，后续 `submit_order` 不应只依赖 `at_checkout`。
 - 当前仍未做完整回放/DFS 栈；browser back 后的定位恢复后续还需要单独设计。
-
-这份文档记录项目中的关键调整：改了什么、为什么改、影响范围是什么。后续每次做架构、pipeline、数据结构、实验策略或主线清理时，都应该追加一条简短记录。
-
-记录格式：
-
-```text
-## YYYY-MM-DD - 决策标题
-
-更改：
-- ...
-
-原因：
-- ...
-
-影响：
-- ...
-```
 
 ## 2026-08-01 - 探索阶段先稳定 domain，并避免同页面状态污染
 
@@ -269,3 +395,28 @@ PDDL 候选谓词词表 + 优先观察目标 + 跨网站语义对齐锚点
 
 - 该整理后来被“收窄 current-project-overview 的职责”决策修正。
 - 当前分工是：overview 只保留高层项目状态；结构细节归 `docs/project-structure.md` 和 `docs/project-structure.zh-CN.md`。
+
+## 2026-08-03 - 删除底层 selector / interactable explored 探索路径
+
+更改：
+
+- 删除旧动作选择模块：
+  - `src/ai_web_explorer/grounded_web/llm_action_selector.py`
+  - `src/ai_web_explorer/grounded_web/openai_action_selector.py`
+- 删除旧 selector 相关测试和本地 fixture golden-path 测试。
+- 从 `run_web_kobe_exploration` 中移除 `action_selector` / `selector_trace_path` 参数。
+- 从 `WebKobeExplorer` 中移除低层 interactable fallback、`selection_traces` 和 interactable explored 标记调用。
+- 从 `WebKobeGraphManager` 中删除 `mark_interactable_explored` / `interactables_for_node`。
+- 更新项目结构和 overview 文档，明确低层 DOM interactables 只作为 node evidence / debug 信息，不再作为探索决策或 graph memory 单位。
+
+原因：
+
+- 当前架构已经明确：VLM 生成 business affordances，本地 graph / embedding memory 选择和去重，Stagehand 执行被选中的业务动作。
+- 旧 selector 路径会把系统重新带回 selector/locator-driven exploration，与“底层操作交给 Stagehand”的方向冲突。
+- `interactable_elements.explored` 会让 graph 层承担操作层细节，和后续业务节点/frontier 记忆模型不一致。
+
+影响：
+
+- 主探索链路不会在没有 business affordances 时回退去点击 DOM interactables。
+- 旧 Web-KOBE Playwright selector smoke 能力被移除；如需恢复，可从 Git 历史找回。
+- `interactable_elements` 字段暂时保留为页面观察证据，后续等 graph 层稳定后再决定是否剥离到 trace artifacts。

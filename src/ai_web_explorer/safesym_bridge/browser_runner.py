@@ -5,7 +5,6 @@ import socket
 import time
 import urllib.request
 from pathlib import Path
-from typing import Callable
 
 from ai_web_explorer.grounded_web.capability_graph import Evidence, PageFrame
 from ai_web_explorer.grounded_web.graph import (
@@ -30,10 +29,6 @@ from ai_web_explorer.grounded_web.playwright_backend import (
 )
 from ai_web_explorer.grounded_web.semantic_assistor import (
     DeterministicSemanticAssistor,
-)
-from ai_web_explorer.grounded_web.llm_action_selector import (
-    LlmActionSelectionRequest,
-    LlmActionSelectionResult,
 )
 from ai_web_explorer.grounded_web.openai_visual_delta import (
     create_openai_visual_delta_provider_from_env,
@@ -143,11 +138,83 @@ def build_debug_web_kobe_graph() -> WebKobeGraph:
 
 def write_web_kobe_graph(graph: WebKobeGraph, output_path: Path) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    graph_data = graph.to_dict()
+    graph_data.setdefault("meta", {})["frontier_metrics"] = _frontier_metrics_for_graph(
+        graph
+    )
     output_path.write_text(
-        json.dumps(graph.to_dict(), indent=2, ensure_ascii=False),
+        json.dumps(graph_data, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
     return output_path
+
+
+def _edge_action_id(edge) -> str:
+    return edge.action.canonical_action_name or edge.action.semantic_id
+
+
+def _unique(items: list[str]) -> list[str]:
+    return list(dict.fromkeys(items))
+
+
+def _frontier_metrics_for_graph(graph: WebKobeGraph) -> dict[str, object]:
+    edge_action_ids_by_source: dict[str, list[str]] = {}
+    no_op_action_ids_by_source: dict[str, list[str]] = {}
+    failed_action_ids_by_source: dict[str, list[str]] = {}
+    repeated_target_hit_count = 0
+    seen_nodes = {graph.start_node_id}
+
+    for edge in graph.edges:
+        action_id = _edge_action_id(edge)
+        edge_action_ids_by_source.setdefault(edge.source_node_id, []).append(action_id)
+        if edge.status == "no_observed_change":
+            no_op_action_ids_by_source.setdefault(edge.source_node_id, []).append(
+                action_id
+            )
+        if edge.status == "failed_execution":
+            failed_action_ids_by_source.setdefault(edge.source_node_id, []).append(
+                action_id
+            )
+        if edge.target_node_id in seen_nodes:
+            repeated_target_hit_count += 1
+        seen_nodes.add(edge.target_node_id)
+
+    nodes: dict[str, dict[str, object]] = {}
+    frontier_node_count = 0
+    exhausted_node_count = 0
+    for node in graph.nodes:
+        candidate_ids = _unique(
+            [affordance.action_name for affordance in node.business_affordances]
+        )
+        tried_action_ids = _unique(edge_action_ids_by_source.get(node.node_id, []))
+        no_op_action_ids = _unique(no_op_action_ids_by_source.get(node.node_id, []))
+        failed_action_ids = _unique(failed_action_ids_by_source.get(node.node_id, []))
+        tried_set = set(tried_action_ids)
+        untried_action_ids = [
+            action_id for action_id in candidate_ids if action_id not in tried_set
+        ]
+
+        if candidate_ids and untried_action_ids:
+            frontier_node_count += 1
+        elif candidate_ids:
+            exhausted_node_count += 1
+
+        nodes[node.node_id] = {
+            "node_label": node.node_label,
+            "candidate_count": len(candidate_ids),
+            "tried_action_ids": tried_action_ids,
+            "untried_action_ids": untried_action_ids,
+            "no_op_action_ids": no_op_action_ids,
+            "failed_action_ids": failed_action_ids,
+        }
+
+    return {
+        "frontier_node_count": frontier_node_count,
+        "exhausted_node_count": exhausted_node_count,
+        "repeated_target_hit_count": repeated_target_hit_count,
+        "backtrack_count": int(graph.meta.get("backtrack_count", 0)),
+        "nodes": nodes,
+    }
 
 
 def _is_ecommerce_terminal_graph(graph: WebKobeGraph) -> bool:
@@ -209,10 +276,6 @@ async def run_web_kobe_exploration(
     steps: int = 1,
     headless: bool = True,
     goal: str = "Explore the web task.",
-    action_selector: (
-        Callable[[LlmActionSelectionRequest], LlmActionSelectionResult] | None
-    ) = None,
-    selector_trace_path: Path | None = None,
     screenshot_dir: Path | None = None,
 ) -> Path:
     from playwright.async_api import async_playwright
@@ -232,22 +295,11 @@ async def run_web_kobe_exploration(
                 adapter=adapter,
                 semantic_assistor=DeterministicSemanticAssistor(app=app_name),
                 goal=goal,
-                action_selector=action_selector,
                 capture_screenshots=screenshot_dir is not None,
             )
             controller = WebKobeExplorationController(explorer)
             result = await controller.run(max_steps=max(steps, 1))
             write_web_kobe_graph(result.graph, output_path)
-            if selector_trace_path is not None:
-                selector_trace_path.parent.mkdir(parents=True, exist_ok=True)
-                selector_trace_path.write_text(
-                    json.dumps(
-                        explorer.selection_traces,
-                        indent=2,
-                        ensure_ascii=False,
-                    ),
-                    encoding="utf-8",
-                )
             return output_path
         finally:
             await browser.close()

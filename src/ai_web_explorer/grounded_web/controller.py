@@ -14,6 +14,14 @@ SUCCESS_EDGE_STATUSES = frozenset(
         "no_observed_change",
     }
 )
+PRODUCTIVE_EDGE_STATUSES = frozenset(
+    {
+        "verified",
+        "succeeded",
+        "succeeded_with_observed_change",
+        "succeeded_with_navigation",
+    }
+)
 
 
 class StepExplorer(Protocol):
@@ -28,6 +36,8 @@ class WebKobeExplorationSummary:
     node_count: int
     edge_count: int
     failed_edge_count: int
+    consecutive_unproductive_steps: int = 0
+    max_consecutive_unproductive_steps: int = 3
 
 
 @dataclass(frozen=True)
@@ -46,6 +56,8 @@ def _summary(
     requested_steps: int,
     baseline_completed: int,
     stop_reason: str,
+    consecutive_unproductive_steps: int = 0,
+    max_consecutive_unproductive_steps: int = 3,
 ) -> WebKobeExplorationSummary:
     return WebKobeExplorationSummary(
         requested_steps=requested_steps,
@@ -54,7 +66,29 @@ def _summary(
         node_count=len(graph.nodes),
         edge_count=len(graph.edges),
         failed_edge_count=_failed_edge_count(graph),
+        consecutive_unproductive_steps=consecutive_unproductive_steps,
+        max_consecutive_unproductive_steps=max_consecutive_unproductive_steps,
     )
+
+
+def _last_step_is_productive_control_action(graph: WebKobeGraph) -> bool:
+    return (
+        graph.meta.get("last_step_kind") == "control_backtrack"
+        and graph.meta.get("last_step_status") == "productive"
+    )
+
+
+def _last_edge_status(graph: WebKobeGraph) -> str | None:
+    if not graph.edges:
+        return None
+    return graph.edges[-1].status
+
+
+def _last_step_is_productive(graph: WebKobeGraph) -> bool:
+    if _last_step_is_productive_control_action(graph):
+        return True
+    edge_status = _last_edge_status(graph)
+    return edge_status in PRODUCTIVE_EDGE_STATUSES
 
 
 class WebKobeExplorationController:
@@ -63,9 +97,14 @@ class WebKobeExplorationController:
         explorer: StepExplorer,
         *,
         terminal_condition: Callable[[WebKobeGraph], bool] | None = None,
+        max_consecutive_unproductive_steps: int = 3,
     ):
         self.explorer = explorer
         self.terminal_condition = terminal_condition
+        self.max_consecutive_unproductive_steps = max(
+            max_consecutive_unproductive_steps,
+            1,
+        )
 
     async def run(self, *, max_steps: int = 1) -> WebKobeExplorationResult:
         requested_steps = max(max_steps, 0)
@@ -73,6 +112,7 @@ class WebKobeExplorationController:
         baseline_completed = 0
         previous_completed = 0
         stop_reason = "max_steps"
+        consecutive_unproductive_steps = 0
 
         for index in range(requested_steps):
             graph = await self.explorer.explore_one_step()
@@ -80,13 +120,39 @@ class WebKobeExplorationController:
                 baseline_completed = max(graph.total_steps_completed - 1, 0)
                 previous_completed = baseline_completed
 
+            if (
+                graph.total_steps_completed == previous_completed
+                and _last_step_is_productive_control_action(graph)
+            ):
+                consecutive_unproductive_steps = 0
+                graph.meta["consecutive_unproductive_steps"] = (
+                    consecutive_unproductive_steps
+                )
+                graph.meta["max_consecutive_unproductive_steps"] = (
+                    self.max_consecutive_unproductive_steps
+                )
+                continue
+
             if graph.total_steps_completed == previous_completed:
                 stop_reason = "no_available_action"
                 break
 
             previous_completed = graph.total_steps_completed
-            if graph.edges and graph.edges[-1].status not in SUCCESS_EDGE_STATUSES:
-                stop_reason = "failed_action"
+            if _last_step_is_productive(graph):
+                consecutive_unproductive_steps = 0
+            else:
+                consecutive_unproductive_steps += 1
+            graph.meta["consecutive_unproductive_steps"] = (
+                consecutive_unproductive_steps
+            )
+            graph.meta["max_consecutive_unproductive_steps"] = (
+                self.max_consecutive_unproductive_steps
+            )
+            if (
+                consecutive_unproductive_steps
+                >= self.max_consecutive_unproductive_steps
+            ):
+                stop_reason = "consecutive_unproductive_steps"
                 break
             if self.terminal_condition is not None and self.terminal_condition(graph):
                 stop_reason = "terminal_condition"
@@ -106,5 +172,9 @@ class WebKobeExplorationController:
                 requested_steps=requested_steps,
                 baseline_completed=baseline_completed,
                 stop_reason=stop_reason,
+                consecutive_unproductive_steps=consecutive_unproductive_steps,
+                max_consecutive_unproductive_steps=(
+                    self.max_consecutive_unproductive_steps
+                ),
             ),
         )

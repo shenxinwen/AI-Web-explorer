@@ -4,7 +4,7 @@ import asyncio
 import hashlib
 import json
 from dataclasses import replace
-from typing import Any, Callable
+from typing import Any
 
 from ai_web_explorer.grounded_web.automation_backend import AutomationBackend
 from ai_web_explorer.grounded_web.capability_graph import (
@@ -20,10 +20,6 @@ from ai_web_explorer.grounded_web.graph import (
     WebKobeEdge,
     WebKobeGraph,
     WebKobeNode,
-)
-from ai_web_explorer.grounded_web.llm_action_selector import (
-    LlmActionSelectionRequest,
-    LlmActionSelectionResult,
 )
 from ai_web_explorer.grounded_web.graph_manager import WebKobeGraphManager
 from ai_web_explorer.grounded_web.business_profile import BusinessFlowProfile
@@ -70,6 +66,7 @@ from ai_web_explorer.grounded_web.visual_delta import (
 OBSERVATION_WAIT_TIMEOUT_MS = 1200
 OBSERVATION_WAIT_INTERVAL_MS = 200
 CURRENT_NODE_MATCH_THRESHOLD = 0.88
+TARGET_NODE_MATCH_THRESHOLD = 0.90
 
 
 def _node_from_draft(draft) -> WebKobeNode:
@@ -89,28 +86,6 @@ def _node_from_draft(draft) -> WebKobeNode:
         state_summary=draft.state_summary,
         naming_provenance=draft.naming_provenance,
     )
-
-
-def _browser_action_from_interactable(item: dict[str, Any]) -> BrowserAction:
-    return BrowserAction(
-        action_kind=str(item.get("action_kind") or "click"),
-        locator=item.get("locator"),
-        semantic_id=str(item.get("semantic_id") or "unknown_action"),
-        input_values=dict(item.get("input_values") or {}),
-        description=item.get("description"),
-        action_label=item.get("action_label"),
-        canonical_action_name=item.get("canonical_action_name"),
-        naming_provenance=item.get("naming_provenance"),
-    )
-
-
-def _first_unexplored_action(
-    interactables: list[dict[str, Any]],
-) -> BrowserAction | None:
-    for item in interactables:
-        if not item.get("explored"):
-            return _browser_action_from_interactable(item)
-    return None
 
 
 def _business_action_from_affordance(affordance: BusinessAffordance) -> BrowserAction:
@@ -282,6 +257,12 @@ def _should_advance_current_node(
         "succeeded_with_observed_change",
     }:
         return False
+    if (
+        edge_status == "succeeded_with_observed_change"
+        and business_transition is None
+        and planning_transition is None
+    ):
+        return True
     return (
         should_materialize_business_state(business_transition)
         or _planning_transition_has_fact_change(planning_transition)
@@ -342,9 +323,6 @@ class WebKobeExplorer:
         adapter: AutomationBackend,
         semantic_assistor: SemanticAssistor,
         goal: str = "Explore the web task.",
-        action_selector: (
-            Callable[[LlmActionSelectionRequest], LlmActionSelectionResult] | None
-        ) = None,
         business_profile: BusinessFlowProfile | None = None,
         capture_screenshots: bool = False,
         visual_delta_provider: VisualDeltaProvider | None = None,
@@ -356,7 +334,6 @@ class WebKobeExplorer:
         self.adapter = adapter
         self.semantic_assistor = semantic_assistor
         self.goal = goal
-        self.action_selector = action_selector
         self.business_profile = business_profile
         self.capture_screenshots = capture_screenshots
         self.visual_delta_provider = visual_delta_provider
@@ -364,10 +341,10 @@ class WebKobeExplorer:
         self.state_embedding_provider = state_embedding_provider
         self.state_embedding_records = list(state_embedding_records or [])
         self.enable_exploration_memory = enable_exploration_memory
-        self.selection_traces: list[dict] = []
         self.manager = WebKobeGraphManager(app=adapter.app_name)
         self._start_node_id: str | None = None
         self._current_node_id: str | None = None
+        self._visit_stack: list[str] = []
 
     async def explore_one_step(self) -> WebKobeGraph:
         before = await self.adapter.observe_state()
@@ -389,6 +366,7 @@ class WebKobeExplorer:
             default_source_id=source_id,
             source_match=source_match,
         )
+        self._record_visit_node(source_id)
         if source_id != before_draft.node_id:
             self._refresh_matched_source_node(
                 source_id=source_id,
@@ -401,11 +379,8 @@ class WebKobeExplorer:
                 before=before,
                 before_screenshot_path=before_screenshot_path,
             )
-        source_interactables = self.manager.interactables_for_node(source_id)
         exploration_context = self._exploration_context_for_source(
-            before=before,
             source_id=source_id,
-            source_interactables=source_interactables,
             state_match=accepted_source_match,
         )
         set_context = getattr(self.adapter, "set_exploration_context", None)
@@ -413,12 +388,13 @@ class WebKobeExplorer:
             set_context(exploration_context.to_prompt_block())
 
         selected = self._select_action(
-            before,
-            source_interactables,
             exploration_context=exploration_context,
         )
         if selected is None:
-            await self._try_backtrack()
+            did_backtrack = await self._try_backtrack()
+            if not did_backtrack:
+                self.manager.meta["last_step_kind"] = "no_available_action"
+                self.manager.meta["last_step_status"] = "unproductive"
             return self.manager.to_graph(start_node_id=self._start_node_id)
 
         if (
@@ -549,13 +525,28 @@ class WebKobeExplorer:
             target_node=target_node,
             planning_transition=planning_transition,
         )
+        target_node, target_match = self._match_existing_target_node(
+            target_node=target_node,
+            after=after,
+            after_interactables=after_interactables,
+            planning_transition=planning_transition,
+            visual_summary=execution_metadata.get("visual_change_summary"),
+        )
+        if target_match is not None:
+            execution_metadata["target_state_match"] = {
+                "status": target_match.status,
+                "node_id": target_match.node_id,
+                "score": target_match.score,
+                "blocked_reason": target_match.blocked_reason,
+                "accepted": target_node.node_id == target_match.node_id,
+            }
         target_id = self.manager.identify_or_add_node(target_node)
         if edge_status == "no_observed_change" and should_materialize_business_state(
             business_transition
         ):
             edge_status = "succeeded_with_observed_change"
         if (
-            edge_status == "failed_execution"
+            edge_status in {"failed_execution", "no_observed_change"}
             and _is_ignorable_stagehand_tool_choice_error(execution_error)
             and _planning_delta_has_fact_change(planning_delta)
         ):
@@ -605,10 +596,17 @@ class WebKobeExplorer:
         if self.business_profile is not None:
             self.manager.apply_planning_transition(edge)
         self.manager.add_edge(edge)
-        self.manager.mark_interactable_explored(
-            source_id,
-            selected.semantic_id,
-            locator=selected.locator,
+        self.manager.meta["last_step_kind"] = "business_edge"
+        self.manager.meta["last_step_status"] = (
+            "productive"
+            if edge_status
+            in {
+                "verified",
+                "succeeded",
+                "succeeded_with_observed_change",
+                "succeeded_with_navigation",
+            }
+            else "unproductive"
         )
         if _should_advance_current_node(
             source_id=source_id,
@@ -617,9 +615,9 @@ class WebKobeExplorer:
             business_transition=business_transition,
             planning_transition=planning_transition,
         ):
-            self._current_node_id = target_id
+            self._set_current_node(target_id)
         elif self._current_node_id is None:
-            self._current_node_id = source_id
+            self._set_current_node(source_id)
         return self.manager.to_graph(start_node_id=self._start_node_id)
 
     def _avoid_incompatible_existing_target_state(
@@ -649,11 +647,98 @@ class WebKobeExplorer:
         )
         return replace(target_node, node_id=node_id, node_label=label)
 
+    def _match_existing_target_node(
+        self,
+        *,
+        target_node: WebKobeNode,
+        after: StateSnapshot,
+        after_interactables: list[dict[str, Any]],
+        planning_transition: PlanningTransition | None,
+        visual_summary: str | None,
+    ) -> tuple[WebKobeNode, StateMatch | None]:
+        if (
+            not self.enable_exploration_memory
+            or self.state_embedding_provider is None
+            or not self.state_embedding_records
+            or planning_transition is None
+        ):
+            return target_node, None
+        target_summary = build_state_summary(
+            snapshot=after,
+            interactables=after_interactables,
+            active_planning_facts=planning_transition.post_facts,
+            visual_summary=visual_summary,
+        )
+        target_match = find_best_state_match(
+            target_summary,
+            self.state_embedding_records,
+            embedding_provider=self.state_embedding_provider,
+            same_threshold=TARGET_NODE_MATCH_THRESHOLD,
+        )
+        if target_match.status != "same" or target_match.node_id is None:
+            return target_node, target_match
+        try:
+            existing = self.manager.node_for_id(target_match.node_id)
+        except KeyError:
+            return target_node, target_match
+        existing_facts = (
+            list(existing.planning_state.active_facts)
+            if existing.planning_state is not None
+            else None
+        )
+        if not _facts_compatible(existing_facts, list(planning_transition.post_facts)):
+            return target_node, replace(
+                target_match,
+                status="blocked",
+                blocked_reason="planning_fact_conflict",
+            )
+        return (
+            replace(
+                target_node,
+                node_id=existing.node_id,
+                node_label=existing.node_label or target_node.node_label,
+                state_summary=target_node.state_summary or existing.state_summary,
+                naming_provenance=(
+                    target_node.naming_provenance or existing.naming_provenance
+                ),
+                planning_state=existing.planning_state,
+            ),
+            target_match,
+        )
+
     async def _try_backtrack(self) -> bool:
         go_back = getattr(self.adapter, "go_back", None)
         if go_back is None:
             return False
-        return await go_back()
+        did_go_back = await go_back()
+        if did_go_back and len(self._visit_stack) > 1:
+            self.manager.meta["backtrack_count"] = (
+                int(self.manager.meta.get("backtrack_count", 0)) + 1
+            )
+            self._visit_stack.pop()
+            self._current_node_id = self._visit_stack[-1]
+            self.manager.meta["last_step_kind"] = "control_backtrack"
+            self.manager.meta["last_step_status"] = "productive"
+        elif did_go_back:
+            self.manager.meta["last_step_kind"] = "control_backtrack"
+            self.manager.meta["last_step_status"] = "unproductive"
+        return did_go_back
+
+    def _set_current_node(self, node_id: str) -> None:
+        self._current_node_id = node_id
+        self._record_visit_node(node_id)
+
+    def _record_visit_node(self, node_id: str) -> None:
+        if not self._visit_stack:
+            self._visit_stack.append(node_id)
+            return
+        if self._visit_stack[-1] == node_id:
+            return
+        if node_id in self._visit_stack:
+            index = self._visit_stack.index(node_id)
+            self._visit_stack = self._visit_stack[: index + 1]
+            return
+        self._visit_stack.append(node_id)
 
     def _record_source_business_affordances(
         self,
@@ -749,6 +834,8 @@ class WebKobeExplorer:
     ) -> str:
         if observed_delta:
             return "succeeded_with_observed_change"
+        if _is_ignorable_stagehand_tool_choice_error(execution_error):
+            return "no_observed_change"
         if not execution_success:
             return "failed_execution"
         return "no_observed_change"
@@ -756,19 +843,10 @@ class WebKobeExplorer:
     def _exploration_context_for_source(
         self,
         *,
-        before: StateSnapshot,
         source_id: str,
-        source_interactables: list[dict[str, Any]],
         state_match: StateMatch | None,
     ) -> ExplorationContext:
         graph_before_action = self.manager.to_graph(start_node_id=self._start_node_id)
-        nodes_by_id = {node.node_id: node for node in graph_before_action.nodes}
-        source_node = nodes_by_id.get(source_id)
-        active_facts = (
-            list(source_node.planning_state.active_facts)
-            if source_node is not None and source_node.planning_state is not None
-            else []
-        )
         return build_exploration_context(
             graph_before_action,
             current_node_id=source_id,
@@ -805,6 +883,12 @@ class WebKobeExplorer:
         default_source_id: str,
         source_match: StateMatch | None,
     ) -> tuple[str, StateMatch | None]:
+        has_active_current_pointer = (
+            self._current_node_id is not None
+            and default_source_id == self._current_node_id
+        )
+        if has_active_current_pointer:
+            return default_source_id, None
         if source_match is None:
             return default_source_id, None
         if source_match.status == "same" and source_match.node_id is not None:
@@ -909,48 +993,12 @@ class WebKobeExplorer:
 
     def _select_action(
         self,
-        state,
-        interactables: list[dict],
         *,
         exploration_context: ExplorationContext,
     ) -> BrowserAction | None:
-        selected_business_action = self._select_business_affordance_action(
+        return self._select_business_affordance_action(
             exploration_context=exploration_context,
         )
-        if selected_business_action is not None:
-            return selected_business_action
-
-        if self.action_selector is None:
-            return _first_unexplored_action(interactables)
-
-        candidate_actions = [
-            _browser_action_from_interactable(item)
-            for item in interactables
-            if not item.get("explored")
-        ]
-        if not candidate_actions:
-            return None
-
-        result = self.action_selector(
-            LlmActionSelectionRequest(
-                goal=self.goal,
-                state=state,
-                candidate_actions=candidate_actions,
-                exploration_context={
-                    "prompt_block": exploration_context.to_prompt_block(),
-                    "avoid_action_ids": list(exploration_context.avoid_action_ids),
-                    "tried_action_ids": list(exploration_context.tried_action_ids),
-                },
-            )
-        )
-        self.selection_traces.append(result.trace.to_dict())
-        candidate_ids = {action.semantic_id for action in candidate_actions}
-        if (
-            result.selected_action is not None
-            and result.selected_action.semantic_id in candidate_ids
-        ):
-            return result.selected_action
-        return _first_unexplored_action(interactables)
 
     def _select_business_affordance_action(
         self,
@@ -974,8 +1022,4 @@ class WebKobeExplorer:
             if affordance.action_name in local_tried:
                 continue
             return _business_action_from_affordance(affordance)
-
-        for affordance in ranked:
-            if affordance.action_name not in local_avoid:
-                return _business_action_from_affordance(affordance)
         return None

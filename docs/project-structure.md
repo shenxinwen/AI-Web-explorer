@@ -154,21 +154,24 @@ Main modules:
 
 - `src/ai_web_explorer/grounded_web/explorer.py`
 - `src/ai_web_explorer/grounded_web/controller.py`
-- `src/ai_web_explorer/grounded_web/llm_action_selector.py`
-- `src/ai_web_explorer/grounded_web/openai_action_selector.py`
 
 Main responsibilities:
 
 - run one exploration step;
-- choose one business or fallback action;
+- choose one business action from observed business affordances;
 - apply memory context and repetition avoidance;
 - keep a lightweight current-node pointer so the next action starts from the
   latest valid materialized business state;
 - reject embedding source matches that would relocate to a planning-fact
   incompatible node;
-- call operation and observation layers;
+- call the Stagehand operation layer and VLM/DOM observation layers;
 - update graph state;
 - stop by budget or controller terminal condition.
+
+Low-level DOM interactables may remain in node evidence for debugging, but they
+are not a graph-memory or exploration-decision unit. The old LLM action selector
+path was removed so the system does not fall back to selector/locator-driven
+exploration.
 
 `WebKobeExplorer` is currently the largest coordination class. New exploration
 features should avoid further enlarging it when a small policy/observer/recorder

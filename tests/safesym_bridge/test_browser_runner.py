@@ -12,6 +12,7 @@ from ai_web_explorer.grounded_web.controller import (
 )
 from ai_web_explorer.grounded_web.capability_graph import ExecutionTrace, PageFrame
 from ai_web_explorer.grounded_web.graph import WebKobeGraph
+from ai_web_explorer.grounded_web.graph import BusinessAffordance
 from ai_web_explorer.grounded_web.graph import BrowserAction
 from ai_web_explorer.grounded_web.graph import ReferenceObservation
 from ai_web_explorer.grounded_web.graph import WebKobeEdge
@@ -53,6 +54,121 @@ def test_stagehand_ecommerce_goal_avoids_site_specific_script():
     ]
     for term in forbidden_terms:
         assert term not in prompt_text
+
+
+def test_write_web_kobe_graph_adds_frontier_metrics(tmp_path):
+    output_path = tmp_path / "graph.json"
+    graph = WebKobeGraph(
+        app="demo",
+        start_node_id="product_list",
+        total_steps_completed=2,
+        nodes=[
+            WebKobeNode(
+                node_id="product_list",
+                page_description="Product list",
+                page_frame=PageFrame(
+                    page_id="demo:product_list",
+                    page_type="product_list",
+                    url="https://example.test/shop",
+                    url_pattern="https://example.test/shop",
+                    title="Shop",
+                ),
+                state_schema={},
+                last_state_snapshot={},
+                business_affordances=[
+                    BusinessAffordance(action_name="view_product_details"),
+                    BusinessAffordance(action_name="open_cart"),
+                    BusinessAffordance(action_name="sort_products"),
+                ],
+            ),
+            WebKobeNode(
+                node_id="cart",
+                page_description="Cart",
+                page_frame=PageFrame(
+                    page_id="demo:cart",
+                    page_type="cart",
+                    url="https://example.test/cart",
+                    url_pattern="https://example.test/cart",
+                    title="Cart",
+                ),
+                state_schema={},
+                last_state_snapshot={},
+                business_affordances=[
+                    BusinessAffordance(action_name="checkout"),
+                ],
+            ),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="product_list",
+                target_node_id="product_list",
+                instruction="view details",
+                action=BrowserAction(
+                    action_kind="business_intent",
+                    locator=None,
+                    semantic_id="view_product_details",
+                    canonical_action_name="view_product_details",
+                ),
+                capability=None,
+                target_observation="Product details modal",
+                observed_delta=[],
+                schema_delta={},
+                execution_trace=ExecutionTrace(
+                    "business_intent",
+                    None,
+                    "view_product_details",
+                    {},
+                    "product_list",
+                    "product_list",
+                    True,
+                ),
+                status="succeeded_with_observed_change",
+            ),
+            WebKobeEdge(
+                source_node_id="product_list",
+                target_node_id="product_list",
+                instruction="sort",
+                action=BrowserAction(
+                    action_kind="business_intent",
+                    locator=None,
+                    semantic_id="sort_products",
+                    canonical_action_name="sort_products",
+                ),
+                capability=None,
+                target_observation="Product list",
+                observed_delta=[],
+                schema_delta={},
+                execution_trace=ExecutionTrace(
+                    "business_intent",
+                    None,
+                    "sort_products",
+                    {},
+                    "product_list",
+                    "product_list",
+                    True,
+                ),
+                status="no_observed_change",
+            ),
+        ],
+    )
+
+    browser_runner.write_web_kobe_graph(graph, output_path)
+
+    data = json.loads(output_path.read_text(encoding="utf-8"))
+    metrics = data["meta"]["frontier_metrics"]
+    assert metrics["frontier_node_count"] == 2
+    assert metrics["exhausted_node_count"] == 0
+    assert metrics["repeated_target_hit_count"] == 2
+    assert metrics["backtrack_count"] == 0
+    product_list = metrics["nodes"]["product_list"]
+    assert product_list["candidate_count"] == 3
+    assert product_list["tried_action_ids"] == [
+        "view_product_details",
+        "sort_products",
+    ]
+    assert product_list["untried_action_ids"] == ["open_cart"]
+    assert product_list["no_op_action_ids"] == ["sort_products"]
+    assert product_list["failed_action_ids"] == []
 
 
 @pytest.mark.anyio
@@ -142,104 +258,6 @@ async def test_run_web_kobe_exploration_uses_controller(tmp_path, monkeypatch):
     ]
     data = json.loads(output_path.read_text(encoding="utf-8"))
     assert data["meta"]["total_steps_completed"] == 3
-
-
-@pytest.mark.anyio
-async def test_run_web_kobe_exploration_writes_selector_trace(tmp_path, monkeypatch):
-    import playwright.async_api as playwright_async_api
-
-    output_path = tmp_path / "web_kobe_graph.json"
-    trace_path = tmp_path / "selector_trace.json"
-    calls = []
-
-    class FakePage:
-        async def goto(self, url):
-            calls.append(("goto", url))
-
-    class FakeBrowser:
-        async def new_page(self):
-            return FakePage()
-
-        async def close(self):
-            calls.append(("close", None))
-
-    class FakeChromium:
-        async def launch(self, *, headless=True):
-            return FakeBrowser()
-
-    class FakePlaywright:
-        chromium = FakeChromium()
-
-    class FakePlaywrightContext:
-        async def __aenter__(self):
-            return FakePlaywright()
-
-        async def __aexit__(self, exc_type, exc, traceback):
-            return None
-
-    def fake_selector(request):
-        raise AssertionError("controller fake should not call selector directly")
-
-    class FakeController:
-        def __init__(self, explorer):
-            assert explorer.action_selector is fake_selector
-            explorer.selection_traces.append(
-                {
-                    "status": "selected",
-                    "llm_response": {
-                        "selected_action_id": "product_add_to_cart",
-                    },
-                }
-            )
-            self.explorer = explorer
-
-        async def run(self, *, max_steps=1):
-            return WebKobeExplorationResult(
-                graph=WebKobeGraph(
-                    app="fixture",
-                    start_node_id="fixture_shop",
-                    total_steps_completed=max_steps,
-                ),
-                summary=WebKobeExplorationSummary(
-                    requested_steps=max_steps,
-                    steps_completed=max_steps,
-                    stop_reason="max_steps",
-                    node_count=0,
-                    edge_count=0,
-                    failed_edge_count=0,
-                ),
-            )
-
-    monkeypatch.setattr(
-        playwright_async_api,
-        "async_playwright",
-        lambda: FakePlaywrightContext(),
-    )
-    monkeypatch.setattr(
-        browser_runner,
-        "WebKobeExplorationController",
-        FakeController,
-        raising=False,
-    )
-
-    await run_web_kobe_exploration(
-        "https://example.test/shop",
-        output_path,
-        app_name="fixture",
-        steps=1,
-        action_selector=fake_selector,
-        selector_trace_path=trace_path,
-    )
-
-    trace = json.loads(trace_path.read_text(encoding="utf-8"))
-    assert trace == [
-        {
-            "status": "selected",
-            "llm_response": {
-                "selected_action_id": "product_add_to_cart",
-            },
-        }
-    ]
 
 
 @pytest.mark.anyio

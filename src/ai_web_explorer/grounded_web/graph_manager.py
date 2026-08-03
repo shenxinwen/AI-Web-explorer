@@ -121,6 +121,7 @@ class WebKobeGraphManager:
         self._nodes: OrderedDict[str, WebKobeNode] = OrderedDict()
         self._edges: OrderedDict[str, WebKobeEdge] = OrderedDict()
         self.total_steps_completed = 0
+        self.meta: dict[str, Any] = {}
 
     def identify_or_add_node(self, node: WebKobeNode) -> str:
         existing = self._nodes.get(node.node_id)
@@ -314,27 +315,6 @@ class WebKobeGraphManager:
             ),
         )
 
-    def mark_interactable_explored(
-        self,
-        node_id: str,
-        semantic_id: str,
-        locator: str | None = None,
-    ) -> None:
-        node = self._nodes[node_id]
-        interactables = []
-        for item in node.interactable_elements:
-            updated = dict(item)
-            if (locator is not None and updated.get("locator") == locator) or (
-                locator is None and updated.get("semantic_id") == semantic_id
-            ):
-                updated["explored"] = True
-            interactables.append(updated)
-        self._nodes[node_id] = replace(node, interactable_elements=interactables)
-
-    def interactables_for_node(self, node_id: str) -> list[dict[str, Any]]:
-        node = self._nodes[node_id]
-        return [dict(item) for item in node.interactable_elements]
-
     def to_graph(self, start_node_id: str | None = None) -> WebKobeGraph:
         resolved_start = start_node_id
         if resolved_start is None and self._nodes:
@@ -345,4 +325,5 @@ class WebKobeGraphManager:
             total_steps_completed=self.total_steps_completed,
             nodes=list(self._nodes.values()),
             edges=list(self._edges.values()),
+            meta=dict(self.meta),
         )

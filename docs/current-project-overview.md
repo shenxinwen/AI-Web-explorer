@@ -46,11 +46,13 @@ exploration V1. The current target is a minimal usable exploration loop:
 ```text
 observe current state
   -> generate immediately executable business action candidates
-  -> choose one action using graph memory / embedding memory / repetition penalty
+  -> choose an untried business action using the current-node frontier, tried
+     candidates, graph memory, and embedding memory
   -> execute the action
   -> observe before/after business changes
   -> update node, edge, planning_state, and planning_transition
   -> generate or update PDDL/SafeSym artifacts
+  -> if the current node is exhausted, backtrack to an older node with frontier
   -> continue or stop based on budget, repetition, frontier, or business coverage
 ```
 
@@ -62,6 +64,16 @@ graph/PDDL/SafeSym engineering chain: established
 VLM visual delta: connected
 business affordance generation: initial version exists
 embedding memory: connected for similar-state lookup and repetition guidance
+target matching: initial version connected; post-action states can reuse
+existing business nodes using embeddings plus planning-fact compatibility
+source localization: normal exploration trusts the current-node pointer;
+source embedding match is recovery/diagnostic only
+frontier / DFS exploration policy: minimal business-affordance selector/backtrack
+behavior is implemented; graph meta now emits frontier_metrics
+consecutive unproductive stop policy: implemented; failed/no-op steps no
+longer stop the run until the threshold is reached
+Stagehand thinking/tool_choice errors: treated as non-fatal; no visible change
+becomes no-op instead of a failed edge
 generated fact recording: graph layer records them, PDDL excludes them by default
 ecommerce profile facts: first quality pass completed with product detail,
 checkout required/complete, cart total, invoice, and availability facts
@@ -128,8 +140,9 @@ The current long-term exploration boundary is:
 
 ```text
 VLM observes the current page and proposes business action candidates
-local graph / embedding memory locates the current state, deduplicates actions,
-and chooses one candidate
+local current-node pointer maintains source location
+local graph / embedding memory handles target merge, recovery, and action
+deduplication
 Stagehand executes exactly the selected action
 VLM summarizes before/after visible business change
 graph policy decides create / merge / revisit
@@ -141,13 +154,21 @@ state is new, or whether a node should be created. It has no stable graph
 memory. It should provide visible evidence, candidate business actions, and
 before/after change summaries.
 
-Action deduplication should be embedding-assisted, not only
-`node_id + action_slug`. The intended query shape is:
+Normal exploration should not use embeddings to relocalize the source on every
+step. Source defaults to the target of the previous successful edge. If an
+action creates a new node, move to it; if it matches an existing target node,
+move there; if it produces no effective change, stay on the current node.
+Source embedding match should be reserved for recovery cases such as browser
+back, refresh, experiment resume, external navigation, or pointer/browser
+desynchronization.
+
+Action deduplication should not rely only on `node_id + action_slug`.
+Embedding-assisted memory can still help query similar-node action history:
 
 ```text
-current state summary
+current / target state summary
   -> embedding match against existing nodes / state variants
-  -> inspect tried business actions from similar nodes
+  -> inspect tried business actions or reusable target states from similar nodes
   -> downrank or skip repeated / low-value actions
 ```
 
@@ -197,7 +218,68 @@ Naming work is deferred. The intended boundary is that LLM/VLM may help produce
 semantic labels during exploration, while the projector only normalizes and
 projects stored graph semantics.
 
+### 6. Graph quality starts with business-state uniqueness
+
+Graph quality should not be judged only by whether nodes, edges, and PDDL are
+generated. It must also preserve stable business-state identity:
+
+- the same business state should have one node; for example, cart from home,
+  product detail, or another page should resolve to the same cart node;
+- edges can represent different source paths, but nodes should not duplicate
+  the same state just because the source path differs;
+- a new node must represent a meaningful business-state change; if
+  `cart_has_items` is already true and item count changes are not modeled,
+  adding the same item again should not create another business-state node;
+- merge-before-create is the default policy; after an action, match the target
+  state against existing nodes using planning facts, VLM state summary, and
+  embeddings before materializing a new node;
+- node labels must be semantically stable; many `at_product_details_002` or
+  `at_shopping_003` predicates usually indicate weak merge or naming policy;
+- every node and edge should be traceable to evidence such as VLM summaries,
+  planning facts, screenshots, or structured observations.
+
+### 7. Exploration policy should be frontier-first
+
+The confirmed V1 exploration policy is simple DFS / frontier, not free-form
+planning by Stagehand or VLM:
+
+- each business node owns 3-5 immediately executable business affordances;
+- local code marks candidates as untried, tried, no-op, or failed; VLM proposes
+  candidates and evidence, but does not own memory;
+- the current node prefers untried candidates; after execution, move to a new
+  node, move to an accepted existing target node, or stay put if no effective
+  change occurred;
+- once a node has no untried candidates, do not repeat a successful non-avoid
+  action; backtrack to an older node with frontier;
+- stop on max steps, no frontier, repeated-state budget, consecutive no-op /
+  failures, or an explicit terminal state.
+
+Short term, tried/no-op/failed state is derived from existing edges. Do not add
+a large memory table yet. The old selector/locator fallback has been removed;
+the business-affordance selector no longer chooses already-tried successful
+actions after a node's local candidates are exhausted. Successful browser back
+now pops a lightweight visit stack and restores `_current_node_id`.
+`graph.meta.frontier_metrics` records per-node candidates, tried/untried/no-op/
+failed action ids, repeated target hits, and backtrack count. Full DFS recovery
+can later use source embedding relocalization.
+
 ## Main Problems
+
+### P0: identical business states do not merge reliably yet
+
+The latest Practice Automated Testing Shopping 8-step run produced 6 nodes and
+8 edges. The chain completed, but graph quality is still weak. Target matching
+can reuse some existing nodes, but similar `product_details` / `product_list`
+state variants still appear, and the PDDL still contains weak predicates such
+as `at_product_details_002` and `at_product_list_002`.
+
+This means embeddings already provide similar-state signals, but target-node
+materialization and merge logic did not consume those signals strongly enough.
+Target matching V1 is now connected: after an action, the target state is
+matched against existing nodes using embeddings plus planning-fact
+compatibility. If a match is accepted, the edge points to the existing node
+instead of creating another state variant. The next real-site run must confirm
+whether this reduces duplicate business nodes.
 
 ### P0: generated facts do not yet have a promotion strategy
 
@@ -228,7 +310,7 @@ into state variants instead of overwriting the existing page node. This reduces
 the risk that a later state, such as `cart_has_items`, pollutes the exploration
 start node.
 
-### P1: exploration does not yet have a real frontier
+### P1: exploration still needs frontier validation and refinement
 
 The system has business affordances and embedding memory, but not mature:
 
@@ -238,14 +320,35 @@ The system has business affordances and embedding memory, but not mature:
 - backtracking;
 - coverage stop conditions.
 
-It is closer to bounded single-path exploration than mature free exploration.
-The next version should make embedding memory operational in selection and
-revisit handling rather than leaving it as diagnostic metadata.
+It is closer to bounded exploration V1 than mature free exploration. A previous
+run cycled between product list and product details. The main cause was not
+that VLM produced no candidates; it was that the old selector fell back to
+"successful but non-avoid" actions after all local candidates had been tried,
+so low-progress successful actions could repeat. The minimal fix is now in
+place: if a node has no untried business candidates, selection returns `None`
+and triggers browser back / visit-stack backtracking. The old LLM action
+selector / OpenAI action selector modules have been deleted so exploration
+cannot silently return to locator-driven behavior.
+
+The controller now uses a consecutive-unproductive-step policy. A single
+`failed_execution`, `no_observed_change`, or productive control backtrack does
+not stop exploration. The run stops on max steps, terminal condition, no edge
+with no productive control action, or `consecutive_unproductive_steps` reaching
+the configured threshold. `graph.meta` records `last_step_kind`,
+`last_step_status`, `consecutive_unproductive_steps`, and
+`max_consecutive_unproductive_steps`.
+
 Recent cleanup moved the generic Stagehand exploration default to
 `observed_action`, preserves VLM candidate `expected_change` in graph
 affordances, and removed global completed-action downranking from business
 affordance selection. Repetition policy should now be based on the current or
 embedding-matched node context.
+
+Known `Thinking mode does not support this tool_choice` errors are
+Stagehand/model-adapter exceptions and should not terminate experiments by
+themselves. If no visible change occurs, the action should be recorded as
+`no_observed_change`; local action memory can then avoid it and continue with
+another candidate.
 
 ### P1: WebKobeExplorer has centralization risk
 
@@ -254,11 +357,13 @@ source matching, edge construction, planning transition, and backtracking. It is
 the current mainline core, but new exploration policy should not keep growing
 inside `explore_one_step`.
 
-### P2: graph still mixes business state and low-level UI structure
+### P2: graph still keeps low-level UI evidence fields
 
-`interactable_elements`, selectors, and low-level action traces still exist in
-the graph structure. Keep them short term for compatibility and debugging, but
-the business graph should gradually center on:
+`interactable_elements` still exists on nodes as page evidence and debugging
+data. It no longer owns action choice, action memory, or frontier state.
+`mark_interactable_explored`, `interactables_for_node`, the old LLM action
+selector modules, and their tests have been removed. The business graph should
+gradually center on:
 
 ```text
 business_affordances + business_transition + planning_transition
@@ -273,7 +378,7 @@ Short term, preserve provenance and evidence.
 
 ## Latest Experiment
 
-The 2026-08-01 8-step run on Practice Automated Testing Shopping completed and
+The latest 8-step run on Practice Automated Testing Shopping completed and
 wrote:
 
 ```text
@@ -282,22 +387,26 @@ outputs/experiments/practice_automated_testing/latest/
 
 High-signal result:
 
-- 8 nodes and 8 edges were produced.
-- The root `shopping` node stayed free of later cart/order facts, so the
-  same-page incompatible-state split fixed the earlier pollution failure.
+- 6 nodes and 8 edges were produced.
+- The run completed all 8 steps after treating the known Stagehand
+  `Thinking mode does not support this tool_choice` exception as non-fatal.
+- Target matching accepted some repeated states, but the graph still produced
+  duplicate-looking product list/detail state variants.
 - `domain_only/domain.pddl` was generated without choosing a concrete
   `problem.pddl` goal.
-- VLM produced both profile facts and one generated fact
-  (`product_details_visible`), with provenance preserved.
+- The run stayed around product list/detail and cart-related states; it did not
+  progress reliably to checkout.
 
 Open problems from this run:
 
-- Source matching previously mapped later actions back to an earlier `checkout`
-  node. A lightweight current-node pointer and planning-fact compatibility
-  guard now prevent this in tests, but the fix still needs a real-site rerun.
-- Embedding summaries previously included repeated Stagehand policy/control
-  boilerplate. Summary generation now prefers business labels for Stagehand
-  business-intent controls, but real traces should be inspected again.
+- The old selector/locator fallback that could loop after exhausting local
+  candidates has been removed. Next runs should verify that business-affordance
+  selection now backtracks instead of repeating successful low-progress actions.
+- Business action memory is derived from graph edges, not stored as explicit
+  candidate status on each node; this is acceptable short term but needs a
+  clearer frontier policy.
+- Similar business states still produce duplicate-looking `at_*_002`
+  predicates, so merge-before-create still needs real-site improvement.
 - Graph edge metadata still embeds large visual prompt/response traces. These
   should mostly live in trace artifacts, while graph should keep compact
   evidence and planner-relevant state.
@@ -306,23 +415,21 @@ Open problems from this run:
 
 ## Next Priorities
 
-1. Re-run the Practice Automated Testing Shopping experiment to validate the
-   source-matching trajectory guard, cleaned embedding summaries, and updated
-   ecommerce profile facts.
-2. Re-run a bounded exploration experiment to validate that VLM candidates,
-   embedding-assisted memory, and Stagehand business-intent execution follow
-   the confirmed responsibility boundary.
-3. Inspect whether checkout substeps now form a sequential chain rather than
-   multiple edges fanning out from `checkout`.
-4. Keep using domain-only projection as the primary exploration artifact;
-   generate `problem.pddl` only for explicit smoke/query checks.
-5. Reduce graph trace bloat by moving verbose prompts/responses to trace files
-   and keeping graph evidence compact.
+1. Re-run Practice Automated Testing Shopping and check whether the minimal
+   frontier/DFS behavior escapes the product list/detail loop and reaches
+   cart/checkout states.
+2. Use `graph.meta.frontier_metrics` to inspect candidates per node,
+   tried/untried/no-op/failed counts, backtracks, and repeated-node hits.
+3. Check whether the default consecutive-unproductive threshold of 3 is too
+   strict or too loose for real websites.
+4. Continue validating target matching and keep source embeddings limited to
+   recovery/diagnostic use.
+5. Inspect graph and domain PDDL quality, especially source/target,
+   preconditions/effects, node labels, and duplicate `at_*_002` predicates.
 6. Discuss generated fact promotion / optional projection policy.
-7. Revisit PDDL action naming and low-value action filtering after graph
-   semantics are stable.
-8. Once the graph layer stabilizes, refactor or detach `interactable_elements`
-   and gradually split `WebKobeExplorer`.
+7. Once the graph layer stabilizes, decide whether `interactable_elements`
+   should remain as compact evidence or move into trace artifacts, and
+   gradually split `WebKobeExplorer`.
 
 ## Experiment Management
 

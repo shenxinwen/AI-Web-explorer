@@ -149,17 +149,17 @@ embedding memory 只辅助定位和避免重复，不直接进入 PDDL。
 
 - `src/ai_web_explorer/grounded_web/explorer.py`
 - `src/ai_web_explorer/grounded_web/controller.py`
-- `src/ai_web_explorer/grounded_web/llm_action_selector.py`
-- `src/ai_web_explorer/grounded_web/openai_action_selector.py`
 
 主要职责：
 
 - 执行一轮 exploration step；
-- 选择一个业务动作或 fallback action；
+- 从观察层生成的 business affordances 中选择一个业务动作；
 - 使用 memory context 和重复惩罚；
-- 调用操作层和观察层；
+- 调用 Stagehand 操作层和 VLM/DOM 观察层；
 - 更新 graph；
 - 按 step budget 或 terminal condition 停止。
+
+低层 DOM interactables 可以继续作为 node evidence 供调试使用，但不再作为 graph memory 或探索决策单位。旧的 LLM action selector 路径已经移除，避免系统回退到 selector/locator 驱动的探索。
 
 `WebKobeExplorer` 目前是最大的协调类。后续新增探索策略时，应尽量拆成小组件，不要继续把所有逻辑堆进 `explore_one_step`。
 
