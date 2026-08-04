@@ -52,24 +52,83 @@ class VisualAffordanceResult:
 def _prompt_for_request(request: VisualAffordanceRequest) -> str:
     payload = {
         "instruction": (
-            "Inspect the current web page screenshot and list up to "
-            f"{request.max_actions} next-step business actions. Return JSON only. "
-            "Each action must be immediately executable from the visible current "
-            "page, grounded in visible evidence, and useful for discovering the "
-            "site's business flow. Focus on visible business capabilities and "
-            "possible next business-state changes, but do not infer graph memory, "
+            "Inspect the current web page screenshot and list direct next-step "
+            "business actions that are immediately executable from the visible "
+            "current state. Return JSON only. "
+            f"Return at most {request.max_actions} actions. This limit is an "
+            "upper bound, not a quota. Return fewer actions when fewer are "
+            "actually available. Do not fill the list with "
+            "background, global, generic, or merely visible controls. Only "
+            "include actions grounded in controls clearly visible in the "
+            "screenshot. Do not infer actions from common website patterns or "
+            "expected workflows. Do not infer graph memory, business stages, "
             "whether an action was previously attempted, or whether Web-KOBE "
-            "should materialize a node. Avoid sort, filter, theme, language, "
-            "footer, social, newsletter, or purely decorative actions unless no "
-            "better business action exists."
+            "should create or merge a node. "
+            "Identify the current active business surface first. An active "
+            "surface may be the main page content, a focused panel, modal, "
+            "dialog, drawer, popover, form, details view, table row, selected "
+            "item, selected object, or visible workflow step. If a focused "
+            "surface is open, only include actions inside that focused surface "
+            "plus explicit close, dismiss, back, cancel, or return actions for "
+            "leaving it. Exclude background or global page controls when a "
+            "focused surface is open, unless the control is visibly part of "
+            "that focused surface. "
+            "A business action is a visible action that can directly change "
+            "the user's business state, reveal a new business state, submit or "
+            "edit business data, select or configure a business object, "
+            "navigate to a directly relevant business surface, or close/leave "
+            "the current active business surface. Each returned action must "
+            "have a concrete expected visible change. If you cannot describe "
+            "a concrete visible change, omit the action. Presentation, "
+            "preference, display, sorting, filtering, search, theme, language, "
+            "newsletter, footer, social, or cosmetic actions should be omitted "
+            "when any more direct active-surface business action is available. "
+            "Include those lower-information actions only when they are the "
+            "main available actions in the current active business surface."
         ),
         "goal": request.goal,
-        "profile": request.profile.to_dict(),
         "current_signature": dict(request.current_signature or {}),
-        "current_planning_facts": list(request.current_planning_facts or []),
         "required_json_fields": [
+            "active_surface",
             "state_summary",
             "business_affordances",
+        ],
+        "relevance_hint_meaning": {
+            "core": (
+                "A primary action in the active surface that directly changes, "
+                "reveals, submits, edits, selects, configures, or advances a "
+                "business state."
+            ),
+            "supporting": (
+                "A secondary active-surface action such as close, back, cancel, "
+                "dismiss, return, open details, expand a relevant panel, or "
+                "navigate to a directly related surface."
+            ),
+            "low_value": (
+                "A visible action that mostly changes presentation, ordering, "
+                "filtering, preference settings, search results, or "
+                "non-essential content."
+            ),
+            "unknown": (
+                "Use only when the action is visible but its business role is "
+                "unclear."
+            ),
+        },
+        "examples": [
+            (
+                "If a focused dialog or details view contains one submit/select "
+                "action and one close action, return only those actions."
+            ),
+            (
+                "If a form step is active, return the visible actions that "
+                "submit, continue, save, cancel, or edit that form step."
+            ),
+            (
+                "If a table row, record view, item view, or selected object is "
+                "active, return actions directly available for that object, not "
+                "unrelated page-wide controls."
+            ),
+            "Do not return an action unless its target control is clearly visible.",
         ],
         "business_affordance_schema": {
             "action_name": "snake_case next-step business action name",
@@ -126,7 +185,11 @@ def _relevance(value: Any) -> str:
     return "unknown"
 
 
-def _affordances_from_response(parsed: dict[str, Any]) -> list[BusinessAffordance]:
+def _affordances_from_response(
+    parsed: dict[str, Any],
+    *,
+    max_actions: int,
+) -> list[BusinessAffordance]:
     raw_items = parsed.get("business_affordances")
     if not isinstance(raw_items, list):
         return []
@@ -152,6 +215,8 @@ def _affordances_from_response(parsed: dict[str, Any]) -> list[BusinessAffordanc
                 evidence=_clean_text(item.get("evidence")),
             )
         )
+        if len(affordances) >= max_actions:
+            break
     return affordances
 
 
@@ -204,7 +269,10 @@ def summarize_visual_affordances(
         )
 
     return VisualAffordanceResult(
-        business_affordances=_affordances_from_response(parsed),
+        business_affordances=_affordances_from_response(
+            parsed,
+            max_actions=request.max_actions,
+        ),
         trace=_trace(
             prompt=prompt,
             raw_response=raw_response,

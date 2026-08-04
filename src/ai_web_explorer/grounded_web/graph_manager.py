@@ -67,13 +67,9 @@ def _merge_interactables(
 
 
 def _merge_business_affordances(existing, incoming):
-    merged = list(existing)
-    seen = {item.action_name for item in merged}
-    for item in incoming:
-        if item.action_name not in seen:
-            merged.append(item)
-            seen.add(item.action_name)
-    return merged
+    if existing:
+        return list(existing)
+    return list(incoming)
 
 
 def _profile_fact_ids(profile: BusinessFlowProfile) -> set[str]:

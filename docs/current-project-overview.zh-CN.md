@@ -170,7 +170,7 @@ edge.planning_transition 中属于 profile facts 的 pre/added/removed facts
 
 当前确认的第一版探索策略是简单 DFS / frontier，而不是让 Stagehand 或 VLM 自由规划：
 
-- 每个业务节点拥有 3-5 个当前可执行的 business affordances。
+- 每个业务节点拥有 3-5 个当前可执行的 business affordances；这些候选只在节点首次获得 frontier 时写入，后续 revisit / target merge 回到同一节点时不再重新生成或追加。
 - 本地系统把候选动作标记为未尝试、已尝试、no-op 或失败；VLM 只负责提出候选和证据，不负责记忆。
 - 当前节点优先执行未尝试候选；动作成功后，若产生新业务状态就移动到新节点，若命中已有业务状态就移动到已有节点，若没有有效变化就留在原节点。
 - 当前节点候选都尝试完后，不能继续重复“非 avoid 的成功动作”，而应回退到上一个仍有未尝试候选的节点。

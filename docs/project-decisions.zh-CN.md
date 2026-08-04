@@ -420,3 +420,46 @@ PDDL 候选谓词词表 + 优先观察目标 + 跨网站语义对齐锚点
 - 主探索链路不会在没有 business affordances 时回退去点击 DOM interactables。
 - 旧 Web-KOBE Playwright selector smoke 能力被移除；如需恢复，可从 Git 历史找回。
 - `interactable_elements` 字段暂时保留为页面观察证据，后续等 graph 层稳定后再决定是否剥离到 trace artifacts。
+
+## 2026-08-03 - 固定业务节点候选 frontier，停止 revisit 累积
+
+更改：
+
+- `WebKobeExplorer._record_source_business_affordances` 在当前业务节点已有 `business_affordances` 时直接复用旧 frontier，不再调用 VLM 重新生成候选。
+- `WebKobeGraphManager` 在同一 node revisit / target merge 时不再追加新的 `business_affordances`；已有候选非空时保留第一次写入的候选，只有旧节点没有候选时才接收 incoming 候选。
+- 新增回归测试，覆盖“已有节点候选不被 revisit 追加”和“已有 frontier 时不再次调用 VLM provider”两个行为。
+
+原因：
+
+- Practice Automated Testing Shopping 实验中，`cart_with_items` 节点因多次 revisit / target merge 从单轮候选累计到 12 个动作，导致 frontier 变成多次访问路径上的动作合集。
+- business node 的 frontier 应表示首次观察到该业务状态时的稳定候选清单；后续探索应消费这张清单里的未尝试动作，而不是继续贴新动作。
+- 如果同一页面壳下出现真正不同的业务能力，应由 planning facts / target matching 形成不同业务节点，而不是污染已有节点的 frontier。
+
+影响：
+
+- 单个业务节点的候选集合不会随 revisit 继续膨胀。
+- `frontier_metrics.candidate_count` 更接近节点首次观察到的业务候选数量，后续 tried / no-op / failed 会在稳定清单上累积。
+- checkout 推进排序仍需要后续单独优化；本次只修复候选累计问题，不改变排序策略。
+
+## 2026-08-04 - 收紧 VLM 候选生成上限语义
+
+更改：
+
+- `business_affordance` prompt 明确 `max_actions` 是 upper bound，不是 quota；如果当前页面真实可执行业务动作少于上限，应返回更少动作。
+- prompt 明确要求聚焦当前 active business surface；如果 modal、dialog、drawer、form、details view、table row、selected object 等 focused surface 打开，只返回该 surface 内动作和显式离开动作，不为了凑数加入背景页面控件。
+- VLM 候选生成 prompt 不再携带 `profile` 和 `current_planning_facts`；profile facts / stages 后续只由本地 selector / policy 用于打分、去重和 planner-facing 语义对齐。
+- 本地解析层对 VLM 返回的 `business_affordances` 强制按 `request.max_actions` 截断，防止模型超额返回。
+- 新增测试覆盖 prompt 合同和解析层上限。
+
+原因：
+
+- Practice Automated Testing Shopping 实验中，商品详情 modal 状态实际强相关业务动作主要是 `add_to_cart` 和 `close_product_details`，但 VLM 仍返回满 5 个候选，把背景页的 `search_for_items`、`filter_products` 也放入该节点 frontier。
+- 候选数量上限应防止候选池过大，而不是暗示 VLM 必须凑满数量。
+- VLM 没有稳定 graph memory，不应消费 profile facts 或根据 profile stage 判断动作优先级；否则容易把“典型业务流程”误当成当前可见动作。
+- frontier 质量应先由候选生成阶段控制；排序策略不应该承担过滤明显不属于当前业务上下文动作的全部压力。
+
+影响：
+
+- 新实验中商品详情等窄上下文节点可能只生成 2-3 个候选，而不是固定接近 5 个。
+- 即使 VLM 超额返回，本地 graph frontier 也不会超过配置上限。
+- 后续候选排序应在本地完成：如果业务动作预期变化或执行结果命中 profile facts / stages，再由本地 policy 给予更高分；同时继续加入 action family / no-op / repeated target 惩罚。

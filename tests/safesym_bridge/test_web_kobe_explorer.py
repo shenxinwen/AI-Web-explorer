@@ -741,6 +741,54 @@ async def test_explore_one_step_records_visual_business_affordances_on_source_no
     assert source.business_affordances[0].target_hint == "button labeled Add to cart"
 
 
+def test_record_source_business_affordances_skips_existing_node_frontier():
+    provider_calls = []
+
+    def visual_provider(
+        prompt,
+        *,
+        current_screenshot_path=None,
+        before_screenshot_path=None,
+        after_screenshot_path=None,
+    ):
+        provider_calls.append(current_screenshot_path)
+        return _business_affordance_response("sort_products")
+
+    explorer = WebKobeExplorer(
+        adapter=FakeAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        business_profile=ecommerce_checkout_profile(),
+        capture_screenshots=True,
+        visual_delta_provider=visual_provider,
+    )
+    explorer.manager.identify_or_add_node(
+        _selection_node(
+            "cart_with_items",
+            business_affordances=[
+                BusinessAffordance("view_cart"),
+                BusinessAffordance("proceed_to_checkout"),
+            ],
+        )
+    )
+
+    explorer._record_source_business_affordances(
+        source_id="cart_with_items",
+        before=StateSnapshot(
+            page_id="cart",
+            url="https://example.test/cart",
+            title="Cart",
+            signature={"cart_has_items": True},
+        ),
+        before_screenshot_path="outputs/before_0001.png",
+    )
+
+    assert provider_calls == []
+    node = explorer.manager.node_for_id("cart_with_items")
+    assert [
+        affordance.action_name for affordance in node.business_affordances
+    ] == ["view_cart", "proceed_to_checkout"]
+
+
 @pytest.mark.anyio
 async def test_explore_one_step_prefers_high_ranked_current_business_affordance():
     adapter = ScreenshotAdapter()

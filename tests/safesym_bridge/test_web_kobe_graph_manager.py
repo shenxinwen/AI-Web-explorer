@@ -10,6 +10,7 @@ from ai_web_explorer.grounded_web.capability_graph import (
     PageFrame,
 )
 from ai_web_explorer.grounded_web.graph import (
+    BusinessAffordance,
     BrowserAction,
     ReferenceObservation,
     WebKobeEdge,
@@ -57,6 +58,32 @@ def test_identify_or_add_node_merges_schema_and_visit_count():
     assert node.state_schema["cart_has_items"] == [False, True]
     assert node.state_schema["filter_open"] == [False]
     assert node.last_state_snapshot == {"cart_has_items": True, "filter_open": False}
+
+
+def test_identify_or_add_node_keeps_existing_business_frontier_on_revisit():
+    manager = WebKobeGraphManager(app="example")
+    first = replace(
+        _node("cart_with_items", {"cart_has_items": True}),
+        business_affordances=[
+            BusinessAffordance("view_cart"),
+            BusinessAffordance("proceed_to_checkout"),
+        ],
+    )
+    revisit = replace(
+        _node("cart_with_items", {"cart_has_items": True}),
+        business_affordances=[
+            BusinessAffordance("add_to_cart"),
+            BusinessAffordance("sort_products"),
+        ],
+    )
+
+    manager.identify_or_add_node(first)
+    manager.identify_or_add_node(revisit)
+
+    graph = manager.to_graph()
+    assert [
+        affordance.action_name for affordance in graph.nodes[0].business_affordances
+    ] == ["view_cart", "proceed_to_checkout"]
 
 
 def test_add_edge_merges_planning_transition_for_repeated_edge():

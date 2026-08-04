@@ -750,6 +750,8 @@ class WebKobeExplorer:
         if self.business_profile is None or self.visual_delta_provider is None:
             return
         source_node = self.manager.node_for_id(source_id)
+        if source_node.business_affordances:
+            return
         active_facts = (
             list(source_node.planning_state.active_facts)
             if source_node.planning_state is not None

@@ -243,7 +243,9 @@ generated. It must also preserve stable business-state identity:
 The confirmed V1 exploration policy is simple DFS / frontier, not free-form
 planning by Stagehand or VLM:
 
-- each business node owns 3-5 immediately executable business affordances;
+- each business node owns 3-5 immediately executable business affordances; these
+  candidates are written when the node first receives a frontier, and later
+  revisits / target merges do not regenerate or append to that node's frontier;
 - local code marks candidates as untried, tried, no-op, or failed; VLM proposes
   candidates and evidence, but does not own memory;
 - the current node prefers untried candidates; after execution, move to a new
