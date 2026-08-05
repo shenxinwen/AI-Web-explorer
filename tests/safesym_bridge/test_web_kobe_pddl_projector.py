@@ -602,7 +602,7 @@ def test_compile_web_kobe_graph_to_pddl_trusts_candidate_planning_delta():
     assert "(order_review_ready) (order_review_ready)" not in artifacts.domain
 
 
-def test_compile_web_kobe_graph_to_pddl_excludes_generated_facts_by_default():
+def test_compile_web_kobe_graph_to_pddl_includes_generated_facts_by_default():
     graph = WebKobeGraph(
         app="example",
         start_node_id="products",
@@ -674,6 +674,33 @@ def test_compile_web_kobe_graph_to_pddl_excludes_generated_facts_by_default():
 
     assert "(product_list_visible)" in artifacts.domain
     assert "(product_list_visible)" in artifacts.problem
+    assert "(product_details_visible)" in artifacts.domain
+    assert "(product_details_visible)" in artifacts.problem
+
+
+def test_compile_web_kobe_graph_to_pddl_can_exclude_generated_facts_explicitly():
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="products",
+        total_steps_completed=1,
+        nodes=[
+            _node(
+                "products",
+                "products",
+                {},
+                planning_facts=["product_details_visible"],
+                generated_fact_ids=["product_details_visible"],
+            ),
+        ],
+        edges=[],
+    )
+
+    artifacts = compile_web_kobe_graph_to_pddl(
+        graph,
+        goal_node_id="products",
+        options=PddlProjectionOptions(include_generated_planning_facts=False),
+    )
+
     assert "product_details_visible" not in artifacts.domain
     assert "product_details_visible" not in artifacts.problem
 

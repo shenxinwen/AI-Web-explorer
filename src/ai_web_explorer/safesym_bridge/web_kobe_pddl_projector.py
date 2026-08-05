@@ -42,7 +42,7 @@ class WebKobePddlArtifacts:
 @dataclass(frozen=True)
 class PddlProjectionOptions:
     include_observed_delta_facts: bool = False
-    include_generated_planning_facts: bool = False
+    include_generated_planning_facts: bool = True
 
 
 def _evidence_from_dict(data: dict[str, Any]) -> Evidence:
