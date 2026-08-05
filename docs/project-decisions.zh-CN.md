@@ -419,7 +419,7 @@ PDDL 候选谓词词表 + 优先观察目标 + 跨网站语义对齐锚点
 
 - 主探索链路不会在没有 business affordances 时回退去点击 DOM interactables。
 - 旧 Web-KOBE Playwright selector smoke 能力被移除；如需恢复，可从 Git 历史找回。
-- `interactable_elements` 字段暂时保留为页面观察证据，后续等 graph 层稳定后再决定是否剥离到 trace artifacts。
+- `interactable_elements` 不再输出到 canonical `graph.json` node；运行时 DOM interactables 如需保留，应进入 state summary、embedding matching 或 trace/debug artifacts。
 
 ## 2026-08-03 - 固定业务节点候选 frontier，停止 revisit 累积
 

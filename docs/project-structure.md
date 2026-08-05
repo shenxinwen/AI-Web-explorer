@@ -168,10 +168,11 @@ Main responsibilities:
 - update graph state;
 - stop by budget or controller terminal condition.
 
-Low-level DOM interactables may remain in node evidence for debugging, but they
-are not a graph-memory or exploration-decision unit. The old LLM action selector
-path was removed so the system does not fall back to selector/locator-driven
-exploration.
+Low-level DOM interactables may still be used as runtime state summary /
+embedding-matching input, but they are no longer emitted in canonical
+`graph.json` nodes and are not a graph-memory or exploration-decision unit. The
+old LLM action selector path was removed so the system does not fall back to
+selector/locator-driven exploration.
 
 `WebKobeExplorer` is currently the largest coordination class. New exploration
 features should avoid further enlarging it when a small policy/observer/recorder

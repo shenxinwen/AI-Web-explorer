@@ -224,9 +224,9 @@ controller 已改为连续无进展策略：单次 `failed_execution`、`no_obse
 
 `WebKobeExplorer` 目前同时处理观察、动作选择、VLM、embedding、source matching、edge 构造、planning transition 和回退。它是当前主线核心，短期可以保留，但后续新增探索策略时不应该继续把所有逻辑塞进 `explore_one_step`。
 
-### P2: graph 层仍保留底层 UI 证据字段
+### P2: 低层 UI 证据已退出 canonical graph
 
-`interactable_elements` 仍存在于 node 中，主要作为页面观察证据和调试信息。它不再承担动作选择、动作记忆或 frontier 单位职责；`mark_interactable_explored`、`interactables_for_node`、旧 LLM action selector 和对应测试已经删除。业务探索图应逐渐围绕：
+低层 DOM interactables 可以在运行时作为 state summary / embedding matching 的辅助输入，但不再输出到 canonical `graph.json` 的 node 结构中。它不承担动作选择、动作记忆或 frontier 单位职责；`mark_interactable_explored`、`interactables_for_node`、旧 LLM action selector 和对应测试已经删除。业务探索图应围绕：
 
 ```text
 business_affordances + business_transition + planning_transition
@@ -246,7 +246,7 @@ business_affordances + business_transition + planning_transition
 4. 继续检查 target matching 是否减少重复业务节点，以及 embedding source/target matching 是否只在正确位置发挥作用。
 5. 检查 graph 和 domain PDDL 质量，尤其是 source/target、precondition/effect、node label 和重复 `at_*_002`。
 6. 讨论 generated facts 的晋升/可选投影策略。
-7. 等 graph 层稳定后，评估是否进一步剥离或归档 `interactable_elements` 等底层 UI 证据字段。
+7. 评估是否把运行时 DOM interactables 进一步迁入 trace/debug artifacts，或完全从主线状态匹配中剥离。
 8. 后续逐步拆分 `WebKobeExplorer`，避免核心协调类继续膨胀。
 
 ## 实验管理规则

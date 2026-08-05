@@ -359,10 +359,11 @@ source matching, edge construction, planning transition, and backtracking. It is
 the current mainline core, but new exploration policy should not keep growing
 inside `explore_one_step`.
 
-### P2: graph still keeps low-level UI evidence fields
+### P2: low-level UI evidence is out of the canonical graph
 
-`interactable_elements` still exists on nodes as page evidence and debugging
-data. It no longer owns action choice, action memory, or frontier state.
+Low-level DOM interactables may still be used at runtime as state summary /
+embedding-matching input, but they are no longer emitted in canonical
+`graph.json` nodes. They do not own action choice, action memory, or frontier state.
 `mark_interactable_explored`, `interactables_for_node`, the old LLM action
 selector modules, and their tests have been removed. The business graph should
 gradually center on:
@@ -429,9 +430,9 @@ Open problems from this run:
 5. Inspect graph and domain PDDL quality, especially source/target,
    preconditions/effects, node labels, and duplicate `at_*_002` predicates.
 6. Discuss generated fact promotion / optional projection policy.
-7. Once the graph layer stabilizes, decide whether `interactable_elements`
-   should remain as compact evidence or move into trace artifacts, and
-   gradually split `WebKobeExplorer`.
+7. Decide whether runtime DOM interactables should move into trace/debug
+   artifacts or be removed from mainline state matching, and gradually split
+   `WebKobeExplorer`.
 
 ## Experiment Management
 

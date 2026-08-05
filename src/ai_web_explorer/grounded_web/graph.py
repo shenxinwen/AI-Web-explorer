@@ -188,9 +188,6 @@ class WebKobeNode:
             "last_state_snapshot": dict(self.last_state_snapshot),
             "state_indicators": _list_to_dict(self.state_indicators),
             "action_targets": _list_to_dict(self.action_targets),
-            "interactable_elements": [
-                dict(item) for item in self.interactable_elements
-            ],
             "business_affordances": _list_to_dict(self.business_affordances),
             "capabilities": _list_to_dict(self.capabilities),
             "reference_observation": (

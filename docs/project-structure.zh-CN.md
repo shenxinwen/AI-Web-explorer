@@ -159,7 +159,7 @@ embedding memory 只辅助定位和避免重复，不直接进入 PDDL。
 - 更新 graph；
 - 按 step budget 或 terminal condition 停止。
 
-低层 DOM interactables 可以继续作为 node evidence 供调试使用，但不再作为 graph memory 或探索决策单位。旧的 LLM action selector 路径已经移除，避免系统回退到 selector/locator 驱动的探索。
+低层 DOM interactables 可以继续作为运行时 state summary / embedding matching 的辅助输入，但不再输出到 canonical `graph.json` node，也不作为 graph memory 或探索决策单位。旧的 LLM action selector 路径已经移除，避免系统回退到 selector/locator 驱动的探索。
 
 `WebKobeExplorer` 目前是最大的协调类。后续新增探索策略时，应尽量拆成小组件，不要继续把所有逻辑堆进 `explore_one_step`。
 

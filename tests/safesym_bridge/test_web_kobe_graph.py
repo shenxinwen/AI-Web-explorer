@@ -195,6 +195,7 @@ def test_web_kobe_graph_serializes_node_edge_and_evidence():
         == "Login page before credentials are entered."
     )
     assert data["nodes"][0]["naming_provenance"] == {"source": "unit_test"}
+    assert "interactable_elements" not in data["nodes"][0]
     assert data["nodes"][0]["planning_state"] == {
         "active_facts": ["required_info_missing"],
         "profile_fact_ids": [],
