@@ -8,10 +8,8 @@ from ai_web_explorer.grounded_web.automation_backend import AutomationBackend
 from ai_web_explorer.grounded_web.graph import BrowserAction
 from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.grounded_web.stagehand_actions import (
-    StagehandObservedAction,
     StagehandProvider,
     StagehandStepTrace,
-    stagehand_action_to_browser_action,
     stagehand_trace_metadata,
 )
 
@@ -43,7 +41,6 @@ class StagehandAutomationBackend:
         self.last_execution_error: str | None = None
         self.last_execution_metadata: dict[str, Any] = {}
         self._exploration_context_prompt: str | None = None
-        self._observed_actions_by_id: dict[str, StagehandObservedAction] = {}
         self._business_goals_by_id: dict[str, str] = {}
         self._business_metadata_by_id: dict[str, dict[str, Any]] = {}
         self._business_milestone_counter = 0
@@ -128,35 +125,8 @@ class StagehandAutomationBackend:
                 }
             ]
 
-        observed = await self.provider.observe_next_action(
-            instruction=self.goal,
-            state=state,
-        )
-        records: list[dict[str, Any]] = []
-        for index, stagehand_action in enumerate(observed):
-            action = stagehand_action_to_browser_action(
-                stagehand_action,
-                index=index,
-            )
-            self._observed_actions_by_id[action.semantic_id] = stagehand_action
-            records.append(
-                {
-                    "semantic_id": action.semantic_id,
-                    "description": action.description,
-                    "locator": action.locator,
-                    "action_kind": action.action_kind,
-                    "input_values": dict(action.input_values),
-                    "action_label": action.action_label,
-                    "canonical_action_name": action.canonical_action_name,
-                    "naming_provenance": action.naming_provenance,
-                    "explored": False,
-                    "metadata": {
-                        "action_source": "stagehand",
-                        "stagehand_method": stagehand_action.method,
-                    },
-                }
-            )
-        return records
+        if self.execution_mode == "observed_action":
+            return await self.base_backend.list_interactables(state)
 
     async def execute(self, action: BrowserAction | dict[str, Any]) -> bool:
         semantic_id = (
@@ -186,34 +156,13 @@ class StagehandAutomationBackend:
                 {"business_action_id": semantic_id},
             )
 
-        stagehand_action = self._observed_actions_by_id.get(semantic_id)
-        if stagehand_action is None:
-            self.last_execution_error = "stagehand_action_not_found"
-            self.last_execution_metadata = {
-                "action_source": "stagehand",
-                "stagehand_error": self.last_execution_error,
-            }
-            return False
-        try:
-            result = await self.provider.act(stagehand_action)
-        except Exception as error:
-            self.last_execution_error = str(error)
-            trace = StagehandStepTrace(
-                instruction=self.goal,
-                observed_action=stagehand_action,
-                act_result=None,
-                error=self.last_execution_error,
-            )
-            self.last_execution_metadata = stagehand_trace_metadata(trace)
-            return False
-        trace = StagehandStepTrace(
-            instruction=self.goal,
-            observed_action=stagehand_action,
-            act_result=result,
-        )
-        self.last_execution_metadata = stagehand_trace_metadata(trace)
-        self.last_execution_error = None if result.success else result.message
-        return result.success
+        self.last_execution_error = "stagehand_business_intent_required"
+        self.last_execution_metadata = {
+            "action_source": "stagehand",
+            "stagehand_error": self.last_execution_error,
+            "stagehand_semantic_id": semantic_id,
+        }
+        return False
 
     async def _execute_business_intent(
         self,
@@ -260,7 +209,6 @@ class StagehandAutomationBackend:
             self.last_execution_error = str(error)
             trace = StagehandStepTrace(
                 instruction=instruction,
-                observed_action=None,
                 act_result=None,
                 error=self.last_execution_error,
             )
@@ -270,7 +218,6 @@ class StagehandAutomationBackend:
             return False
         trace = StagehandStepTrace(
             instruction=instruction,
-            observed_action=None,
             act_result=result,
         )
         self.last_execution_metadata = stagehand_trace_metadata(trace)

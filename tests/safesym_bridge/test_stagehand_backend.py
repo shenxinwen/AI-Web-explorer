@@ -4,7 +4,6 @@ from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.grounded_web.graph import BrowserAction
 from ai_web_explorer.grounded_web.stagehand_actions import (
     StagehandActResult,
-    StagehandObservedAction,
 )
 from ai_web_explorer.grounded_web.stagehand_backend import (
     StagehandAutomationBackend,
@@ -41,6 +40,18 @@ class FakeBaseBackend:
         return True
 
 
+class DeterministicInteractablesBaseBackend(FakeBaseBackend):
+    async def list_interactables(self, state):
+        return [
+            {
+                "semantic_id": "dom_login_button",
+                "description": "Login button evidence",
+                "locator": "#login-button",
+                "action_kind": "click",
+            }
+        ]
+
+
 class ScreenshotBaseBackend(FakeBaseBackend):
     def __init__(self):
         self.captured = []
@@ -52,31 +63,8 @@ class ScreenshotBaseBackend(FakeBaseBackend):
 
 class FakeStagehandProvider:
     def __init__(self):
-        self.observed = []
-        self.acted = []
         self.acted_instructions = []
         self.executed_instructions = []
-
-    async def observe_next_action(self, *, instruction, state):
-        self.observed.append((instruction, state.page_id))
-        return [
-            StagehandObservedAction(
-                description="Click the Login button",
-                method="click",
-                selector="#login-button",
-                arguments=[],
-                raw={"backendNodeId": 123},
-            )
-        ]
-
-    async def act(self, action):
-        self.acted.append(action)
-        return StagehandActResult(
-            success=True,
-            message="Clicked login",
-            action_description="Clicked button with text Login",
-            raw={"actionId": "act_login"},
-        )
 
     async def act_instruction(self, instruction):
         self.acted_instructions.append(instruction)
@@ -98,93 +86,26 @@ class FakeStagehandProvider:
 
 
 @pytest.mark.anyio
-async def test_stagehand_backend_exposes_one_observed_action_as_interactable():
+async def test_stagehand_backend_observed_action_mode_delegates_base_evidence():
     provider = FakeStagehandProvider()
     backend = StagehandAutomationBackend(
-        base_backend=FakeBaseBackend(),
+        base_backend=DeterministicInteractablesBaseBackend(),
         provider=provider,
-        goal="Log in and reach checkout overview.",
+        goal="Explore shopping capabilities.",
+        execution_mode="observed_action",
     )
     state = await backend.observe_state()
 
     actions = await backend.list_interactables(state)
 
-    assert provider.observed == [("Log in and reach checkout overview.", "login")]
-    assert actions[0]["semantic_id"] == "stagehand_000_click_login_button"
-    assert actions[0]["description"] == "Click the Login button"
-    assert actions[0]["locator"] == "#login-button"
-    assert actions[0]["action_kind"] == "click"
-    assert actions[0]["metadata"]["action_source"] == "stagehand"
-
-
-@pytest.mark.anyio
-async def test_stagehand_backend_execute_calls_provider_and_records_metadata():
-    provider = FakeStagehandProvider()
-    backend = StagehandAutomationBackend(
-        base_backend=FakeBaseBackend(),
-        provider=provider,
-        goal="Log in.",
-    )
-    state = await backend.observe_state()
-    action_dict = (await backend.list_interactables(state))[0]
-
-    success = await backend.execute(action_dict)
-
-    assert success is True
-    assert provider.acted[0].description == "Click the Login button"
-    assert backend.last_execution_error is None
-    assert backend.last_execution_metadata["action_source"] == "stagehand"
-    assert backend.last_execution_metadata["stagehand_selector"] == "#login-button"
-    assert backend.last_execution_metadata["stagehand_act_result"]["success"] is True
-
-
-@pytest.mark.anyio
-async def test_stagehand_backend_retains_previous_observed_actions_for_cached_nodes():
-    class SwitchingProvider:
-        def __init__(self):
-            self.actions = [
-                StagehandObservedAction(
-                    description="Click Login",
-                    method="click",
-                    selector="#login-button",
-                    arguments=[],
-                )
-            ]
-            self.acted = []
-
-        async def observe_next_action(self, *, instruction, state):
-            return list(self.actions)
-
-        async def act(self, action):
-            self.acted.append(action)
-            return StagehandActResult(success=True)
-
-    provider = SwitchingProvider()
-    backend = StagehandAutomationBackend(
-        base_backend=FakeBaseBackend(),
-        provider=provider,
-        goal="log in",
-    )
-    state = StateSnapshot(
-        page_id="login",
-        url="https://example.test",
-        title="Login",
-        signature={},
-    )
-
-    first_actions = await backend.list_interactables(state)
-    provider.actions = [
-        StagehandObservedAction(
-            description="Fill password",
-            method="fill",
-            selector="#password",
-            arguments=["secret_sauce"],
-        )
+    assert actions == [
+        {
+            "semantic_id": "dom_login_button",
+            "description": "Login button evidence",
+            "locator": "#login-button",
+            "action_kind": "click",
+        }
     ]
-    await backend.list_interactables(state)
-
-    assert await backend.execute(first_actions[0]) is True
-    assert provider.acted[0].description == "Click Login"
 
 
 @pytest.mark.anyio
@@ -230,8 +151,6 @@ async def test_stagehand_backend_business_milestone_mode_acts_without_observe():
     success = await backend.execute(actions[0])
 
     assert success is True
-    assert provider.observed == []
-    assert provider.acted == []
     assert provider.acted_instructions == []
     assert provider.executed_instructions == [
         ("Advance one meaningful checkout milestone.", 5)
@@ -303,8 +222,6 @@ async def test_stagehand_backend_executes_business_intent_action_instruction():
     )
 
     assert success is True
-    assert provider.observed == []
-    assert provider.acted == []
     assert provider.executed_instructions == [
         (
             "Business action: add_item_to_cart. Target hint: button labeled "

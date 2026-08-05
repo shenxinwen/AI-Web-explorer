@@ -5,7 +5,6 @@ from typing import Any, Callable, Mapping
 
 from ai_web_explorer.grounded_web.stagehand_actions import (
     StagehandActResult,
-    StagehandObservedAction,
 )
 
 
@@ -43,62 +42,10 @@ def _to_jsonable(value: Any) -> Any:
     return value
 
 
-def _result_items(response: Any) -> list[Any]:
-    data = getattr(response, "data", None)
-    result = getattr(data, "result", None)
-    if result is None and isinstance(data, dict):
-        result = data.get("result")
-    if result is None:
-        return []
-    return list(result if isinstance(result, list) else [result])
-
-
 class StagehandSdkProvider:
     def __init__(self, *, session: Any, page: Any | None = None) -> None:
         self.session = session
         self.page = page
-
-    async def observe_next_action(self, *, instruction, state):
-        observe_args = {"instruction": instruction}
-        if self.page is not None:
-            observe_args["page"] = self.page
-        response = await self.session.observe(**observe_args)
-        actions = []
-        for item in _result_items(response):
-            data = _to_dict(item)
-            actions.append(
-                StagehandObservedAction(
-                    description=str(data.get("description", "")),
-                    method=str(data.get("method") or data.get("action") or "act"),
-                    selector=data.get("selector"),
-                    arguments=list(data.get("arguments") or []),
-                    raw=data,
-                )
-            )
-        return actions
-
-    async def act(self, action: StagehandObservedAction) -> StagehandActResult:
-        action_input = {
-            "description": action.description,
-            "method": action.method,
-            "selector": action.selector,
-            "arguments": list(action.arguments),
-        }
-        act_args = {"input": action_input}
-        if self.page is not None:
-            act_args["page"] = self.page
-        response = await self.session.act(**act_args)
-        raw_data = _to_dict(getattr(response, "data", response))
-        result_data = _to_dict(raw_data.get("result"))
-        return StagehandActResult(
-            success=bool(result_data.get("success", raw_data.get("success", True))),
-            message=result_data.get("message"),
-            action_description=(
-                result_data.get("actionDescription")
-                or result_data.get("action_description")
-            ),
-            raw=raw_data,
-        )
 
     async def act_instruction(self, instruction: str) -> StagehandActResult:
         act_args = {"input": instruction}
