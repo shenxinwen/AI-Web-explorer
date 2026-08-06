@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -60,11 +61,12 @@ def _prompt_for_request(request: VisualDeltaRequest) -> str:
     payload = {
         "instruction": (
             "Compare the before and after screenshots for the executed web "
-            "action and report only facts visibly observed after the action "
-            "or visibly removed by the action. Return JSON only. Facts may "
-            "describe any meaningful business state; do not force them into "
-            "a predefined vocabulary. Do not predict effects, infer hidden "
-            "state, or mark anything verified. The "
+            "action and report only short business-state fact phrases visibly "
+            "observed after the action or visibly removed by the action. "
+            "Return JSON only. Each candidate fact must be a lowercase "
+            "snake_case string, not an object or explanation sentence. Do "
+            "not predict effects, infer hidden state, or mark anything "
+            "verified. The "
             "business_relevance field must be exactly one enum value from "
             "business_relevance_enum, not an explanation sentence."
         ),
@@ -73,13 +75,11 @@ def _prompt_for_request(request: VisualDeltaRequest) -> str:
         "before_signature": dict(request.before_signature or {}),
         "after_signature": dict(request.after_signature or {}),
         "required_json_fields": [
-            "visible_change_summary",
             "business_action_name",
             "business_relevance",
             "meaningful_change",
             "candidate_added_facts",
             "candidate_removed_facts",
-            "evidence",
             "confidence",
         ],
     }
@@ -131,10 +131,14 @@ def _fact_id_list(value: Any) -> list[str]:
         return []
     facts: list[str] = []
     for item in value:
-        candidate = item.get("fact_id") if isinstance(item, dict) else item
-        text = str(candidate).strip() if candidate is not None else ""
-        if text:
-            facts.append(text)
+        if not isinstance(item, str):
+            continue
+        text = item.strip().lower()
+        if text and re.fullmatch(r"[a-z0-9]+(?:_[a-z0-9]+)*", text):
+            if text not in facts:
+                facts.append(text)
+        if len(facts) >= 8:
+            break
     return facts
 
 
@@ -213,7 +217,7 @@ def _business_relevance(value: Any) -> str:
 def _business_transition_from_response(
     parsed: dict[str, Any],
     *,
-    visual_change_summary: str,
+    visual_change_summary: str | None,
     evidence: list[str],
 ) -> BusinessTransition | None:
     action_name = parsed.get("business_action_name")
@@ -288,18 +292,6 @@ def summarize_visual_delta(
         )
 
     visual_change_summary = _summary_text(parsed.get("visible_change_summary"))
-    if visual_change_summary is None:
-        return VisualDeltaResult(
-            planning_delta=_empty_delta(),
-            trace=_trace(
-                prompt=prompt,
-                raw_response=raw_response,
-                llm_response=parsed,
-                status="failed",
-                error_type="missing_visual_change_summary",
-                error_message="Visual delta response must include visible_change_summary.",
-            ),
-        )
 
     candidate_added = _fact_id_list(parsed.get("candidate_added_facts"))
     candidate_removed = _fact_id_list(parsed.get("candidate_removed_facts"))

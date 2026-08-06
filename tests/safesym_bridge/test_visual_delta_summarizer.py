@@ -26,13 +26,13 @@ def test_summarize_visual_delta_maps_provider_json_to_candidate_planning_delta()
         assert "Add one item to the cart." not in prompt
         assert "cart_has_items" not in prompt
         assert '"profile"' not in prompt
+        assert "visible_change_summary" not in prompt
+        assert "evidence" not in prompt
         assert before_screenshot_path == "before.png"
         assert after_screenshot_path == "after.png"
         return (
-            '{"visible_change_summary":"Cart count changed from 0 to 1.",'
-            '"candidate_added_facts":["cart_has_items"],'
+            '{"candidate_added_facts":["cart_has_items"],'
             '"candidate_removed_facts":[],'
-            '"evidence":["cart badge shows one item"],'
             '"confidence":0.86}'
         )
 
@@ -41,10 +41,7 @@ def test_summarize_visual_delta_maps_provider_json_to_candidate_planning_delta()
     assert result.planning_delta.candidate_added_facts == ["cart_has_items"]
     assert result.planning_delta.verified_added_facts == []
     assert result.trace.status == "summarized"
-    assert result.trace.visual_change_summary == "Cart count changed from 0 to 1."
-    assert result.trace.llm_response["visible_change_summary"] == (
-        "Cart count changed from 0 to 1."
-    )
+    assert result.trace.visual_change_summary is None
 
 
 def test_summarize_visual_delta_maps_business_transition_fields():
@@ -66,13 +63,11 @@ def test_summarize_visual_delta_maps_business_transition_fields():
         assert "business_relevance" in prompt
         assert "meaningful_change" in prompt
         return (
-            '{"visible_change_summary":"Bluetooth Headphones were added to cart.",'
-            '"business_action_name":"add_item_to_cart",'
+            '{"business_action_name":"add_item_to_cart",'
             '"business_relevance":"core",'
             '"meaningful_change":true,'
             '"candidate_added_facts":["cart_has_items"],'
             '"candidate_removed_facts":[],'
-            '"evidence":["cart badge changed from 0 to 1"],'
             '"confidence":0.9}'
         )
 
@@ -83,10 +78,8 @@ def test_summarize_visual_delta_maps_business_transition_fields():
     assert result.business_transition.relevance == "core"
     assert result.business_transition.meaningful_change is True
     assert result.business_transition.judge_source == "vlm"
-    assert result.business_transition.summary == (
-        "Bluetooth Headphones were added to cart."
-    )
-    assert result.business_transition.evidence == ["cart badge changed from 0 to 1"]
+    assert result.business_transition.summary is None
+    assert result.business_transition.evidence == []
     assert result.business_transition.confidence == 0.9
 
 
@@ -102,13 +95,11 @@ def test_summarize_visual_delta_normalizes_explanatory_business_relevance():
     def provider(prompt, *, before_screenshot_path, after_screenshot_path):
         assert "business_relevance_enum" in prompt
         return (
-            '{"visible_change_summary":"A product detail modal opened.",'
-            '"business_action_name":"view_product_details",'
+            '{"business_action_name":"view_product_details",'
             '"business_relevance":"This is a key product selection step.",'
             '"meaningful_change":true,'
             '"candidate_added_facts":["product_details_visible"],'
             '"candidate_removed_facts":[],'
-            '"evidence":["product detail modal is visible"],'
             '"confidence":0.8}'
         )
 
@@ -129,13 +120,11 @@ def test_summarize_visual_delta_records_vlm_fact_as_generated_until_verified():
 
     def provider(prompt, *, before_screenshot_path, after_screenshot_path):
         return (
-            '{"visible_change_summary":"A product detail modal opened.",'
-            '"business_action_name":"view_product_details",'
+            '{"business_action_name":"view_product_details",'
             '"business_relevance":"core",'
             '"meaningful_change":true,'
             '"candidate_added_facts":["product_details_visible"],'
             '"candidate_removed_facts":[],'
-            '"evidence":["product detail modal is visible"],'
             '"confidence":0.8}'
         )
 
@@ -163,10 +152,8 @@ def test_summarize_visual_delta_keeps_all_vlm_facts_generated():
 
     def provider(prompt, *, before_screenshot_path, after_screenshot_path):
         return (
-            '{"visible_change_summary":"Product details show an add-to-cart button.",'
-            '"candidate_added_facts":["cart_has_items","product_details_visible"],'
+            '{"candidate_added_facts":["cart_has_items","product_details_visible"],'
             '"candidate_removed_facts":["modal_absent"],'
-            '"evidence":["product detail modal is visible"],'
             '"confidence":0.8}'
         )
 
@@ -186,7 +173,7 @@ def test_summarize_visual_delta_keeps_all_vlm_facts_generated():
     ]
 
 
-def test_summarize_visual_delta_requires_visible_change_summary():
+def test_summarize_visual_delta_accepts_fact_only_response():
     request = VisualDeltaRequest(
         goal="Add one item to the cart.",
         action=BrowserAction("click", "button.add", "add_to_cart"),
@@ -199,18 +186,16 @@ def test_summarize_visual_delta_requires_visible_change_summary():
         return (
             '{"candidate_added_facts":["cart_has_items"],'
             '"candidate_removed_facts":[],'
-            '"evidence":["cart badge changed"],'
             '"confidence":0.6}'
         )
 
     result = summarize_visual_delta(request, provider=provider)
 
-    assert result.trace.status == "failed"
-    assert result.trace.error_type == "missing_visual_change_summary"
-    assert result.planning_delta.candidate_added_facts == []
+    assert result.trace.status == "summarized"
+    assert result.planning_delta.candidate_added_facts == ["cart_has_items"]
 
 
-def test_summarize_visual_delta_accepts_object_summary_and_fact_objects():
+def test_summarize_visual_delta_ignores_non_string_fact_objects():
     request = VisualDeltaRequest(
         goal="Add one item to the cart.",
         action=BrowserAction("click", "button.add", "add_to_cart"),
@@ -221,24 +206,18 @@ def test_summarize_visual_delta_accepts_object_summary_and_fact_objects():
 
     def provider(prompt, *, before_screenshot_path, after_screenshot_path):
         return (
-            '{"visible_change_summary":{'
-            '"before":{"cart_count":0},'
-            '"after":{"cart_count":1}},'
-            '"candidate_added_facts":[{"fact_id":"cart_has_items"}],'
-            '"candidate_removed_facts":[],'
-            '"evidence":[{"description":"cart badge changed from 0 to 1"}],'
+            '{"candidate_added_facts":[{"fact_id":"cart_has_items"}],'
+            '"candidate_removed_facts":[{"fact":"cart_empty"}],'
             '"confidence":"high"}'
         )
 
     result = summarize_visual_delta(request, provider=provider)
 
     assert result.trace.status == "summarized"
-    assert result.trace.visual_change_summary == (
-        '{"after": {"cart_count": 1}, "before": {"cart_count": 0}}'
-    )
-    assert result.planning_delta.candidate_added_facts == ["cart_has_items"]
+    assert result.trace.visual_change_summary is None
+    assert result.planning_delta.candidate_added_facts == []
     assert result.planning_delta.candidate_removed_facts == []
-    assert result.planning_delta.evidence == ["cart badge changed from 0 to 1"]
+    assert result.planning_delta.evidence == []
 
 
 def test_summarize_visual_delta_captures_provider_errors_without_raising():
