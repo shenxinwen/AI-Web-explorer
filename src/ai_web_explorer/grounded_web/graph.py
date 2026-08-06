@@ -76,6 +76,7 @@ class BrowserAction:
     action_label: str | None = None
     canonical_action_name: str | None = None
     naming_provenance: dict[str, Any] | None = None
+    supporting_facts: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -91,6 +92,7 @@ class BrowserAction:
                 if self.naming_provenance is not None
                 else None
             ),
+            "supporting_facts": list(self.supporting_facts),
         }
 
 
@@ -120,6 +122,7 @@ class BusinessAffordance:
     source: str = "vlm"
     confidence: float | None = None
     evidence: str | None = None
+    supporting_facts: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -131,6 +134,7 @@ class BusinessAffordance:
             "source": self.source,
             "confidence": self.confidence,
             "evidence": self.evidence,
+            "supporting_facts": list(self.supporting_facts),
         }
 
 

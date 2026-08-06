@@ -26,11 +26,10 @@ def test_summarize_visual_affordances_maps_provider_json():
             '{"intent":"add_item_to_cart",'
             '"label":"Add to cart",'
             '"target":"button labeled Add to cart on a visible item",'
-            '"expected_effect":"The selected item is added."},'
+            '"supporting_facts":["item_control_visible","cart_control_visible"]},'
             '{"intent":"open_cart",'
             '"label":"Cart",'
-            '"target":"cart link",'
-            '"expected_effect":"The cart surface opens."}'
+            '"target":"cart link"}'
             ']}]}'
         )
 
@@ -46,9 +45,10 @@ def test_summarize_visual_affordances_maps_provider_json():
     assert result.business_affordances[0].target_hint == (
         "button labeled Add to cart on a visible item"
     )
-    assert result.business_affordances[0].expected_change == (
-        "The selected item is added."
-    )
+    assert result.business_affordances[0].supporting_facts == [
+        "item_control_visible",
+        "cart_control_visible",
+    ]
     assert result.business_affordances[0].evidence is None
 
 
@@ -65,7 +65,8 @@ def test_visual_affordance_prompt_keeps_vlm_stateless_about_graph_and_profile():
         payload = json.loads(prompt)
         assert "functional regions" in prompt
         assert "representative business actions" in prompt
-        assert "expected_effect" in prompt
+        assert "supporting_facts" in prompt
+        assert "expected_effect" not in prompt
         assert "profile" not in payload
         assert "current_planning_facts" not in payload
         assert request.goal not in prompt
@@ -107,9 +108,9 @@ def test_visual_affordance_prompt_treats_max_actions_as_upper_bound():
             '{"region_id":"region_1","purpose":"Focused object actions",'
             '"actions":['
             '{"intent":"add_to_cart","target":"Add to cart",'
-            '"expected_effect":"The item is added."},'
+            '"supporting_facts":["item_visible"]},'
             '{"intent":"close_product_details","target":"Close",'
-            '"expected_effect":"The focused surface closes."}'
+            '"supporting_facts":[]}'
             ']}]}'
         )
 
@@ -135,11 +136,11 @@ def test_summarize_visual_affordances_enforces_max_actions_upper_bound():
             '{"region_id":"region_1","purpose":"First region",'
             '"actions":['
             '{"intent":"first_action","target":"First",'
-            '"expected_effect":"First effect"},'
+            '"supporting_facts":["first_visible"]},'
             '{"intent":"second_action","target":"Second",'
-            '"expected_effect":"Second effect"},'
+            '"supporting_facts":["second_visible"]},'
             '{"intent":"third_action","target":"Third",'
-            '"expected_effect":"Third effect"}'
+            '"supporting_facts":["third_visible"]}'
             ']}]}'
         )
 
@@ -166,3 +167,50 @@ def test_summarize_visual_affordances_rejects_non_object_response():
     assert result.trace.status == "failed"
     assert result.trace.error_type == "parse_error"
     assert result.business_affordances == []
+
+
+def test_summarize_visual_affordances_normalizes_supporting_facts():
+    request = VisualAffordanceRequest(
+        goal="Explore visible business capabilities.",
+        profile=ecommerce_checkout_profile(),
+        current_screenshot_path="current.png",
+    )
+
+    def provider(prompt, *, current_screenshot_path):
+        return (
+            '{"regions":[{"actions":[{"intent":"inspect",'
+            '"supporting_facts":[" visible_control ","","   ",'
+            '"visible_control","second_fact","third_fact","fourth_fact",'
+            '"fifth_fact","sixth_fact","seventh_fact","eighth_fact",'
+            '"ninth_fact"]}]}]}'
+        )
+
+    result = summarize_visual_affordances(request, provider=provider)
+
+    assert result.business_affordances[0].supporting_facts == [
+        "visible_control",
+        "second_fact",
+        "third_fact",
+        "fourth_fact",
+        "fifth_fact",
+        "sixth_fact",
+        "seventh_fact",
+        "eighth_fact",
+        "ninth_fact",
+    ][:8]
+
+
+def test_summarize_visual_affordances_keeps_legacy_expected_change_input():
+    request = VisualAffordanceRequest(
+        goal="Explore visible business capabilities.",
+        profile=ecommerce_checkout_profile(),
+        current_screenshot_path="current.png",
+    )
+
+    def provider(prompt, *, current_screenshot_path):
+        return '{"business_affordances":[{"action_name":"legacy_action","expected_change":"legacy"}]}'
+
+    result = summarize_visual_affordances(request, provider=provider)
+
+    assert result.business_affordances[0].action_name == "legacy_action"
+    assert result.business_affordances[0].expected_change == "legacy"

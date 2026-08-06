@@ -62,8 +62,9 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
             "mainly focused on one object, form, dialog, detail view, or "
             "workflow, use single_surface and do not force multiple regions. "
             "An action must be directly executable, have a clear business "
-            "meaning, have a visible target, and have an expected visible "
-            "effect. Do not include hidden, disabled, speculative, or low-level "
+            "meaning, and have a visible target. For each action, list only "
+            "short, stable snake_case observation fact IDs that support why it "
+            "is executable. Do not include hidden, disabled, speculative, or low-level "
             "interaction steps. Do not infer actions from common website patterns "
             "or expected workflows. If multiple controls have the same purpose "
             "and expected effect, select one representative action. Keep "
@@ -84,7 +85,9 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
                             "intent": "snake_case business action name",
                             "label": "visible action label or description",
                             "target": "visible action target",
-                            "expected_effect": "expected visible change",
+                            "supporting_facts": [
+                                "short_stable_snake_case_fact_id"
+                            ],
                         }
                     ],
                 }
@@ -136,6 +139,19 @@ def _relevance(value: Any) -> str:
     return "unknown"
 
 
+def _supporting_fact_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    facts: list[str] = []
+    for item in value:
+        text = str(item).strip() if item is not None else ""
+        if text and text not in facts:
+            facts.append(text)
+        if len(facts) >= 8:
+            break
+    return facts
+
+
 def _affordances_from_response(
     parsed: dict[str, Any],
     *,
@@ -177,6 +193,9 @@ def _affordances_from_response(
                 source="vlm",
                 confidence=_confidence(item.get("confidence")),
                 evidence=_clean_text(item.get("evidence")),
+                supporting_facts=_supporting_fact_list(
+                    item.get("supporting_facts")
+                ),
             )
         )
         if len(affordances) >= max_actions:
