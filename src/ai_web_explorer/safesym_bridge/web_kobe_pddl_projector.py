@@ -240,8 +240,6 @@ def _business_transition_from_dict(
         relevance=str(data.get("relevance", "unknown")),
         meaningful_change=meaningful_change,
         judge_source=str(data.get("judge_source", "vlm")),
-        summary=data.get("summary"),
-        evidence=list(data.get("evidence", [])),
         confidence=confidence,
     )
 

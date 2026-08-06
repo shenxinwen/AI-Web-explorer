@@ -41,7 +41,7 @@ def test_summarize_visual_delta_maps_provider_json_to_candidate_planning_delta()
     assert result.planning_delta.candidate_added_facts == ["cart_has_items"]
     assert result.planning_delta.verified_added_facts == []
     assert result.trace.status == "summarized"
-    assert result.trace.visual_change_summary is None
+    assert "visual_change_summary" not in result.trace.to_dict()
 
 
 def test_summarize_visual_delta_maps_business_transition_fields():
@@ -78,8 +78,9 @@ def test_summarize_visual_delta_maps_business_transition_fields():
     assert result.business_transition.relevance == "core"
     assert result.business_transition.meaningful_change is True
     assert result.business_transition.judge_source == "vlm"
-    assert result.business_transition.summary is None
-    assert result.business_transition.evidence == []
+    transition_data = result.business_transition.to_dict()
+    assert "summary" not in transition_data
+    assert "evidence" not in transition_data
     assert result.business_transition.confidence == 0.9
 
 
@@ -214,7 +215,6 @@ def test_summarize_visual_delta_ignores_non_string_fact_objects():
     result = summarize_visual_delta(request, provider=provider)
 
     assert result.trace.status == "summarized"
-    assert result.trace.visual_change_summary is None
     assert result.planning_delta.candidate_added_facts == []
     assert result.planning_delta.candidate_removed_facts == []
     assert result.planning_delta.evidence == []

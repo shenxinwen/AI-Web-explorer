@@ -43,7 +43,6 @@ from ai_web_explorer.grounded_web.semantic_naming import (
     SemanticNamingProvider,
     SemanticNamingRequest,
     apply_semantic_naming,
-    apply_transition_naming,
 )
 from ai_web_explorer.grounded_web.typed_delta import (
     observed_deltas_from_typed,
@@ -487,19 +486,6 @@ class WebKobeExplorer:
             visual_planning_delta = visual_result.planning_delta
             business_transition = visual_result.business_transition
             execution_metadata["visual_delta_trace"] = visual_result.trace.to_dict()
-            if visual_result.trace.visual_change_summary:
-                execution_metadata["visual_change_summary"] = (
-                    visual_result.trace.visual_change_summary
-                )
-                if self.semantic_naming_provider is not None:
-                    selected = apply_transition_naming(
-                        action=selected,
-                        goal=self.goal,
-                        visual_change_summary=(
-                            visual_result.trace.visual_change_summary
-                        ),
-                        provider=self.semantic_naming_provider,
-                    )
         planning_delta = _merge_planning_deltas(
             structured_planning_delta,
             visual_planning_delta,
@@ -527,7 +513,6 @@ class WebKobeExplorer:
             after=after,
             after_interactables=after_interactables,
             planning_transition=planning_transition,
-            visual_summary=execution_metadata.get("visual_change_summary"),
         )
         if target_match is not None:
             execution_metadata["target_state_match"] = {
@@ -557,7 +542,6 @@ class WebKobeExplorer:
             target_id=target_id,
             after=after,
             after_interactables=after_interactables,
-            visual_summary=execution_metadata.get("visual_change_summary"),
             active_planning_facts=(
                 planning_transition.post_facts
                 if planning_transition is not None
@@ -651,7 +635,6 @@ class WebKobeExplorer:
         after: StateSnapshot,
         after_interactables: list[dict[str, Any]],
         planning_transition: PlanningTransition | None,
-        visual_summary: str | None,
     ) -> tuple[WebKobeNode, StateMatch | None]:
         if (
             not self.enable_exploration_memory
@@ -664,7 +647,6 @@ class WebKobeExplorer:
             snapshot=after,
             interactables=after_interactables,
             active_planning_facts=planning_transition.post_facts,
-            visual_summary=visual_summary,
         )
         target_match = find_best_state_match(
             target_summary,
@@ -963,7 +945,6 @@ class WebKobeExplorer:
         target_id: str,
         after: StateSnapshot,
         after_interactables: list[dict[str, Any]],
-        visual_summary: str | None,
         active_planning_facts: list[str],
     ) -> None:
         if not self.enable_exploration_memory or self.state_embedding_provider is None:
@@ -972,7 +953,6 @@ class WebKobeExplorer:
             snapshot=after,
             interactables=after_interactables,
             active_planning_facts=active_planning_facts,
-            visual_summary=visual_summary,
         )
         target_embedding = self.state_embedding_provider(target_summary.text)
         self.state_embedding_records = [

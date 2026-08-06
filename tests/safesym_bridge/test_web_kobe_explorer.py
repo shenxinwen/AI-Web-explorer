@@ -1504,17 +1504,15 @@ async def test_explore_one_step_records_visual_delta_candidates_without_verifyin
         "cart_has_items",
     ]
     assert edge.planning_delta.verified_added_facts == ["cart_has_items"]
-    assert (
-        edge.execution_trace.metadata["visual_change_summary"]
-        == "Final confirmation control appears."
-    )
+    assert "visual_change_summary" not in edge.execution_trace.metadata
     assert edge.execution_trace.metadata["visual_delta_trace"]["status"] == "summarized"
     assert edge.business_transition is not None
     assert edge.business_transition.action_name == "prepare_order_confirmation"
     assert edge.business_transition.relevance == "core"
     assert edge.business_transition.meaningful_change is True
     assert edge.business_transition.judge_source == "vlm"
-    assert edge.business_transition.summary == "Final confirmation control appears."
+    assert "summary" not in edge.business_transition.to_dict()
+    assert "evidence" not in edge.business_transition.to_dict()
 
 
 class TypedFactsAdapter(FakeAdapter):
@@ -1679,7 +1677,7 @@ async def test_explore_one_step_uses_business_affordance_naming():
 
 
 @pytest.mark.anyio
-async def test_explore_one_step_applies_transition_naming_from_visual_summary():
+async def test_explore_one_step_does_not_apply_transition_naming_from_visual_summary():
     adapter = ScreenshotAdapter()
     seen_requests = []
 
@@ -1693,11 +1691,8 @@ async def test_explore_one_step_applies_transition_naming_from_visual_summary():
         if current_screenshot_path is not None:
             return _business_affordance_response("add_to_cart_product")
         return (
-            '{"visible_change_summary":"The page changed from a sign-in form '
-            'to an account dashboard.",'
-            '"candidate_added_facts":[],'
+            '{"candidate_added_facts":[],'
             '"candidate_removed_facts":[],'
-            '"evidence":[],'
             '"confidence":0.7}'
         )
 
@@ -1726,19 +1721,11 @@ async def test_explore_one_step_applies_transition_naming_from_visual_summary():
     transition_requests = [
         request for request in seen_requests if request.naming_task == "transition"
     ]
-    assert len(transition_requests) == 1
-    assert (
-        transition_requests[0].visual_change_summary
-        == "The page changed from a sign-in form to an account dashboard."
-    )
+    assert transition_requests == []
     edge = graph.edges[0]
     assert edge.action.semantic_id == "add_to_cart_product"
-    assert edge.action.action_label == "Log in"
-    assert edge.action.canonical_action_name == "log_in"
-    assert edge.action.naming_provenance == {
-        "source": "llm_transition_naming",
-        "confidence": 0.9,
-    }
+    assert edge.action.action_label == "Add To Cart Product"
+    assert edge.action.canonical_action_name == "add_to_cart_product"
 
 
 class RevisitMemoryAdapter(RepeatedStateAdapter):
@@ -1849,7 +1836,6 @@ def test_target_matching_reuses_existing_business_state_node():
         after=after,
         after_interactables=[],
         planning_transition=PlanningTransition(post_facts=["cart_has_items"]),
-        visual_summary="Cart page lists selected products.",
     )
 
     assert match is not None

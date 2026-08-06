@@ -32,7 +32,6 @@ class VisualDeltaTrace:
     raw_response: str
     llm_response: dict[str, Any] | None
     status: str
-    visual_change_summary: str | None = None
     error_type: str | None = None
     error_message: str | None = None
 
@@ -44,7 +43,6 @@ class VisualDeltaTrace:
                 dict(self.llm_response) if self.llm_response is not None else None
             ),
             "status": self.status,
-            "visual_change_summary": self.visual_change_summary,
             "error_type": self.error_type,
             "error_message": self.error_message,
         }
@@ -96,7 +94,6 @@ def _trace(
     raw_response: str = "",
     llm_response: dict[str, Any] | None = None,
     status: str,
-    visual_change_summary: str | None = None,
     error_type: str | None = None,
     error_message: str | None = None,
 ) -> VisualDeltaTrace:
@@ -105,7 +102,6 @@ def _trace(
         raw_response=raw_response,
         llm_response=llm_response,
         status=status,
-        visual_change_summary=visual_change_summary,
         error_type=error_type,
         error_message=error_message,
     )
@@ -115,15 +111,6 @@ def _string_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value]
-
-
-def _summary_text(value: Any) -> str | None:
-    if isinstance(value, str):
-        text = value.strip()
-        return text or None
-    if isinstance(value, (dict, list)):
-        return json.dumps(value, ensure_ascii=False, sort_keys=True)
-    return None
 
 
 def _fact_id_list(value: Any) -> list[str]:
@@ -140,20 +127,6 @@ def _fact_id_list(value: Any) -> list[str]:
         if len(facts) >= 8:
             break
     return facts
-
-
-def _evidence_list(value: Any) -> list[str]:
-    if not isinstance(value, list):
-        return []
-    evidence: list[str] = []
-    for item in value:
-        if isinstance(item, dict) and item.get("description"):
-            evidence.append(str(item["description"]))
-        elif isinstance(item, (dict, list)):
-            evidence.append(json.dumps(item, ensure_ascii=False, sort_keys=True))
-        else:
-            evidence.append(str(item))
-    return evidence
 
 
 def _meaningful_change(value: Any) -> bool | None:
@@ -216,9 +189,6 @@ def _business_relevance(value: Any) -> str:
 
 def _business_transition_from_response(
     parsed: dict[str, Any],
-    *,
-    visual_change_summary: str | None,
-    evidence: list[str],
 ) -> BusinessTransition | None:
     action_name = parsed.get("business_action_name")
     relevance = parsed.get("business_relevance")
@@ -236,9 +206,6 @@ def _business_transition_from_response(
         relevance=_business_relevance(relevance),
         meaningful_change=_meaningful_change(meaningful_change),
         judge_source="vlm",
-        summary=_summary_text(parsed.get("business_change_summary"))
-        or visual_change_summary,
-        evidence=evidence,
         confidence=confidence,
     )
 
@@ -291,13 +258,10 @@ def summarize_visual_delta(
             ),
         )
 
-    visual_change_summary = _summary_text(parsed.get("visible_change_summary"))
-
     candidate_added = _fact_id_list(parsed.get("candidate_added_facts"))
     candidate_removed = _fact_id_list(parsed.get("candidate_removed_facts"))
     generated_facts = list(dict.fromkeys(candidate_added + candidate_removed))
 
-    evidence = _evidence_list(parsed.get("evidence"))
     delta = PlanningDelta(
         candidate_added_facts=candidate_added,
         candidate_removed_facts=candidate_removed,
@@ -305,15 +269,10 @@ def summarize_visual_delta(
         verified_removed_facts=[],
         profile_fact_ids=[],
         generated_fact_ids=generated_facts,
-        evidence=evidence,
         confidence=parsed.get("confidence"),
         uncertainty_reason="visual delta has not been structurally verified",
     )
-    business_transition = _business_transition_from_response(
-        parsed,
-        visual_change_summary=visual_change_summary,
-        evidence=evidence,
-    )
+    business_transition = _business_transition_from_response(parsed)
     return VisualDeltaResult(
         planning_delta=delta,
         trace=_trace(
@@ -321,7 +280,6 @@ def summarize_visual_delta(
             raw_response=raw_response,
             llm_response=parsed,
             status="summarized",
-            visual_change_summary=visual_change_summary,
         ),
         business_transition=business_transition,
     )

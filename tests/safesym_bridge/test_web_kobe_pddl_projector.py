@@ -1632,8 +1632,6 @@ def test_load_web_kobe_graph_json_preserves_business_transition(tmp_path):
                     relevance="core",
                     meaningful_change=True,
                     judge_source="vlm",
-                    summary="Checkout form became visible.",
-                    evidence=["checkout form became visible"],
                     confidence=0.8,
                 ),
             )
@@ -1649,12 +1647,8 @@ def test_load_web_kobe_graph_json_preserves_business_transition(tmp_path):
     assert loaded.edges[0].business_transition.relevance == "core"
     assert loaded.edges[0].business_transition.meaningful_change is True
     assert loaded.edges[0].business_transition.judge_source == "vlm"
-    assert (
-        loaded.edges[0].business_transition.summary == "Checkout form became visible."
-    )
-    assert loaded.edges[0].business_transition.evidence == [
-        "checkout form became visible"
-    ]
+    assert "summary" not in loaded.edges[0].business_transition.to_dict()
+    assert "evidence" not in loaded.edges[0].business_transition.to_dict()
     assert loaded.edges[0].business_transition.confidence == 0.8
 
 

@@ -140,8 +140,6 @@ class BusinessTransition:
     relevance: str = "unknown"
     meaningful_change: bool | None = None
     judge_source: str = "vlm"
-    summary: str | None = None
-    evidence: list[str] = field(default_factory=list)
     confidence: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -150,8 +148,6 @@ class BusinessTransition:
             "relevance": self.relevance,
             "meaningful_change": self.meaningful_change,
             "judge_source": self.judge_source,
-            "summary": self.summary,
-            "evidence": list(self.evidence),
             "confidence": self.confidence,
         }
 

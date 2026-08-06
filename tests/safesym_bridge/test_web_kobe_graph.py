@@ -168,8 +168,6 @@ def test_web_kobe_graph_serializes_node_edge_and_evidence():
             relevance="core",
             meaningful_change=True,
             judge_source="vlm",
-            summary="The login form was submitted and shopping controls appeared.",
-            evidence=["shopping controls replaced the login controls"],
             confidence=0.95,
         ),
         visit_count=1,
@@ -238,7 +236,5 @@ def test_web_kobe_graph_serializes_node_edge_and_evidence():
         "relevance": "core",
         "meaningful_change": True,
         "judge_source": "vlm",
-        "summary": "The login form was submitted and shopping controls appeared.",
-        "evidence": ["shopping controls replaced the login controls"],
         "confidence": 0.95,
     }
