@@ -686,6 +686,9 @@ def _preconditions_for_edge(
     source_node=None,
 ) -> list[str]:
     preconditions = [f"({location_predicates[edge.source_node_id]})"]
+    preconditions.extend(
+        f"({_predicate(fact)})" for fact in edge.action.supporting_facts
+    )
     if edge.planning_transition is not None:
         preconditions.extend(
             f"({_predicate(fact)})"
@@ -847,6 +850,9 @@ def _compile_domain(
     nodes_by_id = _nodes_by_id(graph)
     for edge in graph.edges:
         if _is_projectable_edge(edge):
+            predicate_names.update(
+                _predicate(fact) for fact in edge.action.supporting_facts
+            )
             predicate_names.update(
                 _effect_predicates_for_edge(
                     edge,

@@ -70,6 +70,56 @@ def _node(
     )
 
 
+def test_compile_web_kobe_graph_to_pddl_projects_action_supporting_facts_as_preconditions():
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="listing",
+        total_steps_completed=1,
+        nodes=[
+            _node("listing", "listing", {}),
+            _node("listing_after", "listing", {}),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="listing",
+                target_node_id="listing_after",
+                instruction="search items",
+                action=BrowserAction(
+                    "business_intent",
+                    None,
+                    "search_items",
+                    supporting_facts=[
+                        "search_input_visible",
+                        "result_collection_visible",
+                    ],
+                ),
+                capability=None,
+                target_observation="listing page",
+                observed_delta=[],
+                schema_delta={},
+                execution_trace=ExecutionTrace(
+                    "business_intent",
+                    None,
+                    "search_items",
+                    {},
+                    "listing",
+                    "listing_after",
+                    True,
+                ),
+            )
+        ],
+    )
+
+    artifacts = compile_web_kobe_graph_to_pddl(graph, goal_node_id="listing_after")
+
+    assert (
+        ":precondition (and (at_listing) (search_input_visible) "
+        "(result_collection_visible))"
+    ) in artifacts.domain
+    assert "(search_input_visible)" not in artifacts.domain.split(":effect", 1)[1]
+    assert "(result_collection_visible)" not in artifacts.problem
+
+
 def test_compile_web_kobe_graph_to_pddl_can_include_observed_delta_when_requested():
     graph = WebKobeGraph(
         app="example",
