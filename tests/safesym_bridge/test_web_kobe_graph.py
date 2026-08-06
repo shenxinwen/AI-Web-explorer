@@ -95,6 +95,7 @@ def test_web_kobe_graph_serializes_node_edge_and_evidence():
                 expected_change="Shopping controls replace the login form.",
                 evidence="A login form and submit button are visible.",
                 confidence=0.9,
+                supporting_facts=["login_form_visible"],
             )
         ],
         capabilities=[capability],
@@ -120,6 +121,7 @@ def test_web_kobe_graph_serializes_node_edge_and_evidence():
             canonical_action_name="login_submit",
             naming_provenance={"source": "unit_test"},
             input_values={"username": "standard_user", "password": "secret_sauce"},
+            supporting_facts=["login_form_visible"],
         ),
         capability=capability,
         target_observation="home page",
@@ -202,8 +204,12 @@ def test_web_kobe_graph_serializes_node_edge_and_evidence():
         "generated_fact_ids": [],
         "evidence": ["unit test planning state"],
     }
+    assert "login_form_visible" not in data["nodes"][0]["planning_state"][
+        "active_facts"
+    ]
     assert data["edges"][0]["action"]["action_label"] == "Submit login form"
     assert data["edges"][0]["action"]["canonical_action_name"] == "login_submit"
+    assert data["edges"][0]["action"]["supporting_facts"] == ["login_form_visible"]
     assert data["edges"][0]["action"]["naming_provenance"] == {"source": "unit_test"}
     assert data["nodes"][0]["action_targets"][0]["target_type"] == "form"
     assert data["nodes"][0]["business_affordances"] == [
@@ -216,6 +222,7 @@ def test_web_kobe_graph_serializes_node_edge_and_evidence():
             "source": "vlm",
             "confidence": 0.9,
             "evidence": "A login form and submit button are visible.",
+            "supporting_facts": ["login_form_visible"],
         }
     ]
     assert data["nodes"][0]["capabilities"][0]["capability_id"] == "submit_login_form"

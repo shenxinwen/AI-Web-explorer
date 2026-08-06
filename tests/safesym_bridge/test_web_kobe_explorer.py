@@ -3,7 +3,10 @@ import pytest
 from ai_web_explorer.grounded_web.capability_graph import ExecutionTrace, PageFrame
 from ai_web_explorer.grounded_web.exploration_index import ExplorationContext
 from ai_web_explorer.grounded_web.models import StateSnapshot
-from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
+from ai_web_explorer.grounded_web.explorer import (
+    WebKobeExplorer,
+    _business_action_from_affordance,
+)
 from ai_web_explorer.grounded_web.graph import (
     BusinessAffordance,
     BrowserAction,
@@ -895,6 +898,22 @@ def test_business_affordance_selection_does_not_downrank_action_completed_elsewh
 
     assert selected is not None
     assert selected.semantic_id == "add_item_to_cart"
+
+
+def test_business_action_snapshots_supporting_facts_without_expected_effect_text():
+    action = _business_action_from_affordance(
+        BusinessAffordance(
+            action_name="search_items",
+            label="Search",
+            target_hint="search input",
+            expected_change="Results may change.",
+            supporting_facts=["search_input_visible"],
+        )
+    )
+
+    assert action.supporting_facts == ["search_input_visible"]
+    assert "search input" in action.description
+    assert "Expected visible change:" not in action.description
 
 
 def test_business_affordance_selection_returns_none_when_local_frontier_exhausted():

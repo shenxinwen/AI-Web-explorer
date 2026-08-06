@@ -97,8 +97,6 @@ def _business_action_from_affordance(affordance: BusinessAffordance) -> BrowserA
     ]
     if affordance.target_hint:
         details.append(f"Target hint: {affordance.target_hint}.")
-    if affordance.expected_change:
-        details.append(f"Expected visible change: {affordance.expected_change}.")
     if affordance.evidence:
         details.append(f"Evidence: {affordance.evidence}.")
     return BrowserAction(
@@ -115,6 +113,7 @@ def _business_action_from_affordance(affordance: BusinessAffordance) -> BrowserA
             "affordance_source": affordance.source,
             "confidence": affordance.confidence,
         },
+        supporting_facts=list(affordance.supporting_facts),
     )
 
 
