@@ -17,6 +17,23 @@
 - ...
 ```
 
+## 2026-08-06 - 分离 VLM 观察事实与本地 profile facts
+
+更改：
+- visual delta VLM prompt 不再携带 `BusinessFlowProfile` 或探索目标，只接收动作和 before/after 观察上下文。
+- VLM 返回的 `candidate_added_facts` / `candidate_removed_facts` 默认全部记录为 `generated_fact_ids`，不再因为名称与 profile fact 相同而自动归类。
+- `profile_fact_ids` 只接受本地结构化 verifier 明确确认的结果；`WebKobeGraphManager` 不再根据 profile 词表和 fact 名称做隐式推断。
+
+原因：
+- profile facts 不是网页状态全集，直接交给 VLM 会让模型把预设词表当成当前页面事实或典型流程提示。
+- VLM 观察到的事实可能是 profile 未覆盖的新状态，也可能只是视觉层面的局部变化；名称相同不等于已经满足本地事实定义。
+- 需要把“VLM 观察到什么”和“本地系统确认了什么”分开，保留事实来源，方便 graph/PDDL 审查。
+
+影响：
+- graph 仍然可以记录更开放的 VLM generated facts，不会因为 profile 词表不完整而丢失状态信息。
+- profile facts 的稳定入口变成本地 verifier；后续若要把 generated fact 晋升为 profile fact，必须增加显式规则或审查流程。
+- 现有 `VisualDeltaRequest.profile` 和 graph manager 的兼容参数暂时保留，但不再作为 VLM 输入或自动匹配依据。
+
 ## 2026-08-02 - 将探索策略收束为 frontier / DFS
 
 更改：

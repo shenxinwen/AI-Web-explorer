@@ -72,10 +72,6 @@ def _merge_business_affordances(existing, incoming):
     return list(incoming)
 
 
-def _profile_fact_ids(profile: BusinessFlowProfile) -> set[str]:
-    return {fact.fact_id for fact in profile.planning_facts}
-
-
 def _unique_facts(*fact_lists: list[str]) -> list[str]:
     facts: list[str] = []
     for fact_list in fact_lists:
@@ -242,9 +238,6 @@ class WebKobeGraphManager:
             return
         source = self._nodes[edge.source_node_id]
         target = self._nodes[edge.target_node_id]
-        known_profile_facts = (
-            _profile_fact_ids(profile) if profile is not None else set()
-        )
         source_profile_facts = (
             list(source.planning_state.profile_fact_ids)
             if source.planning_state is not None
@@ -266,15 +259,11 @@ class WebKobeGraphManager:
             else []
         )
         post_facts = list(edge.planning_transition.post_facts)
-        inferred_profile_facts = [
-            fact for fact in post_facts if fact in known_profile_facts
-        ]
         profile_fact_ids = [
             fact
             for fact in _unique_facts(
                 source_profile_facts,
                 delta_profile_facts,
-                inferred_profile_facts,
             )
             if fact in post_facts
         ]

@@ -89,7 +89,7 @@ Stagehand 属于这一层。它可以看页面、生成候选、执行动作，�
 - 生成 `BusinessTransition`、`PlanningDelta` 和 evidence；
 - 提供轻量结构化 verifier。
 
-profile facts 位于这一层。它们的定位是“优先观察目标 + PDDL 候选谓词词表”，不是网页所有可能状态的全集。VLM 可以补充 profile 未覆盖的 generated facts。具体网站类型可以通过 `PlanningFactSpec.state_label_hint` 提供业务节点命名建议。
+profile facts 位于这一层。它们的定位是“优先观察目标 + PDDL 候选谓词词表”，不是网页所有可能状态的全集。visual delta VLM 不接收 profile facts；它观察到的动作后事实默认是 generated facts，只有本地结构化 verifier 明确确认的事实才归入 profile facts。具体网站类型可以通过 `PlanningFactSpec.state_label_hint` 提供业务节点命名建议。
 
 主要函数/类：
 
@@ -192,7 +192,7 @@ embedding memory 只辅助定位和避免重复，不直接进入 PDDL。
 - 运行 PDDL readiness smoke；
 - 运行 SafeSym parser、safety injection、planner smoke。
 
-这一层应保持确定性。它应该消费 graph 中已经记录的语义，不应该直接调用 LLM/VLM。默认情况下，它只投影 profile facts；generated facts 留在 graph 中供审查、晋升或显式投影策略使用。
+这一层应保持确定性。它应该消费 graph 中已经记录的语义，不应该直接调用 LLM/VLM。当前默认允许投影 graph 中的 generated facts；是否将其长期视为稳定 planner-facing 语义，仍由后续审查和晋升策略决定。
 
 主要函数/类：
 

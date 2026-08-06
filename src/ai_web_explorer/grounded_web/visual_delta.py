@@ -56,25 +56,20 @@ class VisualDeltaResult:
     business_transition: BusinessTransition | None = None
 
 
-def _fact_ids(profile: BusinessFlowProfile) -> set[str]:
-    return {fact.fact_id for fact in profile.planning_facts}
-
-
 def _prompt_for_request(request: VisualDeltaRequest) -> str:
     payload = {
         "instruction": (
             "Compare the before and after screenshots for the executed web "
-            "action. Return JSON only. Prefer candidate planning facts from "
-            "the provided profile when they fit, but you may propose new "
-            "candidate facts for meaningful business states not covered by "
-            "the profile. Do not mark anything verified. The "
+            "action and report only facts visibly observed after the action "
+            "or visibly removed by the action. Return JSON only. Facts may "
+            "describe any meaningful business state; do not force them into "
+            "a predefined vocabulary. Do not predict effects, infer hidden "
+            "state, or mark anything verified. The "
             "business_relevance field must be exactly one enum value from "
             "business_relevance_enum, not an explanation sentence."
         ),
         "business_relevance_enum": ["core", "supporting", "low_value", "unknown"],
-        "goal": request.goal,
         "action": request.action.to_dict(),
-        "profile": request.profile.to_dict(),
         "before_signature": dict(request.before_signature or {}),
         "after_signature": dict(request.after_signature or {}),
         "required_json_fields": [
@@ -292,7 +287,6 @@ def summarize_visual_delta(
             ),
         )
 
-    allowed = _fact_ids(request.profile)
     visual_change_summary = _summary_text(parsed.get("visible_change_summary"))
     if visual_change_summary is None:
         return VisualDeltaResult(
@@ -309,12 +303,7 @@ def summarize_visual_delta(
 
     candidate_added = _fact_id_list(parsed.get("candidate_added_facts"))
     candidate_removed = _fact_id_list(parsed.get("candidate_removed_facts"))
-    profile_facts = [
-        fact for fact in candidate_added + candidate_removed if fact in allowed
-    ]
-    generated_facts = [
-        fact for fact in candidate_added + candidate_removed if fact not in allowed
-    ]
+    generated_facts = list(dict.fromkeys(candidate_added + candidate_removed))
 
     evidence = _evidence_list(parsed.get("evidence"))
     delta = PlanningDelta(
@@ -322,8 +311,8 @@ def summarize_visual_delta(
         candidate_removed_facts=candidate_removed,
         verified_added_facts=[],
         verified_removed_facts=[],
-        profile_fact_ids=list(dict.fromkeys(profile_facts)),
-        generated_fact_ids=list(dict.fromkeys(generated_facts)),
+        profile_fact_ids=[],
+        generated_fact_ids=generated_facts,
         evidence=evidence,
         confidence=parsed.get("confidence"),
         uncertainty_reason="visual delta has not been structurally verified",

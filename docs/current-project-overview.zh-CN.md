@@ -60,9 +60,9 @@ source 定位：正常探索默认信任当前节点指针；embedding source ma
 frontier / DFS 探索策略：最小 business-affordance selector/backtrack 行为已实现；graph meta 已输出 frontier_metrics
 连续无进展终止：已实现；failed/no-op 不再单次终止，达到阈值才停止
 Stagehand thinking/tool_choice 异常：已定义为非致命异常；无变化时记为 no-op 而不是 failed edge
-generated facts 记录：graph 层已接住，PDDL 默认不投影
+generated facts 记录：graph 层已接住，当前 PDDL 默认允许投影
 自由探索策略：尚未稳定
-profile fact verifier：尚未真正建立
+profile fact verifier：已接入最小确定性 verifier，只负责从本地结构化签名确认 profile facts
 PDDL 语义质量：可消费，但还不够稳定和可读
 业务节点命名：materialized business node 已能从 profile hints / facts / action 推导 label
 ```
@@ -95,7 +95,9 @@ profile facts 不是网页状态全集。它们的新定位是：
 PDDL 候选谓词词表 + 优先观察目标 + 跨网站语义对齐锚点
 ```
 
-Graph 层现在允许记录 profile facts 和 generated facts；PDDL 层默认仍保守消费 profile facts。后续需要设计 generated facts 的晋升和可选投影策略。
+Graph 层现在允许记录 profile facts 和 generated facts；PDDL projector 当前默认允许消费两类事实。后续需要设计 generated facts 的晋升和可选投影策略。
+
+当前事实来源边界已经收紧：visual delta VLM 不接收 profile facts，也不负责把返回事实匹配到 profile。VLM 在动作执行后观察到的事实默认记录为 generated facts；只有本地结构化 verifier 明确确认的事实，才进入 `profile_fact_ids`。Graph manager 不再因为事实名称恰好出现在 profile 中而自动晋升。
 
 ### 3. 探索控制权必须留在本地系统
 
@@ -124,7 +126,7 @@ current / target state summary
   -> 对重复或低价值动作降权或跳过
 ```
 
-Profile facts 可以帮助对齐 planner-facing 语义，但不是唯一探索边界。Graph 可以记录 generated facts；默认 PDDL 仍只投影 profile facts，直到后续有晋升或显式投影策略。
+Profile facts 可以帮助对齐 planner-facing 语义，但不是唯一探索边界。Graph 可以记录 generated facts；当前 PDDL 也允许投影它们，但长期稳定性仍需要后续晋升或审查策略保证。
 
 ### 4. Stagehand 是操作层，不是状态真相层
 
@@ -188,7 +190,7 @@ edge.planning_transition 中属于 profile facts 的 pre/added/removed facts
 
 ### P0: generated facts 还没有晋升策略
 
-当前 graph 已能记录 generated facts，并在 `PlanningState` 中保留 `profile_fact_ids` / `generated_fact_ids` 来源信息。PDDL projector 默认只投影 profile facts，避免未审核事实污染 SafeSym。
+当前 graph 已能记录 generated facts，并在 `PlanningState` 中保留 `profile_fact_ids` / `generated_fact_ids` 来源信息。当前 PDDL projector 默认允许投影 generated facts；后续仍需明确哪些事实经过审查后可以成为更稳定的 planner-facing 语义。
 
 剩余问题是：generated facts 何时可以晋升为 planner-facing facts、是否允许某轮实验显式投影、以及如何通过 verifier 确认它们，目前还没有策略。
 
@@ -200,7 +202,7 @@ SafeSym 可以结构性消费当前产物，但 PDDL 的语义质量还不稳定
 - materialized business node 已开始用 profile-provided hints / facts / action 推导 label，但非业务节点和重复 label 仍可能不够理想；
 - action precondition 依赖 source node 定位，需要继续用实验确认；
 - profile facts 不完整时，PDDL 会退化为 location path；
-- generated facts 默认不进入 PDDL，可能丢失真实业务状态，需要后续晋升/投影策略弥补。
+- generated facts 虽然可以进入 PDDL，但来源稳定性和可读性仍不足，需要后续晋升/投影策略弥补。
 
 ### P1: 探索还没有真正形成 frontier
 

@@ -191,6 +191,53 @@ def test_propagate_planning_state_records_profile_and_generated_facts():
     ]
 
 
+def test_propagate_planning_state_does_not_infer_profile_from_fact_name():
+    manager = WebKobeGraphManager(app="example")
+    manager.identify_or_add_node(_node("products", {}, interactables=[]))
+    manager.identify_or_add_node(_node("products_after", {}, interactables=[]))
+    edge = WebKobeEdge(
+        source_node_id="products",
+        target_node_id="products_after",
+        instruction="observe product details",
+        action=BrowserAction("business_intent", None, "view_product_details"),
+        capability=None,
+        target_observation="product details",
+        observed_delta=[],
+        schema_delta={},
+        execution_trace=ExecutionTrace(
+            "business_intent",
+            None,
+            "view_product_details",
+            {},
+            "products",
+            "products_after",
+            True,
+        ),
+        planning_delta=PlanningDelta(
+            candidate_added_facts=["product_details_visible"],
+            generated_fact_ids=["product_details_visible"],
+        ),
+        planning_transition=PlanningTransition(
+            pre_facts=[],
+            added_facts=["product_details_visible"],
+            removed_facts=[],
+            post_facts=["product_details_visible"],
+        ),
+    )
+
+    manager.apply_planning_transition(
+        edge,
+        profile=ecommerce_checkout_profile(),
+    )
+
+    product_details = manager.node_for_id("products_after")
+    assert product_details.planning_state is not None
+    assert product_details.planning_state.profile_fact_ids == []
+    assert product_details.planning_state.generated_fact_ids == [
+        "product_details_visible"
+    ]
+
+
 def test_propagate_planning_state_omits_already_active_added_facts():
     manager = WebKobeGraphManager(app="example")
     manager.identify_or_add_node(_node("products", {}, interactables=[]))
