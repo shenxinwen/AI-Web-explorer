@@ -118,10 +118,8 @@ class BusinessAffordance:
     label: str | None = None
     relevance_hint: str = "unknown"
     target_hint: str | None = None
-    expected_change: str | None = None
     source: str = "vlm"
     confidence: float | None = None
-    evidence: str | None = None
     supporting_facts: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -130,10 +128,8 @@ class BusinessAffordance:
             "label": self.label,
             "relevance_hint": self.relevance_hint,
             "target_hint": self.target_hint,
-            "expected_change": self.expected_change,
             "source": self.source,
             "confidence": self.confidence,
-            "evidence": self.evidence,
             "supporting_facts": list(self.supporting_facts),
         }
 

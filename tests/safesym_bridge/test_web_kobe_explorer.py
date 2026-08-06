@@ -78,7 +78,6 @@ def _default_visual_provider(
     action_name: str = "add_to_cart_product",
     action_label: str = "Add to cart",
     target_hint: str = "Add to cart control",
-    expected_change: str = "A business state changes.",
     added_facts: list[str] | None = None,
     removed_facts: list[str] | None = None,
     meaningful_change: bool = True,
@@ -98,8 +97,6 @@ def _default_visual_provider(
                 f'"label":"{action_label}",'
                 f'"relevance_hint":"{relevance}",'
                 f'"target_hint":"{target_hint}",'
-                f'"expected_change":"{expected_change}",'
-                '"evidence":"The page shows a relevant business control.",'
                 '"confidence":0.9}'
                 "],"
                 '"state_summary":"Business page with actionable controls."}'
@@ -131,8 +128,6 @@ def _business_affordance_response(
         f'"label":"{action_name.replace("_", " ").title()}",'
         f'"relevance_hint":"{relevance}",'
         f'"target_hint":"visible {action_name.replace("_", " ")} control",'
-        '"expected_change":"A business state may change.",'
-        '"evidence":"The page shows a visible business control.",'
         '"confidence":0.9}'
         "],"
         '"state_summary":"Business page with actionable controls."}'
@@ -906,7 +901,6 @@ def test_business_action_snapshots_supporting_facts_without_expected_effect_text
             action_name="search_items",
             label="Search",
             target_hint="search input",
-            expected_change="Results may change.",
             supporting_facts=["search_input_visible"],
         )
     )

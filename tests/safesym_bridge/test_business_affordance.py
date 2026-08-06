@@ -49,7 +49,6 @@ def test_summarize_visual_affordances_maps_provider_json():
         "item_control_visible",
         "cart_control_visible",
     ]
-    assert result.business_affordances[0].evidence is None
 
 
 def test_visual_affordance_prompt_keeps_vlm_stateless_about_graph_and_profile():
@@ -200,7 +199,7 @@ def test_summarize_visual_affordances_normalizes_supporting_facts():
     ][:8]
 
 
-def test_summarize_visual_affordances_keeps_legacy_expected_change_input():
+def test_summarize_visual_affordances_ignores_removed_candidate_fields():
     request = VisualAffordanceRequest(
         goal="Explore visible business capabilities.",
         profile=ecommerce_checkout_profile(),
@@ -212,5 +211,7 @@ def test_summarize_visual_affordances_keeps_legacy_expected_change_input():
 
     result = summarize_visual_affordances(request, provider=provider)
 
-    assert result.business_affordances[0].action_name == "legacy_action"
-    assert result.business_affordances[0].expected_change == "legacy"
+    affordance = result.business_affordances[0]
+    assert affordance.action_name == "legacy_action"
+    assert "expected_change" not in affordance.to_dict()
+    assert "evidence" not in affordance.to_dict()

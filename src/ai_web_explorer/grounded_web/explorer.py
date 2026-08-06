@@ -97,8 +97,6 @@ def _business_action_from_affordance(affordance: BusinessAffordance) -> BrowserA
     ]
     if affordance.target_hint:
         details.append(f"Target hint: {affordance.target_hint}.")
-    if affordance.evidence:
-        details.append(f"Evidence: {affordance.evidence}.")
     return BrowserAction(
         action_kind="business_intent",
         locator=None,

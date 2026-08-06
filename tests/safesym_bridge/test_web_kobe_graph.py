@@ -89,13 +89,11 @@ def test_web_kobe_graph_serializes_node_edge_and_evidence():
         ],
         business_affordances=[
             BusinessAffordance(
-                action_name="submit_login_form",
-                relevance_hint="core",
-                target_hint="button labeled Login",
-                expected_change="Shopping controls replace the login form.",
-                evidence="A login form and submit button are visible.",
-                confidence=0.9,
-                supporting_facts=["login_form_visible"],
+                    action_name="submit_login_form",
+                    relevance_hint="core",
+                    target_hint="button labeled Login",
+                    confidence=0.9,
+                    supporting_facts=["login_form_visible"],
             )
         ],
         capabilities=[capability],
@@ -218,10 +216,8 @@ def test_web_kobe_graph_serializes_node_edge_and_evidence():
             "label": None,
             "relevance_hint": "core",
             "target_hint": "button labeled Login",
-            "expected_change": "Shopping controls replace the login form.",
             "source": "vlm",
             "confidence": 0.9,
-            "evidence": "A login form and submit button are visible.",
             "supporting_facts": ["login_form_visible"],
         }
     ]
