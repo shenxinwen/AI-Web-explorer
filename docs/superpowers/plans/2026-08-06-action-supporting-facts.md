@@ -259,4 +259,3 @@ Confirm the prompt asks for directly executable actions, treats the action limit
 git add src tests
 git commit -m "Verify action-local fact projection contract"
 ```
-
