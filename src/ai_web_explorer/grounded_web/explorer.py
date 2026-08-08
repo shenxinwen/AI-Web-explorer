@@ -454,7 +454,11 @@ class WebKobeExplorer:
                 "blocked_reason": target_match.blocked_reason,
                 "accepted": target_node.node_id == target_match.node_id,
             }
+        known_node_ids = {
+            node.node_id for node in self.manager.to_graph().nodes
+        }
         target_id = self.manager.identify_or_add_node(target_node)
+        node_was_new = target_id not in known_node_ids
         if edge_status == "no_observed_change" and visual_fact_change:
             edge_status = "succeeded_with_observed_change"
         if source_id != target_id and edge_status in {
@@ -500,18 +504,16 @@ class WebKobeExplorer:
         )
         if self.business_profile is not None and edge_status != "failed_execution":
             self.manager.apply_planning_transition(edge)
+        known_edge_ids = {
+            existing_edge.edge_id for existing_edge in self.manager.to_graph().edges
+        }
+        edge_was_new = edge.edge_id not in known_edge_ids
         self.manager.add_edge(edge)
+        graph_changed = node_was_new or edge_was_new
         self.manager.meta["last_step_kind"] = "business_edge"
+        self.manager.meta["last_step_graph_changed"] = graph_changed
         self.manager.meta["last_step_status"] = (
-            "productive"
-            if edge_status
-            in {
-                "verified",
-                "succeeded",
-                "succeeded_with_observed_change",
-                "succeeded_with_navigation",
-            }
-            else "unproductive"
+            "productive" if graph_changed else "unproductive"
         )
         if _should_advance_current_node(
             source_id=source_id,

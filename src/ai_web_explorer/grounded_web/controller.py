@@ -14,16 +14,6 @@ SUCCESS_EDGE_STATUSES = frozenset(
         "no_observed_change",
     }
 )
-PRODUCTIVE_EDGE_STATUSES = frozenset(
-    {
-        "verified",
-        "succeeded",
-        "succeeded_with_observed_change",
-        "succeeded_with_navigation",
-    }
-)
-
-
 class StepExplorer(Protocol):
     async def explore_one_step(self) -> WebKobeGraph: ...
 
@@ -71,15 +61,8 @@ def _summary(
     )
 
 
-def _last_edge_status(graph: WebKobeGraph) -> str | None:
-    if not graph.edges:
-        return None
-    return graph.edges[-1].status
-
-
 def _last_step_is_productive(graph: WebKobeGraph) -> bool:
-    edge_status = _last_edge_status(graph)
-    return edge_status in PRODUCTIVE_EDGE_STATUSES
+    return graph.meta.get("last_step_graph_changed") is True
 
 
 class WebKobeExplorationController:

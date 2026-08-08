@@ -356,25 +356,32 @@ async def test_explore_one_step_preserves_initial_start_node_across_steps():
 
 
 @pytest.mark.anyio
-async def test_explore_one_step_skips_previously_explored_self_loop_action():
+async def test_explore_one_step_marks_repeated_self_loop_edge_unproductive():
     adapter = RepeatedStateAdapter()
-    provider = _default_visual_provider(action_name="first_action")
+    provider = _default_visual_provider(added_facts=[], removed_facts=[])
     explorer = _business_explorer(
         adapter,
         visual_delta_provider=provider,
     )
+    explorer._select_action = lambda **_: BrowserAction(
+        action_kind="business_intent",
+        locator=None,
+        semantic_id="first_action",
+        canonical_action_name="first_action",
+        description="First action",
+    )
 
-    await explorer.explore_one_step()
+    first_graph = await explorer.explore_one_step()
     graph = await explorer.explore_one_step()
 
     assert [action.semantic_id for action in adapter.executed] == [
         "first_action",
         "first_action",
     ]
-    assert [edge.action.semantic_id for edge in graph.edges] == [
-        "first_action",
-        "first_action",
-    ]
+    assert [edge.action.semantic_id for edge in graph.edges] == ["first_action"]
+    assert graph.edges[0].visit_count == 2
+    assert first_graph.meta["last_step_graph_changed"] is True
+    assert graph.meta["last_step_graph_changed"] is False
 
 
 @pytest.mark.anyio

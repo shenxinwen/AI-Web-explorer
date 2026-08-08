@@ -60,13 +60,15 @@ def _graph(
                 status=edge_status,
             )
         )
+    graph_meta = dict(meta or {})
+    graph_meta.setdefault("last_step_graph_changed", completed > 0)
     return WebKobeGraph(
         app="fake",
         start_node_id="state",
         total_steps_completed=completed,
         nodes=[],
         edges=edges,
-        meta=dict(meta or {}),
+        meta=graph_meta,
     )
 
 
@@ -129,6 +131,7 @@ async def test_controller_continues_after_no_observed_change():
                 completed=1,
                 edge_status="no_observed_change",
                 execution_success=True,
+                meta={"last_step_graph_changed": False},
             ),
             _graph(completed=2),
         ]
@@ -202,9 +205,21 @@ async def test_controller_continues_after_single_failed_action():
 async def test_controller_stops_after_consecutive_unproductive_steps():
     explorer = FakeExplorer(
         [
-            _graph(completed=1, edge_status="failed_execution"),
-            _graph(completed=2, edge_status="no_observed_change"),
-            _graph(completed=3, edge_status="failed_execution"),
+            _graph(
+                completed=1,
+                edge_status="failed_execution",
+                meta={"last_step_graph_changed": False},
+            ),
+            _graph(
+                completed=2,
+                edge_status="no_observed_change",
+                meta={"last_step_graph_changed": False},
+            ),
+            _graph(
+                completed=3,
+                edge_status="failed_execution",
+                meta={"last_step_graph_changed": False},
+            ),
             _graph(completed=4),
         ]
     )
@@ -223,6 +238,28 @@ async def test_controller_stops_after_consecutive_unproductive_steps():
     assert result.summary.consecutive_unproductive_steps == 3
     assert result.summary.max_consecutive_unproductive_steps == 3
     assert result.graph.meta["consecutive_unproductive_steps"] == 3
+
+
+@pytest.mark.anyio
+async def test_controller_stops_after_repeated_steps_without_new_graph_information():
+    explorer = FakeExplorer(
+        [
+            _graph(completed=1, meta={"last_step_graph_changed": True}),
+            _graph(completed=2, meta={"last_step_graph_changed": False}),
+            _graph(completed=3, meta={"last_step_graph_changed": False}),
+            _graph(completed=4, meta={"last_step_graph_changed": False}),
+        ]
+    )
+    controller = WebKobeExplorationController(
+        explorer,
+        max_consecutive_unproductive_steps=3,
+    )
+
+    result = await controller.run(max_steps=10)
+
+    assert explorer.calls == 4
+    assert result.summary.stop_reason == "consecutive_unproductive_steps"
+    assert result.summary.consecutive_unproductive_steps == 3
 
 
 @pytest.mark.anyio
