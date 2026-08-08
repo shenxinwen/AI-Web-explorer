@@ -140,14 +140,15 @@ def _action_from_dict(data: dict[str, Any]) -> BrowserAction:
     supporting_facts = data.get("supporting_facts", [])
     if not isinstance(supporting_facts, list):
         supporting_facts = []
+    semantic_id = str(data["semantic_id"])
     return BrowserAction(
         action_kind=str(data.get("action_kind", "")),
         locator=data.get("locator"),
-        semantic_id=str(data["semantic_id"]),
+        semantic_id=semantic_id,
         input_values=dict(data.get("input_values", {})),
         description=data.get("description"),
         action_label=data.get("action_label"),
-        canonical_action_name=data.get("canonical_action_name"),
+        canonical_action_name=data.get("canonical_action_name") or semantic_id,
         naming_provenance=data.get("naming_provenance"),
         supporting_facts=[
             str(fact).strip()
@@ -307,10 +308,15 @@ def _web_kobe_graph_from_dict(data: dict[str, Any]) -> WebKobeGraph:
     )
 
 
-def load_web_kobe_graph_json(path: Path) -> WebKobeGraph:
+def read_web_kobe_graph_json_data(path: Path) -> dict[str, Any]:
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ValueError("WebKobeGraph JSON root must be an object")
+    return data
+
+
+def load_web_kobe_graph_json(path: Path) -> WebKobeGraph:
+    data = read_web_kobe_graph_json_data(path)
     return _web_kobe_graph_from_dict(data)
 
 

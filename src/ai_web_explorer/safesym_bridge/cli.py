@@ -20,6 +20,7 @@ from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
     compile_web_kobe_graph_to_domain,
     compile_web_kobe_graph_to_pddl,
     load_web_kobe_graph_json,
+    read_web_kobe_graph_json_data,
 )
 from ai_web_explorer.grounded_web.behavior_state_graph import (
     consolidate_behavior_state_graph,
@@ -548,6 +549,7 @@ def main(argv: list[str] | None = None) -> int:
             (args.output / "domain.pddl").write_text(domain, encoding="utf-8")
             output_path = args.output
         elif args.mode in {"web-kobe-phase-a", "web-kobe-consolidate"}:
+            raw_graph_data = read_web_kobe_graph_json_data(args.graph)
             graph = load_web_kobe_graph_json(args.graph)
             artifacts = consolidate_behavior_state_graph(
                 graph,
@@ -555,7 +557,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             args.output.mkdir(parents=True, exist_ok=True)
             (args.output / "raw_graph.json").write_text(
-                json.dumps(artifacts.raw_graph.to_dict(), indent=2, ensure_ascii=False),
+                json.dumps(raw_graph_data, indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )
             (args.output / "canonical_graph.json").write_text(

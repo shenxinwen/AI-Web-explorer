@@ -11,6 +11,9 @@ from ai_web_explorer.grounded_web.graph import (
 )
 from ai_web_explorer.safesym_bridge.cli import main
 from ai_web_explorer.safesym_bridge import cli as cli_module
+from ai_web_explorer.safesym_bridge.graph_artifacts import (
+    build_graph_artifact_payload,
+)
 
 
 def _graph_fixture() -> WebKobeGraph:
@@ -108,6 +111,66 @@ def test_phase_a_cli_writes_raw_canonical_report_and_domain_only(tmp_path, monke
         output_dir / "domain.pddl"
     ).read_text(encoding="utf-8")
     assert not (output_dir / "problem.pddl").exists()
+
+
+def test_phase_a_compact_input_is_semantically_equivalent_and_raw_shape_is_preserved(
+    tmp_path, monkeypatch
+):
+    graph = _graph_fixture()
+    full_input = graph.to_dict()
+    compact_input = build_graph_artifact_payload(graph).compact_graph
+    full_path = tmp_path / "full.json"
+    compact_path = tmp_path / "compact.json"
+    full_path.write_text(json.dumps(full_input), encoding="utf-8")
+    compact_path.write_text(json.dumps(compact_input), encoding="utf-8")
+    full_output = tmp_path / "full_phase_a"
+    compact_output = tmp_path / "compact_phase_a"
+
+    monkeypatch.setattr(
+        cli_module,
+        "create_embedding_provider_from_env",
+        lambda: (lambda text: [1.0, 0.0]),
+    )
+
+    for graph_path, output_dir in (
+        (full_path, full_output),
+        (compact_path, compact_output),
+    ):
+        assert main(
+            [
+                "web-kobe-phase-a",
+                "--graph",
+                str(graph_path),
+                "--output",
+                str(output_dir),
+            ]
+        ) == 0
+
+    compact_raw = json.loads(
+        (compact_output / "raw_graph.json").read_text(encoding="utf-8")
+    )
+    assert compact_raw == compact_input
+    assert not (compact_output / "graph_evidence.json").exists()
+
+    full_canonical = json.loads(
+        (full_output / "canonical_graph.json").read_text(encoding="utf-8")
+    )
+    compact_canonical = json.loads(
+        (compact_output / "canonical_graph.json").read_text(encoding="utf-8")
+    )
+    assert [node["node_id"] for node in full_canonical["nodes"]] == [
+        node["node_id"] for node in compact_canonical["nodes"]
+    ]
+    assert [
+        (edge["source_node_id"], edge["action"]["semantic_id"], edge["target_node_id"])
+        for edge in full_canonical["edges"]
+    ] == [
+        (edge["source_node_id"], edge["action"]["semantic_id"], edge["target_node_id"])
+        for edge in compact_canonical["edges"]
+    ]
+    assert (full_output / "domain.pddl").read_text(encoding="utf-8") == (
+        compact_output / "domain.pddl"
+    ).read_text(encoding="utf-8")
 
 
 def test_phase_a_cli_without_embedding_configuration_is_conservative(tmp_path, monkeypatch):

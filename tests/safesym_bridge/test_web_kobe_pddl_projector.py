@@ -27,6 +27,9 @@ from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
     compile_web_kobe_graph_to_pddl,
     load_web_kobe_graph_json,
 )
+from ai_web_explorer.safesym_bridge.graph_artifacts import (
+    build_graph_artifact_payload,
+)
 
 
 def _node(
@@ -1478,6 +1481,54 @@ def test_load_web_kobe_graph_json_reads_to_dict_output(tmp_path):
     assert loaded.start_node_id == "empty"
     assert loaded.nodes[1].last_state_snapshot == {"cart_count": 1}
     assert loaded.edges[0].action.semantic_id == "add_to_cart"
+    assert loaded.edges[0].execution_trace.success is True
+
+
+def test_load_web_kobe_graph_json_reads_compact_graph_without_sidecar(tmp_path):
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="listing",
+        total_steps_completed=1,
+        nodes=[
+            _node("listing", "listing", {}),
+            _node("details", "details", {}),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="listing",
+                target_node_id="details",
+                instruction="view details",
+                action=BrowserAction(
+                    "click",
+                    "button.details",
+                    "view_details",
+                    canonical_action_name="view_details",
+                ),
+                capability=None,
+                target_observation="details",
+                observed_delta=[],
+                schema_delta=None,
+                execution_trace=ExecutionTrace(
+                    "click",
+                    "button.details",
+                    "details",
+                    {},
+                    "listing",
+                    "details",
+                    True,
+                ),
+            )
+        ],
+    )
+    compact = build_graph_artifact_payload(graph).compact_graph
+    path = tmp_path / "compact_graph.json"
+    path.write_text(json.dumps(compact), encoding="utf-8")
+
+    loaded = load_web_kobe_graph_json(path)
+
+    assert loaded.start_node_id == "listing"
+    assert loaded.edges[0].action.semantic_id == "view_details"
+    assert loaded.edges[0].action.canonical_action_name == "view_details"
     assert loaded.edges[0].execution_trace.success is True
 
 
