@@ -91,6 +91,12 @@ VLM 可能用不同名称表达相同业务意图，例如 `search_items`、`sea
 
 该过程比较目标行为类别而不是原始 node ID，因此能够合并重复探索得到的同构状态，并能正确处理循环 graph。行为不完整或失败节点始终保持独立。
 
+### 动作结果确定性
+
+Phase A 要求同一个抽象 source 状态中的同一个 canonical action 只指向一个目标行为分组。该检查必须在目标节点完成行为分组后进行，不能直接比较 raw target node ID：多个 raw target 如果最终属于同一个行为分组，不构成冲突；如果属于不同分组，则 source 节点记录 `action_target_conflict`。
+
+整理过程按“分组、检查冲突、拒绝冲突 source、重新分组”的顺序重复，直到不再产生新的冲突节点。frontier 不完整、存在执行失败或存在动作目标冲突的 source 节点及其证据完整保留在 raw graph 和 consolidation report 中，但它们的 outgoing transitions 不进入 canonical graph。因此 Phase A PDDL 只能消费完整、成功且确定的行为转换。
+
 ## 产物与可审查性
 
 Phase A 保留三类产物：
@@ -135,6 +141,9 @@ consolidation report
 - 动作语义不确定：不归一化；
 - frontier 不完整：节点不合并；
 - 候选执行失败：节点不合并；
+- 同一动作的 raw targets 属于同一目标行为分组：允许折叠为一个确定转移；
+- 同一动作指向不同目标行为分组：记录 `action_target_conflict`，source outgoing transitions 不进入 canonical graph；
+- frontier 不完整或存在执行失败：source outgoing transitions 同样不进入 canonical graph；
 - 行为证据冲突：拆分节点；
 - 无可见业务变化但执行成功：记录自环；
 - evidence 不足：保留 raw 节点，不猜测 canonical 等价关系。
@@ -151,6 +160,8 @@ consolidation report
 6. `domain.pddl` 只表达 canonical 状态和非自环业务转移。
 7. 当前搜索/清空循环能够收敛为两个可往返的业务状态，而不是因事实累积持续生成新状态。
 8. canonical graph 和 `domain.pddl` 的节点、非自环边及动作可以一一追溯。
+9. 同一 canonical source/action 在 canonical graph 中最多对应一个 target behavior group。
+10. frontier 不完整、执行失败或存在 `action_target_conflict` 的 source transitions 只保留在 raw graph 和报告中，不进入 canonical graph 或 `domain.pddl`。
 
 ## 后续演进到 Phase C
 
