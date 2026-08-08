@@ -120,6 +120,54 @@ def test_compile_web_kobe_graph_to_pddl_projects_action_supporting_facts_as_prec
     assert "(result_collection_visible)" not in artifacts.problem
 
 
+def test_phase_a_domain_ignores_visual_delta_trace_facts():
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="listing",
+        total_steps_completed=1,
+        nodes=[
+            _node("listing", "listing", {}),
+            _node("listing_observed", "listing", {}),
+        ],
+        edges=[
+            WebKobeEdge(
+                source_node_id="listing",
+                target_node_id="listing_observed",
+                instruction="observe cart badge",
+                action=BrowserAction(
+                    "business_intent",
+                    None,
+                    "observe_cart_badge",
+                    canonical_action_name="observe_cart_badge",
+                ),
+                capability=None,
+                target_observation="listing page",
+                observed_delta=[],
+                schema_delta={},
+                execution_trace=ExecutionTrace(
+                    "business_intent",
+                    None,
+                    "observe_cart_badge",
+                    {},
+                    "listing",
+                    "listing_observed",
+                    True,
+                    metadata={
+                        "visual_delta_trace": {
+                            "candidate_added_facts": ["cart_has_items"],
+                            "candidate_removed_facts": [],
+                        }
+                    },
+                ),
+            )
+        ],
+    )
+
+    domain = compile_web_kobe_graph_to_domain(graph)
+
+    assert "cart_has_items" not in domain
+
+
 def test_compile_web_kobe_graph_to_pddl_can_include_observed_delta_when_requested():
     graph = WebKobeGraph(
         app="example",

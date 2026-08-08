@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import replace
 from typing import Any
+from urllib.parse import urlsplit
 
 from ai_web_explorer.grounded_web.automation_backend import AutomationBackend
 from ai_web_explorer.grounded_web.capability_graph import (
@@ -27,6 +28,7 @@ from ai_web_explorer.grounded_web.business_affordance import (
     summarize_visual_affordances,
 )
 from ai_web_explorer.grounded_web.business_state_policy import (
+    observation_change_node_id,
     resolve_business_target_node,
     should_materialize_business_state,
 )
@@ -64,6 +66,10 @@ OBSERVATION_WAIT_TIMEOUT_MS = 1200
 OBSERVATION_WAIT_INTERVAL_MS = 200
 CURRENT_NODE_MATCH_THRESHOLD = 0.88
 TARGET_NODE_MATCH_THRESHOLD = 0.90
+
+
+def _url_path(url: str) -> str:
+    return urlsplit(url).path or "/"
 
 
 def _node_from_draft(draft) -> WebKobeNode:
@@ -159,48 +165,6 @@ def _observed_delta_from_facts_or_signature(
     return _schema_observed_delta(before_signature, after_signature, url)
 
 
-def _merged_unique(*lists: list[str]) -> list[str]:
-    merged: list[str] = []
-    for items in lists:
-        for item in items:
-            if item not in merged:
-                merged.append(item)
-    return merged
-
-
-def _merge_planning_deltas(
-    structured: PlanningDelta | None,
-    visual: PlanningDelta | None,
-) -> PlanningDelta | None:
-    if structured is None:
-        return visual
-    if visual is None:
-        return structured
-    return PlanningDelta(
-        candidate_added_facts=_merged_unique(
-            visual.candidate_added_facts,
-            structured.candidate_added_facts,
-        ),
-        candidate_removed_facts=_merged_unique(
-            visual.candidate_removed_facts,
-            structured.candidate_removed_facts,
-        ),
-        verified_added_facts=list(structured.verified_added_facts),
-        verified_removed_facts=list(structured.verified_removed_facts),
-        profile_fact_ids=_merged_unique(
-            visual.profile_fact_ids,
-            structured.profile_fact_ids,
-        ),
-        generated_fact_ids=_merged_unique(
-            visual.generated_fact_ids,
-            structured.generated_fact_ids,
-        ),
-        evidence=list(visual.evidence) + list(structured.evidence),
-        confidence=structured.confidence or visual.confidence,
-        uncertainty_reason=visual.uncertainty_reason,
-    )
-
-
 def _planning_delta_has_fact_change(delta: PlanningDelta | None) -> bool:
     if delta is None:
         return False
@@ -246,7 +210,6 @@ def _should_advance_current_node(
     if (
         edge_status == "succeeded_with_observed_change"
         and business_transition is None
-        and planning_transition is None
     ):
         return True
     return (
@@ -357,28 +320,38 @@ class WebKobeExplorer:
 
         execution_success = await self.adapter.execute(selected)
         execution_error = getattr(self.adapter, "last_execution_error", None)
-        after = await self._observe_after_action(
-            before=before,
-            before_facts=before_facts,
-            execution_success=execution_success,
-        )
-        after_screenshot_path = await self._capture_screenshot("after")
-        after_interactables = await self.adapter.list_interactables(after)
-        after_draft = self.semantic_assistor.describe_state(
-            snapshot=after,
-            interactables=after_interactables,
-        )
+        if execution_success:
+            after = await self._observe_after_action(
+                before=before,
+                before_facts=before_facts,
+                execution_success=True,
+            )
+            after_screenshot_path = await self._capture_screenshot("after")
+            after_interactables = await self.adapter.list_interactables(after)
+            after_draft = self.semantic_assistor.describe_state(
+                snapshot=after,
+                interactables=after_interactables,
+            )
+        else:
+            after = before
+            after_screenshot_path = None
+            after_interactables = before_interactables
+            after_draft = before_draft
 
         delta = schema_delta(
             before_draft.last_state_snapshot,
             after_draft.last_state_snapshot,
         )
-        observed_delta = _observed_delta_from_facts_or_signature(
-            before_facts=before_facts,
-            after_facts=getattr(self.adapter, "last_state_facts", None),
-            before_signature=before.signature,
-            after_signature=after.signature,
-            url=after.url,
+        observed_delta = (
+            _observed_delta_from_facts_or_signature(
+                before_facts=before_facts,
+                after_facts=getattr(self.adapter, "last_state_facts", None),
+                before_signature=before.signature,
+                after_signature=after.signature,
+                url=after.url,
+            )
+            if execution_success
+            else []
         )
         edge_status = self._edge_status(
             execution_success=execution_success,
@@ -410,10 +383,10 @@ class WebKobeExplorer:
             if self.business_profile is not None
             else None
         )
-        visual_planning_delta = None
         business_transition = None
+        visual_delta_facts = ([], [])
         if (
-            self.business_profile is not None
+            execution_success
             and self.visual_delta_provider is not None
             and before_screenshot_path is not None
             and after_screenshot_path is not None
@@ -422,7 +395,6 @@ class WebKobeExplorer:
                 VisualDeltaRequest(
                     goal=self.goal,
                     action=selected,
-                    profile=self.business_profile,
                     before_screenshot_path=before_screenshot_path,
                     after_screenshot_path=after_screenshot_path,
                     before_signature=before.signature,
@@ -430,13 +402,16 @@ class WebKobeExplorer:
                 ),
                 provider=self.visual_delta_provider,
             )
-            visual_planning_delta = visual_result.planning_delta
-            business_transition = visual_result.business_transition
-            execution_metadata["visual_delta_trace"] = visual_result.trace.to_dict()
-        planning_delta = _merge_planning_deltas(
-            structured_planning_delta,
-            visual_planning_delta,
-        )
+            visual_delta_facts = (
+                list(visual_result.planning_delta.candidate_added_facts),
+                list(visual_result.planning_delta.candidate_removed_facts),
+            )
+            visual_trace = visual_result.trace.to_dict()
+            visual_trace["candidate_added_facts"] = list(visual_delta_facts[0])
+            visual_trace["candidate_removed_facts"] = list(visual_delta_facts[1])
+            execution_metadata["visual_delta_trace"] = visual_trace
+
+        planning_delta = structured_planning_delta
         planning_transition = None
         if self.business_profile is not None:
             planning_transition = self.manager.build_planning_transition(
@@ -444,20 +419,41 @@ class WebKobeExplorer:
                 planning_delta=planning_delta,
                 profile=self.business_profile,
             )
+        visual_fact_change = bool(visual_delta_facts[0] or visual_delta_facts[1])
+        path_changed = _url_path(before.url) != _url_path(after.url)
+        signature_changed = before.signature != after.signature
+        state_changed = path_changed or signature_changed or visual_fact_change
+
         target_node = resolve_business_target_node(
             source_node=self.manager.node_for_id(source_id),
             candidate_node=_node_from_draft(after_draft),
-            business_transition=business_transition,
+            business_transition=None,
             planning_transition=planning_transition,
             state_label_hints=_state_label_hints_from_profile(self.business_profile),
         )
-        target_node, target_match = self._match_existing_target_node(
-            target_node=target_node,
-            after=after,
-            after_interactables=after_interactables,
-            planning_transition=planning_transition,
-            source_node_id=source_id,
-        )
+        if not execution_success or not state_changed:
+            target_node = self.manager.node_for_id(source_id)
+        elif not path_changed and not signature_changed and visual_fact_change:
+            action_name = selected.canonical_action_name or selected.semantic_id
+            target_node = replace(
+                target_node,
+                node_id=observation_change_node_id(
+                    source_node_id=source_id,
+                    action_name=action_name,
+                    added_facts=visual_delta_facts[0],
+                    removed_facts=visual_delta_facts[1],
+                ),
+            )
+
+        target_match = None
+        if state_changed:
+            target_node, target_match = self._match_existing_target_node(
+                target_node=target_node,
+                after=after,
+                after_interactables=after_interactables,
+                planning_transition=planning_transition,
+                source_node_id=source_id,
+            )
         if target_match is not None:
             execution_metadata["target_state_match"] = {
                 "status": target_match.status,
@@ -467,9 +463,7 @@ class WebKobeExplorer:
                 "accepted": target_node.node_id == target_match.node_id,
             }
         target_id = self.manager.identify_or_add_node(target_node)
-        if edge_status == "no_observed_change" and should_materialize_business_state(
-            business_transition
-        ):
+        if edge_status == "no_observed_change" and visual_fact_change:
             edge_status = "succeeded_with_observed_change"
         if (
             edge_status in {"failed_execution", "no_observed_change"}
@@ -518,7 +512,7 @@ class WebKobeExplorer:
             status=edge_status,
             evidence=[Evidence(source="web_kobe_explorer", url=before.url)],
         )
-        if self.business_profile is not None:
+        if self.business_profile is not None and execution_success:
             self.manager.apply_planning_transition(edge)
         self.manager.add_edge(edge)
         self.manager.meta["last_step_kind"] = "business_edge"
@@ -537,7 +531,7 @@ class WebKobeExplorer:
             source_id=source_id,
             target_id=target_id,
             edge_status=edge_status,
-            business_transition=business_transition,
+            business_transition=None,
             planning_transition=planning_transition,
         ):
             self._set_current_node(target_id)
@@ -756,8 +750,6 @@ class WebKobeExplorer:
     ) -> str:
         if observed_delta:
             return "succeeded_with_observed_change"
-        if _is_ignorable_stagehand_tool_choice_error(execution_error):
-            return "no_observed_change"
         if not execution_success:
             return "failed_execution"
         return "no_observed_change"

@@ -19,9 +19,9 @@ VisualDeltaProvider = Callable[..., str]
 class VisualDeltaRequest:
     goal: str
     action: BrowserAction
-    profile: BusinessFlowProfile
     before_screenshot_path: str
     after_screenshot_path: str
+    profile: BusinessFlowProfile | None = None
     before_signature: dict[str, Any] | None = None
     after_signature: dict[str, Any] | None = None
 
@@ -52,33 +52,30 @@ class VisualDeltaTrace:
 class VisualDeltaResult:
     planning_delta: PlanningDelta
     trace: VisualDeltaTrace
+    # Kept for loading/caller compatibility; new visual-delta exploration does
+    # not produce or consume business-transition judgments.
     business_transition: BusinessTransition | None = None
 
 
 def _prompt_for_request(request: VisualDeltaRequest) -> str:
+    action = request.action.to_dict()
+    action.pop("supporting_facts", None)
     payload = {
         "instruction": (
             "Compare the before and after screenshots for the executed web "
-            "action and report only short business-state fact phrases visibly "
-            "observed after the action or visibly removed by the action. "
-            "Return JSON only. Each candidate fact must be a lowercase "
+            "action. candidate_added_facts must contain facts visible after "
+            "the action and not before. candidate_removed_facts must contain "
+            "facts visible before the action and not after. Omit unchanged "
+            "facts. Both lists may be empty when no fact-level visual change "
+            "is visible. Return JSON only. Each fact must be a lowercase "
             "snake_case string, not an object or explanation sentence. Do "
             "not predict effects, infer hidden state, or mark anything "
-            "verified. The "
-            "business_relevance field must be exactly one enum value from "
-            "business_relevance_enum, not an explanation sentence."
+            "verified."
         ),
-        "business_relevance_enum": ["core", "supporting", "low_value", "unknown"],
-        "action": request.action.to_dict(),
-        "before_signature": dict(request.before_signature or {}),
-        "after_signature": dict(request.after_signature or {}),
+        "action": action,
         "required_json_fields": [
-            "business_action_name",
-            "business_relevance",
-            "meaningful_change",
             "candidate_added_facts",
             "candidate_removed_facts",
-            "confidence",
         ],
     }
     return json.dumps(payload, indent=2, ensure_ascii=False)
@@ -127,87 +124,6 @@ def _fact_id_list(value: Any) -> list[str]:
         if len(facts) >= 8:
             break
     return facts
-
-
-def _meaningful_change(value: Any) -> bool | None:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        lowered = value.strip().lower()
-        if lowered in {"true", "yes", "meaningful", "changed"}:
-            return True
-        if lowered in {"false", "no", "no_change", "unchanged"}:
-            return False
-    return None
-
-
-def _business_relevance(value: Any) -> str:
-    relevance = str(value or "unknown").strip().lower()
-    if relevance in {"core", "supporting", "low_value", "unknown"}:
-        return relevance
-    if "low_value" in relevance or "low value" in relevance:
-        return "low_value"
-    if any(
-        token in relevance
-        for token in (
-            "minor",
-            "cosmetic",
-            "sort",
-            "filter",
-            "preference",
-            "does not affect",
-        )
-    ):
-        return "low_value"
-    if any(
-        token in relevance
-        for token in (
-            "supporting",
-            "auxiliary",
-            "navigation",
-            "helps",
-            "assist",
-        )
-    ):
-        return "supporting"
-    if any(
-        token in relevance
-        for token in (
-            "core",
-            "key",
-            "primary",
-            "purchase",
-            "checkout",
-            "cart",
-            "product selection",
-            "order",
-        )
-    ):
-        return "core"
-    return "unknown"
-
-
-def _business_transition_from_response(
-    parsed: dict[str, Any],
-) -> BusinessTransition | None:
-    action_name = parsed.get("business_action_name")
-    relevance = parsed.get("business_relevance")
-    meaningful_change = parsed.get("meaningful_change")
-    if action_name is None and relevance is None and meaningful_change is None:
-        return None
-    confidence = parsed.get("confidence")
-    if confidence is not None:
-        try:
-            confidence = float(confidence)
-        except (TypeError, ValueError):
-            confidence = None
-    return BusinessTransition(
-        action_name=str(action_name).strip() if action_name is not None else None,
-        relevance=_business_relevance(relevance),
-        meaningful_change=_meaningful_change(meaningful_change),
-        judge_source="vlm",
-        confidence=confidence,
-    )
 
 
 def summarize_visual_delta(
@@ -260,7 +176,9 @@ def summarize_visual_delta(
 
     candidate_added = _fact_id_list(parsed.get("candidate_added_facts"))
     candidate_removed = _fact_id_list(parsed.get("candidate_removed_facts"))
-    generated_facts = list(dict.fromkeys(candidate_added + candidate_removed))
+    overlap = set(candidate_added) & set(candidate_removed)
+    candidate_added = [fact for fact in candidate_added if fact not in overlap]
+    candidate_removed = [fact for fact in candidate_removed if fact not in overlap]
 
     delta = PlanningDelta(
         candidate_added_facts=candidate_added,
@@ -268,11 +186,8 @@ def summarize_visual_delta(
         verified_added_facts=[],
         verified_removed_facts=[],
         profile_fact_ids=[],
-        generated_fact_ids=generated_facts,
-        confidence=parsed.get("confidence"),
-        uncertainty_reason="visual delta has not been structurally verified",
+        generated_fact_ids=[],
     )
-    business_transition = _business_transition_from_response(parsed)
     return VisualDeltaResult(
         planning_delta=delta,
         trace=_trace(
@@ -281,7 +196,6 @@ def summarize_visual_delta(
             llm_response=parsed,
             status="summarized",
         ),
-        business_transition=business_transition,
     )
 
 

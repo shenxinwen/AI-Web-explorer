@@ -12,6 +12,25 @@ from ai_web_explorer.grounded_web.state_signature import slug_identifier
 BUSINESS_STATE_RELEVANCE = {"core", "supporting"}
 
 
+def observation_change_node_id(
+    *,
+    source_node_id: str,
+    action_name: str,
+    added_facts: list[str],
+    removed_facts: list[str],
+) -> str:
+    payload = {
+        "source_node_id": source_node_id,
+        "action_name": action_name,
+        "added_facts": sorted(set(added_facts)),
+        "removed_facts": sorted(set(removed_facts)),
+    }
+    digest = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()[:12]
+    return f"{source_node_id}__observation_{digest}"
+
+
 def should_materialize_business_state(
     business_transition: BusinessTransition | None,
 ) -> bool:

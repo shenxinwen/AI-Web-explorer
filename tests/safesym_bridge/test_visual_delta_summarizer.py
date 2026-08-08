@@ -18,13 +18,14 @@ def test_summarize_visual_delta_maps_provider_json_to_candidate_planning_delta()
         profile=ecommerce_checkout_profile(),
         before_screenshot_path="before.png",
         after_screenshot_path="after.png",
-        before_signature={"cart_count": 0},
-        after_signature={"cart_count": 1},
+        before_signature={"cart_has_items": False, "cart_count": 0},
+        after_signature={"cart_has_items": True, "cart_count": 1},
     )
 
     def provider(prompt, *, before_screenshot_path, after_screenshot_path):
         assert "Add one item to the cart." not in prompt
         assert "cart_has_items" not in prompt
+        assert "cart_count" not in prompt
         assert '"profile"' not in prompt
         assert "visible_change_summary" not in prompt
         assert "evidence" not in prompt
@@ -44,7 +45,35 @@ def test_summarize_visual_delta_maps_provider_json_to_candidate_planning_delta()
     assert "visual_change_summary" not in result.trace.to_dict()
 
 
-def test_summarize_visual_delta_maps_business_transition_fields():
+def test_visual_delta_prompt_describes_set_difference_and_allows_empty_sets():
+    request = VisualDeltaRequest(
+        goal="Add one item to the cart.",
+        action=BrowserAction("business_intent", None, "add_to_cart"),
+        profile=ecommerce_checkout_profile(),
+        before_screenshot_path="before.png",
+        after_screenshot_path="after.png",
+    )
+    prompts = []
+
+    def provider(prompt, *, before_screenshot_path, after_screenshot_path):
+        prompts.append(prompt)
+        return '{"candidate_added_facts":[],"candidate_removed_facts":[]}'
+
+    summarize_visual_delta(request, provider=provider)
+
+    prompt = prompts[0]
+    assert "visible after the action and not before" in prompt
+    assert "visible before the action and not after" in prompt
+    assert "unchanged" in prompt
+    assert "Both lists may be empty" in prompt
+    assert "supporting_facts" not in prompt
+    assert "business_relevance" not in prompt
+    assert "meaningful_change" not in prompt
+    assert '"candidate_added_facts"' in prompt
+    assert '"candidate_removed_facts"' in prompt
+
+
+def test_summarize_visual_delta_does_not_generate_business_transition_fields():
     request = VisualDeltaRequest(
         goal="Add one item to the cart.",
         action=BrowserAction(
@@ -59,9 +88,9 @@ def test_summarize_visual_delta_maps_business_transition_fields():
     )
 
     def provider(prompt, *, before_screenshot_path, after_screenshot_path):
-        assert "business_action_name" in prompt
-        assert "business_relevance" in prompt
-        assert "meaningful_change" in prompt
+        assert "business_action_name" not in prompt
+        assert "business_relevance" not in prompt
+        assert "meaningful_change" not in prompt
         return (
             '{"business_action_name":"add_item_to_cart",'
             '"business_relevance":"core",'
@@ -73,15 +102,7 @@ def test_summarize_visual_delta_maps_business_transition_fields():
 
     result = summarize_visual_delta(request, provider=provider)
 
-    assert result.business_transition is not None
-    assert result.business_transition.action_name == "add_item_to_cart"
-    assert result.business_transition.relevance == "core"
-    assert result.business_transition.meaningful_change is True
-    assert result.business_transition.judge_source == "vlm"
-    transition_data = result.business_transition.to_dict()
-    assert "summary" not in transition_data
-    assert "evidence" not in transition_data
-    assert result.business_transition.confidence == 0.9
+    assert result.business_transition is None
 
 
 def test_summarize_visual_delta_normalizes_explanatory_business_relevance():
@@ -94,7 +115,7 @@ def test_summarize_visual_delta_normalizes_explanatory_business_relevance():
     )
 
     def provider(prompt, *, before_screenshot_path, after_screenshot_path):
-        assert "business_relevance_enum" in prompt
+        assert "business_relevance_enum" not in prompt
         return (
             '{"business_action_name":"view_product_details",'
             '"business_relevance":"This is a key product selection step.",'
@@ -106,8 +127,7 @@ def test_summarize_visual_delta_normalizes_explanatory_business_relevance():
 
     result = summarize_visual_delta(request, provider=provider)
 
-    assert result.business_transition is not None
-    assert result.business_transition.relevance == "core"
+    assert result.business_transition is None
 
 
 def test_summarize_visual_delta_records_vlm_fact_as_generated_until_verified():
@@ -135,11 +155,8 @@ def test_summarize_visual_delta_records_vlm_fact_as_generated_until_verified():
     assert result.trace.error_type is None
     assert result.planning_delta.candidate_added_facts == ["product_details_visible"]
     assert result.planning_delta.profile_fact_ids == []
-    assert result.planning_delta.generated_fact_ids == ["product_details_visible"]
-    assert result.business_transition is not None
-    assert result.business_transition.action_name == "view_product_details"
-    assert result.business_transition.relevance == "core"
-    assert result.business_transition.meaningful_change is True
+    assert result.planning_delta.generated_fact_ids == []
+    assert result.business_transition is None
 
 
 def test_summarize_visual_delta_keeps_all_vlm_facts_generated():
@@ -167,11 +184,28 @@ def test_summarize_visual_delta_keeps_all_vlm_facts_generated():
     ]
     assert result.planning_delta.candidate_removed_facts == ["modal_absent"]
     assert result.planning_delta.profile_fact_ids == []
-    assert result.planning_delta.generated_fact_ids == [
-        "cart_has_items",
-        "product_details_visible",
-        "modal_absent",
-    ]
+    assert result.planning_delta.generated_fact_ids == []
+
+
+def test_summarize_visual_delta_drops_facts_reported_in_both_sets():
+    request = VisualDeltaRequest(
+        goal="Observe the page.",
+        action=BrowserAction("business_intent", None, "observe"),
+        profile=ecommerce_checkout_profile(),
+        before_screenshot_path="before.png",
+        after_screenshot_path="after.png",
+    )
+
+    def provider(prompt, *, before_screenshot_path, after_screenshot_path):
+        return (
+            '{"candidate_added_facts":["cart_has_items","same_fact"],'
+            '"candidate_removed_facts":["same_fact"]}'
+        )
+
+    result = summarize_visual_delta(request, provider=provider)
+
+    assert result.planning_delta.candidate_added_facts == ["cart_has_items"]
+    assert result.planning_delta.candidate_removed_facts == []
 
 
 def test_summarize_visual_delta_accepts_fact_only_response():

@@ -287,7 +287,7 @@ class ExhaustedNodeBackAdapter:
 
 
 @pytest.mark.anyio
-async def test_explore_one_step_records_self_loop_delta():
+async def test_explore_one_step_uses_ordinary_target_for_signature_change():
     explorer = _business_explorer(FakeAdapter())
 
     graph = await explorer.explore_one_step()
@@ -297,7 +297,7 @@ async def test_explore_one_step_records_self_loop_delta():
     assert len(graph.edges) == 1
     edge = graph.edges[0]
     assert edge.source_node_id.startswith("listing__")
-    assert edge.target_node_id.startswith("add_to_cart_product__business_")
+    assert edge.target_node_id.startswith("listing__")
     assert edge.source_node_id != edge.target_node_id
     assert edge.action.semantic_id == "add_to_cart_product"
     assert edge.schema_delta == {"cart_has_items": {"before": False, "after": True}}
@@ -460,14 +460,15 @@ class ReportedFailureWithObservedChangeAdapter(FakeAdapter):
 
 
 @pytest.mark.anyio
-async def test_explore_one_step_accepts_observed_change_after_backend_failure():
+async def test_explore_one_step_keeps_failed_action_on_source_node():
     explorer = _business_explorer(ReportedFailureWithObservedChangeAdapter())
 
     graph = await explorer.explore_one_step()
 
     edge = graph.edges[0]
-    assert edge.status == "succeeded_with_observed_change"
-    assert edge.execution_trace.success is True
+    assert edge.status == "failed_execution"
+    assert edge.source_node_id == edge.target_node_id
+    assert edge.execution_trace.success is False
     assert edge.execution_trace.error == "tool reported failure after changing the page"
     assert edge.execution_trace.metadata["backend_reported_success"] is False
 
@@ -1019,7 +1020,7 @@ async def test_backtrack_restores_previous_graph_node_from_visit_stack():
 
 
 @pytest.mark.anyio
-async def test_explore_one_step_collapses_low_value_same_page_visual_change():
+async def test_explore_one_step_uses_signature_change_for_same_page_target():
     adapter = SamePageLowValueChangeAdapter()
 
     def visual_provider(
@@ -1050,11 +1051,10 @@ async def test_explore_one_step_collapses_low_value_same_page_visual_change():
 
     graph = await explorer.explore_one_step()
 
-    assert len(graph.nodes) == 1
+    assert len(graph.nodes) == 2
     edge = graph.edges[0]
-    assert edge.source_node_id == edge.target_node_id
-    assert edge.business_transition is not None
-    assert edge.business_transition.relevance == "low_value"
+    assert edge.source_node_id != edge.target_node_id
+    assert edge.business_transition is None
 
 
 @pytest.mark.anyio
@@ -1099,10 +1099,10 @@ async def test_explore_one_step_materializes_same_page_business_change(monkeypat
     assert edge.source_node_id != edge.target_node_id
     assert edge.status == "succeeded_with_observed_change"
     target = {node.node_id: node for node in graph.nodes}[edge.target_node_id]
-    assert target.node_id.startswith("add_item_to_cart__business_")
-    assert target.node_label == "cart_with_items"
+    assert "__observation_" in target.node_id
+    assert target.node_label == "listing"
     assert target.planning_state is not None
-    assert target.planning_state.active_facts == ["cart_has_items"]
+    assert target.planning_state.active_facts == []
 
 
 @pytest.mark.anyio
@@ -1157,7 +1157,7 @@ async def test_explore_one_step_uses_embedding_match_as_current_business_node(
 
     assert second_graph.edges[1].source_node_id == first_target_id
     assert second_graph.edges[1].planning_transition is not None
-    assert second_graph.edges[1].planning_transition.pre_facts == ["cart_has_items"]
+    assert second_graph.edges[1].planning_transition.pre_facts == []
 
 
 @pytest.mark.anyio
@@ -1285,7 +1285,7 @@ async def test_explore_one_step_does_not_pollute_existing_page_node_with_incompa
     assert (
         nodes_by_id[second_graph.edges[1].target_node_id]
         .planning_state.active_facts
-        == ["cart_has_items"]
+        == []
     )
 
 
@@ -1371,10 +1371,7 @@ async def test_explore_one_step_keeps_source_on_latest_materialized_business_nod
 
     assert third_graph.edges[2].source_node_id == checkout_user_info_id
     assert third_graph.edges[2].planning_transition is not None
-    assert third_graph.edges[2].planning_transition.pre_facts == [
-        "checkout_started",
-        "checkout_user_info_complete",
-    ]
+    assert third_graph.edges[2].planning_transition.pre_facts == []
 
 
 @pytest.mark.anyio
@@ -1462,7 +1459,7 @@ async def test_explore_one_step_records_target_embedding_planning_facts(monkeypa
         for record in explorer.state_embedding_records
         if record.node_id == target_id
     )
-    assert target_record.planning_facts == ("cart_has_items",)
+    assert target_record.planning_facts == ()
 
 
 @pytest.mark.anyio
@@ -1499,14 +1496,15 @@ async def test_explore_one_step_accepts_stagehand_tool_choice_error_with_visual_
     graph = await explorer.explore_one_step()
 
     edge = graph.edges[0]
-    assert edge.status == "succeeded_with_observed_change"
-    assert edge.execution_trace.success is True
+    assert edge.status == "failed_execution"
+    assert edge.source_node_id == edge.target_node_id
+    assert edge.execution_trace.success is False
     assert (
         edge.execution_trace.error == "Thinking mode does not support this tool_choice"
     )
     assert edge.execution_trace.metadata["backend_reported_success"] is False
     assert edge.planning_transition is not None
-    assert edge.planning_transition.added_facts == ["cart_has_items"]
+    assert edge.planning_transition.added_facts == []
 
 
 @pytest.mark.anyio
@@ -1547,20 +1545,14 @@ async def test_explore_one_step_records_visual_delta_candidates_without_verifyin
 
     edge = graph.edges[0]
     assert provider_calls == [("outputs/before_0001.png", "outputs/after_0001.png")]
-    assert edge.planning_delta.candidate_added_facts == [
-        "order_place_pending_sensitive",
-        "cart_has_items",
-    ]
+    assert edge.planning_delta.candidate_added_facts == ["cart_has_items"]
     assert edge.planning_delta.verified_added_facts == ["cart_has_items"]
     assert "visual_change_summary" not in edge.execution_trace.metadata
     assert edge.execution_trace.metadata["visual_delta_trace"]["status"] == "summarized"
-    assert edge.business_transition is not None
-    assert edge.business_transition.action_name == "prepare_order_confirmation"
-    assert edge.business_transition.relevance == "core"
-    assert edge.business_transition.meaningful_change is True
-    assert edge.business_transition.judge_source == "vlm"
-    assert "summary" not in edge.business_transition.to_dict()
-    assert "evidence" not in edge.business_transition.to_dict()
+    assert edge.execution_trace.metadata["visual_delta_trace"][
+        "candidate_added_facts"
+    ] == ["order_place_pending_sensitive"]
+    assert edge.business_transition is None
 
 
 class TypedFactsAdapter(FakeAdapter):
@@ -2036,4 +2028,109 @@ def test_tool_choice_error_without_visible_change_is_non_fatal_noop():
         observed_delta=[],
     )
 
-    assert status == "no_observed_change"
+    assert status == "failed_execution"
+
+
+@pytest.mark.anyio
+async def test_failed_action_is_a_failed_self_loop_without_visual_delta_call():
+    delta_calls = []
+
+    def provider(
+        prompt,
+        *,
+        current_screenshot_path=None,
+        before_screenshot_path=None,
+        after_screenshot_path=None,
+    ):
+        if before_screenshot_path is not None:
+            delta_calls.append((before_screenshot_path, after_screenshot_path))
+            return '{"candidate_added_facts":["should_not_be_used"]}'
+        return _business_affordance_response("add_to_cart_product")
+
+    explorer = _business_explorer(
+        FailingDiagnosticAdapter(),
+        visual_delta_provider=provider,
+    )
+
+    graph = await explorer.explore_one_step()
+
+    edge = graph.edges[0]
+    assert edge.status == "failed_execution"
+    assert edge.source_node_id == edge.target_node_id
+    assert edge.planning_delta is not None
+    assert edge.planning_delta.candidate_added_facts == []
+    assert delta_calls == []
+
+
+@pytest.mark.anyio
+async def test_visual_delta_observation_creates_stable_node_without_planning_facts():
+    def provider(
+        prompt,
+        *,
+        current_screenshot_path=None,
+        before_screenshot_path=None,
+        after_screenshot_path=None,
+    ):
+        if current_screenshot_path is not None:
+            return _business_affordance_response("sort_products")
+        return (
+            '{"candidate_added_facts":["modal_visible","cart_has_items"],'
+            '"candidate_removed_facts":["modal_hidden"]}'
+        )
+
+    explorer = WebKobeExplorer(
+        adapter=SamePageBusinessChangeAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        business_profile=ecommerce_checkout_profile(),
+        capture_screenshots=True,
+        visual_delta_provider=provider,
+    )
+
+    graph = await explorer.explore_one_step()
+
+    edge = graph.edges[0]
+    assert edge.source_node_id != edge.target_node_id
+    assert edge.status == "succeeded_with_observed_change"
+    assert edge.planning_transition is not None
+    assert edge.planning_transition.added_facts == []
+    target = next(node for node in graph.nodes if node.node_id == edge.target_node_id)
+    assert target.planning_state is not None
+    assert target.planning_state.active_facts == []
+    trace = edge.execution_trace.metadata["visual_delta_trace"]
+    assert trace["candidate_added_facts"] == ["modal_visible", "cart_has_items"]
+    assert trace["candidate_removed_facts"] == ["modal_hidden"]
+
+
+@pytest.mark.anyio
+async def test_visual_delta_fact_order_does_not_change_observation_node_id():
+    def make_provider(added):
+        def provider(
+            prompt,
+            *,
+            current_screenshot_path=None,
+            before_screenshot_path=None,
+            after_screenshot_path=None,
+        ):
+            if current_screenshot_path is not None:
+                return _business_affordance_response("sort_products")
+            return (
+                '{"candidate_added_facts":'
+                + json.dumps(added)
+                + ',"candidate_removed_facts":["modal_hidden"]}'
+            )
+
+        return provider
+
+    def make_explorer(added):
+        return WebKobeExplorer(
+            adapter=SamePageBusinessChangeAdapter(),
+            semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+            business_profile=ecommerce_checkout_profile(),
+            capture_screenshots=True,
+            visual_delta_provider=make_provider(added),
+        )
+
+    first = await make_explorer(["modal_visible", "cart_has_items"]).explore_one_step()
+    second = await make_explorer(["cart_has_items", "modal_visible"]).explore_one_step()
+
+    assert first.edges[0].target_node_id == second.edges[0].target_node_id

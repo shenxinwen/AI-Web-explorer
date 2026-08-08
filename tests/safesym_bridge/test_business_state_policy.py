@@ -1,9 +1,28 @@
 from ai_web_explorer.grounded_web.business_profile import PlanningTransition
 from ai_web_explorer.grounded_web.business_state_policy import (
+    observation_change_node_id,
     resolve_business_target_node,
 )
 from ai_web_explorer.grounded_web.capability_graph import Evidence, PageFrame
 from ai_web_explorer.grounded_web.graph import BusinessTransition, WebKobeNode
+
+
+def test_observation_change_node_id_is_stable_and_order_independent():
+    first = observation_change_node_id(
+        source_node_id="listing__source",
+        action_name="add_to_cart",
+        added_facts=["cart_has_items", "product_selected"],
+        removed_facts=["cart_empty"],
+    )
+    second = observation_change_node_id(
+        source_node_id="listing__source",
+        action_name="add_to_cart",
+        added_facts=["product_selected", "cart_has_items"],
+        removed_facts=["cart_empty"],
+    )
+
+    assert first == second
+    assert first != "listing__source"
 
 
 def _node(node_id: str, *, node_label: str | None = None) -> WebKobeNode:
