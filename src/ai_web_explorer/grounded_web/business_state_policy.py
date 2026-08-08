@@ -164,23 +164,17 @@ def _business_state_node_id(
     business_transition: BusinessTransition | None,
     planning_transition: PlanningTransition | None,
 ) -> str:
-    post_facts = (
-        list(planning_transition.post_facts) if planning_transition is not None else []
-    )
     payload = {
         "page_id": candidate_node.page_frame.page_id,
-        "post_facts": sorted(post_facts),
     }
-    if not post_facts and business_transition is not None:
+    if business_transition is not None and business_transition.action_name:
         payload["action_name"] = business_transition.action_name
 
     digest = hashlib.sha1(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()[:10]
-    base_label = (
-        candidate_node.node_label
-        or candidate_node.page_frame.page_type
-        or candidate_node.page_frame.page_id
+    base_label = _label_from_business_action(business_transition) or (
+        candidate_node.page_frame.page_type or candidate_node.page_frame.page_id
     )
     base = slug_identifier(base_label, fallback="state")
     return f"{base}__business_{digest}"

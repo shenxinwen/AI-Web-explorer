@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import shutil
 from pathlib import Path
 
@@ -15,9 +16,16 @@ from ai_web_explorer.safesym_bridge.browser_runner import (
     write_web_kobe_graph,
 )
 from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
+    compile_phase_a_domain,
     compile_web_kobe_graph_to_domain,
     compile_web_kobe_graph_to_pddl,
     load_web_kobe_graph_json,
+)
+from ai_web_explorer.grounded_web.behavior_state_graph import (
+    consolidate_behavior_state_graph,
+)
+from ai_web_explorer.grounded_web.embedding_provider import (
+    create_embedding_provider_from_env,
 )
 from ai_web_explorer.safesym_bridge.web_kobe_pddl_smoke import (
     write_web_kobe_pddl_smoke,
@@ -72,6 +80,13 @@ def _build_ecommerce_benchmark_context(args) -> BenchmarkTaskContext:
         test_credentials=test_credentials,
         checkout_data=checkout_data,
     )
+
+
+def _phase_a_embedding_provider():
+    try:
+        return create_embedding_provider_from_env()
+    except ValueError:
+        return None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -193,6 +208,26 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         default=Path("outputs/web_kobe_domain"),
         help="Directory to write domain.pddl.",
+    )
+    web_kobe_phase_a_parser = subparsers.add_parser(
+        "web-kobe-phase-a",
+        aliases=["web-kobe-consolidate"],
+        help=(
+            "Consolidate a raw Web-KOBE graph and write canonical graph, "
+            "consolidation report, and Phase-A domain.pddl."
+        ),
+    )
+    web_kobe_phase_a_parser.add_argument(
+        "--graph",
+        type=Path,
+        required=True,
+        help="Path to the raw explored Web-KOBE graph JSON.",
+    )
+    web_kobe_phase_a_parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("outputs/web_kobe_phase_a"),
+        help="Directory to write raw/canonical/report/domain artifacts.",
     )
     web_kobe_pddl_smoke_parser = subparsers.add_parser(
         "web-kobe-pddl-smoke",
@@ -495,6 +530,34 @@ def main(argv: list[str] | None = None) -> int:
             domain = compile_web_kobe_graph_to_domain(graph)
             args.output.mkdir(parents=True, exist_ok=True)
             (args.output / "domain.pddl").write_text(domain, encoding="utf-8")
+            output_path = args.output
+        elif args.mode in {"web-kobe-phase-a", "web-kobe-consolidate"}:
+            graph = load_web_kobe_graph_json(args.graph)
+            artifacts = consolidate_behavior_state_graph(
+                graph,
+                embedding_provider=_phase_a_embedding_provider(),
+            )
+            args.output.mkdir(parents=True, exist_ok=True)
+            (args.output / "raw_graph.json").write_text(
+                json.dumps(artifacts.raw_graph.to_dict(), indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            (args.output / "canonical_graph.json").write_text(
+                json.dumps(
+                    artifacts.canonical_graph.to_dict(),
+                    indent=2,
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            (args.output / "consolidation_report.json").write_text(
+                json.dumps(artifacts.report.to_dict(), indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            (args.output / "domain.pddl").write_text(
+                compile_phase_a_domain(artifacts.canonical_graph),
+                encoding="utf-8",
+            )
             output_path = args.output
         elif args.mode == "web-kobe-pddl-smoke":
             graph = load_web_kobe_graph_json(args.graph)

@@ -64,7 +64,7 @@ def test_business_state_node_does_not_hardcode_profile_fact_labels():
     )
 
     assert target.node_label == "cart_page"
-    assert target.node_id.startswith("cart_page__business_")
+    assert target.node_id.startswith("cart__business_")
 
 
 def test_business_state_node_falls_back_to_business_action_name():
@@ -81,3 +81,30 @@ def test_business_state_node_falls_back_to_business_action_name():
 
     assert target.node_label == "product_details"
     assert target.node_id.startswith("product_details__business_")
+
+
+def test_business_state_identity_does_not_include_planning_facts():
+    first = resolve_business_target_node(
+        source_node=_node("shopping"),
+        candidate_node=_node("shopping_after", node_label="shopping"),
+        business_transition=BusinessTransition(
+            action_name="open_cart",
+            relevance="core",
+            meaningful_change=True,
+        ),
+        planning_transition=PlanningTransition(post_facts=["cart_page_visible"]),
+    )
+    second = resolve_business_target_node(
+        source_node=_node("shopping"),
+        candidate_node=_node("shopping_after", node_label="shopping"),
+        business_transition=BusinessTransition(
+            action_name="open_cart",
+            relevance="core",
+            meaningful_change=True,
+        ),
+        planning_transition=PlanningTransition(
+            post_facts=["cart_page_visible", "unstable_vlm_observation"]
+        ),
+    )
+
+    assert first.node_id == second.node_id

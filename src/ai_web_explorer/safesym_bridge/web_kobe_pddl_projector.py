@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -90,6 +90,9 @@ def _business_affordance_from_dict(data: dict[str, Any]) -> BusinessAffordance:
             confidence = float(confidence)
         except (TypeError, ValueError):
             confidence = None
+    supporting_facts = data.get("supporting_facts", [])
+    if not isinstance(supporting_facts, list):
+        supporting_facts = []
     return BusinessAffordance(
         action_name=str(data.get("action_name", "")),
         label=data.get("label"),
@@ -99,7 +102,7 @@ def _business_affordance_from_dict(data: dict[str, Any]) -> BusinessAffordance:
         confidence=confidence,
         supporting_facts=[
             str(fact).strip()
-            for fact in data.get("supporting_facts", [])
+            for fact in supporting_facts
             if str(fact).strip()
         ],
     )
@@ -134,6 +137,9 @@ def _node_from_dict(data: dict[str, Any]) -> WebKobeNode:
 
 
 def _action_from_dict(data: dict[str, Any]) -> BrowserAction:
+    supporting_facts = data.get("supporting_facts", [])
+    if not isinstance(supporting_facts, list):
+        supporting_facts = []
     return BrowserAction(
         action_kind=str(data.get("action_kind", "")),
         locator=data.get("locator"),
@@ -143,6 +149,11 @@ def _action_from_dict(data: dict[str, Any]) -> BrowserAction:
         action_label=data.get("action_label"),
         canonical_action_name=data.get("canonical_action_name"),
         naming_provenance=data.get("naming_provenance"),
+        supporting_facts=[
+            str(fact).strip()
+            for fact in supporting_facts
+            if str(fact).strip()
+        ],
     )
 
 
@@ -836,12 +847,86 @@ def compile_web_kobe_graph_to_domain(
     )
 
 
+def _phase_a_action_name(
+    edge,
+    *,
+    index: int,
+    location_predicates: dict[str, str],
+    used_names: set[str],
+) -> str:
+    action_name = (
+        _business_canonical_action_name(edge)
+        or _action_name(edge.action.semantic_id)
+        or "transition"
+    )
+    source_name = location_predicates[edge.source_node_id]
+    if source_name.startswith("at_"):
+        source_name = source_name[3:]
+    candidate = f"{action_name}__from_{source_name}"
+    if candidate in used_names:
+        candidate = f"{candidate}__{index:03d}"
+    used_names.add(candidate)
+    return candidate
+
+
+def compile_phase_a_domain(
+    graph: WebKobeGraph,
+    *,
+    options: PddlProjectionOptions | None = None,
+) -> str:
+    """Project a canonical behavior graph to the Phase-A location domain.
+
+    Phase A deliberately keeps planning and observation evidence on the graph
+    for auditability, but excludes those fields from the planner-facing domain.
+    Self-loops remain in the canonical graph and are omitted only here.
+    """
+    phase_a_nodes = [replace(node, planning_state=None) for node in graph.nodes]
+    known_node_ids = {node.node_id for node in phase_a_nodes}
+    phase_a_edges = []
+    for edge in graph.edges:
+        if (
+            edge.source_node_id == edge.target_node_id
+            or edge.source_node_id not in known_node_ids
+            or edge.target_node_id not in known_node_ids
+        ):
+            continue
+        phase_a_edges.append(
+            replace(
+                edge,
+                action=replace(edge.action, supporting_facts=[]),
+                observed_delta=[],
+                pddl_hint=None,
+                planning_delta=None,
+                planning_transition=None,
+            )
+        )
+    phase_a_graph = replace(
+        graph,
+        nodes=phase_a_nodes,
+        edges=phase_a_edges,
+    )
+    base_options = options or PddlProjectionOptions()
+    phase_a_options = replace(
+        base_options,
+        include_observed_delta_facts=False,
+        include_generated_planning_facts=False,
+    )
+    return _compile_domain(
+        phase_a_graph,
+        options=phase_a_options,
+        location_predicates=_location_predicates_by_node_id(phase_a_graph),
+        extra_predicate_names=[],
+        action_name_factory=_phase_a_action_name,
+    )
+
+
 def _compile_domain(
     graph: WebKobeGraph,
     *,
     options: PddlProjectionOptions,
     location_predicates: dict[str, str],
     extra_predicate_names: list[str],
+    action_name_factory=None,
 ) -> str:
     predicate_names = set(
         list(location_predicates.values())
@@ -866,8 +951,18 @@ def _compile_domain(
 
     projectable_edges = [edge for edge in graph.edges if _is_projectable_edge(edge)]
     action_blocks = []
+    used_action_names: set[str] = set()
     for index, edge in enumerate(projectable_edges, start=1):
-        action_name = _unique_pddl_action_name(edge, index=index)
+        action_name = (
+            action_name_factory(
+                edge,
+                index=index,
+                location_predicates=location_predicates,
+                used_names=used_action_names,
+            )
+            if action_name_factory is not None
+            else _unique_pddl_action_name(edge, index=index)
+        )
         source_node = nodes_by_id.get(edge.source_node_id)
         preconditions = _preconditions_for_edge(
             edge,

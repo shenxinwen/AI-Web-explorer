@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 
 from ai_web_explorer.grounded_web.capability_graph import ExecutionTrace, PageFrame
@@ -294,7 +296,7 @@ async def test_explore_one_step_records_self_loop_delta():
     assert len(graph.edges) == 1
     edge = graph.edges[0]
     assert edge.source_node_id.startswith("listing__")
-    assert edge.target_node_id.startswith("cart_with_items__business_")
+    assert edge.target_node_id.startswith("add_to_cart_product__business_")
     assert edge.source_node_id != edge.target_node_id
     assert edge.action.semantic_id == "add_to_cart_product"
     assert edge.schema_delta == {"cart_has_items": {"before": False, "after": True}}
@@ -1051,7 +1053,7 @@ async def test_explore_one_step_materializes_same_page_business_change(monkeypat
     assert edge.source_node_id != edge.target_node_id
     assert edge.status == "succeeded_with_observed_change"
     target = {node.node_id: node for node in graph.nodes}[edge.target_node_id]
-    assert target.node_id.startswith("cart_with_items__business_")
+    assert target.node_id.startswith("add_item_to_cart__business_")
     assert target.node_label == "cart_with_items"
     assert target.planning_state is not None
     assert target.planning_state.active_facts == ["cart_has_items"]
@@ -1797,6 +1799,8 @@ def test_target_matching_reuses_existing_business_state_node():
         ),
     )
     explorer.manager.identify_or_add_node(existing_cart)
+    explorer.manager.identify_or_add_node(_selection_node("source"))
+    explorer.manager.add_edge(_selection_edge("source", "cart__existing", "open_cart"))
     explorer.state_embedding_records = [
         StateEmbeddingRecord(
             node_id="cart__existing",
@@ -1836,12 +1840,124 @@ def test_target_matching_reuses_existing_business_state_node():
         after=after,
         after_interactables=[],
         planning_transition=PlanningTransition(post_facts=["cart_has_items"]),
+        source_node_id="source",
     )
 
     assert match is not None
     assert match.status == "same"
     assert matched_node.node_id == "cart__existing"
     assert matched_node.node_label == "cart"
+
+
+def test_target_matching_reuses_known_state_despite_planning_fact_conflict():
+    def embed(text):
+        return [1.0, 0.0, 0.0]
+
+    explorer = WebKobeExplorer(
+        adapter=FakeAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        enable_exploration_memory=True,
+        state_embedding_provider=embed,
+    )
+    explorer.manager.identify_or_add_node(
+        replace(
+            _selection_node("cart__existing"),
+            planning_state=PlanningState(active_facts=["old_observation"]),
+        )
+    )
+    explorer.manager.identify_or_add_node(_selection_node("source"))
+    explorer.manager.add_edge(_selection_edge("source", "cart__existing", "open_cart"))
+    explorer.state_embedding_records = [
+        StateEmbeddingRecord(
+            node_id="cart__existing",
+            summary_text="known cart state",
+            embedding=[1.0, 0.0, 0.0],
+        )
+    ]
+
+    matched_node, match = explorer._match_existing_target_node(
+        target_node=_selection_node("new_candidate"),
+        after=StateSnapshot(
+            page_id="cart",
+            url="https://example.test/cart",
+            title="Cart",
+            signature={},
+        ),
+        after_interactables=[],
+        planning_transition=PlanningTransition(post_facts=["new_observation"]),
+        source_node_id="source",
+    )
+
+    assert match is not None
+    assert match.status == "same"
+    assert match.blocked_reason is None
+    assert matched_node.node_id == "cart__existing"
+
+
+def test_source_matching_reuses_known_state_despite_planning_fact_conflict():
+    explorer = WebKobeExplorer(
+        adapter=FakeAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        enable_exploration_memory=True,
+        state_embedding_provider=lambda text: [1.0, 0.0],
+    )
+    explorer.manager.identify_or_add_node(
+        replace(
+            _selection_node("observed"),
+            planning_state=PlanningState(active_facts=["observed_fact"]),
+        )
+    )
+    explorer.manager.add_edge(_selection_edge("observed", "known", "revisit"))
+    explorer.manager.identify_or_add_node(
+        replace(
+            _selection_node("known"),
+            planning_state=PlanningState(active_facts=["known_fact"]),
+        )
+    )
+
+    source_id, accepted_match = explorer._resolve_current_source_id(
+        default_source_id="observed",
+        source_match=StateMatch(status="same", node_id="known", score=0.99),
+    )
+
+    assert source_id == "known"
+    assert accepted_match is not None
+
+
+def test_target_matching_does_not_reuse_embedding_only_unknown_state():
+    explorer = WebKobeExplorer(
+        adapter=FakeAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        enable_exploration_memory=True,
+        state_embedding_provider=lambda text: [1.0, 0.0, 0.0],
+    )
+    explorer.manager.identify_or_add_node(_selection_node("known"))
+    explorer.manager.identify_or_add_node(_selection_node("source"))
+    explorer.state_embedding_records = [
+        StateEmbeddingRecord(
+            node_id="known",
+            summary_text="known state",
+            embedding=[1.0, 0.0, 0.0],
+        )
+    ]
+
+    matched_node, match = explorer._match_existing_target_node(
+        target_node=_selection_node("unknown_candidate"),
+        after=StateSnapshot(
+            page_id="known",
+            url="https://example.test/known",
+            title="Known",
+            signature={},
+        ),
+        after_interactables=[],
+        planning_transition=PlanningTransition(post_facts=[]),
+        source_node_id="source",
+    )
+
+    assert match is not None
+    assert match.status == "blocked"
+    assert match.blocked_reason == "embedding_only"
+    assert matched_node.node_id == "unknown_candidate"
 
 
 def test_source_matching_trusts_current_node_pointer_during_normal_exploration():

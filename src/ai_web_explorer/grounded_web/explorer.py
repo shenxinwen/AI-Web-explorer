@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import json
 from dataclasses import replace
 from typing import Any
 
@@ -12,7 +10,7 @@ from ai_web_explorer.grounded_web.capability_graph import (
     ExecutionTrace,
     ObservedDelta,
 )
-from ai_web_explorer.grounded_web.state_signature import schema_delta, slug_identifier
+from ai_web_explorer.grounded_web.state_signature import schema_delta
 from ai_web_explorer.grounded_web.graph import (
     BusinessAffordance,
     BrowserAction,
@@ -230,14 +228,6 @@ def _is_ignorable_stagehand_tool_choice_error(error: str | None) -> bool:
     return bool(error and "Thinking mode does not support this tool_choice" in error)
 
 
-def _planning_transition_has_fact_change(
-    transition: PlanningTransition | None,
-) -> bool:
-    if transition is None:
-        return False
-    return set(transition.pre_facts) != set(transition.post_facts)
-
-
 def _should_advance_current_node(
     *,
     source_id: str,
@@ -261,54 +251,7 @@ def _should_advance_current_node(
         return True
     return (
         should_materialize_business_state(business_transition)
-        or _planning_transition_has_fact_change(planning_transition)
         or edge_status == "succeeded_with_navigation"
-    )
-
-
-def _facts_compatible(
-    existing_facts: list[str] | None,
-    post_facts: list[str],
-) -> bool:
-    if existing_facts is None:
-        return not post_facts
-    return set(existing_facts) == set(post_facts)
-
-
-def _state_variant_node_id(
-    *,
-    node: WebKobeNode,
-    post_facts: list[str],
-    state_label_hints: dict[str, str],
-) -> tuple[str, str]:
-    label = _state_variant_label(
-        node=node,
-        post_facts=post_facts,
-        state_label_hints=state_label_hints,
-    )
-    payload = {
-        "base_node_id": node.node_id,
-        "post_facts": sorted(post_facts),
-    }
-    digest = hashlib.sha1(
-        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()[:10]
-    return f"{label}__state_{digest}", label
-
-
-def _state_variant_label(
-    *,
-    node: WebKobeNode,
-    post_facts: list[str],
-    state_label_hints: dict[str, str],
-) -> str:
-    for fact in post_facts:
-        hint = state_label_hints.get(fact)
-        if hint:
-            return slug_identifier(hint, fallback="state")
-    return slug_identifier(
-        node.node_label or node.page_frame.page_type or node.node_id,
-        fallback="state",
     )
 
 
@@ -504,15 +447,12 @@ class WebKobeExplorer:
             planning_transition=planning_transition,
             state_label_hints=_state_label_hints_from_profile(self.business_profile),
         )
-        target_node = self._avoid_incompatible_existing_target_state(
-            target_node=target_node,
-            planning_transition=planning_transition,
-        )
         target_node, target_match = self._match_existing_target_node(
             target_node=target_node,
             after=after,
             after_interactables=after_interactables,
             planning_transition=planning_transition,
+            source_node_id=source_id,
         )
         if target_match is not None:
             execution_metadata["target_state_match"] = {
@@ -601,33 +541,6 @@ class WebKobeExplorer:
             self._set_current_node(source_id)
         return self.manager.to_graph(start_node_id=self._start_node_id)
 
-    def _avoid_incompatible_existing_target_state(
-        self,
-        *,
-        target_node: WebKobeNode,
-        planning_transition: PlanningTransition | None,
-    ) -> WebKobeNode:
-        if planning_transition is None:
-            return target_node
-        try:
-            existing = self.manager.node_for_id(target_node.node_id)
-        except KeyError:
-            return target_node
-        existing_facts = (
-            list(existing.planning_state.active_facts)
-            if existing.planning_state is not None
-            else None
-        )
-        post_facts = list(planning_transition.post_facts)
-        if _facts_compatible(existing_facts, post_facts):
-            return target_node
-        node_id, label = _state_variant_node_id(
-            node=target_node,
-            post_facts=post_facts,
-            state_label_hints=_state_label_hints_from_profile(self.business_profile),
-        )
-        return replace(target_node, node_id=node_id, node_label=label)
-
     def _match_existing_target_node(
         self,
         *,
@@ -635,6 +548,7 @@ class WebKobeExplorer:
         after: StateSnapshot,
         after_interactables: list[dict[str, Any]],
         planning_transition: PlanningTransition | None,
+        source_node_id: str | None = None,
     ) -> tuple[WebKobeNode, StateMatch | None]:
         if (
             not self.enable_exploration_memory
@@ -660,16 +574,14 @@ class WebKobeExplorer:
             existing = self.manager.node_for_id(target_match.node_id)
         except KeyError:
             return target_node, target_match
-        existing_facts = (
-            list(existing.planning_state.active_facts)
-            if existing.planning_state is not None
-            else None
-        )
-        if not _facts_compatible(existing_facts, list(planning_transition.post_facts)):
+        if not self._has_known_revisit_evidence(
+            default_node_id=source_node_id,
+            matched_node_id=existing.node_id,
+        ):
             return target_node, replace(
                 target_match,
                 status="blocked",
-                blocked_reason="planning_fact_conflict",
+                blocked_reason="embedding_only",
             )
         return (
             replace(
@@ -683,6 +595,30 @@ class WebKobeExplorer:
                 planning_state=existing.planning_state,
             ),
             target_match,
+        )
+
+    def _has_known_revisit_evidence(
+        self,
+        *,
+        default_node_id: str | None,
+        matched_node_id: str,
+    ) -> bool:
+        if default_node_id == matched_node_id:
+            return True
+        if matched_node_id == self._current_node_id:
+            return True
+        if matched_node_id in self._visit_stack:
+            return True
+        if default_node_id is None:
+            return False
+        graph = self.manager.to_graph()
+        return any(
+            {
+                edge.source_node_id,
+                edge.target_node_id,
+            }
+            == {default_node_id, matched_node_id}
+            for edge in graph.edges
         )
 
     async def _try_backtrack(self) -> bool:
@@ -903,19 +839,12 @@ class WebKobeExplorer:
     ) -> bool:
         if default_source_id == matched_source_id:
             return True
-        default_node = self.manager.node_for_id(default_source_id)
-        matched_node = self.manager.node_for_id(matched_source_id)
-        default_facts = (
-            list(default_node.planning_state.active_facts)
-            if default_node.planning_state is not None
-            else None
+        self.manager.node_for_id(default_source_id)
+        self.manager.node_for_id(matched_source_id)
+        return self._has_known_revisit_evidence(
+            default_node_id=default_source_id,
+            matched_node_id=matched_source_id,
         )
-        matched_facts = (
-            list(matched_node.planning_state.active_facts)
-            if matched_node.planning_state is not None
-            else None
-        )
-        return _facts_compatible(default_facts, matched_facts or [])
 
     def _refresh_matched_source_node(
         self,
