@@ -53,13 +53,31 @@
 - 实验默认覆盖 `outputs/experiments/<site>/latest/`，除非显式归档。
 - `BusinessAffordance.action_name`、`label`、`target_hint` 的语义重叠留待后续 schema review。
 
+## 2026-08-08 - 探索 loop 收束为 forward-only frontier
+
+更改：
+- 当前节点候选耗尽时直接记录 `current_state_exhausted` 并停止，不执行 browser back 或 visit-stack recovery。
+- 命中已有节点时继续使用该节点已经建立的固定候选，不重新生成候选。
+- 重复已知 `(source, action, target)` transition，或连续没有新节点/新语义转换，计为无进展；最大步数仍然有效。
+- runtime memory 只在当前节点或可靠匹配的历史节点上下文内避免同义动作；embedding 相似度用于局部语义去重，不做全局屏蔽。
+- Phase A 不再因为 frontier 尚未覆盖全部 affordance 而拒绝节点；部分 frontier 上已经真实观察成功、目标存在的边仍可进入 canonical graph 和 `domain.pddl`，失败或缺失目标的边仍排除。
+
+原因：
+- 当前阶段需要先验证单向探索和停止边界，browser back、replay 和复杂 DFS recovery 不属于本轮最小闭环。
+- 已观察到的业务边即使节点仍有未尝试候选，也应成为 Phase A 的可审查事实；未完成候选不等于已观察边无效。
+
+影响：
+- `current_state_exhausted`、连续无进展和最大步数共同决定探索停止。
+- raw graph 仍原样保留；canonical graph/domain 只消费符合现有成功、目标存在和非自环规则的 observed edges。
+- 不新增持久化 graph 字段、memory 表或 PDDL 事实来源。
+
 ## 2026-08-02 - 将探索策略收束为 frontier / DFS
 
 更改：
 - 在 current project overview 中明确 bounded exploration V1 的方向：每个节点维护一组当前可执行业务候选，优先执行未尝试候选。
-- 当前节点候选耗尽时，应回退到仍有 frontier 的历史节点，而不是重复执行已成功但低进展的动作。
+- 历史计划曾要求当前节点候选耗尽时回退到仍有 frontier 的历史节点；该方案已由 2026-08-08 的 forward-only 决策取代。
 - 短期继续从已有 edges 反查 tried / no-op / failed 状态，不急着新增复杂 memory 表；browser back / DFS recovery 后续再接 embedding source relocalization。
-- 代码层已落地最小行为：business affordance selector 不再在候选耗尽后选择非 avoid 成功动作；browser back 成功后会用轻量 visit stack 恢复 `_current_node_id`。
+- 当时的最小实现曾包含 selector 去重和 browser back visit stack；当前代码已移除 browser back recovery，保留局部候选去重。
 
 原因：
 - 最新 Practice Automated Testing Shopping 实验在商品列表和商品详情之间反复切换，说明当前 selector 的“全部尝试后选择非 avoid 成功动作”兜底会制造循环。
@@ -67,44 +85,44 @@
 - 这个方向更接近 SEE / UI-KOBE 类探索图构建的 frontier 思路，同时保持第一版实现足够简单。
 
 影响：
-- 下一步优先通过真实网站实验验证最小 frontier/DFS 行为，并补充实验报告中的 frontier 质量指标。
-- embedding 继续服务 target merge、相似节点动作记忆和 recovery，不在正常探索中每步覆盖 source。
-- graph/PDDL 质量评估会增加候选耗尽、回退、重复节点命中等探索过程指标。
+- 后续实验应验证 forward-only 候选耗尽停止、连续无进展阈值和重复节点命中。
+- embedding 继续服务 target merge 和当前/可信历史节点上下文内的动作记忆，不在正常探索中每步覆盖 source。
+- graph/PDDL 质量评估继续关注候选耗尽、重复节点命中和观察成功边，不把 browser back 次数作为当前闭环指标。
 
-## 2026-08-03 - 将 frontier 指标写入 graph meta
+## 2026-08-03 - 将 frontier 指标写入 graph meta（历史记录）
 
 更改：
 - `write_web_kobe_graph` 在输出 `graph.json` 时写入 `meta.frontier_metrics`。
-- 指标包括每个节点的候选动作数、已尝试动作、未尝试动作、no-op 动作、失败动作、全局 frontier/exhausted 节点数、重复 target 命中数和 backtrack 次数。
-- `WebKobeGraphManager` 新增轻量 `meta` 字典；`WebKobeExplorer._try_backtrack` 成功同步 visit stack 时递增 `backtrack_count`。
+- 指标包括每个节点的候选动作数、已尝试动作、未尝试动作、no-op 动作、失败动作、全局 frontier/exhausted 节点数和重复 target 命中数。
+- `WebKobeGraphManager` 新增轻量 `meta` 字典；当时的实现还曾记录 visit-stack backtrack。
 
 原因：
 - 后续实验不能只看 node/edge 数量，需要知道每个节点的候选动作是否真的被消耗、是否仍有 frontier、重复节点是否被命中。
 - 指标可以由现有 graph 派生，不需要提前引入新的 memory 表或改变 node/edge schema。
-- backtrack 不记录为业务 edge，因此需要在 graph meta 中记录控制层回退次数。
+- 当时认为 backtrack 不记录为业务 edge，因此需要记录控制层回退次数；该 recovery 方案已被 forward-only 决策取代。
 
 影响：
-- 下一轮实验可以直接从 `graph.json` 判断探索是否卡在某个节点、是否因为候选耗尽触发回退、哪些动作被 no-op/failed。
-- 暂时仍缺 controller 层完整 DFS：当前 controller 会把 no-edge backtrack 视为 `no_available_action` 停止。下一步需要区分“控制性 backtrack，继续探索”和“没有 frontier，终止”。
+- 当时计划下一轮实验从 `graph.json` 判断探索是否卡在某个节点、是否因为候选耗尽触发回退、哪些动作被 no-op/failed；当前应改为观察候选耗尽停止和无进展统计。
+- 本条关于完整 DFS/backtrack controller 的设计属于历史方案；当前 controller 在当前节点候选耗尽时记录 `current_state_exhausted` 并停止。
 - 指标属于诊断/实验质量信息，不进入 PDDL projector。
 
-## 2026-08-03 - controller 改为连续无进展终止
+## 2026-08-03 - controller 改为连续无进展终止（历史记录）
 
 更改：
 - `WebKobeExplorationController` 不再遇到单次 `failed_execution` 就终止。
 - 新增 `max_consecutive_unproductive_steps`，默认值为 3。
 - `failed_execution`、`no_observed_change` 等无进展业务 edge 会累加连续无进展计数；成功业务 edge 会清零。
-- 成功的 `control_backtrack` 不产生业务 edge，但会被视为有效探索控制动作，不再触发 `no_available_action` 立即停止。
+- 当时将成功的 `control_backtrack` 视为有效探索控制动作；该行为已由当前 `current_state_exhausted` forward-only 边界取代。
 - `graph.meta` 记录 `last_step_kind`、`last_step_status`、`consecutive_unproductive_steps` 和 `max_consecutive_unproductive_steps`。
 
 原因：
 - 开放探索中失败是正常试错信号，不应把系统重新拉回“任务必须每步成功”的执行器逻辑。
 - 用户明确要求业务动作也允许失败，只有连续失败或连续无进展后才终止并记录。
-- backtrack 属于探索控制动作，不应作为 PDDL edge，也不应因为没有新增 edge 就让 controller 停止。
+- 当时认为 backtrack 属于探索控制动作；当前不执行 browser back，重复已知 transition 和无新 graph information 会计为无进展。
 
 影响：
-- 实验可以继续越过偶发的 Stagehand 执行失败、no-op 或模型适配异常。
-- stop reason 更符合探索语义：`consecutive_unproductive_steps` 表示连续无进展耗尽，`no_available_action` 表示没有 edge 且没有有效控制动作。
+- 实验仍可继续越过偶发的 Stagehand 执行失败、no-op 或模型适配异常，直至连续无进展阈值或其他停止条件命中。
+- stop reason 更符合探索语义：`current_state_exhausted` 表示当前节点候选耗尽，`consecutive_unproductive_steps` 表示连续无进展耗尽。
 - 后续真实实验需要评估默认阈值 3 是否合适。
 
 ## 2026-08-02 - 将 Stagehand thinking/tool_choice 异常视为非致命执行异常

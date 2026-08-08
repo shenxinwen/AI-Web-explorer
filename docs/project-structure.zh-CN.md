@@ -11,7 +11,7 @@
 真实浏览器操作
   -> 观察与状态解释
   -> WebKobeGraph 记忆
-  -> bounded exploration 策略
+  -> bounded forward-only exploration 策略
   -> PDDL 投影
   -> SafeSym smoke / 安全验证
 ```
@@ -120,12 +120,13 @@ profile facts 位于这一层。它们的定位是“优先观察目标 + PDDL �
 - 定义 `WebKobeGraph`、`WebKobeNode`、`WebKobeEdge`；
 - 记录 `BusinessAffordance`、`PlanningDelta`、`PlanningState`、`PlanningTransition`，并兼容读取历史 `BusinessTransition`；
 - 判断一次业务变化是否应该生成新节点；
-- 基于 profile 提供的 state label hints、planning facts 和 business action fallback，为 materialized business node 生成可读 `node_label`；
+- 基于 profile 提供的 state label hints、planning facts 和 business action，为 materialized business node 生成可读 `node_label`；
 - 传播 source-aware planning state；
 - 在 `PlanningState` 中同时保留 `active_facts`、`profile_fact_ids` 和 `generated_fact_ids`；
 - 将 Visual Delta 观察事实写入 raw edge 的 `execution_trace.metadata.visual_delta_trace`，不参与 planning transition、target matching planning facts 或 Phase A PDDL；
 - 存储 state embeddings；
 - 判断 revisit，并给探索策略提供 memory context；明确 URL path、结构签名或 Visual Delta 变化时，不将候选目标合并回本次 source，但仍可复用有可靠证据的其他历史节点。
+- 在当前节点或可靠匹配的历史节点上下文内，使用 exact/embedding 相似度避免重复业务动作；不做全局动作屏蔽。
 
 embedding memory 只辅助定位和避免重复，不直接进入 PDDL。
 
@@ -159,6 +160,7 @@ embedding memory 只辅助定位和避免重复，不直接进入 PDDL。
 - 调用 Stagehand 操作层和 VLM/DOM 观察层；
 - 更新 graph；
 - 按 step budget 或 terminal condition 停止。
+- 当前节点候选耗尽时以 `current_state_exhausted` 停止，不执行 browser back；连续没有新 graph information 时累计无进展。
 
 低层 DOM interactables 可以继续作为运行时 state summary / embedding matching 的辅助输入，但不再输出到 canonical `graph.json` node，也不作为 graph memory 或探索决策单位。旧的 LLM action selector 路径已经移除，避免系统回退到 selector/locator 驱动的探索。
 
@@ -193,7 +195,7 @@ embedding memory 只辅助定位和避免重复，不直接进入 PDDL。
 - 运行 PDDL readiness smoke；
 - 运行 SafeSym parser、safety injection、planner smoke。
 
-这一层应保持确定性。它应该消费 graph 中已经记录的语义，不应该直接调用 LLM/VLM。Phase A 只投影 canonical locations 和非自环 business transitions；Visual Delta 观察事实不作为 Phase A 的 predicates、preconditions 或 effects。其他事实是否长期晋升为 planner-facing 语义，仍由后续审查和晋升策略决定。
+这一层应保持确定性。它应该消费 graph 中已经记录的语义，不应该直接调用 LLM/VLM。Phase A 只投影 canonical locations 和非自环 business transitions；部分 frontier 不因尚未覆盖全部 affordance 而被拒绝，已经真实观察成功且目标存在的边仍可进入 canonical graph/domain，失败或缺失目标的边仍被排除。Visual Delta 观察事实不作为 Phase A 的 predicates、preconditions 或 effects。其他事实是否长期晋升为 planner-facing 语义，仍由后续审查和晋升策略决定。
 
 主要函数/类：
 

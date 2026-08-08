@@ -43,7 +43,7 @@ Stagehand、Playwright、VLM/LLM、embedding 都是工具或证据来源。Web-K
   -> 观察 before/after 业务变化
   -> 更新 node、edge、planning_state、planning_transition
   -> 生成或更新 PDDL/SafeSym 产物
-  -> 如果当前节点候选耗尽，则回退到仍有 frontier 的历史节点
+  -> 如果当前节点候选耗尽，则以 `current_state_exhausted` 停止，不执行 browser back
   -> 根据步数、重复、frontier 或目标覆盖决定是否继续
 ```
 
@@ -57,7 +57,7 @@ business affordance 生成：已有初版
 embedding memory：已接入，用于相似状态定位和重复提示
 target matching：已有初版，动作后会用 embedding 相似度和可靠的本地 revisit evidence 复用已有业务节点；state summary 可包含本地确认的 planning context，但不是独立否决或裁决门槛；存在明确 URL/signature/visual 变化时不得回并到 source
 source 定位：正常探索默认信任当前节点指针；embedding source match 只作为恢复/诊断信号
-frontier / DFS 探索策略：最小 business-affordance selector/backtrack 行为已实现；graph meta 已输出 frontier_metrics
+forward-only frontier 探索策略：当前节点候选耗尽即停止；graph meta 记录 frontier/step 诊断信息
 连续无进展终止：已实现；failed/no-op 不再单次终止，达到阈值才停止
 Stagehand thinking/tool_choice 异常：已定义为需要继续动作后观察；有变化时记为成功转换，无变化时记为 `no_observed_change`
 Visual observations：只保留在 raw edge trace，不进入 `PlanningState` 或 Phase A PDDL
@@ -124,7 +124,7 @@ PDDL projector 确定性消费 graph 中已经记录的语义
 
 这意味着 VLM 不应该判断“动作是否做过”“当前状态是否是新节点”“是否应该建新节点”。VLM 没有稳定的 graph 记忆，它应该提供的是页面证据、候选业务动作和 before/after 变化摘要。
 
-正常探索不应每一步都用 embedding 重新定位 source。source 默认来自上一条成功 edge 的 target；如果动作生成新节点就跳转过去，如果命中旧节点就跳到旧节点，如果没有有效变化就留在原地。embedding source match 只用于 browser back、页面刷新、实验恢复、外部导航或浏览器实际位置和 graph 指针可能不一致的恢复场景。
+正常探索不应每一步都用 embedding 重新定位 source。source 默认来自上一条成功 edge 的 target；如果动作生成新节点就跳转过去，如果命中旧节点就跳到旧节点，如果没有有效变化就留在原地。embedding source match 只用于页面刷新、实验恢复、外部导航或浏览器实际位置和 graph 指针可能不一致的诊断/恢复场景；当前探索 loop 不执行 browser back recovery。
 
 动作去重不应只依赖 `node_id + action_slug`。这个方式可以作为快速索引，但相似节点上的动作记忆可以由 embedding-assisted memory 辅助：
 
@@ -179,15 +179,16 @@ edge.planning_transition 中属于 profile facts 的 pre/added/removed facts
 
 ### 7. 探索策略应以 frontier 为核心
 
-当前确认的第一版探索策略是简单 DFS / frontier，而不是让 Stagehand 或 VLM 自由规划：
+当前确认的第一版探索策略是简单、forward-only 的 frontier，而不是让 Stagehand 或 VLM 自由规划：
 
 - 每个业务节点拥有 3-5 个当前可执行的 business affordances；这些候选只在节点首次获得 frontier 时写入，后续 revisit / target merge 回到同一节点时不再重新生成或追加。
 - 本地系统把候选动作标记为未尝试、已尝试、no-op 或失败；VLM 只负责提出候选和证据，不负责记忆。
 - 当前节点优先执行未尝试候选；动作成功后，若产生新业务状态就移动到新节点，若命中已有业务状态就移动到已有节点，若没有有效变化就留在原节点。
-- 当前节点候选都尝试完后，不能继续重复“非 avoid 的成功动作”，而应回退到上一个仍有未尝试候选的节点。
-- 停止条件包括最大步数、没有 frontier、多次重复状态、连续 no-op/失败，以及显式 terminal 状态。
+- 命中已有节点时继续使用该节点首次建立的固定候选，不重新生成或追加候选。
+- 当前节点候选都尝试完后，直接记录 `current_state_exhausted` 并停止，不执行 browser back；连续没有新节点或新语义转换时计为无进展，最大步数仍有效。
+- runtime memory 只在当前节点或可靠 embedding 匹配的历史节点上下文内避免同义动作，不做全局动作屏蔽。
 
-短期先从已有 edges 反查 tried/no-op/failed 状态，不新增复杂 memory 表。旧的 selector/locator fallback 已删除；business-affordance selector 不再在候选耗尽后继续选择成功但已尝试的动作。browser back 成功后会用轻量 visit stack 回退 `_current_node_id`。`graph.meta.frontier_metrics` 已记录每个节点的候选、已尝试、未尝试、no-op、失败、重复 target 命中和 backtrack 次数。后续还需要把 embedding source relocalization 接入更完整的 DFS recovery。
+短期先从已有 edges 反查 tried/no-op/failed 状态，不新增复杂 memory 表。旧的 selector/locator fallback 已删除；business-affordance selector 不再在候选耗尽后继续选择成功但已尝试的动作。`graph.meta` 记录 step kind/status、连续无进展和 frontier 诊断信息。后续可再评估 replay、browser back recovery 或更完整的 frontier 恢复，但不属于当前闭环。
 
 ## 当前主要问题
 
@@ -213,19 +214,18 @@ SafeSym 可以结构性消费当前产物，但 PDDL 的语义质量还不稳定
 - profile facts 不完整时，PDDL 会退化为 location path；
 - Phase A 当前只投影 canonical locations 和非自环 business transitions；Visual Delta facts 不进入 domain PDDL。
 
-### P1: 探索还没有真正形成 frontier
+### P1: 探索仍是受限的 forward-only frontier
 
-当前系统已经有 business affordance 和 embedding memory，但还没有成熟的：
+当前系统已经有 business affordance、局部 tried/avoid memory、语义动作去重和连续无进展终止，但仍缺少：
 
 - candidate action ranking；
-- tried action memory；
-- duplicate/no-op penalty；
-- backtracking；
-- coverage stop condition。
+- 更丰富的 coverage 评估；
+- replay 或 browser back recovery；
+- 跨节点的长期记忆模型。
 
-现在更像 bounded exploration V1，还不是成熟自由探索。此前实验中页面在商品列表和商品详情之间来回切换，核心原因不是 VLM 完全不会提候选，而是旧 selector 在当前节点候选都尝试完后，会回退到“非 avoid 的成功动作”，导致成功但低进展的动作被重复执行。最小修复已完成：当前节点无未尝试业务候选时返回 None，并触发 browser back / visit stack 回退；旧的 LLM action selector / OpenAI action selector 模块已删除，避免探索链路回退到 locator-driven 行为。
+现在更像 bounded exploration V1，还不是成熟自由探索。此前实验中页面在商品列表和商品详情之间来回切换，核心原因不是 VLM 完全不会提候选，而是旧 selector 在当前节点候选都尝试完后，会回退到“非 avoid 的成功动作”，导致成功但低进展的动作被重复执行。当前修复已改为：当前节点无未尝试业务候选时返回 None 并以 `current_state_exhausted` 停止；重复的已知 transition 或连续没有新 graph information 会计为无进展。旧的 LLM action selector / OpenAI action selector 模块已删除，避免探索链路回退到 locator-driven 行为。
 
-controller 已改为连续无进展策略：单次 `failed_execution`、`no_observed_change` 或成功 backtrack 都不会立刻终止；只有连续无进展达到阈值、无法产生 edge 且没有有效控制动作、terminal condition 命中或达到最大步数时才停止。`graph.meta` 会记录 `last_step_kind`、`last_step_status`、`consecutive_unproductive_steps` 和 `max_consecutive_unproductive_steps`。
+controller 已改为连续无进展策略：单次 `failed_execution`、`no_observed_change` 或重复已知 transition 都不会立刻终止；只有连续无进展达到阈值、当前节点候选耗尽、terminal condition 命中或达到最大步数时才停止。`graph.meta` 会记录 `last_step_kind`、`last_step_status`、`consecutive_unproductive_steps` 和 `max_consecutive_unproductive_steps`。
 
 最近的清理已经把通用 Stagehand exploration 默认模式改为 `observed_action`，保留 VLM 候选动作的 `supporting_facts`，并移除了业务候选选择中的全局 completed action 降权；重复策略应基于当前节点或 embedding 命中的相似节点上下文。
 
@@ -235,7 +235,7 @@ controller 已改为连续无进展策略：单次 `failed_execution`、`no_obse
 
 ### P1: WebKobeExplorer 有中心化风险
 
-`WebKobeExplorer` 目前同时处理观察、动作选择、VLM、embedding、source matching、edge 构造、planning transition 和回退。它是当前主线核心，短期可以保留，但后续新增探索策略时不应该继续把所有逻辑塞进 `explore_one_step`。
+`WebKobeExplorer` 目前同时处理观察、动作选择、VLM、embedding、source/target matching、edge 构造和 planning transition。它是当前主线核心，短期可以保留，但后续新增探索策略时不应该继续把所有逻辑塞进 `explore_one_step`。
 
 ### P2: 低层 UI 证据已退出 canonical graph
 
@@ -253,8 +253,8 @@ business_affordances + business_transition + planning_transition
 
 ## 下一阶段优先级
 
-1. 重跑 Practice Automated Testing Shopping，验证最小 frontier/DFS 是否能离开 product list / product details 循环，并继续观察 cart / checkout 等业务状态。
-2. 根据 `graph.meta.frontier_metrics` 分析每个节点候选数量、已尝试/未尝试/no-op/失败统计、回退次数、重复节点命中情况。
+1. 重跑 Practice Automated Testing Shopping，验证 forward-only 候选耗尽停止和连续无进展阈值，并继续观察 cart / checkout 等业务状态。
+2. 根据 graph meta 和 edge trace 分析每个节点候选数量、已尝试/未尝试/no-op/失败统计、重复节点命中和 stop reason。
 3. 检查连续无进展阈值是否合理；第一版 controller 默认阈值为 3。
 4. 继续检查 target matching 是否减少重复业务节点，以及 embedding source/target matching 是否只在正确位置发挥作用。
 5. 检查 graph 和 domain PDDL 质量，尤其是 source/target、precondition/effect、node label 和重复 `at_*_002`。
