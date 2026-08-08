@@ -206,6 +206,8 @@ embedding memory 只辅助定位和避免重复，不直接进入 PDDL。
 - `write_web_kobe_safesym_smoke`
 - `main`
 
+graph artifact 的布局由 `src/ai_web_explorer/safesym_bridge/graph_artifacts.py` 负责：`graph.json` 是可独立加载的紧凑主图，`graph_evidence.json` 是可选诊断 sidecar。`evidence_ref` 解析到 sidecar 中稳定的 node/edge key；历史完整 graph 继续兼容读取。Phase A 只消费 graph，不读取 sidecar，`raw_graph.json` 保留输入文件的原始 JSON 形状，因此 sidecar 证据不会被重新膨胀，也不参与 PDDL。该 artifact 拆分不改变探索、状态命名、matching 或 Phase A 语义。
+
 ### 实验运行层
 
 负责 CLI-facing 的实验编排。

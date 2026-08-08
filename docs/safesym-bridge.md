@@ -77,6 +77,25 @@ problem.pddl
 smoke_report.json
 ```
 
+### Graph artifacts and evidence sidecar
+
+The exploration writer emits a compact `graph.json` plus a sibling
+`graph_evidence.json`. The compact graph keeps topology, URLs and compact state
+signatures, frozen business affordances, action/status/visit data, execution
+outcomes, and non-empty planning transitions. Repeated page/node evidence,
+verbose instruction and action details, observed/schema deltas, and full
+Stagehand/Visual Delta traces remain in the sidecar. A compact node or edge
+resolves its `evidence_ref` through `node-evidence:<node_id>` or
+`edge-evidence:<edge_id>` in the sidecar.
+
+Historical full graph JSON remains load-compatible, and a compact graph can be
+loaded without the sidecar. Phase A reads only `graph.json`; it does not
+hydrate or require `graph_evidence.json`, and its `raw_graph.json` preserves the
+input JSON shape instead of expanding compact input. Sidecar visual evidence is
+diagnostic only and does not enter graph planning state or PDDL. This artifact
+layout does not change state naming or exploration semantics; candidate
+generation failure/empty distinction remains a separate follow-up.
+
 It validates planning readiness only. The report checks graph reachability,
 projected action/predicate counts, and basic static PDDL consistency. In
 particular, `pddl_static_consistency_ready` must be true and

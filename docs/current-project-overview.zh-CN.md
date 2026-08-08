@@ -78,6 +78,12 @@ PDDL 语义质量：可消费，但还不够稳定和可读
 - 只要 URL path、结构签名或 Visual Delta 有明确变化，target matching 就不能把候选目标合并回 source；仍可按既有可靠 revisit evidence 复用其他历史节点。
 - `Thinking mode does not support this tool_choice` 只表示 Stagehand/模型适配层异常：探索器会继续获取动作后状态、截图和 Visual Delta；有明确变化时记录成功转换，无变化时记录 `no_observed_change` 自环。未知执行错误仍是失败自环且不调用 Visual Delta。
 
+### Graph artifact 与 evidence sidecar
+
+当前实验 writer 将 `graph.json` 写为紧凑的主图，并将 verbose 的诊断证据写入同目录的 `graph_evidence.json`。紧凑 graph 保留节点/边拓扑、页面 URL 与结构签名、冻结的 `business_affordances`、状态/访问计数、动作语义、执行结果和非空规划 transition；重复的 page/node evidence、instruction/description、observed/schema delta、完整 Stagehand/Visual Delta trace 等放入 sidecar。紧凑项的 `evidence_ref` 以 `node-evidence:<node_id>` 或 `edge-evidence:<edge_id>` 解析到 sidecar 对应 entry。
+
+历史完整 graph 仍可直接读取；紧凑 graph 即使没有 sidecar 也可加载和运行 Phase A。Phase A 只读取 graph，不 hydrate 或依赖 `graph_evidence.json`；CLI 生成的 `raw_graph.json` 保持输入 JSON 的紧凑/完整形状。sidecar 中的具体视觉事实不会进入 compact state、`PlanningState` 或 PDDL。状态命名保持不变，命名改进仍是独立后续主题；候选生成的失败/空结果区分也尚未在此 artifact 改动中解决。
+
 ## 当前核心判断
 
 ### 1. WebKobeGraph 是主线图结构
