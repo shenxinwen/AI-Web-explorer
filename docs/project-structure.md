@@ -77,14 +77,19 @@ Main responsibilities:
 - build deterministic state snapshots and signatures;
 - summarize current state for review and embeddings;
 - ask VLM for current business affordances;
-- compare before/after screenshots;
-- produce `BusinessTransition`, `PlanningDelta`, and evidence;
+- compare before/after screenshots and output only
+  `candidate_added_facts` / `candidate_removed_facts`;
+- let the local structured verifier produce `PlanningDelta` and evidence;
+  historical `BusinessTransition` remains load-compatible;
 - provide lightweight structured verification.
 
 Profile facts live here as preferred observation targets and candidate PDDL
-predicate vocabulary, not as the full set of possible website states. VLM can
-add generated facts for states that the profile does not cover. Site-type
-profiles can provide business-node naming hints through
+predicate vocabulary, not as the full set of possible website states. Visual
+Delta VLM receives only the selected action and before/after screenshots; it
+does not receive profile facts, supporting facts, or planning state. Its
+observations remain raw edge-trace evidence and do not enter `PlanningState`.
+Only locally confirmed facts enter profile/planning state. Site-type profiles
+can provide business-node naming hints through
 `PlanningFactSpec.state_label_hint`.
 
 Main functions/classes:
@@ -114,8 +119,9 @@ Main modules:
 Main responsibilities:
 
 - define `WebKobeGraph`, `WebKobeNode`, `WebKobeEdge`;
-- record `BusinessAffordance`, `BusinessTransition`, `PlanningDelta`,
-  `PlanningState`, and `PlanningTransition`;
+- record `BusinessAffordance`, `PlanningDelta`, `PlanningState`, and
+  `PlanningTransition`, while remaining compatible with historical
+  `BusinessTransition` data;
 - decide whether a business transition should materialize a new node;
 - derive readable `node_label` values for materialized business nodes from
   profile-provided state label hints, planning facts, and business-action
@@ -127,8 +133,13 @@ Main responsibilities:
   Stagehand policy prompt boilerplate;
 - preserve `active_facts`, `profile_fact_ids`, and `generated_fact_ids` in
   `PlanningState`;
+- retain Visual Delta observations in
+  `execution_trace.metadata.visual_delta_trace`, without using them in
+  planning transitions, target-matching planning facts, or Phase A PDDL;
 - store state embeddings;
-- detect revisits and provide memory context.
+- detect revisits and provide memory context; explicit URL/signature/visual
+  changes prevent a candidate target from merging back to its source, while
+  reliable non-source history may still be reused.
 
 Embeddings help locate similar states and avoid repeated actions. They should
 not directly enter PDDL.
@@ -210,8 +221,9 @@ Main responsibilities:
 - run SafeSym parser, safety injection, and planner smoke checks.
 
 This layer should be deterministic. It should consume graph semantics, not call
-LLM/VLM directly. By default it projects only profile facts; generated facts
-remain in the graph for review, promotion, or explicit projection policy.
+LLM/VLM directly. Phase A projects canonical locations and eligible
+non-self-loop business transitions into `domain.pddl` only. Visual Delta
+observations are not Phase A predicates, preconditions, or effects.
 
 Main functions/classes:
 
@@ -281,14 +293,23 @@ WebKobeExplorer.explore_one_step
   -> optional summarize_visual_affordances
   -> select business/fallback action
   -> adapter.execute
-  -> capture after state/screenshots
-  -> summarize_visual_delta / verify_planning_delta
+  -> capture after state/screenshots when execution succeeds or the known
+     Stagehand tool_choice error is reported
+  -> summarize_visual_delta (raw observation trace only) /
+     verify_planning_delta
   -> GraphManager.build_planning_transition
   -> resolve_business_target_node
   -> split incompatible same-page planning-state variants
   -> GraphManager.add_edge
   -> PDDL projector consumes graph JSON
 ```
+
+For `Thinking mode does not support this tool_choice`, the explorer continues
+after-state observation. A URL/signature/visual change records a successful
+transition; no change records `no_observed_change` while preserving the
+original error and `backend_reported_success=false`. Unknown execution errors
+remain failed self-loops and skip Visual Delta. New exploration does not
+produce VLM `BusinessTransition` judgments; old fields remain load-compatible.
 
 ## Documentation Files
 

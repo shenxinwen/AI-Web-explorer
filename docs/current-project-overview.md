@@ -61,20 +61,28 @@ Current objective status:
 ```text
 real browser chain: established
 graph/PDDL/SafeSym engineering chain: established
-VLM visual delta: connected
+VLM visual delta: connected; it only observes `candidate_added_facts` /
+candidate_removed_facts
 business affordance generation: initial version exists
 embedding memory: connected for similar-state lookup and repetition guidance
 target matching: initial version connected; post-action states can reuse
-existing business nodes using embeddings plus planning-fact compatibility
+existing business nodes using embeddings plus planning-fact compatibility;
+explicit URL/signature/visual changes cannot merge the candidate back to the
+source, while reliable non-source history may still be reused
 source localization: normal exploration trusts the current-node pointer;
 source embedding match is recovery/diagnostic only
 frontier / DFS exploration policy: minimal business-affordance selector/backtrack
 behavior is implemented; graph meta now emits frontier_metrics
 consecutive unproductive stop policy: implemented; failed/no-op steps no
 longer stop the run until the threshold is reached
-Stagehand thinking/tool_choice errors: treated as non-fatal; no visible change
-becomes no-op instead of a failed edge
-generated fact recording: graph layer records them, PDDL excludes them by default
+Stagehand thinking/tool_choice errors: continue after-state observation; a
+change is a successful transition, no change is `no_observed_change`, and
+unknown failures remain failed self-loops without Visual Delta
+visual observations: retained only in
+`execution_trace.metadata.visual_delta_trace`; excluded from `PlanningState`,
+planning transitions, target-matching planning facts, and Phase A PDDL
+Phase A domain: projects canonical locations and eligible non-self-loop
+business transitions only
 ecommerce profile facts: first quality pass completed with product detail,
 checkout required/complete, cart total, invoice, and availability facts
 exploration responsibility boundary: VLM observes and proposes candidates,
@@ -88,9 +96,8 @@ PDDL semantic quality: consumable, but not stable or readable enough
 business node naming: materialized business nodes can derive labels from
 profile hints / facts / actions
 same-page state variants: split when planning facts are incompatible
-latest 8-step real-site run: completed on Practice Automated Testing Shopping;
-graph/domain improved; source matching now has a trajectory guard, but needs
-real-site revalidation
+previous real-site runs: historical evidence only; the latest controlled
+conclusion still needs revalidation
 ```
 
 Detailed pipeline and module ownership are recorded in
@@ -114,6 +121,8 @@ BusinessTransition
 ```
 
 Historical `WebObservedGraph` designs remain only in old spec/plan documents.
+`BusinessTransition` remains load-compatible for historical graphs, but new
+exploration does not ask the VLM to produce BusinessTransition judgments.
 
 ### 2. Profile facts should have lower influence
 
@@ -125,9 +134,10 @@ candidate PDDL predicate vocabulary + preferred observation targets +
 cross-site semantic alignment anchors
 ```
 
-The graph can record both profile facts and generated facts. PDDL still
-conservatively consumes profile facts by default. Generated fact promotion and
-optional projection remain open design work.
+The graph remains load-compatible with historical profile/generated facts, but
+new Visual Delta observations stay in raw edge traces rather than becoming
+planning facts. Only locally verified facts enter planning/profile state;
+promotion of visual observations requires a separate review policy.
 
 Recent profile update: ecommerce checkout facts now distinguish required
 checkout/payment information from completed information, and include common
@@ -173,8 +183,8 @@ current / target state summary
 ```
 
 Profile facts can help align planner-facing semantics, but they are not the
-only exploration boundary. Generated facts may be recorded in graph memory while
-remaining outside default PDDL projection.
+only exploration boundary. Visual observations remain isolated from planning
+state and are not used as Phase A predicates, preconditions, or effects.
 
 ### 4. Stagehand is the operation layer, not state truth
 
@@ -189,6 +199,13 @@ It should not directly decide:
 
 State truth should come from Web-KOBE before/after observations, VLM/structured
 evidence, graph memory, and a future verifier.
+
+The known `Thinking mode does not support this tool_choice` error is not enough
+to conclude that the browser action did not happen. The explorer continues
+after-state observation: URL/signature/visual change records a successful
+transition, while no change records `no_observed_change` and preserves the
+original error with `backend_reported_success=false`. Unknown execution errors
+remain failed self-loops and skip Visual Delta.
 
 In the preferred exploration loop, Stagehand should be treated as an action
 executor. Its prompt should be closer to "execute this selected business action
@@ -216,7 +233,9 @@ profile facts from edge.planning_transition pre/added/removed facts
 
 Naming work is deferred. The intended boundary is that LLM/VLM may help produce
 semantic labels during exploration, while the projector only normalizes and
-projects stored graph semantics.
+projects stored graph semantics. Phase A projects canonical locations and
+eligible non-self-loop business transitions into `domain.pddl`; Visual Delta
+observations are not predicates, preconditions, or effects.
 
 ### 6. Graph quality starts with business-state uniqueness
 
@@ -232,7 +251,9 @@ generated. It must also preserve stable business-state identity:
   adding the same item again should not create another business-state node;
 - merge-before-create is the default policy; after an action, match the target
   state against existing nodes using planning facts, VLM state summary, and
-  embeddings before materializing a new node;
+  embeddings before materializing a new node; explicit URL/signature/visual
+  changes prevent matching back to the source, but reliable non-source history
+  may still be reused;
 - node labels must be semantically stable; many `at_product_details_002` or
   `at_shopping_003` predicates usually indicate weak merge or naming policy;
 - every node and edge should be traceable to evidence such as VLM summaries,
@@ -269,11 +290,9 @@ can later use source embedding relocalization.
 
 ### P0: identical business states do not merge reliably yet
 
-The latest Practice Automated Testing Shopping 8-step run produced 6 nodes and
-8 edges. The chain completed, but graph quality is still weak. Target matching
-can reuse some existing nodes, but similar `product_details` / `product_list`
-state variants still appear, and the PDDL still contains weak predicates such
-as `at_product_details_002` and `at_product_list_002`.
+Previous Practice Automated Testing Shopping runs produced duplicate-looking
+page/business state variants. Those historical results are not the current
+latest conclusion; graph merge quality still needs a new controlled run.
 
 This means embeddings already provide similar-state signals, but target-node
 materialization and merge logic did not consume those signals strongly enough.
@@ -283,16 +302,15 @@ compatibility. If a match is accepted, the edge points to the existing node
 instead of creating another state variant. The next real-site run must confirm
 whether this reduces duplicate business nodes.
 
-### P0: generated facts do not yet have a promotion strategy
+### P0: visual observations remain separate from planning state
 
-The graph now records generated facts and preserves fact provenance in
-`PlanningState.profile_fact_ids` / `PlanningState.generated_fact_ids`. The PDDL
-projector excludes generated facts by default so unreviewed VLM facts do not
-pollute SafeSym artifacts.
+Visual Delta facts are retained as reviewable raw edge evidence in
+`execution_trace.metadata.visual_delta_trace`. They do not enter
+`PlanningState`, planning transitions, target-matching planning facts, or Phase
+A PDDL.
 
-The remaining issue is policy: when should generated facts be promoted into
-planner-facing facts, when should an experiment explicitly project them, and how
-should a future verifier confirm them?
+If visual observations should later become planner-facing facts, verification,
+promotion, and projection must be designed separately.
 
 ### P0: PDDL semantic quality is still unstable
 
@@ -304,8 +322,8 @@ stable enough:
   facts / actions, but non-business nodes and repeated labels can still be weak;
 - action preconditions depend on correct source-node localization;
 - incomplete profile facts make PDDL degrade into a location path;
-- generated facts are not projected by default, so real business states may be
-  lost until a promotion/projection policy exists.
+- Phase A currently projects only canonical locations and eligible non-self-loop
+  business transitions; Visual Delta facts do not enter `domain.pddl`.
 
 Recent fix: same-page states with incompatible planning facts are now split
 into state variants instead of overwriting the existing page node. This reduces
@@ -347,10 +365,13 @@ affordance selection. Repetition policy should now be based on the current or
 embedding-matched node context.
 
 Known `Thinking mode does not support this tool_choice` errors are
-Stagehand/model-adapter exceptions and should not terminate experiments by
-themselves. If no visible change occurs, the action should be recorded as
-`no_observed_change`; local action memory can then avoid it and continue with
-another candidate.
+Stagehand/model-adapter exceptions and should trigger continued after-state
+observation. A URL/signature/visual change records a successful transition; no
+change records `no_observed_change`. Unknown failures remain failed self-loops
+and do not call Visual Delta.
+
+`BusinessAffordance.action_name`, `label`, and `target_hint` have partial
+semantic overlap and remain a deferred schema-review item.
 
 ### P1: WebKobeExplorer has centralization risk
 
@@ -379,16 +400,15 @@ A future verifier must decide which facts become planner-facing truth.
 
 Short term, preserve provenance and evidence.
 
-## Latest Experiment
+## Historical Experiment Context
 
-The latest 8-step run on Practice Automated Testing Shopping completed and
-wrote:
+A previous run on Practice Automated Testing Shopping wrote:
 
 ```text
 outputs/experiments/practice_automated_testing/latest/
 ```
 
-High-signal result:
+Historical high-signal result:
 
 - 6 nodes and 8 edges were produced.
 - The run completed all 8 steps after treating the known Stagehand
@@ -418,8 +438,9 @@ Open problems from this run:
 
 ## Next Priorities
 
-1. Re-run Practice Automated Testing Shopping and check whether the minimal
-   frontier/DFS behavior escapes the product list/detail loop and reaches
+1. Re-run Practice Automated Testing Shopping under controlled conditions and
+   check whether the minimal frontier/DFS behavior escapes the product
+   list/detail loop and reaches
    cart/checkout states.
 2. Use `graph.meta.frontier_metrics` to inspect candidates per node,
    tried/untried/no-op/failed counts, backtracks, and repeated-node hits.
@@ -429,18 +450,21 @@ Open problems from this run:
    recovery/diagnostic use.
 5. Inspect graph and domain PDDL quality, especially source/target,
    preconditions/effects, node labels, and duplicate `at_*_002` predicates.
-6. Discuss generated fact promotion / optional projection policy.
+6. Discuss promotion / optional projection policy for locally verified
+   planner-facing facts.
 7. Decide whether runtime DOM interactables should move into trace/debug
    artifacts or be removed from mainline state matching, and gradually split
    `WebKobeExplorer`.
 
 ## Experiment Management
 
-Keep only the latest valid output for each site:
+By default, each run overwrites the latest output for its site:
 
 ```text
 outputs/experiments/<site_name>/latest/
 ```
+
+Copy results elsewhere only when explicitly archiving an experiment.
 
 Each experiment report should record:
 
