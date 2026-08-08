@@ -780,6 +780,7 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
             assert explorer.enable_exploration_memory is True
             assert explorer.max_candidates == 2
             assert explorer.state_embedding_provider("x") == [1.0, 0.0]
+            assert explorer.action_embedding_provider("x") == [1.0, 0.0]
             assert explorer.business_profile is not None
             assert explorer.business_profile.site_type == "ecommerce_checkout"
             assert explorer.visual_delta_provider("prompt") == '{"visible_change_summary":"changed","candidate_added_facts":[],"candidate_removed_facts":[],"evidence":[],"confidence":0.5}'

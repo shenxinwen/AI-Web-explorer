@@ -541,6 +541,7 @@ async def run_stagehand_exploration(
                 visual_delta_provider=resolved_visual_delta_provider,
                 enable_exploration_memory=resolved_embedding_provider is not None,
                 state_embedding_provider=resolved_embedding_provider,
+                action_embedding_provider=resolved_embedding_provider,
                 state_embedding_records=embedding_records,
                 max_candidates=max_candidates,
             )
