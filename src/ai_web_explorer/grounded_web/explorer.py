@@ -165,17 +165,6 @@ def _observed_delta_from_facts_or_signature(
     return _schema_observed_delta(before_signature, after_signature, url)
 
 
-def _planning_delta_has_fact_change(delta: PlanningDelta | None) -> bool:
-    if delta is None:
-        return False
-    return bool(
-        delta.candidate_added_facts
-        or delta.candidate_removed_facts
-        or delta.verified_added_facts
-        or delta.verified_removed_facts
-    )
-
-
 def _state_label_hints_from_profile(
     profile: BusinessFlowProfile | None,
 ) -> dict[str, str]:
@@ -320,7 +309,10 @@ class WebKobeExplorer:
 
         execution_success = await self.adapter.execute(selected)
         execution_error = getattr(self.adapter, "last_execution_error", None)
-        if execution_success:
+        observation_allowed = execution_success or _is_ignorable_stagehand_tool_choice_error(
+            execution_error
+        )
+        if observation_allowed:
             after = await self._observe_after_action(
                 before=before,
                 before_facts=before_facts,
@@ -350,7 +342,7 @@ class WebKobeExplorer:
                 after_signature=after.signature,
                 url=after.url,
             )
-            if execution_success
+            if observation_allowed
             else []
         )
         edge_status = self._edge_status(
@@ -386,7 +378,7 @@ class WebKobeExplorer:
         business_transition = None
         visual_delta_facts = ([], [])
         if (
-            execution_success
+            observation_allowed
             and self.visual_delta_provider is not None
             and before_screenshot_path is not None
             and after_screenshot_path is not None
@@ -431,7 +423,7 @@ class WebKobeExplorer:
             planning_transition=planning_transition,
             state_label_hints=_state_label_hints_from_profile(self.business_profile),
         )
-        if not execution_success or not state_changed:
+        if not observation_allowed or not state_changed:
             target_node = self.manager.node_for_id(source_id)
         elif not path_changed and not signature_changed and visual_fact_change:
             action_name = selected.canonical_action_name or selected.semantic_id
@@ -465,12 +457,6 @@ class WebKobeExplorer:
             }
         target_id = self.manager.identify_or_add_node(target_node)
         if edge_status == "no_observed_change" and visual_fact_change:
-            edge_status = "succeeded_with_observed_change"
-        if (
-            edge_status in {"failed_execution", "no_observed_change"}
-            and _is_ignorable_stagehand_tool_choice_error(execution_error)
-            and _planning_delta_has_fact_change(planning_delta)
-        ):
             edge_status = "succeeded_with_observed_change"
         if source_id != target_id and edge_status in {
             "no_observed_change",
@@ -513,7 +499,7 @@ class WebKobeExplorer:
             status=edge_status,
             evidence=[Evidence(source="web_kobe_explorer", url=before.url)],
         )
-        if self.business_profile is not None and execution_success:
+        if self.business_profile is not None and edge_status != "failed_execution":
             self.manager.apply_planning_transition(edge)
         self.manager.add_edge(edge)
         self.manager.meta["last_step_kind"] = "business_edge"
@@ -758,6 +744,8 @@ class WebKobeExplorer:
     ) -> str:
         if observed_delta:
             return "succeeded_with_observed_change"
+        if _is_ignorable_stagehand_tool_choice_error(execution_error):
+            return "no_observed_change"
         if not execution_success:
             return "failed_execution"
         return "no_observed_change"

@@ -534,6 +534,48 @@ class StagehandThinkingFailureVisualChangeAdapter(ScreenshotAdapter):
         return False
 
 
+class StagehandThinkingFailureUrlChangeAdapter(
+    StagehandThinkingFailureVisualChangeAdapter
+):
+    def __init__(self):
+        super().__init__()
+        self.states = [
+            StateSnapshot(
+                page_id="listing",
+                url="https://example.test/listing",
+                title="Listing",
+                signature={"url_path": "/listing"},
+            ),
+            StateSnapshot(
+                page_id="cart",
+                url="https://example.test/cart",
+                title="Cart",
+                signature={"url_path": "/cart"},
+            ),
+        ]
+
+
+class StagehandThinkingFailureSignatureChangeAdapter(
+    StagehandThinkingFailureVisualChangeAdapter
+):
+    def __init__(self):
+        super().__init__()
+        self.states = [
+            StateSnapshot(
+                page_id="listing",
+                url="https://example.test/listing",
+                title="Listing",
+                signature={"url_path": "/listing", "search_query": ""},
+            ),
+            StateSnapshot(
+                page_id="listing",
+                url="https://example.test/listing",
+                title="Listing",
+                signature={"url_path": "/listing", "search_query": "chair"},
+            ),
+        ]
+
+
 class SamePageLowValueChangeAdapter(ScreenshotAdapter):
     def __init__(self):
         super().__init__()
@@ -1496,15 +1538,70 @@ async def test_explore_one_step_accepts_stagehand_tool_choice_error_with_visual_
     graph = await explorer.explore_one_step()
 
     edge = graph.edges[0]
-    assert edge.status == "failed_execution"
-    assert edge.source_node_id == edge.target_node_id
-    assert edge.execution_trace.success is False
+    assert edge.status == "succeeded_with_observed_change"
+    assert edge.source_node_id != edge.target_node_id
+    assert edge.execution_trace.success is True
     assert (
         edge.execution_trace.error == "Thinking mode does not support this tool_choice"
     )
     assert edge.execution_trace.metadata["backend_reported_success"] is False
     assert edge.planning_transition is not None
     assert edge.planning_transition.added_facts == []
+    assert edge.execution_trace.metadata["visual_delta_trace"][
+        "candidate_added_facts"
+    ] == ["cart_has_items"]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "adapter_class",
+    [
+        StagehandThinkingFailureUrlChangeAdapter,
+        StagehandThinkingFailureSignatureChangeAdapter,
+    ],
+)
+async def test_stagehand_tool_choice_error_observes_url_or_signature_change(
+    adapter_class,
+):
+    explorer = _business_explorer(adapter_class())
+
+    graph = await explorer.explore_one_step()
+
+    edge = graph.edges[0]
+    assert edge.status == "succeeded_with_observed_change"
+    assert edge.source_node_id != edge.target_node_id
+    assert edge.execution_trace.success is True
+    assert edge.execution_trace.error == (
+        "Thinking mode does not support this tool_choice"
+    )
+    assert edge.execution_trace.metadata["backend_reported_success"] is False
+
+
+@pytest.mark.anyio
+async def test_stagehand_tool_choice_error_without_change_is_no_observed_change_self_loop():
+    adapter = StagehandThinkingFailureVisualChangeAdapter()
+
+    def visual_provider(
+        prompt,
+        *,
+        current_screenshot_path=None,
+        before_screenshot_path=None,
+        after_screenshot_path=None,
+    ):
+        if current_screenshot_path is not None:
+            return _business_affordance_response("clear_search_query")
+        return '{"candidate_added_facts":[],"candidate_removed_facts":[]}'
+
+    explorer = _business_explorer(adapter, visual_delta_provider=visual_provider)
+
+    graph = await explorer.explore_one_step()
+
+    edge = graph.edges[0]
+    assert edge.status == "no_observed_change"
+    assert edge.source_node_id == edge.target_node_id
+    assert edge.execution_trace.success is True
+    assert edge.execution_trace.error is not None
+    assert edge.execution_trace.metadata["backend_reported_success"] is False
 
 
 @pytest.mark.anyio
@@ -2028,7 +2125,7 @@ def test_tool_choice_error_without_visible_change_is_non_fatal_noop():
         observed_delta=[],
     )
 
-    assert status == "failed_execution"
+    assert status == "no_observed_change"
 
 
 @pytest.mark.anyio
