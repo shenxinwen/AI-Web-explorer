@@ -269,6 +269,33 @@ def _refine_groups(
     return new_groups
 
 
+def _conflicting_sources(
+    groups: list[list[str]],
+    *,
+    nodes: list[WebKobeNode],
+    eligible: dict[str, bool],
+    outgoing: dict[str, list[WebKobeEdge]],
+    action_map: dict[str, str],
+) -> set[str]:
+    group_for_node = {
+        node_id: group[0] for group in groups for node_id in group
+    }
+    conflicts: set[str] = set()
+    for node in nodes:
+        if not eligible[node.node_id]:
+            continue
+        targets_by_action: dict[str, set[str]] = {}
+        for edge in outgoing.get(node.node_id, []):
+            target_group = group_for_node.get(edge.target_node_id)
+            if target_group is None:
+                continue
+            action = action_map.get(_edge_action_name(edge), _edge_action_name(edge))
+            targets_by_action.setdefault(action, set()).add(target_group)
+        if any(len(targets) > 1 for targets in targets_by_action.values()):
+            conflicts.add(node.node_id)
+    return conflicts
+
+
 def _canonical_affordances(
     affordances: list[BusinessAffordance],
     action_map: dict[str, str],
@@ -311,23 +338,41 @@ def consolidate_behavior_state_graph(
         if reasons:
             rejected_nodes[node.node_id] = reasons
 
-    groups = _initial_groups(
-        nodes,
-        eligible=eligible,
-        action_sets=action_sets,
-    )
     while True:
-        refined = _refine_groups(
+        groups = _initial_groups(
+            nodes,
+            eligible=eligible,
+            action_sets=action_sets,
+        )
+        while True:
+            refined = _refine_groups(
+                groups,
+                nodes=nodes,
+                eligible=eligible,
+                action_sets=action_sets,
+                outgoing=outgoing,
+                action_map=action_map,
+            )
+            if refined == groups:
+                break
+            groups = refined
+        conflicting_sources = _conflicting_sources(
             groups,
             nodes=nodes,
             eligible=eligible,
-            action_sets=action_sets,
             outgoing=outgoing,
             action_map=action_map,
         )
-        if refined == groups:
+        new_conflicts = conflicting_sources - {
+            node_id
+            for node_id, reasons in rejected_nodes.items()
+            if "action_target_conflict" in reasons
+        }
+        if not new_conflicts:
             break
-        groups = refined
+        for node_id in sorted(new_conflicts):
+            eligible[node_id] = False
+            rejected_nodes.setdefault(node_id, []).append("action_target_conflict")
 
     raw_to_canonical_node = {
         node_id: group[0] for group in groups for node_id in group
@@ -368,6 +413,19 @@ def consolidate_behavior_state_graph(
             ),
             action=replace(edge.action, canonical_action_name=canonical_action),
         )
+        if not eligible.get(edge.source_node_id, False):
+            edge_mappings.append(
+                {
+                    "raw_edge_id": edge.edge_id,
+                    "canonical_edge_id": None,
+                    "canonical_source_node_id": canonical_edge.source_node_id,
+                    "canonical_target_node_id": canonical_edge.target_node_id,
+                    "canonical_action_name": canonical_action,
+                    "collapsed_into_existing_edge": False,
+                    "omitted_reason": "source_ineligible",
+                }
+            )
+            continue
         key = (
             canonical_edge.source_node_id,
             canonical_action,

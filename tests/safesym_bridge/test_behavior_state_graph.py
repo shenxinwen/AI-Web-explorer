@@ -1,3 +1,5 @@
+import pytest
+
 from ai_web_explorer.grounded_web.business_profile import PlanningState
 from ai_web_explorer.grounded_web.capability_graph import (
     ExecutionTrace,
@@ -209,6 +211,106 @@ def test_consolidation_rejects_incomplete_and_failed_frontiers():
     assert report["raw_to_canonical_node"]["failed"] == "failed"
     assert "frontier_incomplete" in report["rejected_nodes"]["incomplete"]
     assert "failed_execution" in report["rejected_nodes"]["failed"]
+
+
+def test_consolidation_allows_same_action_to_equivalent_raw_targets():
+    graph = _graph(
+        [
+            _node("source", [BusinessAffordance("open_results")]),
+            _node("results_a"),
+            _node("results_b"),
+        ],
+        [
+            _edge("source", "results_a", "open_results"),
+            _edge("source", "results_b", "open_results"),
+        ],
+    )
+
+    artifacts = consolidate_behavior_state_graph(graph)
+
+    assert "source" not in artifacts.report.rejected_nodes
+    source_edges = [
+        edge
+        for edge in artifacts.canonical_graph.edges
+        if edge.source_node_id == "source"
+    ]
+    assert len(source_edges) == 1
+
+
+def test_consolidation_rejects_conflicting_target_behavior_groups():
+    graph = _graph(
+        [
+            _node("source", [BusinessAffordance("open_results")]),
+            _node("results_a", [BusinessAffordance("back_to_list")]),
+            _node("results_b", [BusinessAffordance("start_over")]),
+            _node("list_a"),
+            _node("list_b"),
+        ],
+        [
+            _edge("source", "results_a", "open_results"),
+            _edge("source", "results_b", "open_results"),
+            _edge("results_a", "list_a", "back_to_list"),
+            _edge("results_b", "list_b", "start_over"),
+        ],
+    )
+
+    artifacts = consolidate_behavior_state_graph(graph)
+
+    assert artifacts.report.rejected_nodes["source"] == [
+        "action_target_conflict"
+    ]
+    assert all(edge.source_node_id != "source" for edge in artifacts.canonical_graph.edges)
+
+
+@pytest.mark.parametrize(
+    ("rejection_reason", "source_affordances", "edges", "extra_nodes"),
+    [
+        (
+            "frontier_incomplete",
+            [BusinessAffordance("needed_action")],
+            [_edge("source", "target", "different_action")],
+            [_node("target")],
+        ),
+        (
+            "failed_execution",
+            [BusinessAffordance("open_results")],
+            [_edge("source", "target", "open_results", status="failed_execution")],
+            [_node("target")],
+        ),
+        (
+            "missing_target_node",
+            [BusinessAffordance("open_results")],
+            [_edge("source", "missing", "open_results")],
+            [],
+        ),
+    ],
+)
+def test_consolidation_omits_edges_from_rejected_sources(
+    rejection_reason,
+    source_affordances,
+    edges,
+    extra_nodes,
+):
+    graph = _graph(
+        [_node("source", source_affordances), *extra_nodes],
+        edges,
+    )
+
+    artifacts = consolidate_behavior_state_graph(graph)
+
+    assert rejection_reason in artifacts.report.rejected_nodes["source"]
+    assert artifacts.raw_graph.edges == graph.edges
+    assert artifacts.raw_graph.edges[0].edge_id not in {
+        edge.edge_id for edge in artifacts.canonical_graph.edges
+    }
+    mapping = next(
+        item
+        for item in artifacts.report.edge_mappings
+        if item["raw_edge_id"] == artifacts.raw_graph.edges[0].edge_id
+    )
+    assert mapping["canonical_edge_id"] is None
+    assert mapping["collapsed_into_existing_edge"] is False
+    assert mapping["omitted_reason"] == "source_ineligible"
 
 
 def test_consolidation_keeps_ambiguous_action_chain_identity_mapped():

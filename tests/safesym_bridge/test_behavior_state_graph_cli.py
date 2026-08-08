@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 
 from ai_web_explorer.grounded_web.capability_graph import ExecutionTrace, PageFrame
 from ai_web_explorer.grounded_web.graph import (
@@ -133,3 +134,90 @@ def test_phase_a_cli_without_embedding_configuration_is_conservative(tmp_path, m
         (output_dir / "consolidation_report.json").read_text(encoding="utf-8")
     )
     assert report["action_normalizations"] == []
+
+
+def test_phase_a_cli_keeps_rejected_source_edges_only_in_raw_artifacts(
+    tmp_path,
+    monkeypatch,
+):
+    graph = _graph_fixture()
+    incomplete_source = WebKobeNode(
+        node_id="incomplete",
+        page_description="incomplete",
+        page_frame=PageFrame(
+            page_id="incomplete",
+            page_type="incomplete",
+            url="https://example.test/incomplete",
+            url_pattern="https://example.test/incomplete",
+            title="incomplete",
+        ),
+        state_schema={},
+        last_state_snapshot={},
+        node_label="incomplete",
+        business_affordances=[BusinessAffordance("unexecuted_action")],
+    )
+    rejected_edge = WebKobeEdge(
+        source_node_id="incomplete",
+        target_node_id="details",
+        instruction="different_action",
+        action=BrowserAction(
+            "business_intent",
+            None,
+            "different_action",
+            canonical_action_name="different_action",
+        ),
+        capability=None,
+        target_observation="details",
+        observed_delta=[],
+        schema_delta=None,
+        execution_trace=ExecutionTrace(
+            "business_intent",
+            None,
+            "different_action",
+            {},
+            "incomplete",
+            "details",
+            True,
+        ),
+    )
+    graph = replace(
+        graph,
+        total_steps_completed=2,
+        nodes=[*graph.nodes, incomplete_source],
+        edges=[*graph.edges, rejected_edge],
+    )
+    graph_path = tmp_path / "raw.json"
+    graph_path.write_text(json.dumps(graph.to_dict()), encoding="utf-8")
+    output_dir = tmp_path / "phase_a"
+
+    monkeypatch.setattr(
+        cli_module,
+        "create_embedding_provider_from_env",
+        lambda: (_ for _ in ()).throw(ValueError("missing embedding config")),
+    )
+
+    assert main(
+        [
+            "web-kobe-phase-a",
+            "--graph",
+            str(graph_path),
+            "--output",
+            str(output_dir),
+        ]
+    ) == 0
+
+    raw = json.loads((output_dir / "raw_graph.json").read_text(encoding="utf-8"))
+    canonical = json.loads(
+        (output_dir / "canonical_graph.json").read_text(encoding="utf-8")
+    )
+    report = json.loads(
+        (output_dir / "consolidation_report.json").read_text(encoding="utf-8")
+    )
+    domain = (output_dir / "domain.pddl").read_text(encoding="utf-8")
+
+    assert rejected_edge.to_dict() in raw["edges"]
+    assert all(
+        edge["source_node_id"] != "incomplete" for edge in canonical["edges"]
+    )
+    assert "frontier_incomplete" in report["rejected_nodes"]["incomplete"]
+    assert "different_action" not in domain
