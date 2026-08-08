@@ -191,7 +191,7 @@ def test_consolidation_does_not_merge_different_actions_with_embedding_provider(
     assert report["raw_to_canonical_node"]["sort_page"] == "sort_page"
 
 
-def test_consolidation_rejects_incomplete_and_failed_frontiers():
+def test_consolidation_rejects_failed_but_keeps_incomplete_frontiers():
     graph = _graph(
         [
             _node("incomplete", [BusinessAffordance("open_results")]),
@@ -209,7 +209,7 @@ def test_consolidation_rejects_incomplete_and_failed_frontiers():
 
     assert report["raw_to_canonical_node"]["incomplete"] == "incomplete"
     assert report["raw_to_canonical_node"]["failed"] == "failed"
-    assert "frontier_incomplete" in report["rejected_nodes"]["incomplete"]
+    assert "incomplete" not in report["rejected_nodes"]
     assert "failed_execution" in report["rejected_nodes"]["failed"]
 
 
@@ -262,15 +262,29 @@ def test_consolidation_rejects_conflicting_target_behavior_groups():
     assert all(edge.source_node_id != "source" for edge in artifacts.canonical_graph.edges)
 
 
+def test_consolidation_keeps_observed_edges_from_partial_frontier():
+    graph = _graph(
+        [
+            _node("source", [BusinessAffordance("needed_action")]),
+            _node("target"),
+        ],
+        [_edge("source", "target", "different_action")],
+    )
+
+    artifacts = consolidate_behavior_state_graph(graph)
+
+    assert "source" not in artifacts.report.rejected_nodes
+    assert artifacts.canonical_graph.edges[0].target_node_id == "target"
+    assert artifacts.canonical_graph.edges[0].action.canonical_action_name == (
+        "different_action"
+    )
+    mapping = artifacts.report.edge_mappings[0]
+    assert mapping["canonical_edge_id"] is not None
+
+
 @pytest.mark.parametrize(
     ("rejection_reason", "source_affordances", "edges", "extra_nodes"),
     [
-        (
-            "frontier_incomplete",
-            [BusinessAffordance("needed_action")],
-            [_edge("source", "target", "different_action")],
-            [_node("target")],
-        ),
         (
             "failed_execution",
             [BusinessAffordance("open_results")],

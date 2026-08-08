@@ -216,8 +216,8 @@ def test_phase_a_cli_keeps_rejected_source_edges_only_in_raw_artifacts(
     domain = (output_dir / "domain.pddl").read_text(encoding="utf-8")
 
     assert rejected_edge.to_dict() in raw["edges"]
-    assert all(
-        edge["source_node_id"] != "incomplete" for edge in canonical["edges"]
+    assert any(
+        edge["source_node_id"] == "incomplete" for edge in canonical["edges"]
     )
-    assert "frontier_incomplete" in report["rejected_nodes"]["incomplete"]
-    assert "different_action" not in domain
+    assert "incomplete" not in report["rejected_nodes"]
+    assert "different_action__from_incomplete" in domain

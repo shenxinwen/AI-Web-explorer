@@ -202,8 +202,6 @@ def _frontier_state(
     ):
         reasons.append("failed_execution")
     edge_action_set = set(edge_actions)
-    if any(action not in edge_action_set for action in affordance_actions):
-        reasons.append("frontier_incomplete")
     actions = tuple(sorted(set(affordance_actions) | set(edge_actions)))
     return not reasons, reasons, actions
 
