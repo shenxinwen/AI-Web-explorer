@@ -778,6 +778,7 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
     class FakeController:
         def __init__(self, explorer):
             assert explorer.enable_exploration_memory is True
+            assert explorer.max_candidates == 2
             assert explorer.state_embedding_provider("x") == [1.0, 0.0]
             assert explorer.business_profile is not None
             assert explorer.business_profile.site_type == "ecommerce_checkout"
@@ -820,6 +821,7 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
         screenshot_dir=tmp_path / "screenshots",
         site_purpose="demo store",
         business_profile="ecommerce_checkout",
+        max_candidates=2,
         visual_delta_provider=lambda prompt, **kwargs: '{"visible_change_summary":"changed","candidate_added_facts":[],"candidate_removed_facts":[],"evidence":[],"confidence":0.5}',
     )
 

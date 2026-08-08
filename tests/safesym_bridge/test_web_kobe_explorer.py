@@ -1,3 +1,4 @@
+import json
 from dataclasses import replace
 
 import pytest
@@ -787,6 +788,51 @@ def test_record_source_business_affordances_skips_existing_node_frontier():
     assert [
         affordance.action_name for affordance in node.business_affordances
     ] == ["view_cart", "proceed_to_checkout"]
+
+
+def test_web_kobe_explorer_rejects_invalid_max_candidates():
+    with pytest.raises(ValueError, match="max_candidates"):
+        WebKobeExplorer(
+            adapter=FakeAdapter(),
+            semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+            max_candidates=0,
+        )
+
+
+@pytest.mark.anyio
+async def test_visual_affordance_request_uses_configured_max_candidates():
+    adapter = ScreenshotAdapter()
+    provider_calls = []
+    default_provider = _default_visual_provider()
+
+    def visual_provider(
+        prompt,
+        *,
+        current_screenshot_path=None,
+        before_screenshot_path=None,
+        after_screenshot_path=None,
+    ):
+        if current_screenshot_path is not None:
+            provider_calls.append(json.loads(prompt))
+            return _business_affordance_response()
+        return default_provider(
+            prompt,
+            before_screenshot_path=before_screenshot_path,
+            after_screenshot_path=after_screenshot_path,
+        )
+
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        business_profile=ecommerce_checkout_profile(),
+        capture_screenshots=True,
+        visual_delta_provider=visual_provider,
+        max_candidates=2,
+    )
+
+    await explorer.explore_one_step()
+
+    assert provider_calls[0]["max_candidates"] == 2
 
 
 @pytest.mark.anyio

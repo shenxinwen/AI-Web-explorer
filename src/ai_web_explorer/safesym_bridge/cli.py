@@ -36,6 +36,16 @@ from ai_web_explorer.safesym_bridge.web_kobe_safesym_smoke import (
 from ai_web_explorer.grounded_web.stagehand_prompt import BenchmarkTaskContext
 
 
+def _positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("must be an integer") from error
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be at least 1")
+    return parsed
+
+
 def _clean_output_dir_for(paths: list[Path | None]) -> Path:
     resolved_paths = [path for path in paths if path is not None]
     if not resolved_paths:
@@ -434,6 +444,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     stagehand_explore_parser.add_argument("--model", default=None)
     stagehand_explore_parser.add_argument("--steps", type=int, default=8)
+    stagehand_explore_parser.add_argument(
+        "--max-candidates",
+        type=_positive_int,
+        default=5,
+        help="Maximum VLM business candidates per node.",
+    )
     stagehand_explore_parser.add_argument("--screenshot-dir", type=Path, default=None)
     stagehand_explore_parser.add_argument(
         "--clean-output-dir",
@@ -632,6 +648,7 @@ def main(argv: list[str] | None = None) -> int:
                     use_openai_visual_delta=args.openai_visual_delta,
                     visual_delta_model=args.visual_delta_model,
                     stagehand_execution_mode=args.stagehand_execution_mode,
+                    max_candidates=args.max_candidates,
                 )
             )
         else:

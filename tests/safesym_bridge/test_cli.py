@@ -848,6 +848,7 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
         use_openai_visual_delta=False,
         visual_delta_model=None,
         stagehand_execution_mode="business_milestone",
+        max_candidates=5,
     ):
         calls.append(
             (
@@ -868,6 +869,7 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
                 use_openai_visual_delta,
                 visual_delta_model,
                 stagehand_execution_mode,
+                max_candidates,
             )
         )
         output_path.write_text("{}", encoding="utf-8")
@@ -913,6 +915,8 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
             "gpt-4o-mini",
             "--stagehand-execution-mode",
             "observed_action",
+            "--max-candidates",
+            "2",
             "--headed",
         ]
     )
@@ -937,8 +941,34 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
             True,
             "gpt-4o-mini",
             "observed_action",
+            2,
         )
     ]
+
+
+def test_main_web_kobe_stagehand_explore_rejects_invalid_max_candidates(
+    monkeypatch,
+    capsys,
+):
+    monkeypatch.setattr(
+        cli,
+        "run_stagehand_exploration",
+        lambda *args, **kwargs: pytest.fail("runner should not be called"),
+        raising=False,
+    )
+
+    with pytest.raises(SystemExit):
+        main(
+            [
+                "web-kobe-stagehand-explore",
+                "--url",
+                "https://shop.test/",
+                "--max-candidates",
+                "-1",
+            ]
+        )
+
+    assert "must be at least 1" in capsys.readouterr().err
 
 
 def test_main_web_kobe_stagehand_explore_cleans_latest_output_dir(

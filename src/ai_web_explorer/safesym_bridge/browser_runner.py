@@ -471,6 +471,7 @@ async def run_stagehand_exploration(
     site_purpose: str | None = None,
     business_profile: str | BusinessFlowProfile | None = None,
     stagehand_execution_mode: str = "observed_action",
+    max_candidates: int = 5,
 ) -> Path:
     from playwright.async_api import async_playwright
 
@@ -541,6 +542,7 @@ async def run_stagehand_exploration(
                 enable_exploration_memory=resolved_embedding_provider is not None,
                 state_embedding_provider=resolved_embedding_provider,
                 state_embedding_records=embedding_records,
+                max_candidates=max_candidates,
             )
             controller = WebKobeExplorationController(explorer)
             result = await controller.run(max_steps=max(steps, 1))

@@ -269,11 +269,15 @@ class WebKobeExplorer:
         state_embedding_provider: EmbeddingProvider | None = None,
         state_embedding_records: list[StateEmbeddingRecord] | None = None,
         enable_exploration_memory: bool = False,
+        max_candidates: int = 5,
     ):
+        if max_candidates < 1:
+            raise ValueError("max_candidates must be at least 1.")
         self.adapter = adapter
         self.semantic_assistor = semantic_assistor
         self.goal = goal
         self.business_profile = business_profile
+        self.max_candidates = max_candidates
         self.capture_screenshots = capture_screenshots
         self.visual_delta_provider = visual_delta_provider
         self.semantic_naming_provider = semantic_naming_provider
@@ -679,6 +683,7 @@ class WebKobeExplorer:
                 current_screenshot_path=before_screenshot_path,
                 current_signature=before.signature,
                 current_planning_facts=active_facts,
+                max_actions=self.max_candidates,
             ),
             provider=self.visual_delta_provider,
         )
