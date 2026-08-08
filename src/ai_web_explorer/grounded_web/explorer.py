@@ -286,10 +286,9 @@ class WebKobeExplorer:
             exploration_context=exploration_context,
         )
         if selected is None:
-            did_backtrack = await self._try_backtrack()
-            if not did_backtrack:
-                self.manager.meta["last_step_kind"] = "no_available_action"
-                self.manager.meta["last_step_status"] = "unproductive"
+            self.manager.meta["last_step_kind"] = "current_state_exhausted"
+            self.manager.meta["last_step_status"] = "unproductive"
+            self.manager.meta["last_step_graph_changed"] = False
             return self.manager.to_graph(start_node_id=self._start_node_id)
 
         if (
@@ -612,24 +611,6 @@ class WebKobeExplorer:
             == {default_node_id, matched_node_id}
             for edge in graph.edges
         )
-
-    async def _try_backtrack(self) -> bool:
-        go_back = getattr(self.adapter, "go_back", None)
-        if go_back is None:
-            return False
-        did_go_back = await go_back()
-        if did_go_back and len(self._visit_stack) > 1:
-            self.manager.meta["backtrack_count"] = (
-                int(self.manager.meta.get("backtrack_count", 0)) + 1
-            )
-            self._visit_stack.pop()
-            self._current_node_id = self._visit_stack[-1]
-            self.manager.meta["last_step_kind"] = "control_backtrack"
-            self.manager.meta["last_step_status"] = "productive"
-        elif did_go_back:
-            self.manager.meta["last_step_kind"] = "control_backtrack"
-            self.manager.meta["last_step_status"] = "unproductive"
-        return did_go_back
 
     def _set_current_node(self, node_id: str) -> None:
         self._current_node_id = node_id

@@ -378,7 +378,7 @@ async def test_explore_one_step_skips_previously_explored_self_loop_action():
 
 
 @pytest.mark.anyio
-async def test_explore_one_step_goes_back_when_current_node_has_no_available_action():
+async def test_explore_one_step_stops_forward_when_current_node_is_exhausted():
     adapter = ExhaustedNodeBackAdapter()
     explorer = WebKobeExplorer(
         adapter=adapter,
@@ -387,11 +387,13 @@ async def test_explore_one_step_goes_back_when_current_node_has_no_available_act
 
     graph = await explorer.explore_one_step()
 
-    assert adapter.back_calls == 1
+    assert adapter.back_calls == 0
     assert adapter.executed == []
     assert graph.total_steps_completed == 0
     assert graph.edges == []
     assert len(graph.nodes) == 1
+    assert graph.meta["last_step_kind"] == "current_state_exhausted"
+    assert graph.meta["last_step_status"] == "unproductive"
 
 
 @pytest.mark.anyio
@@ -407,7 +409,7 @@ async def test_explore_one_step_does_not_fallback_to_low_level_interactables():
     assert adapter.executed == []
     assert graph.total_steps_completed == 0
     assert graph.edges == []
-    assert graph.meta["last_step_kind"] == "no_available_action"
+    assert graph.meta["last_step_kind"] == "current_state_exhausted"
     assert graph.meta["last_step_status"] == "unproductive"
 
 
@@ -1035,30 +1037,6 @@ def test_business_affordance_selection_returns_none_when_local_frontier_exhauste
     )
 
     assert selected is None
-
-
-@pytest.mark.anyio
-async def test_backtrack_restores_previous_graph_node_from_visit_stack():
-    adapter = ExhaustedNodeBackAdapter()
-    explorer = WebKobeExplorer(
-        adapter=adapter,
-        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
-    )
-    explorer.manager.identify_or_add_node(_selection_node("shopping"))
-    explorer.manager.identify_or_add_node(_selection_node("product_detail"))
-    explorer._current_node_id = "product_detail"
-    explorer._visit_stack = ["shopping", "product_detail"]
-
-    did_backtrack = await explorer._try_backtrack()
-
-    assert did_backtrack is True
-    assert adapter.back_calls == 1
-    assert explorer._current_node_id == "shopping"
-    assert explorer._visit_stack == ["shopping"]
-    assert (
-        explorer.manager.to_graph(start_node_id="shopping").meta["backtrack_count"]
-        == 1
-    )
 
 
 @pytest.mark.anyio

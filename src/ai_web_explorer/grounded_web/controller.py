@@ -71,13 +71,6 @@ def _summary(
     )
 
 
-def _last_step_is_productive_control_action(graph: WebKobeGraph) -> bool:
-    return (
-        graph.meta.get("last_step_kind") == "control_backtrack"
-        and graph.meta.get("last_step_status") == "productive"
-    )
-
-
 def _last_edge_status(graph: WebKobeGraph) -> str | None:
     if not graph.edges:
         return None
@@ -85,8 +78,6 @@ def _last_edge_status(graph: WebKobeGraph) -> str | None:
 
 
 def _last_step_is_productive(graph: WebKobeGraph) -> bool:
-    if _last_step_is_productive_control_action(graph):
-        return True
     edge_status = _last_edge_status(graph)
     return edge_status in PRODUCTIVE_EDGE_STATUSES
 
@@ -120,21 +111,12 @@ class WebKobeExplorationController:
                 baseline_completed = max(graph.total_steps_completed - 1, 0)
                 previous_completed = baseline_completed
 
-            if (
-                graph.total_steps_completed == previous_completed
-                and _last_step_is_productive_control_action(graph)
-            ):
-                consecutive_unproductive_steps = 0
-                graph.meta["consecutive_unproductive_steps"] = (
-                    consecutive_unproductive_steps
-                )
-                graph.meta["max_consecutive_unproductive_steps"] = (
-                    self.max_consecutive_unproductive_steps
-                )
-                continue
-
             if graph.total_steps_completed == previous_completed:
-                stop_reason = "no_available_action"
+                stop_reason = (
+                    "current_state_exhausted"
+                    if graph.meta.get("last_step_kind") == "current_state_exhausted"
+                    else "no_available_action"
+                )
                 break
 
             previous_completed = graph.total_steps_completed
