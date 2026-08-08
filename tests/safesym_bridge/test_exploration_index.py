@@ -1,5 +1,8 @@
 from ai_web_explorer.grounded_web.capability_graph import ExecutionTrace, PageFrame
-from ai_web_explorer.grounded_web.exploration_index import build_exploration_context
+from ai_web_explorer.grounded_web.exploration_index import (
+    build_exploration_context,
+    semantically_matches_action,
+)
 from ai_web_explorer.grounded_web.graph import (
     BrowserAction,
     WebKobeEdge,
@@ -94,4 +97,39 @@ def test_build_exploration_context_uses_matched_node_for_revisit_memory():
     assert context.avoid_action_ids == ("open_filter",)
     assert (
         "This state appears to revisit node products" in context.to_prompt_block()
+    )
+
+
+def test_semantically_matches_action_detects_paraphrase_with_embedding():
+    vectors = {
+        "order_items_alphabetically": (1.0, 0.0),
+        "sort_by_name": (0.98, 0.12),
+        "filter_by_price": (0.0, 1.0),
+    }
+
+    def embedding_provider(text: str):
+        return vectors[text]
+
+    assert semantically_matches_action(
+        "order_items_alphabetically",
+        ("sort_by_name",),
+        embedding_provider=embedding_provider,
+    )
+    assert not semantically_matches_action(
+        "filter_by_price",
+        ("sort_by_name",),
+        embedding_provider=embedding_provider,
+    )
+
+
+def test_semantically_matches_action_uses_exact_match_without_embedding():
+    assert semantically_matches_action(
+        "open_cart",
+        ("open_cart",),
+        embedding_provider=None,
+    )
+    assert not semantically_matches_action(
+        "open_cart",
+        ("view_cart",),
+        embedding_provider=None,
     )

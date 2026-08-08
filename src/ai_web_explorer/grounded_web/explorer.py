@@ -35,6 +35,7 @@ from ai_web_explorer.grounded_web.business_state_policy import (
 from ai_web_explorer.grounded_web.exploration_index import (
     ExplorationContext,
     build_exploration_context,
+    semantically_matches_action,
 )
 from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.grounded_web.planning_fact_verifier import verify_planning_delta
@@ -893,17 +894,23 @@ class WebKobeExplorer:
         if not node.business_affordances:
             return None
 
-        local_tried = set(exploration_context.tried_action_ids)
-        local_avoid = set(exploration_context.avoid_action_ids)
         ranked = sorted(
             node.business_affordances,
             key=_affordance_rank,
             reverse=True,
         )
         for affordance in ranked:
-            if affordance.action_name in local_avoid:
+            if semantically_matches_action(
+                affordance.action_name,
+                exploration_context.avoid_action_ids,
+                embedding_provider=self.state_embedding_provider,
+            ):
                 continue
-            if affordance.action_name in local_tried:
+            if semantically_matches_action(
+                affordance.action_name,
+                exploration_context.tried_action_ids,
+                embedding_provider=self.state_embedding_provider,
+            ):
                 continue
             return _business_action_from_affordance(affordance)
         return None

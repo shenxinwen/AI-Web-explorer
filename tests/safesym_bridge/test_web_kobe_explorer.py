@@ -1046,6 +1046,53 @@ def test_business_affordance_selection_returns_none_when_local_frontier_exhauste
     assert selected is None
 
 
+def test_business_affordance_selection_avoids_semantically_repeated_local_action():
+    vectors = {
+        "order_items_alphabetically": (1.0, 0.0),
+        "sort_by_name": (0.98, 0.12),
+        "filter_by_price": (0.0, 1.0),
+    }
+
+    def embedding_provider(text: str):
+        return vectors[text]
+
+    explorer = WebKobeExplorer(
+        adapter=FakeAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        state_embedding_provider=embedding_provider,
+    )
+    explorer.manager.identify_or_add_node(
+        _selection_node(
+            "product_detail",
+            business_affordances=[
+                BusinessAffordance(
+                    action_name="order_items_alphabetically",
+                    relevance_hint="core",
+                    confidence=0.9,
+                ),
+                BusinessAffordance(
+                    action_name="filter_by_price",
+                    relevance_hint="core",
+                    confidence=0.8,
+                ),
+            ],
+        )
+    )
+
+    selected = explorer._select_business_affordance_action(
+        exploration_context=ExplorationContext(
+            current_node_id="product_detail",
+            reference_node_id="product_detail",
+            is_revisit=False,
+            tried_action_ids=("sort_by_name",),
+            avoid_action_ids=(),
+        )
+    )
+
+    assert selected is not None
+    assert selected.semantic_id == "filter_by_price"
+
+
 @pytest.mark.anyio
 async def test_explore_one_step_uses_signature_change_for_same_page_target():
     adapter = SamePageLowValueChangeAdapter()
