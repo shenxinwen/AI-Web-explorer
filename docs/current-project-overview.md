@@ -62,11 +62,13 @@ Current objective status:
 real browser chain: established
 graph/PDDL/SafeSym engineering chain: established
 VLM visual delta: connected; it only observes `candidate_added_facts` /
-candidate_removed_facts
+`candidate_removed_facts`
 business affordance generation: initial version exists
 embedding memory: connected for similar-state lookup and repetition guidance
 target matching: initial version connected; post-action states can reuse
-existing business nodes using embeddings plus planning-fact compatibility;
+existing business nodes using embedding similarity and reliable local revisit
+evidence; state summaries may include locally verified planning context, but it
+is not an independent veto or decision gate;
 explicit URL/signature/visual changes cannot merge the candidate back to the
 source, while reliable non-source history may still be reused
 source localization: normal exploration trusts the current-node pointer;
@@ -91,7 +93,8 @@ the selected action; first prompt/runner boundary fixes are implemented
 domain-first projection: available through web-kobe-domain-from-graph
 problem generation: diagnostic/query-stage only, requires explicit start/goal
 free exploration strategy: not stable yet
-profile fact verifier: not real yet
+profile fact verifier: minimal deterministic verifier connected; it only
+confirms profile facts from local structured signatures
 PDDL semantic quality: consumable, but not stable or readable enough
 business node naming: materialized business nodes can derive labels from
 profile hints / facts / actions
@@ -297,10 +300,12 @@ latest conclusion; graph merge quality still needs a new controlled run.
 This means embeddings already provide similar-state signals, but target-node
 materialization and merge logic did not consume those signals strongly enough.
 Target matching V1 is now connected: after an action, the target state is
-matched against existing nodes using embeddings plus planning-fact
-compatibility. If a match is accepted, the edge points to the existing node
-instead of creating another state variant. The next real-site run must confirm
-whether this reduces duplicate business nodes.
+matched against existing nodes using embedding similarity and reliable local
+revisit evidence. State summaries may include locally verified planning
+context, but it is not an independent veto or decision gate. If a match is
+accepted, the edge points to the existing node instead of creating another
+state variant. The next real-site run must confirm whether this reduces
+duplicate business nodes.
 
 ### P0: visual observations remain separate from planning state
 
@@ -359,7 +364,7 @@ the configured threshold. `graph.meta` records `last_step_kind`,
 `max_consecutive_unproductive_steps`.
 
 Recent cleanup moved the generic Stagehand exploration default to
-`observed_action`, preserves VLM candidate `expected_change` in graph
+`observed_action`, preserves VLM candidate `supporting_facts` in graph
 affordances, and removed global completed-action downranking from business
 affordance selection. Repetition policy should now be based on the current or
 embedding-matched node context.

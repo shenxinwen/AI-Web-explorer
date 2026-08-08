@@ -55,7 +55,7 @@ graph/PDDL/SafeSym 工程链路：已成立
 VLM visual delta：已接入，只观察 `candidate_added_facts` / `candidate_removed_facts`
 business affordance 生成：已有初版
 embedding memory：已接入，用于相似状态定位和重复提示
-target matching：已有初版，动作后会尝试用 embedding + planning facts 复用已有业务节点；存在明确 URL/signature/visual 变化时不得回并到 source
+target matching：已有初版，动作后会用 embedding 相似度和可靠的本地 revisit evidence 复用已有业务节点；state summary 可包含本地确认的 planning context，但不是独立否决或裁决门槛；存在明确 URL/signature/visual 变化时不得回并到 source
 source 定位：正常探索默认信任当前节点指针；embedding source match 只作为恢复/诊断信号
 frontier / DFS 探索策略：最小 business-affordance selector/backtrack 行为已实现；graph meta 已输出 frontier_metrics
 连续无进展终止：已实现；failed/no-op 不再单次终止，达到阈值才停止
@@ -173,7 +173,7 @@ edge.planning_transition 中属于 profile facts 的 pre/added/removed facts
 - 相同业务状态只能有一个节点；例如无论从首页、商品详情页还是其他页面进入购物车，都应指向同一个购物车业务节点。
 - 边可以表达不同来源路径，节点不能因为来源路径不同而重复表达同一个状态。
 - 新节点必须代表有意义的业务状态变化；如果只是在 `cart_has_items` 已经成立后把同一商品数量从 1 增加到 2，而我们暂不建模数量，就不应生成新的业务状态节点。
-- 状态合并应优先于创建；动作执行后应先用 planning facts、VLM state summary 和 embedding 匹配已有节点，只有不匹配时才创建新节点。
+- 状态合并应优先于创建；动作执行后应先用 embedding 相似度和可靠的本地 revisit evidence 匹配已有节点，state summary 可包含本地确认的 planning context，但不是独立否决或裁决门槛，只有不匹配时才创建新节点。
 - 节点命名要语义稳定；如果 PDDL 出现大量 `at_product_details_002` / `at_shopping_003`，通常说明 graph 的节点合并或命名存在问题。
 - 每个节点和边都要能追溯到 evidence，包括 VLM summary、planning facts、before/after 截图或结构化观察。
 
@@ -195,7 +195,7 @@ edge.planning_transition 中属于 profile facts 的 pre/added/removed facts
 
 此前 Practice Automated Testing Shopping 实验曾生成重复的页面/业务状态变体；该历史结果不作为当前最新结论，仍需要新的受控实验确认 graph merge 质量。
 
-当前已接入 target matching V1：动作后的目标状态会先用 planning facts + embedding 匹配已有节点；匹配成功则 edge 指向已有节点，而不是生成新的状态变体。明确变化时 source 节点受到保护，但其他有可靠证据的历史节点仍可复用。下一步需要通过真实网站实验确认它是否能减少重复业务节点。
+当前已接入 target matching V1：动作后的目标状态会先用 embedding 相似度和可靠的本地 revisit evidence 匹配已有节点；state summary 可包含本地确认的 planning context，但不是独立否决或裁决门槛。匹配成功则 edge 指向已有节点，而不是生成新的状态变体。明确变化时 source 节点受到保护，但其他有可靠证据的历史节点仍可复用。下一步需要通过真实网站实验确认它是否能减少重复业务节点。
 
 ### P0: Visual observations 与规划状态保持隔离
 
@@ -227,7 +227,7 @@ SafeSym 可以结构性消费当前产物，但 PDDL 的语义质量还不稳定
 
 controller 已改为连续无进展策略：单次 `failed_execution`、`no_observed_change` 或成功 backtrack 都不会立刻终止；只有连续无进展达到阈值、无法产生 edge 且没有有效控制动作、terminal condition 命中或达到最大步数时才停止。`graph.meta` 会记录 `last_step_kind`、`last_step_status`、`consecutive_unproductive_steps` 和 `max_consecutive_unproductive_steps`。
 
-最近的清理已经把通用 Stagehand exploration 默认模式改为 `observed_action`，保留 VLM 候选动作的 `expected_change`，并移除了业务候选选择中的全局 completed action 降权；重复策略应基于当前节点或 embedding 命中的相似节点上下文。
+最近的清理已经把通用 Stagehand exploration 默认模式改为 `observed_action`，保留 VLM 候选动作的 `supporting_facts`，并移除了业务候选选择中的全局 completed action 降权；重复策略应基于当前节点或 embedding 命中的相似节点上下文。
 
 已知 `Thinking mode does not support this tool_choice` 属于 Stagehand/模型适配异常，不足以证明网页动作没有发生。探索器会继续获取动作后状态、截图和 Visual Delta：若 URL/signature/visual 任一明确变化，则记录成功转换；若没有变化，则记录 `no_observed_change` 自环，再由本地动作记忆避开并继续尝试其他候选。未知执行错误仍记录失败自环且不调用 Visual Delta。
 

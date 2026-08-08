@@ -260,7 +260,7 @@ WebKobeExplorer.explore_one_step
   -> GraphManager.identify_or_add_node
   -> optional embedding source match
   -> optional summarize_visual_affordances
-  -> select business/fallback action
+  -> select business action
   -> adapter.execute
   -> capture after state/screenshots when execution succeeds or the known Stagehand tool_choice error is reported
   -> summarize_visual_delta (observation trace only) / verify_planning_delta
