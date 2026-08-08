@@ -56,6 +56,9 @@ from ai_web_explorer.grounded_web.state_embedding import (
     read_state_embedding_records,
     write_state_embedding_records,
 )
+from ai_web_explorer.safesym_bridge.graph_artifacts import (
+    build_graph_artifact_payload,
+)
 
 
 ECOMMERCE_CHECKOUT_OVERVIEW_STAGEHAND_GOAL = build_ecommerce_checkout_stagehand_goal(
@@ -136,14 +139,27 @@ def build_debug_web_kobe_graph() -> WebKobeGraph:
     )
 
 
-def write_web_kobe_graph(graph: WebKobeGraph, output_path: Path) -> Path:
+def write_web_kobe_graph(
+    graph: WebKobeGraph,
+    output_path: Path,
+    *,
+    evidence_path: Path | None = None,
+) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    graph_data = graph.to_dict()
-    graph_data.setdefault("meta", {})["frontier_metrics"] = _frontier_metrics_for_graph(
-        graph
+    evidence_path = evidence_path or output_path.with_name("graph_evidence.json")
+    evidence_path.parent.mkdir(parents=True, exist_ok=True)
+
+    payload = build_graph_artifact_payload(graph)
+    payload.compact_graph.setdefault("meta", {})[
+        "frontier_metrics"
+    ] = _frontier_metrics_for_graph(graph)
+
+    evidence_path.write_text(
+        json.dumps(payload.evidence_sidecar, indent=2, ensure_ascii=False),
+        encoding="utf-8",
     )
     output_path.write_text(
-        json.dumps(graph_data, indent=2, ensure_ascii=False),
+        json.dumps(payload.compact_graph, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
     return output_path

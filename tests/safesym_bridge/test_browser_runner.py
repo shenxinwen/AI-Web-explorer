@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -154,8 +155,13 @@ def test_write_web_kobe_graph_adds_frontier_metrics(tmp_path):
 
     browser_runner.write_web_kobe_graph(graph, output_path)
 
+    evidence_path = output_path.with_name("graph_evidence.json")
+    assert output_path.exists()
+    assert evidence_path.exists()
     data = json.loads(output_path.read_text(encoding="utf-8"))
+    evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
     metrics = data["meta"]["frontier_metrics"]
+    assert evidence["schema_version"] == "web-kobe-graph-evidence-v1"
     assert metrics["frontier_node_count"] == 2
     assert metrics["exhausted_node_count"] == 0
     assert metrics["repeated_target_hit_count"] == 2
@@ -169,6 +175,28 @@ def test_write_web_kobe_graph_adds_frontier_metrics(tmp_path):
     assert product_list["untried_action_ids"] == ["open_cart"]
     assert product_list["no_op_action_ids"] == ["sort_products"]
     assert product_list["failed_action_ids"] == []
+
+
+def test_write_web_kobe_graph_does_not_write_graph_if_sidecar_fails(
+    tmp_path, monkeypatch
+):
+    output_path = tmp_path / "graph.json"
+    evidence_path = tmp_path / "graph_evidence.json"
+    original_write_text = Path.write_text
+
+    def fail_sidecar(path, data, **kwargs):
+        if path == evidence_path:
+            raise OSError("sidecar write failed")
+        return original_write_text(path, data, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", fail_sidecar)
+
+    with pytest.raises(OSError, match="sidecar write failed"):
+        browser_runner.write_web_kobe_graph(
+            browser_runner.build_debug_web_kobe_graph(), output_path
+        )
+
+    assert not output_path.exists()
 
 
 @pytest.mark.anyio
@@ -833,6 +861,7 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
         for call in calls
     )
     assert output_path.exists()
+    assert output_path.with_name("graph_evidence.json").exists()
     assert embedding_path.exists()
 
 
