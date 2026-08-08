@@ -59,7 +59,8 @@ Keep:
 
 - stable edge identity;
 - `source_node_id`, canonical business action, and `target_node_id`;
-- action label, target hint, and local `supporting_facts` when present;
+- action label and local `supporting_facts` when present; target hints remain on
+  the source node's frozen business affordances;
 - final edge status and visit count;
 - compact execution outcome needed by eligibility checks;
 - non-empty planning transition data;
