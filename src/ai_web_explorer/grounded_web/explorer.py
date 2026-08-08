@@ -453,6 +453,7 @@ class WebKobeExplorer:
                 after_interactables=after_interactables,
                 planning_transition=planning_transition,
                 source_node_id=source_id,
+                has_explicit_change=state_changed,
             )
         if target_match is not None:
             execution_metadata["target_state_match"] = {
@@ -547,6 +548,7 @@ class WebKobeExplorer:
         after_interactables: list[dict[str, Any]],
         planning_transition: PlanningTransition | None,
         source_node_id: str | None = None,
+        has_explicit_change: bool = False,
     ) -> tuple[WebKobeNode, StateMatch | None]:
         if (
             not self.enable_exploration_memory
@@ -572,6 +574,12 @@ class WebKobeExplorer:
             existing = self.manager.node_for_id(target_match.node_id)
         except KeyError:
             return target_node, target_match
+        if has_explicit_change and existing.node_id == source_node_id:
+            return target_node, replace(
+                target_match,
+                status="blocked",
+                blocked_reason="source_node",
+            )
         if not self._has_known_revisit_evidence(
             default_node_id=source_node_id,
             matched_node_id=existing.node_id,

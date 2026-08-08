@@ -2134,3 +2134,92 @@ async def test_visual_delta_fact_order_does_not_change_observation_node_id():
     second = await make_explorer(["cart_has_items", "modal_visible"]).explore_one_step()
 
     assert first.edges[0].target_node_id == second.edges[0].target_node_id
+
+
+@pytest.mark.anyio
+async def test_explicit_visual_change_does_not_embedding_match_back_to_source():
+    adapter = SamePageBusinessChangeAdapter()
+    assistor = DeterministicSemanticAssistor(app="fake")
+    source_id = assistor.describe_state(
+        snapshot=adapter.states[0],
+        interactables=[],
+    ).node_id
+
+    def provider(
+        prompt,
+        *,
+        current_screenshot_path=None,
+        before_screenshot_path=None,
+        after_screenshot_path=None,
+    ):
+        if current_screenshot_path is not None:
+            return _business_affordance_response("clear_search_query")
+        return '{"candidate_added_facts":["search_results_changed"],"candidate_removed_facts":[]}'
+
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=assistor,
+        business_profile=ecommerce_checkout_profile(),
+        capture_screenshots=True,
+        visual_delta_provider=provider,
+        enable_exploration_memory=True,
+        state_embedding_provider=lambda text: [1.0, 0.0],
+        state_embedding_records=[
+            StateEmbeddingRecord(
+                node_id=source_id,
+                summary_text="source state",
+                embedding=[1.0, 0.0],
+            )
+        ],
+    )
+
+    graph = await explorer.explore_one_step()
+
+    edge = graph.edges[0]
+    assert edge.source_node_id == source_id
+    assert edge.target_node_id != source_id
+    assert "__observation_" in edge.target_node_id
+    assert edge.execution_trace.metadata["target_state_match"][
+        "blocked_reason"
+    ] == "source_node"
+
+
+@pytest.mark.anyio
+async def test_explicit_visual_change_can_match_reliable_non_source_history():
+    adapter = SamePageBusinessChangeAdapter()
+    assistor = DeterministicSemanticAssistor(app="fake")
+    source_id = assistor.describe_state(
+        snapshot=adapter.states[0],
+        interactables=[],
+    ).node_id
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=assistor,
+        business_profile=ecommerce_checkout_profile(),
+        capture_screenshots=True,
+        visual_delta_provider=lambda prompt, **kwargs: (
+            _business_affordance_response("clear_search_query")
+            if kwargs.get("current_screenshot_path") is not None
+            else '{"candidate_added_facts":["search_results_changed"],"candidate_removed_facts":[]}'
+        ),
+        enable_exploration_memory=True,
+        state_embedding_provider=lambda text: [1.0, 0.0],
+        state_embedding_records=[
+            StateEmbeddingRecord(
+                node_id="history",
+                summary_text="reliable history",
+                embedding=[1.0, 0.0],
+            )
+        ],
+    )
+    explorer.manager.identify_or_add_node(_selection_node(source_id))
+    explorer.manager.identify_or_add_node(_selection_node("history"))
+    explorer.manager.add_edge(_selection_edge(source_id, "history", "prior_visit"))
+    explorer._current_node_id = source_id
+
+    graph = await explorer.explore_one_step()
+
+    edge = graph.edges[-1]
+    assert edge.target_node_id == "history"
+    assert edge.execution_trace.metadata["target_state_match"]["node_id"] == "history"
+    assert edge.execution_trace.metadata["target_state_match"]["accepted"] is True
