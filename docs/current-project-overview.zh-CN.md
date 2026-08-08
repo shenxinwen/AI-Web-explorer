@@ -52,15 +52,16 @@ Stagehand、Playwright、VLM/LLM、embedding 都是工具或证据来源。Web-K
 ```text
 真实浏览器链路：已成立
 graph/PDDL/SafeSym 工程链路：已成立
-VLM visual delta：已接入
+VLM visual delta：已接入，只观察 `candidate_added_facts` / `candidate_removed_facts`
 business affordance 生成：已有初版
 embedding memory：已接入，用于相似状态定位和重复提示
-target matching：已有初版，动作后会尝试用 embedding + planning facts 复用已有业务节点
+target matching：已有初版，动作后会尝试用 embedding + planning facts 复用已有业务节点；存在明确 URL/signature/visual 变化时不得回并到 source
 source 定位：正常探索默认信任当前节点指针；embedding source match 只作为恢复/诊断信号
 frontier / DFS 探索策略：最小 business-affordance selector/backtrack 行为已实现；graph meta 已输出 frontier_metrics
 连续无进展终止：已实现；failed/no-op 不再单次终止，达到阈值才停止
-Stagehand thinking/tool_choice 异常：已定义为非致命异常；无变化时记为 no-op 而不是 failed edge
-generated facts 记录：graph 层已接住，当前 PDDL 默认允许投影
+Stagehand thinking/tool_choice 异常：已定义为需要继续动作后观察；有变化时记为成功转换，无变化时记为 `no_observed_change`
+Visual observations：只保留在 raw edge trace，不进入 `PlanningState` 或 Phase A PDDL
+Phase A domain：当前只投影 canonical locations 和非自环 business transitions
 自由探索策略：尚未稳定
 profile fact verifier：已接入最小确定性 verifier，只负责从本地结构化签名确认 profile facts
 PDDL 语义质量：可消费，但还不够稳定和可读
@@ -68,6 +69,14 @@ PDDL 语义质量：可消费，但还不够稳定和可读
 ```
 
 详细 pipeline 和模块职责见 `docs/project-structure.zh-CN.md`。
+
+## 当前观察、规划和异常处理边界
+
+- Visual Delta 只比较动作前后截图，输出 `candidate_added_facts` / `candidate_removed_facts`；新探索不生成 VLM `BusinessTransition` 判断。
+- Visual observations 只作为 raw edge 的可审查证据保留在 `execution_trace.metadata.visual_delta_trace`，不进入 `PlanningState`、planning transition 传播、target matching planning facts 或 Phase A PDDL。
+- Structured profile verification 仍可独立构建 `PlanningState`；Phase A 当前只基于 canonical location 和非自环 business transition 生成 `domain.pddl`。
+- 只要 URL path、结构签名或 Visual Delta 有明确变化，target matching 就不能把候选目标合并回 source；仍可按既有可靠 revisit evidence 复用其他历史节点。
+- `Thinking mode does not support this tool_choice` 只表示 Stagehand/模型适配层异常：探索器会继续获取动作后状态、截图和 Visual Delta；有明确变化时记录成功转换，无变化时记录 `no_observed_change` 自环。未知执行错误仍是失败自环且不调用 Visual Delta。
 
 ## 当前核心判断
 
@@ -95,9 +104,9 @@ profile facts 不是网页状态全集。它们的新定位是：
 PDDL 候选谓词词表 + 优先观察目标 + 跨网站语义对齐锚点
 ```
 
-Graph 层现在允许记录 profile facts 和 generated facts；PDDL projector 当前默认允许消费两类事实。后续需要设计 generated facts 的晋升和可选投影策略。
+Graph 层仍需兼容读取历史 profile/generated facts；但当前新探索的 Visual Delta facts 只保留在 raw edge trace，不作为 planning facts 记录或投影。后续若要把观察事实晋升为 planner-facing 语义，需要单独的审查策略。
 
-当前事实来源边界已经收紧：visual delta VLM 不接收 profile facts，也不负责把返回事实匹配到 profile。VLM 在动作执行后观察到的事实默认记录为 generated facts；只有本地结构化 verifier 明确确认的事实，才进入 `profile_fact_ids`。Graph manager 不再因为事实名称恰好出现在 profile 中而自动晋升。
+当前事实来源边界已经收紧：visual delta VLM 不接收 profile facts，也不负责把返回事实匹配到 profile。只有本地结构化 verifier 明确确认的事实，才进入 planning/profile facts；Visual Delta 返回事实只进入 raw edge trace。Graph manager 不再因为事实名称恰好出现在 profile 中而自动晋升。
 
 ### 3. 探索控制权必须留在本地系统
 
@@ -126,7 +135,7 @@ current / target state summary
   -> 对重复或低价值动作降权或跳过
 ```
 
-Profile facts 可以帮助对齐 planner-facing 语义，但不是唯一探索边界。Graph 可以记录 generated facts；当前 PDDL 也允许投影它们，但长期稳定性仍需要后续晋升或审查策略保证。
+Profile facts 可以帮助对齐 planner-facing 语义，但不是唯一探索边界。Visual observations 与规划状态隔离；Phase A 不把这些观察事实作为 predicates、preconditions 或 effects。
 
 ### 4. Stagehand 是操作层，不是状态真相层
 
@@ -184,15 +193,15 @@ edge.planning_transition 中属于 profile facts 的 pre/added/removed facts
 
 ### P0: 相同业务状态还没有稳定合并
 
-最新 Practice Automated Testing Shopping 8 步实验生成了 6 个节点和 8 条边，链路完整，但 graph 质量仍偏低。系统已经能用 target matching 复用部分已有节点，但仍出现 `product_details` / `product_list` 类似状态变体，PDDL 里也出现 `at_product_details_002`、`at_product_list_002` 这类可读性较差的谓词。
+此前 Practice Automated Testing Shopping 实验曾生成重复的页面/业务状态变体；该历史结果不作为当前最新结论，仍需要新的受控实验确认 graph merge 质量。
 
-这说明 embedding 已经能提供相似状态信号，但目标节点 materialization / merge 逻辑还没有充分消费这个信号。当前已接入 target matching V1：动作后的目标状态会先用 planning facts + embedding 匹配已有节点；匹配成功则 edge 指向已有节点，而不是生成新的状态变体。下一步需要通过真实网站实验确认它是否能减少重复业务节点。
+当前已接入 target matching V1：动作后的目标状态会先用 planning facts + embedding 匹配已有节点；匹配成功则 edge 指向已有节点，而不是生成新的状态变体。明确变化时 source 节点受到保护，但其他有可靠证据的历史节点仍可复用。下一步需要通过真实网站实验确认它是否能减少重复业务节点。
 
-### P0: generated facts 还没有晋升策略
+### P0: Visual observations 与规划状态保持隔离
 
-当前 graph 已能记录 generated facts，并在 `PlanningState` 中保留 `profile_fact_ids` / `generated_fact_ids` 来源信息。当前 PDDL projector 默认允许投影 generated facts；后续仍需明确哪些事实经过审查后可以成为更稳定的 planner-facing 语义。
+Visual Delta facts 目前只作为 raw edge trace 的观察证据保留，不进入 `PlanningState.active_facts`，也不参与 planning transition、target matching planning conflict 或 Phase A PDDL。
 
-剩余问题是：generated facts 何时可以晋升为 planner-facing facts、是否允许某轮实验显式投影、以及如何通过 verifier 确认它们，目前还没有策略。
+后续若需要将视觉观察提升为 planner-facing facts，必须另行设计验证、晋升和投影策略；本轮不处理。
 
 ### P0: PDDL 语义质量仍不稳定
 
@@ -202,7 +211,7 @@ SafeSym 可以结构性消费当前产物，但 PDDL 的语义质量还不稳定
 - materialized business node 已开始用 profile-provided hints / facts / action 推导 label，但非业务节点和重复 label 仍可能不够理想；
 - action precondition 依赖 source node 定位，需要继续用实验确认；
 - profile facts 不完整时，PDDL 会退化为 location path；
-- generated facts 虽然可以进入 PDDL，但来源稳定性和可读性仍不足，需要后续晋升/投影策略弥补。
+- Phase A 当前只投影 canonical locations 和非自环 business transitions；Visual Delta facts 不进入 domain PDDL。
 
 ### P1: 探索还没有真正形成 frontier
 
@@ -220,7 +229,9 @@ controller 已改为连续无进展策略：单次 `failed_execution`、`no_obse
 
 最近的清理已经把通用 Stagehand exploration 默认模式改为 `observed_action`，保留 VLM 候选动作的 `expected_change`，并移除了业务候选选择中的全局 completed action 降权；重复策略应基于当前节点或 embedding 命中的相似节点上下文。
 
-已知 `Thinking mode does not support this tool_choice` 属于 Stagehand/模型适配异常，不再作为 failed edge 终止实验。若页面没有变化，该动作应记录为 `no_observed_change`，再由本地动作记忆避开并继续尝试其他候选。
+已知 `Thinking mode does not support this tool_choice` 属于 Stagehand/模型适配异常，不足以证明网页动作没有发生。探索器会继续获取动作后状态、截图和 Visual Delta：若 URL/signature/visual 任一明确变化，则记录成功转换；若没有变化，则记录 `no_observed_change` 自环，再由本地动作记忆避开并继续尝试其他候选。未知执行错误仍记录失败自环且不调用 Visual Delta。
+
+当前 deferred item：`BusinessAffordance.action_name`、`label` 和 `target_hint` 存在部分语义重叠，需要后续单独进行 schema review。
 
 ### P1: WebKobeExplorer 有中心化风险
 
@@ -258,6 +269,8 @@ business_affordances + business_transition + planning_transition
 ```text
 outputs/experiments/<site_name>/latest/
 ```
+
+默认每轮实验覆盖同一网站的 `latest/` 目录；只有明确归档时才复制到其他归档位置。
 
 每轮实验报告至少记录：
 

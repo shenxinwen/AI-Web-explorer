@@ -85,11 +85,11 @@ Stagehand 属于这一层。它可以看页面、生成候选、执行动作，�
 - 构造确定性的 state snapshot 和 signature；
 - 为人工审查和 embedding 生成 state summary；
 - 让 VLM 总结当前页面可执行的业务候选动作；
-- 比较 before/after 截图；
-- 生成 `BusinessTransition`、`PlanningDelta` 和 evidence；
+- 只比较 before/after 截图并输出 `candidate_added_facts` / `candidate_removed_facts`；
+- 由本地结构化 verifier 生成 `PlanningDelta` 和 evidence；历史 `BusinessTransition` 仅保留兼容读取；
 - 提供轻量结构化 verifier。
 
-profile facts 位于这一层。它们的定位是“优先观察目标 + PDDL 候选谓词词表”，不是网页所有可能状态的全集。visual delta VLM 不接收 profile facts；它观察到的动作后事实默认是 generated facts，只有本地结构化 verifier 明确确认的事实才归入 profile facts。具体网站类型可以通过 `PlanningFactSpec.state_label_hint` 提供业务节点命名建议。
+profile facts 位于这一层。它们的定位是“优先观察目标 + PDDL 候选谓词词表”，不是网页所有可能状态的全集。Visual Delta VLM 只接收动作和 before/after 截图，不接收 profile facts、supporting facts 或规划状态；它输出的观察事实只作为 raw edge trace 证据保留，不进入 `PlanningState`。只有本地结构化 verifier 明确确认的事实才归入 profile facts。具体网站类型可以通过 `PlanningFactSpec.state_label_hint` 提供业务节点命名建议。
 
 主要函数/类：
 
@@ -118,13 +118,14 @@ profile facts 位于这一层。它们的定位是“优先观察目标 + PDDL �
 主要职责：
 
 - 定义 `WebKobeGraph`、`WebKobeNode`、`WebKobeEdge`；
-- 记录 `BusinessAffordance`、`BusinessTransition`、`PlanningDelta`、`PlanningState`、`PlanningTransition`；
+- 记录 `BusinessAffordance`、`PlanningDelta`、`PlanningState`、`PlanningTransition`，并兼容读取历史 `BusinessTransition`；
 - 判断一次业务变化是否应该生成新节点；
 - 基于 profile 提供的 state label hints、planning facts 和 business action fallback，为 materialized business node 生成可读 `node_label`；
 - 传播 source-aware planning state；
 - 在 `PlanningState` 中同时保留 `active_facts`、`profile_fact_ids` 和 `generated_fact_ids`；
+- 将 Visual Delta 观察事实写入 raw edge 的 `execution_trace.metadata.visual_delta_trace`，不参与 planning transition、target matching planning facts 或 Phase A PDDL；
 - 存储 state embeddings；
-- 判断 revisit，并给探索策略提供 memory context。
+- 判断 revisit，并给探索策略提供 memory context；明确 URL path、结构签名或 Visual Delta 变化时，不将候选目标合并回本次 source，但仍可复用有可靠证据的其他历史节点。
 
 embedding memory 只辅助定位和避免重复，不直接进入 PDDL。
 
@@ -192,7 +193,7 @@ embedding memory 只辅助定位和避免重复，不直接进入 PDDL。
 - 运行 PDDL readiness smoke；
 - 运行 SafeSym parser、safety injection、planner smoke。
 
-这一层应保持确定性。它应该消费 graph 中已经记录的语义，不应该直接调用 LLM/VLM。当前默认允许投影 graph 中的 generated facts；是否将其长期视为稳定 planner-facing 语义，仍由后续审查和晋升策略决定。
+这一层应保持确定性。它应该消费 graph 中已经记录的语义，不应该直接调用 LLM/VLM。Phase A 只投影 canonical locations 和非自环 business transitions；Visual Delta 观察事实不作为 Phase A 的 predicates、preconditions 或 effects。其他事实是否长期晋升为 planner-facing 语义，仍由后续审查和晋升策略决定。
 
 主要函数/类：
 
@@ -261,14 +262,16 @@ WebKobeExplorer.explore_one_step
   -> optional summarize_visual_affordances
   -> select business/fallback action
   -> adapter.execute
-  -> capture after state/screenshots
-  -> summarize_visual_delta / verify_planning_delta
+  -> capture after state/screenshots when execution succeeds or the known Stagehand tool_choice error is reported
+  -> summarize_visual_delta (observation trace only) / verify_planning_delta
   -> GraphManager.build_planning_transition
   -> resolve_business_target_node
   -> 拆分同页面但 planning facts 不兼容的状态变体
   -> GraphManager.add_edge
   -> PDDL projector consumes graph JSON
 ```
+
+对 `Thinking mode does not support this tool_choice`，探索器会继续动作后观察：有 URL path、结构签名或 Visual Delta 变化时记录成功转换，无变化时记录 `no_observed_change` 自环，并保留原始错误与 `backend_reported_success=false`。未知执行错误仍记录失败自环且跳过 Visual Delta。
 
 ## 相关文档
 

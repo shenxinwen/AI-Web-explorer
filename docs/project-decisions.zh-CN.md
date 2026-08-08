@@ -34,6 +34,25 @@
 - profile facts 的稳定入口变成本地 verifier；后续若要把 generated fact 晋升为 profile fact，必须增加显式规则或审查流程。
 - 现有 `VisualDeltaRequest.profile` 和 graph manager 的兼容参数暂时保留，但不再作为 VLM 输入或自动匹配依据。
 
+## 2026-08-08 - Stagehand tool_choice 异常必须继续动作后观察
+
+更改：
+- 仅对 `Thinking mode does not support this tool_choice` 启用继续观察。
+- 有明确变化时记录成功转换；无变化时记录 `no_observed_change` 自环。
+- 保留原始 error 和 `backend_reported_success=false`。
+- Visual observations 只保留在 raw edge trace，不进入 `PlanningState` 或 Phase A PDDL。
+- 有明确变化时 target matching 不得回并到 source，但可复用有可靠证据的非 source 历史节点。
+
+原因：
+- Stagehand 可能先完成输入、点击或按键，再在工具协议收尾阶段返回该错误。
+- 执行器错误不能替代 Web-KOBE 的动作后页面观察。
+
+边界：
+- 未知错误仍是失败自环且不调用 Visual Delta。
+- 不调整 embedding 阈值、URL/signature 粒度或 Phase A/PDDL 规则。
+- 实验默认覆盖 `outputs/experiments/<site>/latest/`，除非显式归档。
+- `BusinessAffordance.action_name`、`label`、`target_hint` 的语义重叠留待后续 schema review。
+
 ## 2026-08-02 - 将探索策略收束为 frontier / DFS
 
 更改：
