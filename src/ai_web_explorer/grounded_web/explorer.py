@@ -208,6 +208,11 @@ def _should_advance_current_node(
     )
 
 
+def _edge_novelty_key(edge: WebKobeEdge) -> tuple[str, str, str]:
+    semantic_action = edge.action.canonical_action_name or edge.action.semantic_id
+    return (edge.source_node_id, semantic_action, edge.target_node_id)
+
+
 class WebKobeExplorer:
     def __init__(
         self,
@@ -220,6 +225,7 @@ class WebKobeExplorer:
         visual_delta_provider: VisualDeltaProvider | None = None,
         semantic_naming_provider: SemanticNamingProvider | None = None,
         state_embedding_provider: EmbeddingProvider | None = None,
+        action_embedding_provider: EmbeddingProvider | None = None,
         state_embedding_records: list[StateEmbeddingRecord] | None = None,
         enable_exploration_memory: bool = False,
         max_candidates: int = 5,
@@ -235,6 +241,7 @@ class WebKobeExplorer:
         self.visual_delta_provider = visual_delta_provider
         self.semantic_naming_provider = semantic_naming_provider
         self.state_embedding_provider = state_embedding_provider
+        self.action_embedding_provider = action_embedding_provider
         self.state_embedding_records = list(state_embedding_records or [])
         self.enable_exploration_memory = enable_exploration_memory
         self.manager = WebKobeGraphManager(app=adapter.app_name)
@@ -505,10 +512,11 @@ class WebKobeExplorer:
         )
         if self.business_profile is not None and edge_status != "failed_execution":
             self.manager.apply_planning_transition(edge)
-        known_edge_ids = {
-            existing_edge.edge_id for existing_edge in self.manager.to_graph().edges
+        known_edge_keys = {
+            _edge_novelty_key(existing_edge)
+            for existing_edge in self.manager.to_graph().edges
         }
-        edge_was_new = edge.edge_id not in known_edge_ids
+        edge_was_new = _edge_novelty_key(edge) not in known_edge_keys
         self.manager.add_edge(edge)
         graph_changed = node_was_new or edge_was_new
         self.manager.meta["last_step_kind"] = "business_edge"
@@ -903,13 +911,13 @@ class WebKobeExplorer:
             if semantically_matches_action(
                 affordance.action_name,
                 exploration_context.avoid_action_ids,
-                embedding_provider=self.state_embedding_provider,
+                embedding_provider=self.action_embedding_provider,
             ):
                 continue
             if semantically_matches_action(
                 affordance.action_name,
                 exploration_context.tried_action_ids,
-                embedding_provider=self.state_embedding_provider,
+                embedding_provider=self.action_embedding_provider,
             ):
                 continue
             return _business_action_from_affordance(affordance)

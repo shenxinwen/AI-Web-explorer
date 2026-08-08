@@ -385,6 +385,44 @@ async def test_explore_one_step_marks_repeated_self_loop_edge_unproductive():
 
 
 @pytest.mark.anyio
+async def test_edge_novelty_uses_canonical_action_not_raw_alias():
+    adapter = RepeatedStateAdapter()
+    explorer = _business_explorer(
+        adapter,
+        visual_delta_provider=_default_visual_provider(
+            added_facts=[],
+            removed_facts=[],
+        ),
+    )
+    actions = iter(
+        [
+            BrowserAction(
+                action_kind="business_intent",
+                locator=None,
+                semantic_id="sort_by_name",
+                canonical_action_name="sort_items",
+            ),
+            BrowserAction(
+                action_kind="business_intent",
+                locator=None,
+                semantic_id="order_items_alphabetically",
+                canonical_action_name="sort_items",
+            ),
+        ]
+    )
+    explorer._select_action = lambda **_: next(actions)
+
+    await explorer.explore_one_step()
+    graph = await explorer.explore_one_step()
+
+    assert [edge.action.semantic_id for edge in graph.edges] == [
+        "sort_by_name",
+        "order_items_alphabetically",
+    ]
+    assert graph.meta["last_step_graph_changed"] is False
+
+
+@pytest.mark.anyio
 async def test_explore_one_step_stops_forward_when_current_node_is_exhausted():
     adapter = ExhaustedNodeBackAdapter()
     explorer = WebKobeExplorer(
@@ -1059,7 +1097,7 @@ def test_business_affordance_selection_avoids_semantically_repeated_local_action
     explorer = WebKobeExplorer(
         adapter=FakeAdapter(),
         semantic_assistor=DeterministicSemanticAssistor(app="fake"),
-        state_embedding_provider=embedding_provider,
+        action_embedding_provider=embedding_provider,
     )
     explorer.manager.identify_or_add_node(
         _selection_node(
@@ -1091,6 +1129,33 @@ def test_business_affordance_selection_avoids_semantically_repeated_local_action
 
     assert selected is not None
     assert selected.semantic_id == "filter_by_price"
+
+
+def test_state_embedding_provider_does_not_drive_action_deduplication():
+    explorer = WebKobeExplorer(
+        adapter=FakeAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        state_embedding_provider=lambda text: [1.0, 0.0],
+    )
+    explorer.manager.identify_or_add_node(
+        _selection_node(
+            "product_detail",
+            business_affordances=[BusinessAffordance("clear_search_query")],
+        )
+    )
+
+    selected = explorer._select_business_affordance_action(
+        exploration_context=ExplorationContext(
+            current_node_id="product_detail",
+            reference_node_id="product_detail",
+            is_revisit=False,
+            tried_action_ids=("prior_visit",),
+            avoid_action_ids=(),
+        )
+    )
+
+    assert selected is not None
+    assert selected.semantic_id == "clear_search_query"
 
 
 @pytest.mark.anyio

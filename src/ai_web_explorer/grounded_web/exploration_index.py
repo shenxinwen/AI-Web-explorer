@@ -73,7 +73,7 @@ def semantically_matches_action(
                 >= same_threshold
             ):
                 return True
-    except (TypeError, ValueError, ZeroDivisionError):
+    except Exception:
         return False
     return False
 

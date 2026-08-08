@@ -133,3 +133,19 @@ def test_semantically_matches_action_uses_exact_match_without_embedding():
         ("view_cart",),
         embedding_provider=None,
     )
+
+
+def test_semantically_matches_action_falls_back_safely_when_embedding_fails():
+    def broken_provider(text: str):
+        raise RuntimeError("action embedding unavailable")
+
+    assert semantically_matches_action(
+        "open_cart",
+        ("open_cart",),
+        embedding_provider=broken_provider,
+    )
+    assert not semantically_matches_action(
+        "open_cart",
+        ("view_cart",),
+        embedding_provider=broken_provider,
+    )
