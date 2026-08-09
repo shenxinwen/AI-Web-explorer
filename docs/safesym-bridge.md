@@ -210,6 +210,14 @@ The generic Stagehand runner is the bounded-exploration integration surface. It
 can now reuse the existing profile, visual-delta, embedding, and Stagehand
 candidate-action capabilities:
 
+Stagehand and screenshot observation use separate model settings. Set
+`STAGEHAND_MODEL` (or `--model`) only for Stagehand action execution. Set
+`OPENAI_VISUAL_DELTA_MODEL` (or `--visual-delta-model`) for screenshot business
+affordances, state labels, and before/after Visual Delta. Never copy the
+Stagehand model name into the visual-delta option unless that separate OpenAI-
+compatible endpoint explicitly exposes the same model ID. Embeddings use
+`EMBEDDING_MODEL` independently.
+
 ```powershell
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-stagehand-explore `
   --url https://www.saucedemo.com/ `

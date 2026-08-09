@@ -25,6 +25,14 @@
 
 Stagehand、Playwright、VLM/LLM、embedding 都是工具或证据来源。Web-KOBE 自己必须拥有图结构、状态记忆、PDDL 语义和探索控制权。
 
+当前实验必须明确区分三套模型配置：
+
+- `STAGEHAND_MODEL` 只控制 Stagehand 动作执行；当前配置的 DS Flash 属于这一层。
+- `OPENAI_VISUAL_DELTA_MODEL` 控制截图 VLM，用于业务候选、`state_label` 和动作前后 Visual Delta；当前中转使用 `gpt-4o`。不得根据 `STAGEHAND_MODEL` 推断或覆盖它。
+- `EMBEDDING_MODEL` 只控制本地语义匹配和去重；当前使用 `text-embedding-v4`。
+
+运行实验时，如果没有显式传 `--visual-delta-model`，截图 VLM 会读取 `OPENAI_VISUAL_DELTA_MODEL`，再回退到代码默认的 `gpt-4o`。DS Flash 仅代表 Stagehand 表现，不能描述为截图 VLM 的表现。
+
 ## 当前阶段判断
 
 项目已经完成早期端到端链路验证：
