@@ -20,7 +20,8 @@ def test_summarize_visual_affordances_maps_provider_json():
         assert "representative business actions" in prompt
         assert current_screenshot_path == "current.png"
         return (
-            '{"page_mode":"multi_region","regions":['
+            '{"state_label":"product_list_sorted",'
+            '"page_mode":"multi_region","regions":['
             '{"region_id":"region_1","purpose":"Manage visible items",'
             '"actions":['
             '{"intent":"add_item_to_cart",'
@@ -37,6 +38,7 @@ def test_summarize_visual_affordances_maps_provider_json():
 
     assert result.trace.status == "summarized"
     assert result.state_summary is None
+    assert result.state_label == "product_list_sorted"
     assert [item.action_name for item in result.business_affordances] == [
         "add_item_to_cart",
         "open_cart",
@@ -118,6 +120,46 @@ def test_visual_affordance_prompt_treats_max_actions_as_upper_bound():
     assert [item.action_name for item in result.business_affordances] == [
         "add_to_cart",
         "close_product_details",
+    ]
+
+
+def test_visual_affordance_prompt_requests_top_level_state_label():
+    request = VisualAffordanceRequest(
+        goal="Explore visible business capabilities.",
+        profile=ecommerce_checkout_profile(),
+        current_screenshot_path="current.png",
+    )
+
+    def provider(prompt, *, current_screenshot_path):
+        payload = json.loads(prompt)
+        assert payload["output_schema"]["state_label"] == (
+            "short snake_case visible state name"
+        )
+        return '{"state_label":"product_list_sorted","regions":[]}'
+
+    result = summarize_visual_affordances(request, provider=provider)
+
+    assert result.state_label == "product_list_sorted"
+
+
+def test_visual_affordance_ignores_non_string_state_label_without_losing_actions():
+    request = VisualAffordanceRequest(
+        goal="Explore visible business capabilities.",
+        profile=ecommerce_checkout_profile(),
+        current_screenshot_path="current.png",
+    )
+
+    def provider(prompt, *, current_screenshot_path):
+        return (
+            '{"state_label":{"name":"not-a-label"},"regions":['
+            '{"actions":[{"intent":"sort_products","target":"Sort"}]}]}'
+        )
+
+    result = summarize_visual_affordances(request, provider=provider)
+
+    assert result.state_label is None
+    assert [item.action_name for item in result.business_affordances] == [
+        "sort_products"
     ]
 
 

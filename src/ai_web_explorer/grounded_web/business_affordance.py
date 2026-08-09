@@ -47,6 +47,7 @@ class VisualAffordanceResult:
     business_affordances: list[BusinessAffordance]
     trace: VisualAffordanceTrace
     state_summary: str | None = None
+    state_label: str | None = None
 
 
 def _prompt_for_request(request: VisualAffordanceRequest) -> str:
@@ -71,10 +72,14 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
             "actions separate when they affect different objects, produce "
             "different results, or serve different workflow roles. The action "
             "limit is an upper bound, not a quota. Return fewer actions when "
-            "fewer are actually available. Return JSON only."
+            "fewer are actually available. Also provide a short English "
+            "snake_case state_label describing only the currently visible "
+            "state. Do not describe action history, concrete objects, search "
+            "terms, or item counts in the state_label. Return JSON only."
         ),
         "max_candidates": request.max_actions,
         "output_schema": {
+            "state_label": "short snake_case visible state name",
             "page_mode": "multi_region | single_surface | uncertain",
             "regions": [
                 {
@@ -121,6 +126,12 @@ def _clean_text(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _optional_string(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    return _clean_text(value)
 
 
 def _confidence(value: Any) -> float | None:
@@ -259,6 +270,7 @@ def summarize_visual_affordances(
             status="summarized",
         ),
         state_summary=_clean_text(parsed.get("state_summary")),
+        state_label=_optional_string(parsed.get("state_label")),
     )
 
 
