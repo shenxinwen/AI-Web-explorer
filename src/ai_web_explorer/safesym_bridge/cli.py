@@ -380,19 +380,6 @@ def main(argv: list[str] | None = None) -> int:
         help="Optional OpenAI vision model override for --openai-visual-delta.",
     )
     ecommerce_stagehand_parser.add_argument(
-        "--deepseek-semantic-naming",
-        action="store_true",
-        help=(
-            "Enable observation-side DeepSeek semantic naming for graph node "
-            "and action labels. Runtime IDs and selectors are unchanged."
-        ),
-    )
-    ecommerce_stagehand_parser.add_argument(
-        "--semantic-naming-model",
-        default=None,
-        help="Optional model override for --deepseek-semantic-naming.",
-    )
-    ecommerce_stagehand_parser.add_argument(
         "--allow-final-order",
         action="store_true",
         help="Allow explicit test-site final order confirmation.",
@@ -615,8 +602,6 @@ def main(argv: list[str] | None = None) -> int:
                     screenshot_dir=args.screenshot_dir,
                     use_openai_visual_delta=args.openai_visual_delta,
                     visual_delta_model=args.visual_delta_model,
-                    use_deepseek_semantic_naming=args.deepseek_semantic_naming,
-                    semantic_naming_model=args.semantic_naming_model,
                     allow_final_order=args.allow_final_order,
                     benchmark_context=benchmark_context,
                 )

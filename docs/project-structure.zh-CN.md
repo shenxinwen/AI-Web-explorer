@@ -89,7 +89,7 @@ Stagehand 属于这一层。它可以看页面、生成候选、执行动作，�
 - 由本地结构化 verifier 生成 `PlanningDelta` 和 evidence；历史 `BusinessTransition` 仅保留兼容读取；
 - 提供轻量结构化 verifier。
 
-profile facts 位于这一层。它们的定位是“优先观察目标 + PDDL 候选谓词词表”，不是网页所有可能状态的全集。Visual Delta VLM 只接收动作和 before/after 截图，不接收 profile facts、supporting facts 或规划状态；它输出的观察事实只作为 raw edge trace 证据保留，不进入 `PlanningState`。只有本地结构化 verifier 明确确认的事实才归入 profile facts。具体网站类型可以通过 `PlanningFactSpec.state_label_hint` 提供业务节点命名建议。
+profile facts 位于这一层。它们的定位是“优先观察目标 + PDDL 候选谓词词表”，不是网页所有可能状态的全集。Visual Delta VLM 只接收动作和 before/after 截图，不接收 profile facts、supporting facts 或规划状态；它输出的观察事实只作为 raw edge trace 证据保留，不进入 `PlanningState`。只有本地结构化 verifier 明确确认的事实才归入 profile facts。节点可使用 Visual Affordance 提供的可选技术性 state label；profile facts 不再派生节点 label。
 
 主要函数/类：
 

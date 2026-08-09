@@ -42,6 +42,32 @@ def test_main_help_lists_only_web_kobe_mainline_commands(capsys):
     assert "explore-pddl" not in help_output
 
 
+@pytest.mark.parametrize(
+    "option",
+    ["--deepseek-semantic-naming", "--semantic-naming-model"],
+)
+def test_cli_no_longer_exposes_standalone_semantic_naming_options(
+    option, monkeypatch
+):
+    async def fake_run(*args, **kwargs):
+        return Path("fake-output.json")
+
+    monkeypatch.setattr(
+        cli,
+        "run_ecommerce_stagehand_step",
+        fake_run,
+        raising=False,
+    )
+    argv = ["web-kobe-ecommerce-stagehand-smoke", option]
+    if option == "--semantic-naming-model":
+        argv.append("legacy-model")
+
+    with pytest.raises(SystemExit) as error:
+        main(argv)
+
+    assert error.value.code == 2
+
+
 @pytest.mark.parametrize("legacy_command", ["graph", "pddl", "capability-graph"])
 def test_main_rejects_legacy_fixed_graph_commands(legacy_command, tmp_path):
     with pytest.raises(SystemExit) as error:
@@ -585,8 +611,6 @@ def test_main_web_kobe_ecommerce_stagehand_smoke_wires_benchmark_runner(
         screenshot_dir=None,
         use_openai_visual_delta=False,
         visual_delta_model=None,
-        use_deepseek_semantic_naming=False,
-        semantic_naming_model=None,
         allow_final_order=False,
         benchmark_context=None,
     ):
@@ -602,8 +626,6 @@ def test_main_web_kobe_ecommerce_stagehand_smoke_wires_benchmark_runner(
                 screenshot_dir,
                 use_openai_visual_delta,
                 visual_delta_model,
-                use_deepseek_semantic_naming,
-                semantic_naming_model,
                 allow_final_order,
                 benchmark_context.site_label,
                 benchmark_context.test_credentials,
@@ -661,8 +683,6 @@ def test_main_web_kobe_ecommerce_stagehand_smoke_wires_benchmark_runner(
             "deepseek/test",
             6,
             Path("outputs/latest/screenshots"),
-            False,
-            None,
             False,
             None,
             True,

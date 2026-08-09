@@ -142,7 +142,6 @@ def _business_explorer(
     *,
     business_profile=None,
     visual_delta_provider=None,
-    semantic_naming_provider=None,
     state_embedding_provider=None,
     state_embedding_records=None,
     enable_exploration_memory: bool = False,
@@ -165,7 +164,6 @@ def _business_explorer(
         business_profile=business_profile or ecommerce_checkout_profile(),
         capture_screenshots=True,
         visual_delta_provider=visual_delta_provider or _default_visual_provider(),
-        semantic_naming_provider=semantic_naming_provider,
         state_embedding_provider=state_embedding_provider,
         state_embedding_records=state_embedding_records,
         enable_exploration_memory=enable_exploration_memory,
@@ -2029,58 +2027,6 @@ async def test_explore_one_step_uses_business_affordance_naming():
     assert graph.edges[0].action.semantic_id == "product_add_to_cart"
     assert graph.edges[0].action.action_label == "Add product to cart"
     assert graph.edges[0].action.canonical_action_name == "product_add_to_cart"
-
-
-@pytest.mark.anyio
-async def test_explore_one_step_does_not_apply_transition_naming_from_visual_summary():
-    adapter = ScreenshotAdapter()
-    seen_requests = []
-
-    def visual_provider(
-        prompt,
-        *,
-        current_screenshot_path=None,
-        before_screenshot_path=None,
-        after_screenshot_path=None,
-    ):
-        if current_screenshot_path is not None:
-            return _business_affordance_response("add_to_cart_product")
-        return (
-            '{"candidate_added_facts":[],'
-            '"candidate_removed_facts":[],'
-            '"confidence":0.7}'
-        )
-
-    def semantic_naming_provider(request):
-        seen_requests.append(request)
-        if request.naming_task == "transition":
-            return {
-                "action_label": "Log in",
-                "canonical_action_name": "log_in",
-                "confidence": 0.9,
-            }
-        return {}
-
-    explorer = WebKobeExplorer(
-        adapter=adapter,
-        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
-        goal="Complete a task on the website.",
-        business_profile=ecommerce_checkout_profile(),
-        capture_screenshots=True,
-        visual_delta_provider=visual_provider,
-        semantic_naming_provider=semantic_naming_provider,
-    )
-
-    graph = await explorer.explore_one_step()
-
-    transition_requests = [
-        request for request in seen_requests if request.naming_task == "transition"
-    ]
-    assert transition_requests == []
-    edge = graph.edges[0]
-    assert edge.action.semantic_id == "add_to_cart_product"
-    assert edge.action.action_label == "Add To Cart Product"
-    assert edge.action.canonical_action_name == "add_to_cart_product"
 
 
 class RevisitMemoryAdapter(RepeatedStateAdapter):

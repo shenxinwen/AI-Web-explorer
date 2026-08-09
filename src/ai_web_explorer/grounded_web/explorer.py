@@ -41,11 +41,6 @@ from ai_web_explorer.grounded_web.exploration_index import (
 from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.grounded_web.planning_fact_verifier import verify_planning_delta
 from ai_web_explorer.grounded_web.semantic_assistor import SemanticAssistor
-from ai_web_explorer.grounded_web.semantic_naming import (
-    SemanticNamingProvider,
-    SemanticNamingRequest,
-    apply_semantic_naming,
-)
 from ai_web_explorer.grounded_web.typed_delta import (
     observed_deltas_from_typed,
     typed_deltas_from_facts,
@@ -220,7 +215,6 @@ class WebKobeExplorer:
         business_profile: BusinessFlowProfile | None = None,
         capture_screenshots: bool = False,
         visual_delta_provider: VisualDeltaProvider | None = None,
-        semantic_naming_provider: SemanticNamingProvider | None = None,
         state_embedding_provider: EmbeddingProvider | None = None,
         action_embedding_provider: EmbeddingProvider | None = None,
         state_embedding_records: list[StateEmbeddingRecord] | None = None,
@@ -236,7 +230,6 @@ class WebKobeExplorer:
         self.max_candidates = max_candidates
         self.capture_screenshots = capture_screenshots
         self.visual_delta_provider = visual_delta_provider
-        self.semantic_naming_provider = semantic_naming_provider
         self.state_embedding_provider = state_embedding_provider
         self.action_embedding_provider = action_embedding_provider
         self.state_embedding_records = list(state_embedding_records or [])
@@ -295,21 +288,6 @@ class WebKobeExplorer:
             self.manager.meta["last_step_status"] = "unproductive"
             self.manager.meta["last_step_graph_changed"] = False
             return self.manager.to_graph(start_node_id=self._start_node_id)
-
-        if (
-            self.semantic_naming_provider is not None
-            and selected.action_kind != "business_intent"
-        ):
-            node_fields, selected = apply_semantic_naming(
-                SemanticNamingRequest(
-                    goal=self.goal,
-                    state=before,
-                    action=selected,
-                ),
-                provider=self.semantic_naming_provider,
-            )
-            source_node = _node_from_draft(before_draft)
-            self.manager.identify_or_add_node(replace(source_node, **node_fields))
 
         execution_success = await self.adapter.execute(selected)
         execution_error = getattr(self.adapter, "last_execution_error", None)

@@ -37,10 +37,6 @@ from ai_web_explorer.grounded_web.openai_visual_delta import (
 from ai_web_explorer.grounded_web.embedding_provider import (
     create_embedding_provider_from_env,
 )
-from ai_web_explorer.grounded_web.semantic_naming import (
-    create_deepseek_semantic_naming_provider_from_env,
-    semantic_naming_provider_from_text_provider,
-)
 from ai_web_explorer.grounded_web.stagehand_backend import (
     StagehandAutomationBackend,
 )
@@ -372,9 +368,6 @@ async def run_ecommerce_stagehand_step(
     visual_delta_provider=None,
     use_openai_visual_delta: bool = False,
     visual_delta_model: str | None = None,
-    semantic_naming_provider=None,
-    use_deepseek_semantic_naming: bool = False,
-    semantic_naming_model: str | None = None,
     allow_final_order: bool = False,
     benchmark_context: BenchmarkTaskContext | None = None,
     experiment_plan: ExperimentPlan | None = None,
@@ -390,15 +383,6 @@ async def run_ecommerce_stagehand_step(
         resolved_visual_delta_provider = create_openai_visual_delta_provider_from_env(
             model=visual_delta_model,
         )
-    resolved_semantic_naming_provider = semantic_naming_provider
-    if resolved_semantic_naming_provider is None and use_deepseek_semantic_naming:
-        text_provider = create_deepseek_semantic_naming_provider_from_env(
-            model=semantic_naming_model,
-        )
-        resolved_semantic_naming_provider = semantic_naming_provider_from_text_provider(
-            text_provider
-        )
-
     resolved_experiment_plan = experiment_plan or ecommerce_checkout_experiment_plan(
         allow_final_order=allow_final_order,
     )
@@ -475,7 +459,6 @@ async def run_ecommerce_stagehand_step(
                     else None
                 ),
                 visual_delta_provider=resolved_visual_delta_provider,
-                semantic_naming_provider=resolved_semantic_naming_provider,
             )
             controller = WebKobeExplorationController(explorer)
             if allow_final_order:

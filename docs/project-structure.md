@@ -88,9 +88,9 @@ predicate vocabulary, not as the full set of possible website states. Visual
 Delta VLM receives only the selected action and before/after screenshots; it
 does not receive profile facts, supporting facts, or planning state. Its
 observations remain raw edge-trace evidence and do not enter `PlanningState`.
-Only locally confirmed facts enter profile/planning state. Site-type profiles
-can provide business-node naming hints through
-`PlanningFactSpec.state_label_hint`.
+Only locally confirmed facts enter profile/planning state. Visual affordance
+observations may provide an optional technical state label; profiles do not
+derive node labels from planning facts.
 
 Main functions/classes:
 

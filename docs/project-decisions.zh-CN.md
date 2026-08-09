@@ -286,11 +286,7 @@
 
 ## 2026-07-31 - 将业务节点命名 hint 放回 profile
 
-更改：
-
-- `PlanningFactSpec` 新增 `state_label_hint`，由具体 business profile 为 planning fact 声明推荐节点 label。
-- `business_state_policy.resolve_business_target_node` 改为接收 `state_label_hints`，不再硬编码 ecommerce facts。
-- `WebKobeExplorer` 从当前 `BusinessFlowProfile` 提取 hints 后传给 graph policy。
+状态命名方案已由 2026-08-09 的 VLM state label 设计替代：新探索由 Visual Affordance 可选提供 state label，本地仅做技术清洗；profile facts 不再派生节点 label。旧方案的字段和调用链已移除，历史 graph 仍按兼容规则读取。
 
 原因：
 
