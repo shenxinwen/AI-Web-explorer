@@ -391,6 +391,24 @@ def test_ensure_source_embedding_skips_when_exploration_memory_disabled():
 
 
 @pytest.mark.anyio
+async def test_multi_step_graph_nodes_have_embedding_records():
+    explorer = _business_explorer(
+        FakeAdapter(),
+        enable_exploration_memory=True,
+        state_embedding_provider=lambda summary_text: [1.0, 0.0],
+    )
+
+    await explorer.explore_one_step()
+    graph = await explorer.explore_one_step()
+
+    graph_node_ids = {node.node_id for node in graph.nodes}
+    embedding_node_ids = {
+        record.node_id for record in explorer.state_embedding_records
+    }
+    assert graph_node_ids <= embedding_node_ids
+
+
+@pytest.mark.anyio
 async def test_explore_one_step_preserves_deterministic_node_naming():
     explorer = _business_explorer(FakeAdapter())
 
@@ -1796,11 +1814,11 @@ async def test_explore_one_step_keeps_source_on_latest_materialized_business_nod
         return next(visual_responses)
 
     def embed(text):
+        if "checkout_started" in text:
+            return [1.0, 0.0]
         if "checkout_user_info_complete" in text:
             return [0.0, 1.0]
         if "Choose payment method" in text:
-            return [1.0, 0.0]
-        if "checkout_started" in text or "Open checkout" in text:
             return [1.0, 0.0]
         return [0.0, 0.0]
 
@@ -1859,7 +1877,7 @@ async def test_explore_one_step_uses_one_embedding_match_for_source_and_memory()
 
     await explorer.explore_one_step()
 
-    assert len(calls) == 1
+    assert len(calls) == 2
     assert adapter.exploration_contexts
     assert "This state appears to revisit node" not in adapter.exploration_contexts[0]
 
