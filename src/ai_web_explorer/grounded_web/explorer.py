@@ -530,13 +530,16 @@ class WebKobeExplorer:
             not self.enable_exploration_memory
             or self.state_embedding_provider is None
             or not self.state_embedding_records
-            or planning_transition is None
         ):
             return target_node, None
         target_summary = build_state_summary(
             snapshot=after,
             interactables=after_interactables,
-            active_planning_facts=planning_transition.post_facts,
+            active_planning_facts=(
+                planning_transition.post_facts
+                if planning_transition is not None
+                else []
+            ),
         )
         target_match = find_best_state_match(
             target_summary,
@@ -626,7 +629,7 @@ class WebKobeExplorer:
         before: StateSnapshot,
         before_screenshot_path: str,
     ) -> None:
-        if self.business_profile is None or self.visual_delta_provider is None:
+        if self.visual_delta_provider is None:
             return
         source_node = self.manager.node_for_id(source_id)
         if (
@@ -634,18 +637,11 @@ class WebKobeExplorer:
             or source_id in self._visual_affordance_observed_node_ids
         ):
             return
-        active_facts = (
-            list(source_node.planning_state.active_facts)
-            if source_node.planning_state is not None
-            else []
-        )
         result = summarize_visual_affordances(
             VisualAffordanceRequest(
                 goal=self.goal,
-                profile=self.business_profile,
                 current_screenshot_path=before_screenshot_path,
                 current_signature=before.signature,
-                current_planning_facts=active_facts,
                 max_actions=self.max_candidates,
             ),
             provider=self.visual_delta_provider,

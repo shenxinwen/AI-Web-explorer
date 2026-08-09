@@ -4,7 +4,6 @@ import json
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from ai_web_explorer.grounded_web.business_profile import BusinessFlowProfile
 from ai_web_explorer.grounded_web.graph import BusinessAffordance
 
 VisualAffordanceProvider = Callable[..., str]
@@ -13,10 +12,8 @@ VisualAffordanceProvider = Callable[..., str]
 @dataclass(frozen=True)
 class VisualAffordanceRequest:
     goal: str
-    profile: BusinessFlowProfile
     current_screenshot_path: str
     current_signature: dict[str, Any] | None = None
-    current_planning_facts: list[str] | None = None
     max_actions: int = 5
 
 

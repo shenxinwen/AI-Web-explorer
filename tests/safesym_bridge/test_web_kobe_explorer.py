@@ -984,6 +984,46 @@ def test_record_source_business_affordances_skips_existing_node_frontier():
     ] == ["view_cart", "proceed_to_checkout"]
 
 
+def test_record_source_business_affordances_does_not_require_business_profile():
+    provider_calls = []
+
+    def visual_provider(
+        prompt,
+        *,
+        current_screenshot_path=None,
+        before_screenshot_path=None,
+        after_screenshot_path=None,
+    ):
+        provider_calls.append(current_screenshot_path)
+        return _business_affordance_response("search_items")
+
+    explorer = WebKobeExplorer(
+        adapter=FakeAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        business_profile=None,
+        capture_screenshots=True,
+        visual_delta_provider=visual_provider,
+    )
+    explorer.manager.identify_or_add_node(_selection_node("listing"))
+
+    explorer._record_source_business_affordances(
+        source_id="listing",
+        before=StateSnapshot(
+            page_id="listing",
+            url="https://example.test/listing",
+            title="Listing",
+            signature={},
+        ),
+        before_screenshot_path="outputs/before_0001.png",
+    )
+
+    node = explorer.manager.node_for_id("listing")
+    assert provider_calls == ["outputs/before_0001.png"]
+    assert [item.action_name for item in node.business_affordances] == [
+        "search_items"
+    ]
+
+
 def _state_label_provider(label):
     def provider(
         prompt,
@@ -2356,6 +2396,45 @@ def test_target_matching_reuses_existing_business_state_node():
     assert match.status == "same"
     assert matched_node.node_id == "cart__existing"
     assert matched_node.node_label == "cart"
+
+
+def test_target_matching_runs_without_planning_transition():
+    def embed(text):
+        return [1.0, 0.0, 0.0]
+
+    explorer = WebKobeExplorer(
+        adapter=FakeAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        enable_exploration_memory=True,
+        state_embedding_provider=embed,
+    )
+    explorer.manager.identify_or_add_node(_selection_node("source"))
+    explorer.manager.identify_or_add_node(_selection_node("known"))
+    explorer.manager.add_edge(_selection_edge("source", "known", "prior_visit"))
+    explorer.state_embedding_records = [
+        StateEmbeddingRecord(
+            node_id="known",
+            summary_text="known state",
+            embedding=[1.0, 0.0, 0.0],
+        )
+    ]
+
+    matched_node, match = explorer._match_existing_target_node(
+        target_node=_selection_node("new_candidate"),
+        after=StateSnapshot(
+            page_id="known",
+            url="https://example.test/known",
+            title="Known",
+            signature={},
+        ),
+        after_interactables=[],
+        planning_transition=None,
+        source_node_id="source",
+    )
+
+    assert match is not None
+    assert match.status == "same"
+    assert matched_node.node_id == "known"
 
 
 def test_target_matching_reuses_known_state_despite_planning_fact_conflict():

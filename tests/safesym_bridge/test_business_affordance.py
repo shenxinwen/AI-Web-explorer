@@ -1,19 +1,17 @@
+import dataclasses
 import json
 
 from ai_web_explorer.grounded_web.business_affordance import (
     VisualAffordanceRequest,
     summarize_visual_affordances,
 )
-from ai_web_explorer.grounded_web.business_profile import ecommerce_checkout_profile
 
 
 def test_summarize_visual_affordances_maps_provider_json():
     request = VisualAffordanceRequest(
         goal="Explore shopping capabilities.",
-        profile=ecommerce_checkout_profile(),
         current_screenshot_path="current.png",
         current_signature={"url_path": "/inventory"},
-        current_planning_facts=["product_list_visible"],
     )
 
     def provider(prompt, *, current_screenshot_path):
@@ -56,10 +54,8 @@ def test_summarize_visual_affordances_maps_provider_json():
 def test_visual_affordance_prompt_keeps_vlm_stateless_about_graph_and_profile():
     request = VisualAffordanceRequest(
         goal="Explore visible business capabilities.",
-        profile=ecommerce_checkout_profile(),
         current_screenshot_path="current.png",
         current_signature={"url_path": "/inventory"},
-        current_planning_facts=["product_list_visible"],
     )
 
     def provider(prompt, *, current_screenshot_path):
@@ -86,13 +82,19 @@ def test_visual_affordance_prompt_keeps_vlm_stateless_about_graph_and_profile():
     assert result.trace.status == "summarized"
 
 
+def test_visual_affordance_request_has_no_profile_or_planning_state_fields():
+    field_names = {
+        field.name for field in dataclasses.fields(VisualAffordanceRequest)
+    }
+    assert "profile" not in field_names
+    assert "current_planning_facts" not in field_names
+
+
 def test_visual_affordance_prompt_treats_max_actions_as_upper_bound():
     request = VisualAffordanceRequest(
         goal="Explore visible business capabilities.",
-        profile=ecommerce_checkout_profile(),
         current_screenshot_path="current.png",
         current_signature={"url_path": "/inventory"},
-        current_planning_facts=["product_details_visible"],
         max_actions=5,
     )
 
@@ -126,7 +128,6 @@ def test_visual_affordance_prompt_treats_max_actions_as_upper_bound():
 def test_visual_affordance_prompt_requests_top_level_state_label():
     request = VisualAffordanceRequest(
         goal="Explore visible business capabilities.",
-        profile=ecommerce_checkout_profile(),
         current_screenshot_path="current.png",
     )
 
@@ -145,7 +146,6 @@ def test_visual_affordance_prompt_requests_top_level_state_label():
 def test_visual_affordance_ignores_non_string_state_label_without_losing_actions():
     request = VisualAffordanceRequest(
         goal="Explore visible business capabilities.",
-        profile=ecommerce_checkout_profile(),
         current_screenshot_path="current.png",
     )
 
@@ -166,7 +166,6 @@ def test_visual_affordance_ignores_non_string_state_label_without_losing_actions
 def test_summarize_visual_affordances_enforces_max_actions_upper_bound():
     request = VisualAffordanceRequest(
         goal="Explore shopping capabilities.",
-        profile=ecommerce_checkout_profile(),
         current_screenshot_path="current.png",
         max_actions=2,
     )
@@ -196,7 +195,6 @@ def test_summarize_visual_affordances_enforces_max_actions_upper_bound():
 def test_summarize_visual_affordances_rejects_non_object_response():
     request = VisualAffordanceRequest(
         goal="Explore shopping capabilities.",
-        profile=ecommerce_checkout_profile(),
         current_screenshot_path="current.png",
     )
 
@@ -213,7 +211,6 @@ def test_summarize_visual_affordances_rejects_non_object_response():
 def test_summarize_visual_affordances_normalizes_supporting_facts():
     request = VisualAffordanceRequest(
         goal="Explore visible business capabilities.",
-        profile=ecommerce_checkout_profile(),
         current_screenshot_path="current.png",
     )
 
@@ -244,7 +241,6 @@ def test_summarize_visual_affordances_normalizes_supporting_facts():
 def test_summarize_visual_affordances_ignores_removed_candidate_fields():
     request = VisualAffordanceRequest(
         goal="Explore visible business capabilities.",
-        profile=ecommerce_checkout_profile(),
         current_screenshot_path="current.png",
     )
 
