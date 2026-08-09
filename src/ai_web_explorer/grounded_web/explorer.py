@@ -12,6 +12,7 @@ from ai_web_explorer.grounded_web.capability_graph import (
     ObservedDelta,
 )
 from ai_web_explorer.grounded_web.state_signature import schema_delta
+from ai_web_explorer.grounded_web.state_signature import slug_identifier
 from ai_web_explorer.grounded_web.graph import (
     BusinessAffordance,
     BrowserAction,
@@ -71,6 +72,14 @@ TARGET_NODE_MATCH_THRESHOLD = 0.90
 
 def _url_path(url: str) -> str:
     return urlsplit(url).path or "/"
+
+
+def _safe_vlm_state_label(value: str | None, *, fallback: str) -> str:
+    if value:
+        cleaned = slug_identifier(value, fallback="")
+        if cleaned:
+            return cleaned
+    return slug_identifier(fallback, fallback="state")
 
 
 def _node_from_draft(draft) -> WebKobeNode:
@@ -669,11 +678,29 @@ class WebKobeExplorer:
         )
         if result.trace.status != "summarized":
             return
+        fallback_label = (
+            source_node.node_label
+            or source_node.page_frame.page_type
+            or source_node.node_id
+        )
+        accepted_vlm_label = bool(
+            result.state_label
+            and slug_identifier(result.state_label, fallback="")
+        )
         self.manager.identify_or_add_node(
             replace(
                 source_node,
                 business_affordances=result.business_affordances,
                 state_summary=result.state_summary or source_node.state_summary,
+                node_label=_safe_vlm_state_label(
+                    result.state_label,
+                    fallback=fallback_label,
+                ),
+                naming_provenance=(
+                    {"source": "visual_affordance_vlm"}
+                    if accepted_vlm_label
+                    else source_node.naming_provenance
+                ),
             )
         )
 

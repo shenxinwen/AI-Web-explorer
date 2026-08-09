@@ -880,6 +880,127 @@ def test_record_source_business_affordances_skips_existing_node_frontier():
     ] == ["view_cart", "proceed_to_checkout"]
 
 
+def _state_label_provider(label):
+    def provider(
+        prompt,
+        *,
+        current_screenshot_path=None,
+        before_screenshot_path=None,
+        after_screenshot_path=None,
+    ):
+        if current_screenshot_path is None:
+            return '{"candidate_added_facts":[],"candidate_removed_facts":[]}'
+        return json.dumps(
+            {
+                "state_label": label,
+                "business_affordances": [
+                    {
+                        "action_name": "view_cart",
+                        "label": "View cart",
+                        "target_hint": "cart link",
+                    }
+                ],
+            }
+        )
+
+    return provider
+
+
+def test_record_source_business_affordances_accepts_vlm_state_label_without_changing_id():
+    explorer = WebKobeExplorer(
+        adapter=FakeAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        business_profile=ecommerce_checkout_profile(),
+        capture_screenshots=True,
+        visual_delta_provider=_state_label_provider("product_list_sorted"),
+    )
+    explorer.manager.identify_or_add_node(_selection_node("listing"))
+
+    explorer._record_source_business_affordances(
+        source_id="listing",
+        before=StateSnapshot(
+            page_id="listing",
+            url="https://example.test/listing",
+            title="Listing",
+            signature={"cart_count": 0},
+        ),
+        before_screenshot_path="outputs/before_0001.png",
+    )
+
+    node = explorer.manager.node_for_id("listing")
+    assert node.node_id == "listing"
+    assert node.node_label == "product_list_sorted"
+    assert node.naming_provenance == {"source": "visual_affordance_vlm"}
+
+
+def test_record_source_business_affordances_preserves_revisit_label_and_id():
+    explorer = WebKobeExplorer(
+        adapter=FakeAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        business_profile=ecommerce_checkout_profile(),
+        capture_screenshots=True,
+        visual_delta_provider=_state_label_provider("different_revisit_label"),
+    )
+    explorer.manager.identify_or_add_node(
+        replace(
+            _selection_node(
+                "listing",
+                business_affordances=[BusinessAffordance("view_cart")],
+            ),
+            node_label="product_list",
+            naming_provenance={"source": "visual_affordance_vlm"},
+        )
+    )
+
+    explorer._record_source_business_affordances(
+        source_id="listing",
+        before=StateSnapshot(
+            page_id="listing",
+            url="https://example.test/listing",
+            title="Listing",
+            signature={"cart_count": 0},
+        ),
+        before_screenshot_path="outputs/before_0001.png",
+    )
+
+    node = explorer.manager.node_for_id("listing")
+    assert node.node_id == "listing"
+    assert node.node_label == "product_list"
+
+
+def test_record_source_business_affordances_falls_back_for_invalid_vlm_label():
+    explorer = WebKobeExplorer(
+        adapter=FakeAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        business_profile=ecommerce_checkout_profile(),
+        capture_screenshots=True,
+        visual_delta_provider=_state_label_provider("!!!"),
+    )
+    explorer.manager.identify_or_add_node(
+        replace(
+            _selection_node("listing"),
+            node_label="listing",
+            naming_provenance={"source": "deterministic_fallback"},
+        )
+    )
+
+    explorer._record_source_business_affordances(
+        source_id="listing",
+        before=StateSnapshot(
+            page_id="listing",
+            url="https://example.test/listing",
+            title="Listing",
+            signature={"cart_count": 0},
+        ),
+        before_screenshot_path="outputs/before_0001.png",
+    )
+
+    node = explorer.manager.node_for_id("listing")
+    assert node.node_id == "listing"
+    assert node.node_label == "listing"
+    assert node.naming_provenance == {"source": "deterministic_fallback"}
+
+
 def test_web_kobe_explorer_rejects_invalid_max_candidates():
     with pytest.raises(ValueError, match="max_candidates"):
         WebKobeExplorer(
