@@ -266,6 +266,11 @@ class WebKobeExplorer:
                 source_id=source_id,
                 before_draft=before_draft,
             )
+        self._ensure_source_embedding(
+            node_id=source_id,
+            before=before,
+            before_interactables=before_interactables,
+        )
         before_screenshot_path = await self._capture_screenshot("before")
         if before_screenshot_path is not None:
             self._record_source_business_affordances(
@@ -449,8 +454,8 @@ class WebKobeExplorer:
             "failed_execution",
         }:
             edge_status = "succeeded_with_navigation"
-        self._record_target_embedding(
-            target_id=target_id,
+        self._record_state_embedding(
+            node_id=target_id,
             after=after,
             after_interactables=after_interactables,
             active_planning_facts=(
@@ -850,10 +855,10 @@ class WebKobeExplorer:
             )
         )
 
-    def _record_target_embedding(
+    def _record_state_embedding(
         self,
         *,
-        target_id: str,
+        node_id: str,
         after: StateSnapshot,
         after_interactables: list[dict[str, Any]],
         active_planning_facts: list[str],
@@ -869,16 +874,41 @@ class WebKobeExplorer:
         self.state_embedding_records = [
             record
             for record in self.state_embedding_records
-            if record.node_id != target_id
+            if record.node_id != node_id
         ]
         self.state_embedding_records.append(
             StateEmbeddingRecord(
-                node_id=target_id,
+                node_id=node_id,
                 summary_text=target_summary.text,
                 embedding=list(target_embedding),
                 planning_facts=target_summary.planning_facts,
                 context_markers=target_summary.context_markers,
             )
+        )
+
+    def _ensure_source_embedding(
+        self,
+        *,
+        node_id: str,
+        before: StateSnapshot,
+        before_interactables: list[dict[str, Any]],
+    ) -> None:
+        if (
+            not self.enable_exploration_memory
+            or self.state_embedding_provider is None
+            or any(record.node_id == node_id for record in self.state_embedding_records)
+        ):
+            return
+        source_node = self.manager.node_for_id(node_id)
+        self._record_state_embedding(
+            node_id=node_id,
+            after=before,
+            after_interactables=before_interactables,
+            active_planning_facts=(
+                list(source_node.planning_state.active_facts)
+                if source_node.planning_state is not None
+                else []
+            ),
         )
 
     def _select_action(

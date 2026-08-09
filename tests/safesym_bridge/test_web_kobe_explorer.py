@@ -303,6 +303,94 @@ async def test_explore_one_step_uses_ordinary_target_for_signature_change():
 
 
 @pytest.mark.anyio
+async def test_explore_one_step_records_initial_source_embedding():
+    calls = []
+
+    def embed(summary_text):
+        calls.append(summary_text)
+        return [1.0, 0.0]
+
+    explorer = _business_explorer(
+        FakeAdapter(),
+        enable_exploration_memory=True,
+        state_embedding_provider=embed,
+    )
+
+    graph = await explorer.explore_one_step()
+
+    record_ids = {record.node_id for record in explorer.state_embedding_records}
+    assert graph.start_node_id in record_ids
+    assert {node.node_id for node in graph.nodes} <= record_ids
+    assert calls
+
+
+def test_ensure_source_embedding_does_not_repeat_provider_for_same_node():
+    calls = []
+
+    def embed(summary_text):
+        calls.append(summary_text)
+        return [1.0, 0.0]
+
+    explorer = _business_explorer(
+        FakeAdapter(),
+        enable_exploration_memory=True,
+        state_embedding_provider=embed,
+    )
+    explorer.manager.identify_or_add_node(_selection_node("listing"))
+    before = StateSnapshot(
+        page_id="listing",
+        url="https://example.test/listing",
+        title="Listing",
+        signature={"cart_has_items": False},
+    )
+
+    explorer._ensure_source_embedding(
+        node_id="listing",
+        before=before,
+        before_interactables=[],
+    )
+    explorer._ensure_source_embedding(
+        node_id="listing",
+        before=before,
+        before_interactables=[],
+    )
+
+    assert len(calls) == 1
+    assert [record.node_id for record in explorer.state_embedding_records] == [
+        "listing"
+    ]
+
+
+def test_ensure_source_embedding_skips_when_exploration_memory_disabled():
+    calls = []
+
+    def embed(summary_text):
+        calls.append(summary_text)
+        return [1.0, 0.0]
+
+    explorer = _business_explorer(
+        FakeAdapter(),
+        enable_exploration_memory=False,
+        state_embedding_provider=embed,
+    )
+    explorer.manager.identify_or_add_node(_selection_node("listing"))
+
+    explorer._ensure_source_embedding(
+        node_id="listing",
+        before=StateSnapshot(
+            page_id="listing",
+            url="https://example.test/listing",
+            title="Listing",
+            signature={"cart_has_items": False},
+        ),
+        before_interactables=[],
+    )
+
+    assert calls == []
+    assert explorer.state_embedding_records == []
+
+
+@pytest.mark.anyio
 async def test_explore_one_step_preserves_deterministic_node_naming():
     explorer = _business_explorer(FakeAdapter())
 
