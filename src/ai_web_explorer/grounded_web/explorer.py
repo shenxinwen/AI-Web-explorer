@@ -238,6 +238,7 @@ class WebKobeExplorer:
         self._start_node_id: str | None = None
         self._current_node_id: str | None = None
         self._visit_stack: list[str] = []
+        self._visual_affordance_observed_node_ids: set[str] = set()
 
     async def explore_one_step(self) -> WebKobeGraph:
         before = await self.adapter.observe_state()
@@ -623,7 +624,10 @@ class WebKobeExplorer:
         if self.business_profile is None or self.visual_delta_provider is None:
             return
         source_node = self.manager.node_for_id(source_id)
-        if source_node.business_affordances:
+        if (
+            source_node.business_affordances
+            or source_id in self._visual_affordance_observed_node_ids
+        ):
             return
         active_facts = (
             list(source_node.planning_state.active_facts)
@@ -643,6 +647,7 @@ class WebKobeExplorer:
         )
         if result.trace.status != "summarized":
             return
+        self._visual_affordance_observed_node_ids.add(source_id)
         fallback_label = (
             source_node.node_label
             or source_node.page_frame.page_type

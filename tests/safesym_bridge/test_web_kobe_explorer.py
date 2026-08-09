@@ -931,6 +931,110 @@ def test_record_source_business_affordances_accepts_vlm_state_label_without_chan
     assert node.naming_provenance == {"source": "visual_affordance_vlm"}
 
 
+def test_record_source_business_affordances_does_not_repeat_empty_vlm_result():
+    labels = iter(["empty_results", "different_revisit_label"])
+    provider_calls = []
+
+    def visual_provider(
+        prompt,
+        *,
+        current_screenshot_path=None,
+        before_screenshot_path=None,
+        after_screenshot_path=None,
+    ):
+        provider_calls.append(current_screenshot_path)
+        return json.dumps(
+            {
+                "state_label": next(labels),
+                "regions": [],
+            }
+        )
+
+    explorer = WebKobeExplorer(
+        adapter=FakeAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        business_profile=ecommerce_checkout_profile(),
+        capture_screenshots=True,
+        visual_delta_provider=visual_provider,
+    )
+    explorer.manager.identify_or_add_node(_selection_node("listing"))
+    before = StateSnapshot(
+        page_id="listing",
+        url="https://example.test/listing",
+        title="Listing",
+        signature={"cart_count": 0},
+    )
+
+    explorer._record_source_business_affordances(
+        source_id="listing",
+        before=before,
+        before_screenshot_path="outputs/before_0001.png",
+    )
+    explorer._record_source_business_affordances(
+        source_id="listing",
+        before=before,
+        before_screenshot_path="outputs/before_0002.png",
+    )
+
+    node = explorer.manager.node_for_id("listing")
+    assert provider_calls == [
+        "outputs/before_0001.png",
+    ]
+    assert node.node_label == "empty_results"
+
+
+def test_record_source_business_affordances_does_not_repeat_empty_invalid_label_result():
+    labels = iter(["!!!", "different_revisit_label"])
+    provider_calls = []
+
+    def visual_provider(
+        prompt,
+        *,
+        current_screenshot_path=None,
+        before_screenshot_path=None,
+        after_screenshot_path=None,
+    ):
+        provider_calls.append(current_screenshot_path)
+        return json.dumps(
+            {
+                "state_label": next(labels),
+                "regions": [],
+            }
+        )
+
+    explorer = WebKobeExplorer(
+        adapter=FakeAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        business_profile=ecommerce_checkout_profile(),
+        capture_screenshots=True,
+        visual_delta_provider=visual_provider,
+    )
+    explorer.manager.identify_or_add_node(_selection_node("listing"))
+    before = StateSnapshot(
+        page_id="listing",
+        url="https://example.test/listing",
+        title="Listing",
+        signature={"cart_count": 0},
+    )
+
+    explorer._record_source_business_affordances(
+        source_id="listing",
+        before=before,
+        before_screenshot_path="outputs/before_0001.png",
+    )
+    explorer._record_source_business_affordances(
+        source_id="listing",
+        before=before,
+        before_screenshot_path="outputs/before_0002.png",
+    )
+
+    node = explorer.manager.node_for_id("listing")
+    assert provider_calls == [
+        "outputs/before_0001.png",
+    ]
+    assert node.node_label == "listing"
+
+
 def test_record_source_business_affordances_preserves_revisit_label_and_id():
     explorer = WebKobeExplorer(
         adapter=FakeAdapter(),
