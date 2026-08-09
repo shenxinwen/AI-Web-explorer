@@ -72,6 +72,24 @@ def _merge_business_affordances(existing, incoming):
     return list(incoming)
 
 
+def _merge_node_naming(
+    existing: WebKobeNode,
+    incoming: WebKobeNode,
+) -> tuple[str | None, str | None, dict[str, Any] | None]:
+    existing_source = (existing.naming_provenance or {}).get("source")
+    if existing_source == "visual_affordance_vlm":
+        return (
+            existing.node_label,
+            existing.state_summary,
+            existing.naming_provenance,
+        )
+    return (
+        incoming.node_label or existing.node_label,
+        incoming.state_summary or existing.state_summary,
+        incoming.naming_provenance or existing.naming_provenance,
+    )
+
+
 def _unique_facts(*fact_lists: list[str]) -> list[str]:
     facts: list[str] = []
     for fact_list in fact_lists:
@@ -124,6 +142,10 @@ class WebKobeGraphManager:
             )
             return node.node_id
 
+        node_label, state_summary, naming_provenance = _merge_node_naming(
+            existing,
+            node,
+        )
         self._nodes[node.node_id] = replace(
             existing,
             state_schema=_merge_schema(existing.state_schema, node.last_state_snapshot),
@@ -143,9 +165,9 @@ class WebKobeGraphManager:
             or existing.reference_observation,
             visit_count=existing.visit_count + 1,
             evidence=list(existing.evidence or node.evidence),
-            node_label=node.node_label or existing.node_label,
-            state_summary=node.state_summary or existing.state_summary,
-            naming_provenance=node.naming_provenance or existing.naming_provenance,
+            node_label=node_label,
+            state_summary=state_summary,
+            naming_provenance=naming_provenance,
             planning_state=node.planning_state or existing.planning_state,
         )
         return node.node_id

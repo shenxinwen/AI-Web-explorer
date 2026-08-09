@@ -86,6 +86,82 @@ def test_identify_or_add_node_keeps_existing_business_frontier_on_revisit():
     ] == ["view_cart", "proceed_to_checkout"]
 
 
+def test_identify_or_add_node_upgrades_fallback_naming_to_vlm():
+    manager = WebKobeGraphManager(app="example")
+    fallback = replace(
+        _node("listing", {}),
+        node_label="shopping",
+        state_summary="Local fallback summary.",
+        naming_provenance={"source": "deterministic_fallback"},
+    )
+    vlm_named = replace(
+        _node("listing", {}),
+        node_label="product_list",
+        state_summary="Visible product list.",
+        naming_provenance={"source": "visual_affordance_vlm"},
+    )
+
+    manager.identify_or_add_node(fallback)
+    manager.identify_or_add_node(vlm_named)
+
+    node = manager.node_for_id("listing")
+    assert node.node_label == "product_list"
+    assert node.state_summary == "Visible product list."
+    assert node.naming_provenance == {"source": "visual_affordance_vlm"}
+
+
+def test_identify_or_add_node_preserves_first_vlm_naming_on_revisit():
+    manager = WebKobeGraphManager(app="example")
+    first_vlm = replace(
+        _node("listing", {}),
+        node_label="product_list",
+        state_summary="Visible product list.",
+        naming_provenance={"source": "visual_affordance_vlm"},
+    )
+    local_revisit = replace(
+        _node("listing", {}),
+        node_label="shopping",
+        state_summary="Local fallback summary.",
+        naming_provenance={"source": "deterministic_fallback"},
+    )
+    later_vlm = replace(
+        _node("listing", {}),
+        node_label="different_product_state",
+        state_summary="Different VLM summary.",
+        naming_provenance={"source": "visual_affordance_vlm"},
+    )
+
+    manager.identify_or_add_node(first_vlm)
+    manager.identify_or_add_node(local_revisit)
+    manager.identify_or_add_node(later_vlm)
+
+    node = manager.node_for_id("listing")
+    assert node.node_label == "product_list"
+    assert node.state_summary == "Visible product list."
+    assert node.naming_provenance == {"source": "visual_affordance_vlm"}
+
+
+def test_identify_or_add_node_keeps_existing_non_vlm_merge_behavior():
+    manager = WebKobeGraphManager(app="example")
+    first = replace(
+        _node("listing", {}),
+        node_label="first_fallback",
+        naming_provenance={"source": "deterministic_fallback"},
+    )
+    incoming = replace(
+        _node("listing", {}),
+        node_label="latest_fallback",
+        naming_provenance={"source": "deterministic_fallback"},
+    )
+
+    manager.identify_or_add_node(first)
+    manager.identify_or_add_node(incoming)
+
+    node = manager.node_for_id("listing")
+    assert node.node_label == "latest_fallback"
+    assert node.naming_provenance == {"source": "deterministic_fallback"}
+
+
 def test_add_edge_merges_planning_transition_for_repeated_edge():
     manager = WebKobeGraphManager(app="example")
     edge = WebKobeEdge(
