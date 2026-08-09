@@ -11,7 +11,12 @@ from ai_web_explorer.grounded_web.controller import (
     WebKobeExplorationResult,
     WebKobeExplorationSummary,
 )
-from ai_web_explorer.grounded_web.capability_graph import ExecutionTrace, PageFrame
+from ai_web_explorer.grounded_web.capability_graph import (
+    Evidence,
+    ExecutionTrace,
+    ObservedDelta,
+    PageFrame,
+)
 from ai_web_explorer.grounded_web.graph import WebKobeGraph
 from ai_web_explorer.grounded_web.graph import BusinessAffordance
 from ai_web_explorer.grounded_web.graph import BrowserAction
@@ -182,14 +187,14 @@ def test_write_web_kobe_graph_does_not_write_graph_if_sidecar_fails(
 ):
     output_path = tmp_path / "graph.json"
     evidence_path = tmp_path / "graph_evidence.json"
-    original_write_text = Path.write_text
+    original_write_temp = browser_runner._write_json_temp
 
-    def fail_sidecar(path, data, **kwargs):
+    def fail_sidecar(path, data):
         if path == evidence_path:
             raise OSError("sidecar write failed")
-        return original_write_text(path, data, **kwargs)
+        return original_write_temp(path, data)
 
-    monkeypatch.setattr(Path, "write_text", fail_sidecar)
+    monkeypatch.setattr(browser_runner, "_write_json_temp", fail_sidecar)
 
     with pytest.raises(OSError, match="sidecar write failed"):
         browser_runner.write_web_kobe_graph(
@@ -197,6 +202,156 @@ def test_write_web_kobe_graph_does_not_write_graph_if_sidecar_fails(
         )
 
     assert not output_path.exists()
+
+
+def _transactional_graph(action_name: str) -> WebKobeGraph:
+    evidence = Evidence(
+        source="transactional-test",
+        selector="#action",
+        text_sample=f"{action_name} control",
+        url="https://example.test/shop",
+    )
+    source = WebKobeNode(
+        node_id="source",
+        page_description="Source page",
+        page_frame=PageFrame(
+            page_id="example:source",
+            page_type="source",
+            url="https://example.test/shop",
+            url_pattern="https://example.test/shop",
+            title="Shop",
+            evidence=[evidence],
+        ),
+        state_schema={},
+        last_state_snapshot={},
+        business_affordances=[BusinessAffordance(action_name=action_name)],
+        evidence=[evidence],
+    )
+    target = WebKobeNode(
+        node_id="target",
+        page_description="Target page",
+        page_frame=PageFrame(
+            page_id="example:target",
+            page_type="target",
+            url="https://example.test/target",
+            url_pattern="https://example.test/target",
+            title="Target",
+        ),
+        state_schema={},
+        last_state_snapshot={},
+    )
+    edge = WebKobeEdge(
+        source_node_id="source",
+        target_node_id="target",
+        instruction=f"Execute {action_name}",
+        action=BrowserAction(
+            action_kind="business_intent",
+            locator="#action",
+            semantic_id=action_name,
+            canonical_action_name=action_name,
+        ),
+        capability=None,
+        target_observation="Target page",
+        observed_delta=[
+            ObservedDelta(
+                field=f"{action_name}_visible",
+                before=False,
+                after=True,
+                delta_type="added",
+                evidence=[evidence],
+            )
+        ],
+        schema_delta={"action": {"before": False, "after": True}},
+        execution_trace=ExecutionTrace(
+            "business_intent",
+            "#action",
+            action_name,
+            {},
+            "source",
+            "target",
+            True,
+            metadata={
+                "visual_delta_trace": {
+                    "candidate_added_facts": [f"{action_name}_visible"],
+                    "candidate_removed_facts": [],
+                }
+            },
+        ),
+        status="succeeded_with_observed_change",
+        evidence=[evidence],
+    )
+    return WebKobeGraph(
+        app="transactional-test",
+        start_node_id="source",
+        total_steps_completed=1,
+        nodes=[source, target],
+        edges=[edge],
+    )
+
+
+def _assert_graph_evidence_refs_resolve(graph_path: Path, evidence_path: Path):
+    graph_data = json.loads(graph_path.read_text(encoding="utf-8"))
+    evidence_data = json.loads(evidence_path.read_text(encoding="utf-8"))
+    for item_type in ("nodes", "edges"):
+        for item in graph_data[item_type]:
+            if "evidence_ref" in item:
+                assert item["evidence_ref"] in evidence_data[item_type]
+
+
+def test_write_web_kobe_graph_first_graph_commit_failure_leaves_no_artifacts(
+    tmp_path, monkeypatch
+):
+    output_path = tmp_path / "graph.json"
+    evidence_path = tmp_path / "graph_evidence.json"
+    original_replace = Path.replace
+
+    def fail_graph_replace(path, target):
+        if Path(target) == output_path:
+            raise OSError("graph commit failed")
+        return original_replace(path, target)
+
+    monkeypatch.setattr(Path, "replace", fail_graph_replace)
+
+    with pytest.raises(OSError, match="graph commit failed"):
+        browser_runner.write_web_kobe_graph(
+            _transactional_graph("action_a"), output_path
+        )
+
+    assert not output_path.exists()
+    assert not evidence_path.exists()
+    assert list(tmp_path.glob(".*.tmp")) == []
+
+
+def test_write_web_kobe_graph_failed_overwrite_preserves_old_pair(
+    tmp_path, monkeypatch
+):
+    output_path = tmp_path / "graph.json"
+    evidence_path = tmp_path / "graph_evidence.json"
+    browser_runner.write_web_kobe_graph(
+        _transactional_graph("action_a"), output_path
+    )
+    old_graph = output_path.read_bytes()
+    old_evidence = evidence_path.read_bytes()
+    _assert_graph_evidence_refs_resolve(output_path, evidence_path)
+
+    original_replace = Path.replace
+
+    def fail_graph_replace(path, target):
+        if Path(target) == output_path:
+            raise OSError("graph overwrite failed")
+        return original_replace(path, target)
+
+    monkeypatch.setattr(Path, "replace", fail_graph_replace)
+
+    with pytest.raises(OSError, match="graph overwrite failed"):
+        browser_runner.write_web_kobe_graph(
+            _transactional_graph("action_b"), output_path
+        )
+
+    assert output_path.read_bytes() == old_graph
+    assert evidence_path.read_bytes() == old_evidence
+    _assert_graph_evidence_refs_resolve(output_path, evidence_path)
+    assert list(tmp_path.glob(".*.tmp")) == []
 
 
 @pytest.mark.anyio

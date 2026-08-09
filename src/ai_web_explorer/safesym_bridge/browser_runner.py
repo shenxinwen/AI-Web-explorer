@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import socket
+import tempfile
 import time
 import urllib.request
 from pathlib import Path
@@ -154,15 +155,51 @@ def write_web_kobe_graph(
         "frontier_metrics"
     ] = _frontier_metrics_for_graph(graph)
 
-    evidence_path.write_text(
-        json.dumps(payload.evidence_sidecar, indent=2, ensure_ascii=False),
-        encoding="utf-8",
+    evidence_text = json.dumps(
+        payload.evidence_sidecar, indent=2, ensure_ascii=False
     )
-    output_path.write_text(
-        json.dumps(payload.compact_graph, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    graph_text = json.dumps(payload.compact_graph, indent=2, ensure_ascii=False)
+    evidence_temp = _write_json_temp(evidence_path, evidence_text)
+    graph_temp = None
+    old_evidence = evidence_path.read_bytes() if evidence_path.exists() else None
+    sidecar_replaced = False
+    try:
+        graph_temp = _write_json_temp(output_path, graph_text)
+        evidence_temp.replace(evidence_path)
+        sidecar_replaced = True
+        graph_temp.replace(output_path)
+    except Exception:
+        if sidecar_replaced:
+            if old_evidence is None:
+                evidence_path.unlink(missing_ok=True)
+            else:
+                evidence_path.write_bytes(old_evidence)
+        raise
+    finally:
+        evidence_temp.unlink(missing_ok=True)
+        if graph_temp is not None:
+            graph_temp.unlink(missing_ok=True)
     return output_path
+
+
+def _write_json_temp(path: Path, text: str) -> Path:
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            delete=False,
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+        ) as handle:
+            temp_path = Path(handle.name)
+            handle.write(text)
+        return temp_path
+    except Exception:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+        raise
 
 
 def _edge_action_id(edge) -> str:
