@@ -1562,7 +1562,7 @@ async def test_explore_one_step_uses_signature_change_for_same_page_target():
     assert len(graph.nodes) == 2
     edge = graph.edges[0]
     assert edge.source_node_id != edge.target_node_id
-    assert edge.business_transition is None
+    assert not hasattr(edge, "business_transition")
 
 
 @pytest.mark.anyio
@@ -2115,7 +2115,7 @@ async def test_explore_one_step_records_visual_delta_candidates_without_verifyin
     assert edge.execution_trace.metadata["visual_delta_trace"][
         "candidate_added_facts"
     ] == ["order_place_pending_sensitive"]
-    assert edge.business_transition is None
+    assert not hasattr(edge, "business_transition")
 
 
 class TypedFactsAdapter(FakeAdapter):

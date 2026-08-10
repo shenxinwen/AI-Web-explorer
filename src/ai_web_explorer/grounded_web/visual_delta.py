@@ -10,7 +10,6 @@ from ai_web_explorer.grounded_web.business_profile import (
     PlanningDelta,
 )
 from ai_web_explorer.grounded_web.graph import BrowserAction
-from ai_web_explorer.grounded_web.graph import BusinessTransition
 
 VisualDeltaProvider = Callable[..., str]
 VISUAL_CHANGE_KINDS = frozenset(
@@ -56,9 +55,6 @@ class VisualDeltaResult:
     planning_delta: PlanningDelta
     trace: VisualDeltaTrace
     visual_change_kind: str = "unknown"
-    # Kept for loading/caller compatibility; new visual-delta exploration does
-    # not produce or consume business-transition judgments.
-    business_transition: BusinessTransition | None = None
 
 
 def _prompt_for_request(request: VisualDeltaRequest) -> str:

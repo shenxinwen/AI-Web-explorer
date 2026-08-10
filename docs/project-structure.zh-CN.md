@@ -138,7 +138,7 @@ embedding memory 只辅助定位和避免重复，不直接进入 PDDL。
 - `WebKobeGraphManager.identify_or_add_node`
 - `WebKobeGraphManager.build_planning_transition`
 - `WebKobeGraphManager.apply_planning_transition`
-- `resolve_business_target_node`
+- `WebKobeExplorer._avoid_incompatible_existing_target_state`，用于避免同页面壳但 planning facts 不兼容时污染已有节点。
 - `find_best_state_match`
 - `build_exploration_context`
 

@@ -11,7 +11,6 @@ from ai_web_explorer.grounded_web.capability_graph import (
 from ai_web_explorer.grounded_web.graph import (
     ActionTarget,
     BusinessAffordance,
-    BusinessTransition,
     BrowserAction,
     PddlActionHint,
     ReferenceObservation,
@@ -164,13 +163,6 @@ def test_web_kobe_graph_serializes_node_edge_and_evidence():
             evidence=["login controls were replaced by shopping controls"],
             confidence=0.95,
         ),
-        business_transition=BusinessTransition(
-            action_name="submit_login_form",
-            relevance="core",
-            meaningful_change=True,
-            judge_source="vlm",
-            confidence=0.95,
-        ),
         visit_count=1,
         status="verified",
         evidence=evidence,
@@ -233,10 +225,4 @@ def test_web_kobe_graph_serializes_node_edge_and_evidence():
         "evidence": ["login controls were replaced by shopping controls"],
         "confidence": 0.95,
     }
-    assert data["edges"][0]["business_transition"] == {
-        "action_name": "submit_login_form",
-        "relevance": "core",
-        "meaningful_change": True,
-        "judge_source": "vlm",
-        "confidence": 0.95,
-    }
+    assert "business_transition" not in data["edges"][0]

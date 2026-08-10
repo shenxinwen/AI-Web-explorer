@@ -3,7 +3,6 @@ from ai_web_explorer.grounded_web import (
     BusinessAffordance,
     BrowserAction,
     BusinessFlowProfile,
-    BusinessTransition,
     OpenAIVisualDeltaProvider,
     PlanningDelta,
     PlanningState,
@@ -35,7 +34,6 @@ def test_grounded_web_package_exposes_mainline_api():
     assert BusinessAffordance.__name__ == "BusinessAffordance"
     assert BrowserAction.__name__ == "BrowserAction"
     assert BusinessFlowProfile.__name__ == "BusinessFlowProfile"
-    assert BusinessTransition.__name__ == "BusinessTransition"
     assert OpenAIVisualDeltaProvider.__name__ == "OpenAIVisualDeltaProvider"
     assert PlanningDelta.__name__ == "PlanningDelta"
     assert PlanningState.__name__ == "PlanningState"

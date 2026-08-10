@@ -20,10 +20,6 @@ from ai_web_explorer.grounded_web.business_affordance import (
     VisualAffordanceRequest,
     summarize_visual_affordances,
 )
-from ai_web_explorer.grounded_web.business_state_policy import (
-    resolve_business_target_node,
-    should_materialize_business_state,
-)
 from ai_web_explorer.grounded_web.controller import (
     WebKobeExplorationController,
     WebKobeExplorationResult,
@@ -33,7 +29,6 @@ from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
 from ai_web_explorer.grounded_web.graph import (
     BusinessAffordance,
     BrowserAction,
-    BusinessTransition,
     WebKobeGraph,
 )
 from ai_web_explorer.grounded_web.openai_visual_delta import (
@@ -55,7 +50,6 @@ __all__ = [
     "BrowserAction",
     "BusinessAffordance",
     "BusinessFlowProfile",
-    "BusinessTransition",
     "OpenAIVisualDeltaProvider",
     "PlanningDelta",
     "PlanningState",
@@ -72,8 +66,6 @@ __all__ = [
     "WebKobePlaywrightAdapter",
     "create_openai_visual_delta_provider_from_env",
     "ecommerce_checkout_profile",
-    "resolve_business_target_node",
-    "should_materialize_business_state",
     "summarize_visual_affordances",
     "summarize_visual_delta",
     "verify_planning_delta",

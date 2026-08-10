@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 from dataclasses import replace
 from typing import Any
 from urllib.parse import urlsplit
@@ -27,11 +29,6 @@ from ai_web_explorer.grounded_web.business_profile import PlanningDelta, Plannin
 from ai_web_explorer.grounded_web.business_affordance import (
     VisualAffordanceRequest,
     summarize_visual_affordances,
-)
-from ai_web_explorer.grounded_web.business_state_policy import (
-    observation_change_node_id,
-    resolve_business_target_node,
-    should_materialize_business_state,
 )
 from ai_web_explorer.grounded_web.exploration_index import (
     ExplorationContext,
@@ -75,6 +72,29 @@ def _safe_vlm_state_label(value: str | None, *, fallback: str) -> str:
         if cleaned:
             return cleaned
     return slug_identifier(fallback, fallback="state")
+
+
+def observation_change_node_id(
+    *,
+    source_node_id: str,
+    action_name: str,
+    after_signature: dict[str, Any],
+    added_facts: list[str],
+    removed_facts: list[str],
+) -> str:
+    payload = {
+        "source_node_id": source_node_id,
+        "action_name": action_name,
+        "after_signature": after_signature,
+        "added_facts": sorted(set(added_facts)),
+        "removed_facts": sorted(set(removed_facts)),
+    }
+    digest = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode(
+            "utf-8"
+        )
+    ).hexdigest()[:12]
+    return f"{source_node_id}__observation_{digest}"
 
 
 def _node_from_draft(draft) -> WebKobeNode:
@@ -179,8 +199,6 @@ def _should_advance_current_node(
     source_id: str,
     target_id: str,
     edge_status: str,
-    business_transition: BusinessTransition | None,
-    planning_transition: PlanningTransition | None,
 ) -> bool:
     if source_id == target_id:
         return False
@@ -189,15 +207,7 @@ def _should_advance_current_node(
         "succeeded_with_observed_change",
     }:
         return False
-    if (
-        edge_status == "succeeded_with_observed_change"
-        and business_transition is None
-    ):
-        return True
-    return (
-        should_materialize_business_state(business_transition)
-        or edge_status == "succeeded_with_navigation"
-    )
+    return True
 
 
 def _edge_novelty_key(edge: WebKobeEdge) -> tuple[str, str, str]:
@@ -369,7 +379,6 @@ class WebKobeExplorer:
             if self.business_profile is not None
             else None
         )
-        business_transition = None
         visual_delta_facts = ([], [])
         visual_change_kind = "unknown"
         if (
@@ -412,12 +421,7 @@ class WebKobeExplorer:
         signature_changed = before.signature != after.signature
         state_changed = path_changed or signature_changed or visual_fact_change
 
-        target_node = resolve_business_target_node(
-            source_node=self.manager.node_for_id(source_id),
-            candidate_node=_node_from_draft(after_draft),
-            business_transition=None,
-            planning_transition=planning_transition,
-        )
+        target_node = _node_from_draft(after_draft)
         if not observation_allowed or not state_changed:
             target_node = self.manager.node_for_id(source_id)
         elif not path_changed:
@@ -495,7 +499,6 @@ class WebKobeExplorer:
             ),
             planning_delta=planning_delta,
             planning_transition=planning_transition,
-            business_transition=business_transition,
             visual_change_kind=visual_change_kind,
             status=edge_status,
             evidence=[Evidence(source="web_kobe_explorer", url=before.url)],
@@ -518,8 +521,6 @@ class WebKobeExplorer:
             source_id=source_id,
             target_id=target_id,
             edge_status=edge_status,
-            business_transition=None,
-            planning_transition=planning_transition,
         ):
             self._set_current_node(target_id)
         elif self._current_node_id is None:

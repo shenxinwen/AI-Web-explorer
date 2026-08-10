@@ -150,7 +150,7 @@ def test_summarize_visual_delta_does_not_generate_business_transition_fields():
 
     result = summarize_visual_delta(request, provider=provider)
 
-    assert result.business_transition is None
+    assert not hasattr(result, "business_transition")
 
 
 def test_summarize_visual_delta_normalizes_explanatory_business_relevance():
@@ -175,7 +175,7 @@ def test_summarize_visual_delta_normalizes_explanatory_business_relevance():
 
     result = summarize_visual_delta(request, provider=provider)
 
-    assert result.business_transition is None
+    assert not hasattr(result, "business_transition")
 
 
 def test_summarize_visual_delta_records_vlm_fact_as_generated_until_verified():
@@ -204,7 +204,7 @@ def test_summarize_visual_delta_records_vlm_fact_as_generated_until_verified():
     assert result.planning_delta.candidate_added_facts == ["product_details_visible"]
     assert result.planning_delta.profile_fact_ids == []
     assert result.planning_delta.generated_fact_ids == []
-    assert result.business_transition is None
+    assert not hasattr(result, "business_transition")
 
 
 def test_summarize_visual_delta_keeps_all_vlm_facts_generated():

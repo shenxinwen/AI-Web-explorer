@@ -10,7 +10,6 @@ from ai_web_explorer.grounded_web.capability_graph import (
 )
 from ai_web_explorer.grounded_web.graph import (
     BusinessAffordance,
-    BusinessTransition,
     BrowserAction,
     PddlActionHint,
     ReferenceObservation,
@@ -1720,7 +1719,7 @@ def test_load_web_kobe_graph_json_preserves_planning_transition(tmp_path):
     ]
 
 
-def test_load_web_kobe_graph_json_preserves_business_transition(tmp_path):
+def test_load_web_kobe_graph_json_ignores_legacy_business_transition(tmp_path):
     graph = WebKobeGraph(
         app="example",
         start_node_id="cart",
@@ -1753,29 +1752,21 @@ def test_load_web_kobe_graph_json_preserves_business_transition(tmp_path):
                     "checkout",
                     True,
                 ),
-                business_transition=BusinessTransition(
-                    action_name="start_checkout",
-                    relevance="core",
-                    meaningful_change=True,
-                    judge_source="vlm",
-                    confidence=0.8,
-                ),
             )
         ],
     )
     path = tmp_path / "graph.json"
-    path.write_text(json.dumps(graph.to_dict()), encoding="utf-8")
+    data = graph.to_dict()
+    data["edges"][0]["business_transition"] = {
+        "action_name": "start_checkout",
+        "relevance": "core",
+        "meaningful_change": True,
+    }
+    path.write_text(json.dumps(data), encoding="utf-8")
 
     loaded = load_web_kobe_graph_json(path)
 
-    assert loaded.edges[0].business_transition is not None
-    assert loaded.edges[0].business_transition.action_name == "start_checkout"
-    assert loaded.edges[0].business_transition.relevance == "core"
-    assert loaded.edges[0].business_transition.meaningful_change is True
-    assert loaded.edges[0].business_transition.judge_source == "vlm"
-    assert "summary" not in loaded.edges[0].business_transition.to_dict()
-    assert "evidence" not in loaded.edges[0].business_transition.to_dict()
-    assert loaded.edges[0].business_transition.confidence == 0.8
+    assert not hasattr(loaded.edges[0], "business_transition")
 
 
 def test_load_web_kobe_graph_json_preserves_node_planning_state(tmp_path):

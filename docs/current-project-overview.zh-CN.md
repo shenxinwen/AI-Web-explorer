@@ -60,7 +60,7 @@ Stagehand、Playwright、VLM/LLM、embedding 都是工具或证据来源。Web-K
 ```text
 真实浏览器链路：已成立
 graph/PDDL/SafeSym 工程链路：已成立
-VLM visual delta：已接入，只观察 `candidate_added_facts` / `candidate_removed_facts`
+VLM visual delta：已接入，只观察 `candidate_added_facts` / `candidate_removed_facts`，并给出受限的 `visual_change_kind`
 business affordance 生成：已有初版
 embedding memory：已接入，用于相似状态定位和重复提示
 target matching：已有初版，动作后会用 embedding 相似度和可靠的本地 revisit evidence 复用已有业务节点；state summary 可包含本地确认的 planning context，但不是独立否决或裁决门槛；存在明确 URL/signature/visual 变化时不得回并到 source
@@ -70,22 +70,37 @@ forward-only frontier 探索策略：当前节点候选耗尽即停止；graph m
 checkpoint：每个完成动作后更新 latest 的 embedding、Stagehand trace、graph/evidence；正常结束后写入带 `exploration_summary` 的最终结果
 Stagehand thinking/tool_choice 异常：已定义为需要继续动作后观察；有变化时记为成功转换，无变化时记为 `no_observed_change`
 Visual observations：只保留在 raw edge trace，不进入 `PlanningState` 或 Phase A PDDL
-Phase A domain：当前只投影 canonical locations 和非自环 business transitions
+planning abstraction：已接入，保守合并 presentation 等价观察并聚合已观察能力
+Phase A domain：当前只投影 planning locations 和非自环业务转换
 自由探索策略：尚未稳定
 profile fact verifier：已接入最小确定性 verifier，只负责从本地结构化签名确认 profile facts
 PDDL 语义质量：可消费，但还不够稳定和可读
-业务节点命名：materialized business node 已能从 profile hints / facts / action 推导 label
+业务节点命名：新探索使用 VLM state label；名称不参与 node identity 或 matching
 ```
 
 详细 pipeline 和模块职责见 `docs/project-structure.zh-CN.md`。
 
 ## 当前观察、规划和异常处理边界
 
-- Visual Delta 只比较动作前后截图，输出 `candidate_added_facts` / `candidate_removed_facts`；新探索不生成 VLM `BusinessTransition` 判断。
+- Visual Delta 只比较动作前后截图，输出 `candidate_added_facts` / `candidate_removed_facts` 和受限的 `visual_change_kind`；新探索不生成 VLM `BusinessTransition` 判断。
 - Visual observations 只作为 raw edge 的可审查证据保留在 `execution_trace.metadata.visual_delta_trace`，不进入 `PlanningState`、planning transition 传播、target matching planning facts 或 Phase A PDDL。
-- Structured profile verification 仍可独立构建 `PlanningState`；Phase A 当前只基于 canonical location 和非自环 business transition 生成 `domain.pddl`。
+- Structured profile verification 仍可独立构建 `PlanningState`；planning abstraction 只在本地证据足够时合并观察，Phase A 当前只基于 planning location 和非自环业务转换生成 `domain.pddl`。
 - 只要 URL path、结构签名或 Visual Delta 有明确变化，target matching 就不能把候选目标合并回 source；仍可按既有可靠 revisit evidence 复用其他历史节点。
 - `Thinking mode does not support this tool_choice` 只表示 Stagehand/模型适配层异常：探索器会继续获取动作后状态、截图和 Visual Delta；有明确变化时记录成功转换，无变化时记录 `no_observed_change` 自环。未知执行错误仍是失败自环且不调用 Visual Delta。
+
+当前 planning-state 闭环为：
+
+```text
+VLM 提出可直接执行的业务动作
+→ Stagehand 执行一个选中的动作
+→ raw graph 记录观察转换
+→ 本地 verifier 确认已知 profile 边界
+→ planning abstraction 保守合并 presentation 等价观察
+→ planning graph 聚合真实观察到的能力
+→ Phase A projector 只输出跨 planning state 的转换
+```
+
+profile facts 是强但不完整的语义锚点。`visual_change_kind` 只是观察证据，不是规划决定：`0 → 1` 的购物车数量确认 `cart_has_items`，`1 → 2` 保留该 profile fact；presentation 动作仍保留在 graph 能力和自环中，即使不进入 PDDL；unknown、surface、mixed 默认保持分离。旧的 `BusinessTransition` 和 exact-action-set consolidator 已移除，历史 JSON 中的旧 key 仍会被忽略并正常读取。
 
 ### Graph artifact 与 evidence sidecar
 
@@ -106,7 +121,6 @@ WebKobeEdge
 PlanningState
 PlanningTransition
 BusinessAffordance
-BusinessTransition
 ```
 
 历史 `WebObservedGraph` 设计只保留在旧 spec/plan 文档中作为参考。
@@ -225,10 +239,10 @@ Visual Delta facts 目前只作为 raw edge trace 的观察证据保留，不进
 SafeSym 可以结构性消费当前产物，但 PDDL 的语义质量还不稳定：
 
 - location predicate 仍可能出现 `at_shopping_002` 这类不可读名字；
-- materialized business node 已开始用 profile-provided hints / facts / action 推导 label，但非业务节点和重复 label 仍可能不够理想；
+- VLM state label 已用于节点展示；名称只做本地技术清洗，不参与 node identity 或 matching；
 - action precondition 依赖 source node 定位，需要继续用实验确认；
 - profile facts 不完整时，PDDL 会退化为 location path；
-- Phase A 当前只投影 canonical locations 和非自环 business transitions；Visual Delta facts 不进入 domain PDDL。
+- Phase A 当前从 planning graph 投影 planning locations 和非自环业务转换；Visual Delta facts 不进入 domain PDDL。
 
 ### P1: 探索仍是受限的 forward-only frontier
 

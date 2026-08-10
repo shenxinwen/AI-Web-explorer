@@ -185,8 +185,6 @@ class WebKobeGraphManager:
                 planning_delta=edge.planning_delta or existing.planning_delta,
                 planning_transition=edge.planning_transition
                 or existing.planning_transition,
-                business_transition=edge.business_transition
-                or existing.business_transition,
                 visual_change_kind=(
                     edge.visual_change_kind
                     if edge.visual_change_kind != "unknown"

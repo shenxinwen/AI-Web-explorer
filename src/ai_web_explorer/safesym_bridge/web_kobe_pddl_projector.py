@@ -13,7 +13,6 @@ from ai_web_explorer.grounded_web.capability_graph import (
 )
 from ai_web_explorer.grounded_web.graph import (
     BusinessAffordance,
-    BusinessTransition,
     BrowserAction,
     PddlActionHint,
     ReferenceObservation,
@@ -226,37 +225,6 @@ def _planning_transition_from_dict(
     )
 
 
-def _business_transition_from_dict(
-    data: dict[str, Any] | None,
-) -> BusinessTransition | None:
-    if data is None:
-        return None
-    meaningful_change = data.get("meaningful_change")
-    if isinstance(meaningful_change, str):
-        lowered = meaningful_change.strip().lower()
-        if lowered in {"true", "yes", "meaningful", "changed"}:
-            meaningful_change = True
-        elif lowered in {"false", "no", "no_change", "unchanged"}:
-            meaningful_change = False
-        else:
-            meaningful_change = None
-    elif meaningful_change is not None:
-        meaningful_change = bool(meaningful_change)
-    confidence = data.get("confidence")
-    if confidence is not None:
-        try:
-            confidence = float(confidence)
-        except (TypeError, ValueError):
-            confidence = None
-    return BusinessTransition(
-        action_name=data.get("action_name"),
-        relevance=str(data.get("relevance", "unknown")),
-        meaningful_change=meaningful_change,
-        judge_source=str(data.get("judge_source", "vlm")),
-        confidence=confidence,
-    )
-
-
 def _pddl_action_hint_from_dict(data: dict[str, Any] | None) -> PddlActionHint | None:
     if data is None:
         return None
@@ -287,9 +255,6 @@ def _edge_from_dict(data: dict[str, Any]) -> WebKobeEdge:
         planning_delta=_planning_delta_from_dict(data.get("planning_delta")),
         planning_transition=_planning_transition_from_dict(
             data.get("planning_transition")
-        ),
-        business_transition=_business_transition_from_dict(
-            data.get("business_transition")
         ),
         visual_change_kind=str(data.get("visual_change_kind", "unknown")),
         visit_count=int(data.get("visit_count", 1)),

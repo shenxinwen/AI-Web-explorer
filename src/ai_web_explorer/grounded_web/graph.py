@@ -135,24 +135,6 @@ class BusinessAffordance:
 
 
 @dataclass(frozen=True)
-class BusinessTransition:
-    action_name: str | None = None
-    relevance: str = "unknown"
-    meaningful_change: bool | None = None
-    judge_source: str = "vlm"
-    confidence: float | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "action_name": self.action_name,
-            "relevance": self.relevance,
-            "meaningful_change": self.meaningful_change,
-            "judge_source": self.judge_source,
-            "confidence": self.confidence,
-        }
-
-
-@dataclass(frozen=True)
 class WebKobeNode:
     node_id: str
     page_description: str
@@ -223,7 +205,6 @@ class WebKobeEdge:
     pddl_hint: PddlActionHint | None = None
     planning_delta: PlanningDelta | None = None
     planning_transition: PlanningTransition | None = None
-    business_transition: BusinessTransition | None = None
     visual_change_kind: str = "unknown"
     visit_count: int = 1
     status: str = "verified"
@@ -257,11 +238,6 @@ class WebKobeEdge:
             "planning_transition": (
                 self.planning_transition.to_dict()
                 if self.planning_transition is not None
-                else None
-            ),
-            "business_transition": (
-                self.business_transition.to_dict()
-                if self.business_transition is not None
                 else None
             ),
             "visual_change_kind": self.visual_change_kind,

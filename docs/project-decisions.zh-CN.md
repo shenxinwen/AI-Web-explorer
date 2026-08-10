@@ -85,7 +85,7 @@
 
 影响：
 - 通用 controller 仍可由 `current_state_exhausted`、可选连续无进展阈值和最大步数决定停止；自 2026-08-10 起，真实 Stagehand runner 关闭连续无进展阈值，主要由最大步数和当前节点候选耗尽决定。
-- raw graph 仍原样保留；canonical graph/domain 只消费符合现有成功、目标存在和非自环规则的 observed edges。
+- raw graph 仍原样保留；planning graph/domain 只消费符合现有成功和目标存在规则的 observed edges；presentation 自环保留在 planning graph 中用于审计和能力发现，但不进入 Phase A PDDL。
 - 不新增持久化 graph 字段、memory 表或 PDDL 事实来源。
 
 ## 2026-08-02 - 将探索策略收束为 frontier / DFS

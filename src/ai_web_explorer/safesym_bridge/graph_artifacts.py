@@ -159,7 +159,6 @@ def _compact_edge(edge: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]
             "observed_delta",
             "schema_delta",
             "pddl_hint",
-            "business_transition",
             "evidence",
         )
         if key in edge and edge[key] not in (None, "", [], {})
