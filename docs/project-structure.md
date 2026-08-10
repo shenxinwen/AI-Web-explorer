@@ -10,12 +10,21 @@ The repository is centered on the SafeSym-oriented Web-KOBE mainline:
 
 ```text
 real browser operation
-  -> observation and state interpretation
-  -> WebKobeGraph memory
-  -> bounded exploration policy
-  -> PDDL projection
+  -> VLM candidate hypotheses and local action selection
+  -> Stagehand execution attempt
+  -> after-action observation and local verification
+  -> Raw Graph + evidence sidecar + checkpoint
+  -> offline planning abstraction and Planning Graph
+  -> Phase A PDDL projection
   -> SafeSym smoke / safety validation
 ```
+
+The active explorer is forward-only: it follows the current route until its
+candidate set is exhausted or the step budget/terminal condition is reached.
+That is not a claim of site-wide exploration completion. The VLM proposes
+hypotheses, Stagehand reports execution attempts, and after-action observation
+is the verification evidence. A candidate capability is not a verified
+transition until a successful observed edge supports it.
 
 The old upstream `explore` runtime and the old `WebObservedGraph` exploration
 stack are not active code paths.
@@ -37,12 +46,13 @@ Main modules:
 Main responsibilities:
 
 - observe browser state;
-- list executable low-level or Stagehand-observed actions;
+- list executable low-level actions;
 - execute one selected action;
 - capture screenshots;
 - preserve low-level execution traces.
 
-Stagehand belongs here as an execution/candidate-action backend. It should not
+Stagehand belongs here as the execution backend. Candidate business-action
+generation belongs to the observation/exploration flow; Stagehand should not
 own graph identity, planning facts, or PDDL semantics.
 
 Main functions/classes:
@@ -76,12 +86,16 @@ Main responsibilities:
 
 - build deterministic state snapshots and signatures;
 - summarize current state for review and embeddings;
-- ask VLM for current business affordances;
+- ask VLM for current business-action candidates;
 - compare before/after screenshots and output only
   `candidate_added_facts` / `candidate_removed_facts`;
 - let the local structured verifier produce `PlanningDelta` and evidence;
   historical `BusinessTransition` remains load-compatible;
 - provide lightweight structured verification.
+
+The VLM affordance result is a candidate hypothesis. The local verifier and
+after-action observation determine whether an edge is a verified transition;
+the candidate list alone does not establish a capability.
 
 Profile facts live here as preferred observation targets and candidate PDDL
 predicate vocabulary, not as the full set of possible website states. Visual
@@ -124,8 +138,11 @@ Main responsibilities:
   `BusinessTransition` data;
 - preserve explicit visible changes as distinct raw observations before
   embedding target matching can rewrite them;
-- conservatively group presentation-equivalent observations offline and
-  aggregate observed capabilities with provenance;
+- keep the compact Raw Graph independently loadable, with detailed evidence
+  in the optional `graph_evidence.json` sidecar;
+- conservatively group presentation-equivalent observations offline into a
+  Planning Graph and aggregate candidate capabilities with exact observation
+  provenance;
 - propagate source-aware planning state;
 - keep state embedding summaries focused on page/business evidence instead of
   Stagehand policy prompt boilerplate;
@@ -135,6 +152,8 @@ Main responsibilities:
   `execution_trace.metadata.visual_delta_trace`, without using them in
   planning transitions, target-matching planning facts, or Phase A PDDL;
 - store state embeddings;
+- use embedding similarity together with reliable local revisit evidence for
+  matching; embeddings are memory aids, not graph identity or PDDL facts;
 - detect revisits and provide memory context; explicit URL/signature/visual
   changes prevent a candidate target from merging back to its source, while
   reliable non-source history may still be reused.
@@ -170,12 +189,15 @@ Main responsibilities:
 - apply memory context and repetition avoidance;
 - keep a lightweight current-node pointer so the next action starts from the
   latest valid materialized business state;
-- reject embedding source matches that would relocate to a planning-fact
-  incompatible node;
+- protect a source from embedding matches when the action has an explicit URL,
+  structure-signature, or visual change; reliable non-source revisit evidence
+  may still be reused;
 - call the Stagehand operation layer and VLM/DOM observation layers;
 - update graph state;
 - stop with `current_state_exhausted` when the current node has no candidate;
 - stop by budget or an optional controller terminal condition;
+- treat candidate exhaustion and the bounded step budget as route-local
+  termination, without browser-back recovery or replay;
 - expose an optional per-completed-step checkpoint callback. The generic
   controller retains a consecutive-unproductive threshold, while the real
   Stagehand runner disables that threshold.
@@ -214,16 +236,20 @@ Main modules:
 Main responsibilities:
 
 - load `WebKobeGraph` JSON;
-- project graph locations, profile facts, and planning transitions into PDDL;
+- project Planning Graph locations and eligible observed business transitions
+  into Phase A PDDL; use profile facts only as the declared vocabulary for
+  concrete planning queries;
 - write domain-only artifacts for exploration-stage modeling;
 - write domain/problem artifacts when a concrete planning query is specified;
 - run PDDL readiness checks;
 - run SafeSym parser, safety injection, and planner smoke checks.
 
 This layer should be deterministic. It should consume graph semantics, not call
-LLM/VLM directly. Phase A projects canonical locations and eligible
+LLM/VLM directly. The offline planning abstraction produces a Planning Graph
+and audit report; Phase A projects canonical locations and eligible
 non-self-loop business transitions into `domain.pddl` only. Visual Delta
-observations are not Phase A predicates, preconditions, or effects.
+observations, supporting facts, and raw candidate facts are not Phase A
+predicates, preconditions, or effects.
 
 Main functions/classes:
 
@@ -254,6 +280,13 @@ Main responsibilities:
   pair after each completed action;
 - write the final `graph.meta.exploration_summary` (`requested_steps`,
   `steps_completed`, and `stop_reason`) after normal completion.
+
+`graph.json` is the compact, independently loadable Raw Graph; detailed
+execution evidence is resolved through `graph_evidence.json`. The checkpoint
+keeps the embedding, trace, graph, and evidence artifacts paired after each
+completed action. `raw_graph.json`, `planning_graph.json`, and
+`planning_abstraction_report.json` are separate audit/projection artifacts;
+the sidecar is not read by Phase A.
 
 Checkpointing overwrites the latest artifacts. It protects completed work but
 does not provide resume, replay, browser-back recovery, or per-step history.
@@ -298,7 +331,7 @@ WebKobeExplorer.explore_one_step
   -> GraphManager.identify_or_add_node
   -> optional embedding source match
   -> optional summarize_visual_affordances
-  -> select business action
+  -> local selection of one VLM-proposed business action
   -> adapter.execute
   -> capture after state/screenshots when execution succeeds or the known
      Stagehand tool_choice error is reported
@@ -306,6 +339,7 @@ WebKobeExplorer.explore_one_step
      verify_planning_delta
   -> GraphManager.build_planning_transition
   -> GraphManager.add_edge
+  -> Raw Graph/evidence sidecar observation
   -> controller invokes the optional completed-step checkpoint
   -> real runner writes embedding, Stagehand trace, then graph/evidence
   -> normal completion writes `graph.meta.exploration_summary`
