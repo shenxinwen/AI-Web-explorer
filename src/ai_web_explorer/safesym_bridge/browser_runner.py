@@ -616,26 +616,22 @@ async def run_stagehand_exploration(
                 state_embedding_records=embedding_records,
                 max_candidates=max_candidates,
             )
-            controller = WebKobeExplorationController(explorer)
+            def checkpoint(graph: WebKobeGraph) -> None:
+                _write_stagehand_checkpoint(
+                    graph,
+                    output_path=output_path,
+                    embedding_path=embedding_path,
+                    embedding_records=explorer.state_embedding_records,
+                    stagehand_trace_path=stagehand_trace_path,
+                )
+
+            controller = WebKobeExplorationController(
+                explorer,
+                max_consecutive_unproductive_steps=None,
+                step_checkpoint=checkpoint,
+            )
             result = await controller.run(max_steps=max(steps, 1))
-            write_web_kobe_graph(result.graph, output_path)
-            if embedding_path is not None:
-                write_state_embedding_records(
-                    embedding_path,
-                    explorer.state_embedding_records,
-                )
-            if stagehand_trace_path is not None:
-                traces = [
-                    edge.execution_trace.metadata
-                    for edge in result.graph.edges
-                    if edge.execution_trace.metadata.get("action_source")
-                    == "stagehand"
-                ]
-                stagehand_trace_path.parent.mkdir(parents=True, exist_ok=True)
-                stagehand_trace_path.write_text(
-                    json.dumps(traces, indent=2, ensure_ascii=False),
-                    encoding="utf-8",
-                )
+            checkpoint(result.graph)
             return output_path
         finally:
             await browser.close()

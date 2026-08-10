@@ -985,7 +985,9 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
 
     output_path = tmp_path / "graph.json"
     embedding_path = tmp_path / "state_embeddings.json"
+    trace_path = tmp_path / "stagehand_trace.json"
     calls = []
+    captured = {}
 
     class FakePage:
         async def goto(self, url):
@@ -1023,7 +1025,13 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
             self.app_name = base_backend.app_name
 
     class FakeController:
-        def __init__(self, explorer):
+        def __init__(
+            self,
+            explorer,
+            *,
+            max_consecutive_unproductive_steps=3,
+            step_checkpoint=None,
+        ):
             assert explorer.enable_exploration_memory is True
             assert explorer.max_candidates == 2
             assert explorer.state_embedding_provider("x") == [1.0, 0.0]
@@ -1031,14 +1039,18 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
             assert explorer.business_profile is not None
             assert explorer.business_profile.site_type == "ecommerce_checkout"
             assert explorer.visual_delta_provider("prompt") == '{"visible_change_summary":"changed","candidate_added_facts":[],"candidate_removed_facts":[],"evidence":[],"confidence":0.5}'
+            captured["limit"] = max_consecutive_unproductive_steps
+            captured["checkpoint"] = step_checkpoint
 
         async def run(self, *, max_steps):
+            graph = WebKobeGraph(
+                app="demo",
+                start_node_id="start",
+                total_steps_completed=max_steps,
+            )
+            captured["checkpoint"](graph)
             return WebKobeExplorationResult(
-                graph=WebKobeGraph(
-                    app="demo",
-                    start_node_id="start",
-                    total_steps_completed=max_steps,
-                ),
+                graph=graph,
                 summary=WebKobeExplorationSummary(
                     requested_steps=max_steps,
                     steps_completed=max_steps,
@@ -1066,6 +1078,7 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
         steps=3,
         state_embedding_provider=lambda text: [1.0, 0.0],
         embedding_path=embedding_path,
+        stagehand_trace_path=trace_path,
         screenshot_dir=tmp_path / "screenshots",
         site_purpose="demo store",
         business_profile="ecommerce_checkout",
@@ -1074,6 +1087,8 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
     )
 
     assert result == output_path
+    assert captured["limit"] is None
+    assert captured["checkpoint"] is not None
     assert ("goto", "https://shop.test/") in calls
     assert any(
         call[0] == "stagehand" and call[2] == "observed_action"
@@ -1082,6 +1097,99 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
     assert output_path.exists()
     assert output_path.with_name("graph_evidence.json").exists()
     assert embedding_path.exists()
+    assert trace_path.exists()
+
+
+@pytest.mark.anyio
+async def test_run_stagehand_exploration_preserves_checkpoint_when_step_raises(
+    tmp_path,
+    monkeypatch,
+):
+    import playwright.async_api as playwright_async_api
+
+    output_path = tmp_path / "graph.json"
+    embedding_path = tmp_path / "state_embeddings.json"
+    trace_path = tmp_path / "stagehand_trace.json"
+    closed = []
+
+    class FakePage:
+        async def goto(self, url):
+            pass
+
+    class FakeBrowser:
+        async def new_page(self):
+            return FakePage()
+
+        async def close(self):
+            closed.append(True)
+
+    class FakeChromium:
+        async def launch(self, *, headless=True, args=None):
+            return FakeBrowser()
+
+    class FakePlaywright:
+        chromium = FakeChromium()
+
+    class FakePlaywrightContext:
+        async def __aenter__(self):
+            return FakePlaywright()
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+    class FakeBaseAdapter:
+        def __init__(self, page, *, app_name, page_id=None, screenshot_dir=None):
+            self.app_name = app_name
+
+    class FakeStagehandBackend:
+        def __init__(self, *, base_backend, provider, goal, execution_mode, **kwargs):
+            self.app_name = base_backend.app_name
+
+    class FakeController:
+        def __init__(self, explorer, *, step_checkpoint=None, **kwargs):
+            self.step_checkpoint = step_checkpoint
+
+        async def run(self, *, max_steps):
+            self.step_checkpoint(
+                WebKobeGraph(
+                    app="demo",
+                    start_node_id="start",
+                    total_steps_completed=1,
+                )
+            )
+            raise RuntimeError("experiment interrupted")
+
+    monkeypatch.setattr(
+        playwright_async_api,
+        "async_playwright",
+        lambda: FakePlaywrightContext(),
+    )
+    monkeypatch.setattr(browser_runner, "WebKobePlaywrightAdapter", FakeBaseAdapter)
+    monkeypatch.setattr(browser_runner, "StagehandAutomationBackend", FakeStagehandBackend)
+    monkeypatch.setattr(browser_runner, "WebKobeExplorationController", FakeController)
+
+    with pytest.raises(RuntimeError, match="experiment interrupted"):
+        await browser_runner.run_stagehand_exploration(
+            output_path,
+            start_url="https://shop.test/",
+            app_name="demo",
+            provider=object(),
+            steps=3,
+            state_embedding_provider=lambda text: [1.0, 0.0],
+            embedding_path=embedding_path,
+            stagehand_trace_path=trace_path,
+            screenshot_dir=tmp_path / "screenshots",
+        )
+
+    assert closed == [True]
+    assert output_path.exists()
+    assert output_path.with_name("graph_evidence.json").exists()
+    assert embedding_path.exists()
+    assert trace_path.exists()
+    json.loads(output_path.read_text(encoding="utf-8"))
+    json.loads(output_path.with_name("graph_evidence.json").read_text(encoding="utf-8"))
+    json.loads(embedding_path.read_text(encoding="utf-8"))
+    json.loads(trace_path.read_text(encoding="utf-8"))
 
 
 @pytest.mark.anyio
