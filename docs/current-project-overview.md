@@ -264,28 +264,31 @@ eligible non-self-loop edge action names
 Naming work is deferred. The intended boundary is that LLM/VLM may help produce
 semantic labels during exploration, while the projector only normalizes and
 projects stored graph semantics. Phase A projects canonical locations and
-eligible non-self-loop business transitions into `domain.pddl`; Visual Delta
-observations are not predicates, preconditions, or effects.
+eligible non-self-loop business transitions into `domain.pddl`; supporting
+facts, `PlanningState`, profile facts, and Visual Delta observations are not
+Phase A preconditions or effects.
 
-### 6. Graph quality starts with business-state uniqueness
+### 6. Graph quality separates Raw observation identity from Planning-state identity
 
 Graph quality should not be judged only by whether nodes, edges, and PDDL are
-generated. It must also preserve stable business-state identity:
+generated. It must preserve the distinction between two identities:
 
-- the same business state should have one node; for example, cart from home,
-  product detail, or another page should resolve to the same cart node;
-- edges can represent different source paths, but nodes should not duplicate
-  the same state just because the source path differs;
-- a new node must represent a meaningful business-state change; if
-  `cart_has_items` is already true and item count changes are not modeled,
-  adding the same item again should not create another business-state node;
-- merge-before-create is the default policy; after an action, match the target
-  state against existing nodes using embedding similarity and reliable local
-  revisit evidence before materializing a new node; explicit URL/signature/visual
-  changes prevent matching back to the source, but reliable non-source history
-  may still be reused;
+- Raw Graph identity prioritizes faithful observation. A clear, stable,
+  observable URL/signature/visual change may therefore materialize a raw
+  observation node even when the business interpretation is unchanged;
+- Planning-state identity prioritizes semantic uniqueness. Planning abstraction
+  may group presentation-equivalent observations with provenance, so a cart
+  count change from 1 to 2 can remain a Raw Graph node while usually mapping to
+  the same planning state when `cart_has_items` remains true and quantity is not
+  modeled;
+- embedding target matching must not override an explicit observation change
+  by merging the candidate back to its source. Reliable non-source revisit
+  evidence may reuse an existing historical raw observation;
+- edges can represent different source paths, while Planning Graph groups
+  represent the semantic state identity used for planning;
 - node labels must be semantically stable; many `at_product_details_002` or
-  `at_shopping_003` predicates usually indicate weak merge or naming policy;
+  `at_shopping_003` predicates usually indicate weak planning-group or naming
+  policy;
 - every node and edge should be traceable to evidence such as VLM summaries,
   planning facts, screenshots, or structured observations.
 
@@ -294,14 +297,16 @@ generated. It must also preserve stable business-state identity:
 The confirmed V1 exploration policy is a simple forward-only frontier, not
 free-form planning by Stagehand or VLM:
 
-- each business node owns 3-5 immediately executable business affordances; these
-  candidates are written when the node first receives a frontier, and later
-  revisits / target merges do not regenerate or append to that node's frontier;
+- each Raw observation node receives no more than the configured candidate limit
+  when its business candidates are first generated. The limit is an upper bound,
+  not a quota: fewer candidates or an empty list is valid, and revisits / target
+  merges do not regenerate or append candidates to that node;
 - local code marks candidates as untried, tried, no-op, or failed; VLM proposes
   candidates and evidence, but does not own memory;
-- the current node prefers untried candidates; after execution, move to a new
-  node, move to an accepted existing target node, or stay put if no effective
-  change occurred;
+- the current node prefers untried candidates; after execution, materialize a
+  new Raw observation node for an explicit observed change, reuse an accepted
+  existing historical raw observation, or stay put if no effective change
+  occurred. Planning abstraction may group those Raw observations later;
 - once the current node has no untried candidates, record
   `current_state_exhausted` and stop instead of repeating an older action;
 - use the configured maximum step count as the main real-run limit. The generic

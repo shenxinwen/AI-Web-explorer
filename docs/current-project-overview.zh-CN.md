@@ -205,35 +205,40 @@ Stagehand 尝试执行选中的动作并提供 execution trace；它不负责候
 
 PDDL projector 应消费 planning graph 中已经记录的语义，不应直接调用 LLM/VLM，也不应自由发明谓词。
 
-当前 PDDL 主要来自：
+规划抽象先从 Raw Graph 生成 `planning_graph.json` 和
+`planning_abstraction_report.json`，Phase A 只消费 Planning Graph。当前 Phase A
+主要输入是：
 
 ```text
-node location
-node.planning_state.profile_fact_ids 默认投影
-edge.action.canonical_action_name
-edge.planning_transition 中属于 profile facts 的 pre/added/removed facts
+planning-group location
+planning-group business affordances and observed capabilities
+eligible non-self-loop edge action names
 ```
+
+Phase A 只把 canonical locations 和 eligible non-self-loop business transitions
+投影到 `domain.pddl`。`supporting_facts`、`PlanningState`、profile facts 和 Visual
+Delta observations 都不进入 Phase A 的 preconditions 或 effects。
 
 命名问题暂缓，但方向是：LLM/VLM 可以在探索阶段帮助生成语义 label；PDDL projector 只做确定性规范化和投影。
 
-### 6. Graph 质量优先看业务状态唯一性
+### 6. Graph 质量要区分 Raw observation identity 与 Planning-state identity
 
-当前 graph 质量评价不应只看是否生成了节点、边和 PDDL，还要看业务状态是否稳定。基本原则是：
+当前 graph 质量评价不应只看是否生成了节点、边和 PDDL，还要区分两种 identity：
 
-- 相同业务状态只能有一个节点；例如无论从首页、商品详情页还是其他页面进入购物车，都应指向同一个购物车业务节点。
-- 边可以表达不同来源路径，节点不能因为来源路径不同而重复表达同一个状态。
-- 新节点必须代表有意义的业务状态变化；如果只是在 `cart_has_items` 已经成立后把同一商品数量从 1 增加到 2，而我们暂不建模数量，就不应生成新的业务状态节点。
-- 状态合并应优先于创建；动作执行后应先用 embedding 相似度和可靠的本地 revisit evidence 匹配已有节点，state summary 可包含本地确认的 planning context，但不是独立否决或裁决门槛，只有不匹配时才创建新节点。
-- 节点命名要语义稳定；如果 PDDL 出现大量 `at_product_details_002` / `at_shopping_003`，通常说明 graph 的节点合并或命名存在问题。
+- Raw Graph identity 追求观察忠实，而不是业务状态唯一。明确、稳定、可观察的 URL/signature/visual 变化，即使业务解释可能相同，也可以生成 raw observation node。
+- Planning-state identity 才追求业务语义唯一。Planning Abstraction 可以保留 provenance，把 presentation-equivalent observations 归入同一 planning state；例如 `cart_has_items` 已为 true 且未建模数量时，购物车数量从 1 变为 2 可以保留 Raw Graph node，但通常不产生新的 planning node。
+- embedding target matching 不得覆盖 explicit observation change，不得把候选目标合并回本次 source；有可靠证据的 non-source 历史 raw observation 仍可以复用。
+- 不同来源路径可以由 edge 表达；Planning Graph 的 grouping 表达规划所使用的语义状态 identity。
+- 节点命名要语义稳定；如果 PDDL 出现大量 `at_product_details_002` / `at_shopping_003`，通常说明 planning-group 或命名存在问题。
 - 每个节点和边都要能追溯到 evidence，包括 VLM summary、planning facts、before/after 截图或结构化观察。
 
 ### 7. 探索策略应以 frontier 为核心
 
 当前确认的第一版探索策略是简单、forward-only 的 frontier，而不是让 Stagehand 或 VLM 自由规划：
 
-- 每个业务节点拥有 3-5 个当前可执行的 business affordances；这些候选只在节点首次获得 frontier 时写入，后续 revisit / target merge 回到同一节点时不再重新生成或追加。
+- 每个 Raw observation node 首次生成业务候选时，不超过配置的候选上限；上限不是 quota，不要求凑满，少于上限或空列表都合法。后续 revisit / target merge 回到同一节点时不再重新生成或追加候选。
 - 本地系统把候选动作标记为未尝试、已尝试、no-op 或失败；VLM 只负责提出候选和证据，不负责记忆。
-- 当前节点优先执行未尝试候选；动作成功后，若产生新业务状态就移动到新节点，若命中已有业务状态就移动到已有节点，若没有有效变化就留在原节点。
+- 当前节点优先执行未尝试候选；动作后若有明确观察变化就生成新的 Raw observation node，若有可靠证据命中已有历史 raw observation 就复用，否则没有有效变化时留在原节点；Planning Abstraction 后续可以再把这些 Raw observations 归组。
 - 命中已有节点时继续使用该节点首次建立的固定候选，不重新生成或追加候选。
 - 当前节点候选都尝试完后，直接记录 `current_state_exhausted` 并停止，不执行 browser back；连续没有新节点或新语义转换时计为无进展，但真实 Stagehand runner 暂时不因此提前终止，最大步数仍有效。
 - 每个完成的探索动作都会写入 latest checkpoint；checkpoint 只保护已完成探索，不提供 resume、replay 或逐步历史版本。

@@ -46,14 +46,17 @@ Main modules:
 Main responsibilities:
 
 - observe browser state;
-- list executable low-level actions;
+- collect low-level interactables as auxiliary input for state summaries,
+  embedding matching, or execution evidence;
 - execute one selected action;
 - capture screenshots;
 - preserve low-level execution traces.
 
 Stagehand belongs here as the execution backend. Candidate business-action
-generation belongs to the observation/exploration flow; Stagehand should not
-own graph identity, planning facts, or PDDL semantics.
+generation belongs to the observation/exploration flow; low-level interactables
+are not exploration candidates, memory/frontier units, or a selector/locator
+fallback. Stagehand should not own graph identity, planning facts, or PDDL
+semantics.
 
 Main functions/classes:
 

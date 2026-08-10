@@ -52,12 +52,13 @@ PDDL 映射与 SafeSym bridge 层
 主要职责：
 
 - 观察浏览器状态；
-- 列出可执行的底层动作；
+- 收集低层 interactables，作为 state summary、embedding 或执行证据的辅助输入；
 - 执行一个已选择动作；
 - 截图；
 - 保存底层 execution trace。
 
-Stagehand 属于这一层，是执行后端。业务动作候选由观察/探索流程生成和选择；
+Stagehand 属于这一层，是执行后端。业务动作候选由观察/探索流程生成和选择；低层
+interactables 不作为探索候选、memory/frontier 单位，也不恢复 selector/locator fallback。
 Stagehand 不应该决定 graph identity、planning facts 或 PDDL 语义。
 
 主要函数/类：
