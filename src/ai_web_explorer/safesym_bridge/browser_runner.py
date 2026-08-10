@@ -631,6 +631,11 @@ async def run_stagehand_exploration(
                 step_checkpoint=checkpoint,
             )
             result = await controller.run(max_steps=max(steps, 1))
+            result.graph.meta["exploration_summary"] = {
+                "requested_steps": result.summary.requested_steps,
+                "steps_completed": result.summary.steps_completed,
+                "stop_reason": result.summary.stop_reason,
+            }
             checkpoint(result.graph)
             return output_path
         finally:

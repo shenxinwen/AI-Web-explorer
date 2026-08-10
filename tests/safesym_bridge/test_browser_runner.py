@@ -1098,6 +1098,12 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
     assert output_path.with_name("graph_evidence.json").exists()
     assert embedding_path.exists()
     assert trace_path.exists()
+    graph_data = json.loads(output_path.read_text(encoding="utf-8"))
+    assert graph_data["meta"]["exploration_summary"] == {
+        "requested_steps": 3,
+        "steps_completed": 3,
+        "stop_reason": "max_steps",
+    }
 
 
 @pytest.mark.anyio

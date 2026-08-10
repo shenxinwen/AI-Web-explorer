@@ -52,7 +52,7 @@ def _summary(
     stop_reason: str,
     consecutive_unproductive_steps: int = 0,
     max_consecutive_unproductive_steps: int | None = 3,
-    ) -> WebKobeExplorationSummary:
+) -> WebKobeExplorationSummary:
     return WebKobeExplorationSummary(
         requested_steps=requested_steps,
         steps_completed=max(graph.total_steps_completed - baseline_completed, 0),

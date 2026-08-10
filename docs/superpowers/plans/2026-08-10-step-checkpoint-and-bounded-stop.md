@@ -526,4 +526,3 @@ Expected: changes are limited to checkpoint persistence, runner stop configurati
 git add docs/current-project-overview.zh-CN.md docs/project-structure.zh-CN.md docs/project-decisions.zh-CN.md
 git commit -m "Document bounded checkpointed exploration"
 ```
-

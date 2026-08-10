@@ -61,4 +61,3 @@ Automated tests must prove:
 4. Current-state exhaustion still ends the forward-only run naturally.
 5. Embedding, trace, graph, and evidence are refreshed by checkpoints.
 6. Failed JSON replacement does not expose truncated graph artifacts.
-
