@@ -9,6 +9,7 @@ from ai_web_explorer.grounded_web.graph import (
     WebKobeGraph,
     WebKobeNode,
 )
+from ai_web_explorer.grounded_web.business_profile import PlanningDelta
 from ai_web_explorer.safesym_bridge.cli import main
 from ai_web_explorer.safesym_bridge import cli as cli_module
 from ai_web_explorer.safesym_bridge.graph_artifacts import (
@@ -69,7 +70,7 @@ def _graph_fixture() -> WebKobeGraph:
     )
 
 
-def test_phase_a_cli_writes_raw_canonical_report_and_domain_only(tmp_path, monkeypatch):
+def test_phase_a_cli_writes_raw_planning_report_and_domain_only(tmp_path, monkeypatch):
     graph = _graph_fixture()
     graph_path = tmp_path / "raw.json"
     graph_path.write_text(
@@ -102,8 +103,8 @@ def test_phase_a_cli_writes_raw_canonical_report_and_domain_only(tmp_path, monke
         path.name for path in output_dir.iterdir()
     } == {
         "raw_graph.json",
-        "canonical_graph.json",
-        "consolidation_report.json",
+        "planning_graph.json",
+        "planning_abstraction_report.json",
         "domain.pddl",
     }
     assert json.loads((output_dir / "raw_graph.json").read_text(encoding="utf-8")) == graph.to_dict()
@@ -152,21 +153,21 @@ def test_phase_a_compact_input_is_semantically_equivalent_and_raw_shape_is_prese
     assert compact_raw == compact_input
     assert not (compact_output / "graph_evidence.json").exists()
 
-    full_canonical = json.loads(
-        (full_output / "canonical_graph.json").read_text(encoding="utf-8")
+    full_planning = json.loads(
+        (full_output / "planning_graph.json").read_text(encoding="utf-8")
     )
-    compact_canonical = json.loads(
-        (compact_output / "canonical_graph.json").read_text(encoding="utf-8")
+    compact_planning = json.loads(
+        (compact_output / "planning_graph.json").read_text(encoding="utf-8")
     )
-    assert [node["node_id"] for node in full_canonical["nodes"]] == [
-        node["node_id"] for node in compact_canonical["nodes"]
+    assert [node["node_id"] for node in full_planning["nodes"]] == [
+        node["node_id"] for node in compact_planning["nodes"]
     ]
     assert [
         (edge["source_node_id"], edge["action"]["semantic_id"], edge["target_node_id"])
-        for edge in full_canonical["edges"]
+        for edge in full_planning["edges"]
     ] == [
         (edge["source_node_id"], edge["action"]["semantic_id"], edge["target_node_id"])
-        for edge in compact_canonical["edges"]
+        for edge in compact_planning["edges"]
     ]
     assert (full_output / "domain.pddl").read_text(encoding="utf-8") == (
         compact_output / "domain.pddl"
@@ -194,9 +195,66 @@ def test_phase_a_cli_without_embedding_configuration_is_conservative(tmp_path, m
         ]
     ) == 0
     report = json.loads(
-        (output_dir / "consolidation_report.json").read_text(encoding="utf-8")
+        (output_dir / "planning_abstraction_report.json").read_text(encoding="utf-8")
     )
-    assert report["action_normalizations"] == []
+    assert report["ambiguous_actions"] == []
+
+
+def test_phase_a_projects_only_cross_group_edges_and_keeps_capability_self_loop(
+    tmp_path,
+    monkeypatch,
+):
+    graph = _graph_fixture()
+    cart = replace(graph.nodes[1], node_id="cart", page_description="cart")
+    boundary = WebKobeEdge(
+        source_node_id="details",
+        target_node_id="cart",
+        instruction="add_to_cart",
+        action=BrowserAction("business_intent", None, "add_to_cart"),
+        capability=None,
+        target_observation="cart",
+        observed_delta=[],
+        schema_delta=None,
+        execution_trace=ExecutionTrace(
+            "business_intent",
+            None,
+            "add_to_cart",
+            {},
+            "details",
+            "cart",
+            True,
+        ),
+        planning_delta=PlanningDelta(verified_added_facts=["cart_has_items"]),
+    )
+    graph = replace(
+        graph,
+        nodes=[graph.nodes[0], graph.nodes[1], cart],
+        edges=[replace(graph.edges[0], visual_change_kind="presentation"), boundary],
+    )
+    graph_path = tmp_path / "raw.json"
+    graph_path.write_text(json.dumps(graph.to_dict()), encoding="utf-8")
+    output_dir = tmp_path / "phase_a"
+    monkeypatch.setattr(
+        cli_module,
+        "create_embedding_provider_from_env",
+        lambda: (_ for _ in ()).throw(ValueError("missing embedding config")),
+    )
+
+    assert main(
+        ["web-kobe-phase-a", "--graph", str(graph_path), "--output", str(output_dir)]
+    ) == 0
+
+    planning = json.loads((output_dir / "planning_graph.json").read_text())
+    domain = (output_dir / "domain.pddl").read_text(encoding="utf-8")
+    assert any(
+        edge["source_node_id"] == edge["target_node_id"]
+        and edge["action"]["semantic_id"] == "view_details"
+        for edge in planning["edges"]
+    )
+    assert "add_to_cart__from_listing" in domain
+    assert "view_details__from_listing" not in domain
+    assert "cart_has_items" not in domain
+    assert "visible_control" not in domain
 
 
 def test_phase_a_cli_keeps_rejected_source_edges_only_in_raw_artifacts(
@@ -270,17 +328,17 @@ def test_phase_a_cli_keeps_rejected_source_edges_only_in_raw_artifacts(
     ) == 0
 
     raw = json.loads((output_dir / "raw_graph.json").read_text(encoding="utf-8"))
-    canonical = json.loads(
-        (output_dir / "canonical_graph.json").read_text(encoding="utf-8")
+    planning = json.loads(
+        (output_dir / "planning_graph.json").read_text(encoding="utf-8")
     )
     report = json.loads(
-        (output_dir / "consolidation_report.json").read_text(encoding="utf-8")
+        (output_dir / "planning_abstraction_report.json").read_text(encoding="utf-8")
     )
     domain = (output_dir / "domain.pddl").read_text(encoding="utf-8")
 
     assert rejected_edge.to_dict() in raw["edges"]
     assert any(
-        edge["source_node_id"] == "incomplete" for edge in canonical["edges"]
+        edge["source_node_id"] == "incomplete" for edge in planning["edges"]
     )
-    assert "incomplete" not in report["rejected_nodes"]
+    assert report["raw_to_planning_node"]["incomplete"] == "incomplete"
     assert "different_action__from_incomplete" in domain

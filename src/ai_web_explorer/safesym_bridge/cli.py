@@ -22,8 +22,8 @@ from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
     load_web_kobe_graph_json,
     read_web_kobe_graph_json_data,
 )
-from ai_web_explorer.grounded_web.behavior_state_graph import (
-    consolidate_behavior_state_graph,
+from ai_web_explorer.grounded_web.planning_abstraction import (
+    build_planning_state_graph,
 )
 from ai_web_explorer.grounded_web.embedding_provider import (
     create_embedding_provider_from_env,
@@ -224,8 +224,8 @@ def main(argv: list[str] | None = None) -> int:
         "web-kobe-phase-a",
         aliases=["web-kobe-consolidate"],
         help=(
-            "Consolidate a raw Web-KOBE graph and write canonical graph, "
-            "consolidation report, and Phase-A domain.pddl."
+            "Build a planning-state graph and write planning artifacts plus "
+            "the Phase-A domain.pddl."
         ),
     )
     web_kobe_phase_a_parser.add_argument(
@@ -238,7 +238,7 @@ def main(argv: list[str] | None = None) -> int:
         "--output",
         type=Path,
         default=Path("outputs/web_kobe_phase_a"),
-        help="Directory to write raw/canonical/report/domain artifacts.",
+        help="Directory to write raw/planning/report/domain artifacts.",
     )
     web_kobe_pddl_smoke_parser = subparsers.add_parser(
         "web-kobe-pddl-smoke",
@@ -538,7 +538,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.mode in {"web-kobe-phase-a", "web-kobe-consolidate"}:
             raw_graph_data = read_web_kobe_graph_json_data(args.graph)
             graph = load_web_kobe_graph_json(args.graph)
-            artifacts = consolidate_behavior_state_graph(
+            artifacts = build_planning_state_graph(
                 graph,
                 embedding_provider=_phase_a_embedding_provider(),
             )
@@ -547,20 +547,20 @@ def main(argv: list[str] | None = None) -> int:
                 json.dumps(raw_graph_data, indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )
-            (args.output / "canonical_graph.json").write_text(
+            (args.output / "planning_graph.json").write_text(
                 json.dumps(
-                    artifacts.canonical_graph.to_dict(),
+                    artifacts.planning_graph.to_dict(),
                     indent=2,
                     ensure_ascii=False,
                 ),
                 encoding="utf-8",
             )
-            (args.output / "consolidation_report.json").write_text(
+            (args.output / "planning_abstraction_report.json").write_text(
                 json.dumps(artifacts.report.to_dict(), indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )
             (args.output / "domain.pddl").write_text(
-                compile_phase_a_domain(artifacts.canonical_graph),
+                compile_phase_a_domain(artifacts.planning_graph),
                 encoding="utf-8",
             )
             output_path = args.output

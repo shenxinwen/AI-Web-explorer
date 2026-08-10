@@ -882,11 +882,11 @@ def compile_phase_a_domain(
     *,
     options: PddlProjectionOptions | None = None,
 ) -> str:
-    """Project a canonical behavior graph to the Phase-A location domain.
+    """Project a planning-state graph to the Phase-A location domain.
 
     Phase A deliberately keeps planning and observation evidence on the graph
     for auditability, but excludes those fields from the planner-facing domain.
-    Self-loops remain in the canonical graph and are omitted only here.
+    Self-loops remain in the planning graph and are omitted only here.
     """
     phase_a_nodes = [replace(node, planning_state=None) for node in graph.nodes]
     known_node_ids = {node.node_id for node in phase_a_nodes}
