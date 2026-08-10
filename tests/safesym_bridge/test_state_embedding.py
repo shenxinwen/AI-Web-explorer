@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from ai_web_explorer.grounded_web.state_embedding import (
     StateEmbeddingRecord,
     cosine_similarity,
@@ -84,3 +86,22 @@ def test_state_embedding_sidecar_round_trips(tmp_path: Path):
     loaded = read_state_embedding_records(path)
 
     assert loaded == records
+
+
+def test_failed_embedding_replace_preserves_previous_file(tmp_path, monkeypatch):
+    path = tmp_path / "state_embeddings.json"
+    path.write_text('{"records":[{"node_id":"old"}]}', encoding="utf-8")
+    old_bytes = path.read_bytes()
+    original_replace = Path.replace
+
+    def fail_target_replace(self, target):
+        if Path(target) == path:
+            raise OSError("replace failed")
+        return original_replace(self, target)
+
+    monkeypatch.setattr(Path, "replace", fail_target_replace)
+    with pytest.raises(OSError, match="replace failed"):
+        write_state_embedding_records(path, [])
+
+    assert path.read_bytes() == old_bytes
+    assert list(tmp_path.glob("*.tmp")) == []

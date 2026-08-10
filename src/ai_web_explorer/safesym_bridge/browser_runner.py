@@ -6,6 +6,7 @@ import tempfile
 import time
 import urllib.request
 from pathlib import Path
+from typing import Iterable
 
 from ai_web_explorer.grounded_web.capability_graph import Evidence, PageFrame
 from ai_web_explorer.grounded_web.graph import (
@@ -50,6 +51,7 @@ from ai_web_explorer.grounded_web.stagehand_sdk_provider import (
     create_async_stagehand_provider_from_env,
 )
 from ai_web_explorer.grounded_web.state_embedding import (
+    StateEmbeddingRecord,
     read_state_embedding_records,
     write_state_embedding_records,
 )
@@ -196,6 +198,39 @@ def _write_json_temp(path: Path, text: str) -> Path:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)
         raise
+
+
+def _write_text_atomically(path: Path, text: str) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = _write_json_temp(path, text)
+    try:
+        temp_path.replace(path)
+    finally:
+        temp_path.unlink(missing_ok=True)
+    return path
+
+
+def _write_stagehand_checkpoint(
+    graph: WebKobeGraph,
+    *,
+    output_path: Path,
+    embedding_path: Path | None,
+    embedding_records: Iterable[StateEmbeddingRecord],
+    stagehand_trace_path: Path | None,
+) -> Path:
+    if embedding_path is not None:
+        write_state_embedding_records(embedding_path, embedding_records)
+    if stagehand_trace_path is not None:
+        traces = [
+            edge.execution_trace.metadata
+            for edge in graph.edges
+            if edge.execution_trace.metadata.get("action_source") == "stagehand"
+        ]
+        _write_text_atomically(
+            stagehand_trace_path,
+            json.dumps(traces, indent=2, ensure_ascii=False),
+        )
+    return write_web_kobe_graph(graph, output_path)
 
 
 def _edge_action_id(edge) -> str:

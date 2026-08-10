@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable, Sequence
@@ -122,5 +123,21 @@ def write_state_embedding_records(
 ) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {"records": [record.to_dict() for record in records]}
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    text = json.dumps(payload, indent=2, ensure_ascii=False)
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            delete=False,
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+        ) as handle:
+            temp_path = Path(handle.name)
+            handle.write(text)
+        temp_path.replace(path)
+    finally:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
     return path

@@ -25,6 +25,7 @@ from ai_web_explorer.grounded_web.graph import WebKobeEdge
 from ai_web_explorer.grounded_web.graph import WebKobeNode
 from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.grounded_web.stagehand_prompt import BenchmarkTaskContext
+from ai_web_explorer.grounded_web.state_embedding import StateEmbeddingRecord
 
 
 @pytest.fixture
@@ -180,6 +181,69 @@ def test_write_web_kobe_graph_adds_frontier_metrics(tmp_path):
     assert product_list["untried_action_ids"] == ["open_cart"]
     assert product_list["no_op_action_ids"] == ["sort_products"]
     assert product_list["failed_action_ids"] == []
+
+
+def test_stagehand_checkpoint_writes_embedding_trace_then_graph(
+    tmp_path, monkeypatch
+):
+    graph = _transactional_graph("stagehand_action")
+    graph.edges[0].execution_trace.metadata["action_source"] = "stagehand"
+    calls = []
+    embedding_path = tmp_path / "state_embeddings.json"
+    trace_path = tmp_path / "stagehand_trace.json"
+    output_path = tmp_path / "graph.json"
+
+    monkeypatch.setattr(
+        browser_runner,
+        "write_state_embedding_records",
+        lambda path, records: calls.append("embedding") or path,
+    )
+    monkeypatch.setattr(
+        browser_runner,
+        "_write_text_atomically",
+        lambda path, text: calls.append("trace") or path,
+    )
+    monkeypatch.setattr(
+        browser_runner,
+        "write_web_kobe_graph",
+        lambda graph, path: calls.append("graph") or path,
+    )
+
+    result = browser_runner._write_stagehand_checkpoint(
+        graph,
+        output_path=output_path,
+        embedding_path=embedding_path,
+        embedding_records=[
+            StateEmbeddingRecord("source", "source", [1.0, 0.0])
+        ],
+        stagehand_trace_path=trace_path,
+    )
+
+    assert result == output_path
+    assert calls == ["embedding", "trace", "graph"]
+
+
+def test_stagehand_checkpoint_writes_graph_without_optional_artifacts(
+    tmp_path, monkeypatch
+):
+    calls = []
+    output_path = tmp_path / "graph.json"
+    monkeypatch.setattr(
+        browser_runner,
+        "write_web_kobe_graph",
+        lambda graph, path: calls.append("graph") or path,
+    )
+
+    result = browser_runner._write_stagehand_checkpoint(
+        browser_runner.build_debug_web_kobe_graph(),
+        output_path=output_path,
+        embedding_path=None,
+        embedding_records=[],
+        stagehand_trace_path=None,
+    )
+
+    assert result == output_path
+    assert calls == ["graph"]
 
 
 def test_write_web_kobe_graph_does_not_write_graph_if_sidecar_fails(
