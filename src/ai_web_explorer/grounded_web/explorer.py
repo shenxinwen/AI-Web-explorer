@@ -271,6 +271,12 @@ class WebKobeExplorer:
             before=before,
             before_interactables=before_interactables,
         )
+        if before_draft.node_id != source_id:
+            self._ensure_source_embedding(
+                node_id=before_draft.node_id,
+                before=before,
+                before_interactables=before_interactables,
+            )
         before_screenshot_path = await self._capture_screenshot("before")
         if before_screenshot_path is not None:
             self._record_source_business_affordances(
@@ -412,13 +418,14 @@ class WebKobeExplorer:
         )
         if not observation_allowed or not state_changed:
             target_node = self.manager.node_for_id(source_id)
-        elif not path_changed and not signature_changed and visual_fact_change:
+        elif not path_changed:
             action_name = selected.canonical_action_name or selected.semantic_id
             target_node = replace(
                 target_node,
                 node_id=observation_change_node_id(
                     source_node_id=source_id,
                     action_name=action_name,
+                    after_signature=after.signature,
                     added_facts=visual_delta_facts[0],
                     removed_facts=visual_delta_facts[1],
                 ),
@@ -553,11 +560,11 @@ class WebKobeExplorer:
             existing = self.manager.node_for_id(target_match.node_id)
         except KeyError:
             return target_node, target_match
-        if has_explicit_change and existing.node_id == source_node_id:
+        if has_explicit_change:
             return target_node, replace(
                 target_match,
                 status="blocked",
-                blocked_reason="source_node",
+                blocked_reason="explicit_observation_change",
             )
         if not self._has_known_revisit_evidence(
             default_node_id=source_node_id,
@@ -591,8 +598,6 @@ class WebKobeExplorer:
         if default_node_id == matched_node_id:
             return True
         if matched_node_id == self._current_node_id:
-            return True
-        if matched_node_id in self._visit_stack:
             return True
         if default_node_id is None:
             return False

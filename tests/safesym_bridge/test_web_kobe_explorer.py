@@ -2731,11 +2731,11 @@ async def test_explicit_visual_change_does_not_embedding_match_back_to_source():
     assert "__observation_" in edge.target_node_id
     assert edge.execution_trace.metadata["target_state_match"][
         "blocked_reason"
-    ] == "source_node"
+    ] == "explicit_observation_change"
 
 
 @pytest.mark.anyio
-async def test_explicit_visual_change_can_match_reliable_non_source_history():
+async def test_explicit_visual_change_does_not_match_historical_node():
     adapter = SamePageBusinessChangeAdapter()
     assistor = DeterministicSemanticAssistor(app="fake")
     source_id = assistor.describe_state(
@@ -2770,6 +2770,8 @@ async def test_explicit_visual_change_can_match_reliable_non_source_history():
     graph = await explorer.explore_one_step()
 
     edge = graph.edges[-1]
-    assert edge.target_node_id == "history"
-    assert edge.execution_trace.metadata["target_state_match"]["node_id"] == "history"
-    assert edge.execution_trace.metadata["target_state_match"]["accepted"] is True
+    assert edge.target_node_id != "history"
+    assert "__observation_" in edge.target_node_id
+    assert edge.execution_trace.metadata["target_state_match"][
+        "blocked_reason"
+    ] == "explicit_observation_change"

@@ -11,18 +11,39 @@ def test_observation_change_node_id_is_stable_and_order_independent():
     first = observation_change_node_id(
         source_node_id="listing__source",
         action_name="add_to_cart",
+        after_signature={"cart_count": 1},
         added_facts=["cart_has_items", "product_selected"],
         removed_facts=["cart_empty"],
     )
     second = observation_change_node_id(
         source_node_id="listing__source",
         action_name="add_to_cart",
+        after_signature={"cart_count": 1},
         added_facts=["product_selected", "cart_has_items"],
         removed_facts=["cart_empty"],
     )
 
     assert first == second
     assert first != "listing__source"
+
+
+def test_observation_change_node_id_uses_after_signature():
+    first = observation_change_node_id(
+        source_node_id="listing",
+        action_name="add_to_cart",
+        after_signature={"cart_count": 1},
+        added_facts=["cart_count_increased"],
+        removed_facts=[],
+    )
+    second = observation_change_node_id(
+        source_node_id="listing",
+        action_name="add_to_cart",
+        after_signature={"cart_count": 2},
+        added_facts=["cart_count_increased"],
+        removed_facts=[],
+    )
+
+    assert first != second
 
 
 def _node(node_id: str, *, node_label: str | None = None) -> WebKobeNode:

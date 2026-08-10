@@ -16,17 +16,24 @@ def observation_change_node_id(
     *,
     source_node_id: str,
     action_name: str,
+    after_signature: dict,
     added_facts: list[str],
     removed_facts: list[str],
 ) -> str:
     payload = {
         "source_node_id": source_node_id,
         "action_name": action_name,
+        "after_signature": after_signature,
         "added_facts": sorted(set(added_facts)),
         "removed_facts": sorted(set(removed_facts)),
     }
     digest = hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        ).encode("utf-8")
     ).hexdigest()[:12]
     return f"{source_node_id}__observation_{digest}"
 
