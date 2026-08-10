@@ -17,6 +17,24 @@
 - ...
 ```
 
+## 2026-08-10 - 对齐当前主线的观察、图和规划职责
+
+更改：
+- VLM Visual Affordance 只提出业务动作候选假设；本地逻辑选择一个候选，Stagehand 负责执行尝试，动作后观察负责验证可见结果。候选能力不等于已验证转换，只有成功且有观察证据支持的 edge 才能作为已验证转换。
+- `graph.json` 是可独立加载的紧凑 Raw Graph；详细执行证据通过 `graph_evidence.json` sidecar 和 `evidence_ref` 保留，`raw_graph.json` 保留输入 JSON 的原始形状。每个完成动作后由 checkpoint 配对保存 embedding、trace、graph/evidence；checkpoint 不提供 resume、replay 或 browser-back recovery。
+- `planning_abstraction.py` 离线把可保守合并的 presentation-equivalent raw observations 归入 Planning Graph，并聚合候选能力及精确观察 provenance；`planning_graph.json` 与 `planning_abstraction_report.json` 是离线抽象/审计产物，sidecar 不参与 PDDL。
+- profile facts 是本地 verifier 的强/弱边界和候选谓词词表，不是网页状态全集；Visual Delta 不接收 profile facts。Visual observations 只保留在 `execution_trace.metadata.visual_delta_trace`，不进入 `PlanningState`、planning transitions、target matching planning facts 或 Phase A PDDL。embedding 只用于状态记忆、相似匹配和局部动作去重，不定义 node identity，也不是 PDDL facts。
+- Phase A 只从 Planning Graph 投影 canonical locations 和符合条件的、已观察成功的非自环业务转换，生成 `domain.pddl`；本阶段不生成 `problem.pddl`，Visual Delta、supporting facts、raw candidate facts 和 `PlanningState` 都不是 Phase A predicates、preconditions 或 effects。
+- 当前探索器是 forward-only，只沿当前路线处理固定候选，候选耗尽或最大步数到达即可结束，不代表全站探索完成。Visual Delta 当前有 bounded 分类实现，但分类体系仍待审查；planning abstraction 已实现并有单测覆盖，但尚未通过新的真实网页实验验证。
+
+原因：
+- 需要让候选、执行尝试、观察证据、Raw Graph、Planning Graph 和 planner-facing 投影各自承担单一职责，避免把模型假设当成业务事实。
+- 当前阶段优先验证可审查的局部探索和离线抽象，不把一次有界路线的结果表述为全站覆盖，也不在未做新真实网页验证前宣称 planning abstraction 已经经过生产场景验证。
+
+影响：
+- 旧 decisions 中直接把 VLM 候选当能力、把 Visual Delta facts 当规划 facts、或把 target matching 描述为独立 planning-fact compatibility gate 的表述，均由本条当前决策取代；历史背景保留，但不得作为当前行为依据。
+- 旧 `BusinessTransition` 字段继续兼容读取；新探索不生成 VLM `BusinessTransition` 判断。旧 `business_state_policy.py`、`resolve_business_target_node` 和 `behavior_state_graph.py` 仅作为历史名称保留，不属于当前 active path。
+
 ## 2026-08-10 - 真实 Stagehand 实验采用有界 checkpoint
 
 更改：
@@ -176,19 +194,19 @@
 - embedding 的主职责收窄为 target merge、recovery、相似节点动作记忆和后续图审查。
 - 后续实现 browser back / DFS recovery 时，可以显式进入 recovery 模式再使用 source embedding relocalization。
 
-## 2026-08-02 - 接入动作后 target matching V1
+## 2026-08-02 - 接入动作后 target matching V1（历史实现；兼容性 gate 已被 2026-08-10 当前决策取代）
 
 更改：
 - `WebKobeExplorer` 在动作执行后、写入目标节点前，新增 target matching 阶段。
 - target matching 使用动作后的 state summary、planning_transition.post_facts、visual summary 和现有 state embeddings 查找相似目标节点。
-- 只有 embedding 判断为 `same` 且 planning facts 兼容时，才复用已有目标节点；否则保留原有创建/变体逻辑。
+- 历史实现曾要求 embedding 判断为 `same` 且 planning facts 兼容时才复用已有目标节点；该独立 planning-fact compatibility gate 已被 2026-08-10 当前决策取代。
 - edge execution metadata 新增 `target_state_match`，用于实验报告审查匹配状态、分数和是否被接受。
 - 同步修正无 business profile 的低层探索推进：当普通 observed delta 成功发生且没有 business/planning transition 时，也允许当前节点指针推进，避免后续边持续从起点发出并覆盖起点快照。
 
 原因：
 - 之前系统有 source matching，但缺少 target matching，导致不同路径到达同一业务状态时容易重复创建节点。
 - “防污染”的 state variant 逻辑只能避免把不兼容 facts 写进旧节点，不能解决“不同 node_id 但同一业务状态”的归并问题。
-- 第一版需要保守，避免误合并；因此必须同时满足 embedding 相似和 planning facts 兼容。
+- 第一版需要保守，避免误合并；该版本的 planning facts compatibility 约束属于历史实现，不描述当前 target matching。
 - Playwright fixture golden path 暴露了另一个基础图质量问题：无 business profile 场景下当前节点不推进，会污染起点节点快照；这与 target matching 不同，但同属 source/target 定位基本质量。
 
 影响：
@@ -214,18 +232,18 @@
 - embedding 不应只作为 metadata 记录，还应参与目标节点定位和合并。
 - PDDL 中大量 `at_xxx_002` / `at_xxx_003` 应被视为 graph merge 或命名策略的质量信号，而不是单纯 projector 后处理问题。
 
-## 2026-08-02 - 修正通用探索实验入口与动作记忆边界
+## 2026-08-02 - 修正通用探索实验入口与动作记忆边界（部分字段描述已被当前 schema 取代）
 
 更改：
 - `web-kobe-stagehand-explore` 的默认 Stagehand execution mode 从 `business_milestone` 改为 `observed_action`，让通用探索入口默认不再生成虚拟 milestone 动作。
-- `BusinessAffordance` 新增 `expected_change` 字段，并在 VLM 候选解析、graph JSON 序列化和 graph JSON 读取中保留。
+- 当时曾以 `expected_change` 描述 VLM 候选预期；该历史字段表述已被当前候选的 `supporting_facts` 语义取代。
 - business affordance selector 移除全局 completed action 降权；重复判断回到当前节点或 embedding 命中的相似节点上下文，通过 `tried_action_ids` / `avoid_action_ids` 控制。
 - `docs/safesym-bridge.md` 明确：`observed_action` 是通用 bounded exploration 默认路径，`business_milestone` 只作为 legacy fallback 或 checkout benchmark smoke 使用。
 
 原因：
 - 通用探索的主线应该是 VLM 提候选、本地 graph/embedding memory 选择和去重、Stagehand 执行选中动作；默认 `business_milestone` 会把实验带回旧任务驱动路径。
 - 同名业务动作在不同业务状态下可能合理重复，例如不同商品详情页上的 `add_item_to_cart`，不应被全局 completed action 直接降权。
-- `expected_change` 是候选动作排序和人工审查的重要证据，之前只写在 prompt schema 中但没有进入 graph，会丢失信息。
+- 当时认为 `expected_change` 是候选动作排序和人工审查的重要证据；当前候选证据使用 `supporting_facts`，该历史字段描述不代表当前 schema。
 
 影响：
 - 下一轮 `web-kobe-stagehand-explore` 实验更接近当前探索方向。
@@ -267,11 +285,11 @@
 - `product_details_visible` 现在会被归类为 profile fact，而不是 generated fact；相关 visual delta 测试已同步。
 - 后续仍需要通过真实实验验证这些 facts 是否减少误判和 `at_product_list_00x` 膨胀。
 
-## 2026-08-01 - 用执行轨迹约束 source matching，并清理 embedding 摘要
+## 2026-08-01 - 用执行轨迹约束 source matching，并清理 embedding 摘要（历史 compatibility 描述已被当前决策取代）
 
 更改：
 - `WebKobeExplorer` 增加轻量级当前节点指针：成功产生有效业务状态转移后，下一步默认从上一条 edge 的 target 节点继续。
-- embedding source match 仍然保留，但当它想把 source 拉回 planning facts 不兼容的旧节点时，会被拒绝，只作为 metadata 参考。
+- 历史实现曾把 planning facts 不兼容作为 source match 的拒绝条件；当前不把它描述为独立 compatibility gate，source protection 以明确 URL/signature/visual change 为边界。
 - `build_state_summary` 对 Stagehand business intent / policy prompt 做摘要清理，embedding 文本优先使用业务动作 label，而不是整段 Stagehand action policy / memory policy。
 
 原因：
@@ -321,7 +339,7 @@
 
 更改：
 
-- 该历史实现后来已被 VLM 自由状态命名和离线 `planning_abstraction.py` 取代；`business_state_policy.resolve_business_target_node` 与 `BusinessTransition` 当前已移除，仅兼容读取历史 JSON key。
+- 该历史实现后来已被 VLM 自由状态命名和离线 `planning_abstraction.py` 取代；`business_state_policy.resolve_business_target_node` 不属于当前 active path，历史 `BusinessTransition` 记录仅按兼容规则读取。
 - 业务节点的 `node_id` 前缀同步使用该语义 label，例如 `cart_with_items__business_*`，而不是退回 `shopping__business_*`。
 - PDDL projector 仍只读取 graph 中已有的 `node_label`，不直接调用 LLM/VLM，也不自行猜测网页含义。
 
