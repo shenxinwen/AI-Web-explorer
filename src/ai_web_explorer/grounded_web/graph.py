@@ -224,6 +224,7 @@ class WebKobeEdge:
     planning_delta: PlanningDelta | None = None
     planning_transition: PlanningTransition | None = None
     business_transition: BusinessTransition | None = None
+    visual_change_kind: str = "unknown"
     visit_count: int = 1
     status: str = "verified"
     evidence: list[Evidence] = field(default_factory=list)
@@ -263,6 +264,7 @@ class WebKobeEdge:
                 if self.business_transition is not None
                 else None
             ),
+            "visual_change_kind": self.visual_change_kind,
             "visit_count": self.visit_count,
             "status": self.status,
             "evidence": _list_to_dict(self.evidence),

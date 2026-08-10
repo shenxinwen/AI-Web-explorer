@@ -1635,6 +1635,33 @@ def test_load_web_kobe_graph_json_preserves_planning_delta(tmp_path):
     ]
 
 
+def test_load_web_kobe_graph_json_defaults_missing_visual_change_kind(tmp_path):
+    path = tmp_path / "legacy-graph.json"
+    path.write_text(
+        json.dumps(
+            {
+                "meta": {"app": "example", "start_node_id": "n0", "total_steps_completed": 0},
+                "nodes": [],
+                "edges": [
+                    {
+                        "source_node_id": "n0",
+                        "target_node_id": "n1",
+                        "action": {"action_kind": "click", "semantic_id": "observe"},
+                        "execution_trace": {},
+                        "observed_delta": [],
+                        "evidence": [],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    loaded = load_web_kobe_graph_json(path)
+
+    assert loaded.edges[0].visual_change_kind == "unknown"
+
+
 def test_load_web_kobe_graph_json_preserves_planning_transition(tmp_path):
     graph = WebKobeGraph(
         app="example",

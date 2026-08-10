@@ -13,6 +13,9 @@ from ai_web_explorer.grounded_web.graph import BrowserAction
 from ai_web_explorer.grounded_web.graph import BusinessTransition
 
 VisualDeltaProvider = Callable[..., str]
+VISUAL_CHANGE_KINDS = frozenset(
+    {"none", "presentation", "state_indicator", "surface", "mixed", "unknown"}
+)
 
 
 @dataclass(frozen=True)
@@ -52,6 +55,7 @@ class VisualDeltaTrace:
 class VisualDeltaResult:
     planning_delta: PlanningDelta
     trace: VisualDeltaTrace
+    visual_change_kind: str = "unknown"
     # Kept for loading/caller compatibility; new visual-delta exploration does
     # not produce or consume business-transition judgments.
     business_transition: BusinessTransition | None = None
@@ -70,12 +74,18 @@ def _prompt_for_request(request: VisualDeltaRequest) -> str:
             "is visible. Return JSON only. Each fact must be a lowercase "
             "snake_case string, not an object or explanation sentence. Do "
             "not predict effects, infer hidden state, or mark anything "
-            "verified."
+            "verified. Classify the observed visual change as exactly one of "
+            "none (no visible change), presentation (styling or layout only), "
+            "state_indicator (a visible indicator of an existing state), "
+            "surface (a visible page or component surface changed), mixed "
+            "(more than one kind), or unknown (insufficient visual basis). This "
+            "classification is observation metadata only, not planning authority."
         ),
         "action": action,
         "required_json_fields": [
             "candidate_added_facts",
             "candidate_removed_facts",
+            "visual_change_kind",
         ],
     }
     return json.dumps(payload, indent=2, ensure_ascii=False)
@@ -124,6 +134,14 @@ def _fact_id_list(value: Any) -> list[str]:
         if len(facts) >= 8:
             break
     return facts
+
+
+def _visual_change_kind(value: Any) -> str:
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in VISUAL_CHANGE_KINDS:
+            return normalized
+    return "unknown"
 
 
 def summarize_visual_delta(
@@ -179,6 +197,7 @@ def summarize_visual_delta(
     overlap = set(candidate_added) & set(candidate_removed)
     candidate_added = [fact for fact in candidate_added if fact not in overlap]
     candidate_removed = [fact for fact in candidate_removed if fact not in overlap]
+    visual_change_kind = _visual_change_kind(parsed.get("visual_change_kind"))
 
     delta = PlanningDelta(
         candidate_added_facts=candidate_added,
@@ -190,6 +209,7 @@ def summarize_visual_delta(
     )
     return VisualDeltaResult(
         planning_delta=delta,
+        visual_change_kind=visual_change_kind,
         trace=_trace(
             prompt=prompt,
             raw_response=raw_response,

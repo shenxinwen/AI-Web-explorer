@@ -43,6 +43,7 @@ def verify_planning_delta(
     candidate_removed: list[str] = []
     verified_added: list[str] = []
     verified_removed: list[str] = []
+    preserved_profile_facts: list[str] = []
     evidence: list[str] = []
 
     for fact_id in sorted(profile_fact_ids):
@@ -76,12 +77,16 @@ def verify_planning_delta(
                 _add_unique(candidate_removed, "cart_has_items")
                 _add_unique(verified_removed, "cart_has_items")
             evidence.append(f"structured count {key} changed from {before} to {after}")
+        elif _is_positive_number(before) and _is_positive_number(after):
+            if "cart_has_items" in profile_fact_ids:
+                _add_unique(preserved_profile_facts, "cart_has_items")
 
     return PlanningDelta(
         candidate_added_facts=candidate_added,
         candidate_removed_facts=candidate_removed,
         verified_added_facts=verified_added,
         verified_removed_facts=verified_removed,
+        preserved_profile_facts=preserved_profile_facts,
         profile_fact_ids=sorted(set(candidate_added + candidate_removed)),
         evidence=evidence,
         confidence=1.0 if verified_added or verified_removed else None,

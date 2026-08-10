@@ -44,3 +44,25 @@ def test_verify_planning_delta_removes_cart_has_items_when_cart_count_reaches_ze
     assert delta.verified_removed_facts == ["cart_has_items"]
     assert delta.candidate_removed_facts == ["cart_has_items"]
     assert "cart_count" in delta.evidence[0]
+
+
+def test_verify_planning_delta_preserves_profile_fact_across_positive_cart_count_change():
+    delta = verify_planning_delta(
+        profile=ecommerce_checkout_profile(),
+        before_signature={"cart_count": 1},
+        after_signature={"cart_count": 2},
+    )
+
+    assert delta.preserved_profile_facts == ["cart_has_items"]
+    assert delta.verified_added_facts == []
+    assert delta.verified_removed_facts == []
+
+
+def test_verify_planning_delta_does_not_preserve_profile_fact_across_zero_boundary():
+    delta = verify_planning_delta(
+        profile=ecommerce_checkout_profile(),
+        before_signature={"cart_count": 0},
+        after_signature={"cart_count": 1},
+    )
+
+    assert delta.preserved_profile_facts == []

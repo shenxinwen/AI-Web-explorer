@@ -191,6 +191,7 @@ def _planning_delta_from_dict(data: dict[str, Any] | None) -> PlanningDelta | No
         candidate_removed_facts=list(data.get("candidate_removed_facts", [])),
         verified_added_facts=list(data.get("verified_added_facts", [])),
         verified_removed_facts=list(data.get("verified_removed_facts", [])),
+        preserved_profile_facts=list(data.get("preserved_profile_facts", [])),
         profile_fact_ids=list(data.get("profile_fact_ids", [])),
         generated_fact_ids=list(data.get("generated_fact_ids", [])),
         evidence=list(data.get("evidence", [])),
@@ -290,6 +291,7 @@ def _edge_from_dict(data: dict[str, Any]) -> WebKobeEdge:
         business_transition=_business_transition_from_dict(
             data.get("business_transition")
         ),
+        visual_change_kind=str(data.get("visual_change_kind", "unknown")),
         visit_count=int(data.get("visit_count", 1)),
         status=str(data.get("status", "verified")),
         evidence=[_evidence_from_dict(item) for item in data.get("evidence", [])],

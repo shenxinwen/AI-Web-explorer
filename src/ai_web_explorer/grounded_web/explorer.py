@@ -371,6 +371,7 @@ class WebKobeExplorer:
         )
         business_transition = None
         visual_delta_facts = ([], [])
+        visual_change_kind = "unknown"
         if (
             observation_allowed
             and self.visual_delta_provider is not None
@@ -392,6 +393,7 @@ class WebKobeExplorer:
                 list(visual_result.planning_delta.candidate_added_facts),
                 list(visual_result.planning_delta.candidate_removed_facts),
             )
+            visual_change_kind = visual_result.visual_change_kind
             visual_trace = visual_result.trace.to_dict()
             visual_trace["candidate_added_facts"] = list(visual_delta_facts[0])
             visual_trace["candidate_removed_facts"] = list(visual_delta_facts[1])
@@ -494,6 +496,7 @@ class WebKobeExplorer:
             planning_delta=planning_delta,
             planning_transition=planning_transition,
             business_transition=business_transition,
+            visual_change_kind=visual_change_kind,
             status=edge_status,
             evidence=[Evidence(source="web_kobe_explorer", url=before.url)],
         )

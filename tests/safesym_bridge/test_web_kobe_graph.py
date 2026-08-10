@@ -155,6 +155,7 @@ def test_web_kobe_graph_serializes_node_edge_and_evidence():
             evidence=["login controls were replaced by shopping controls"],
             confidence=0.95,
         ),
+        visual_change_kind="state_indicator",
         planning_transition=PlanningTransition(
             pre_facts=["required_info_missing"],
             added_facts=["logged_in"],
@@ -223,6 +224,7 @@ def test_web_kobe_graph_serializes_node_edge_and_evidence():
     assert data["edges"][0]["status"] == "verified"
     assert data["edges"][0]["pddl_hint"]["add_effects"] == ["logged_in", "at_home"]
     assert data["edges"][0]["planning_delta"]["verified_added_facts"] == ["logged_in"]
+    assert data["edges"][0]["visual_change_kind"] == "state_indicator"
     assert data["edges"][0]["planning_transition"] == {
         "pre_facts": ["required_info_missing"],
         "added_facts": ["logged_in"],

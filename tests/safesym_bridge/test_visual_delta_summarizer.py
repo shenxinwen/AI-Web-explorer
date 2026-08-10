@@ -73,6 +73,54 @@ def test_visual_delta_prompt_describes_set_difference_and_allows_empty_sets():
     assert '"candidate_removed_facts"' in prompt
 
 
+def test_visual_delta_prompt_defines_bounded_change_kinds_without_profile_authority():
+    request = VisualDeltaRequest(
+        goal="Observe the page.",
+        action=BrowserAction("business_intent", None, "observe"),
+        profile=ecommerce_checkout_profile(),
+        before_screenshot_path="before.png",
+        after_screenshot_path="after.png",
+    )
+    prompts = []
+
+    def provider(prompt, *, before_screenshot_path, after_screenshot_path):
+        prompts.append(prompt)
+        return '{"candidate_added_facts":[],"candidate_removed_facts":[],"visual_change_kind":"presentation"}'
+
+    result = summarize_visual_delta(request, provider=provider)
+
+    assert result.visual_change_kind == "presentation"
+    prompt = prompts[0]
+    assert "presentation" in prompt
+    assert "state_indicator" in prompt
+    assert "surface" in prompt
+    assert "mixed" in prompt
+    assert "unknown" in prompt
+    assert "cart_has_items" not in prompt
+    assert "planning_facts" not in prompt
+
+
+def test_visual_delta_uses_unknown_for_invalid_change_kind_and_failed_observation():
+    request = VisualDeltaRequest(
+        goal="Observe the page.",
+        action=BrowserAction("business_intent", None, "observe"),
+        before_screenshot_path="before.png",
+        after_screenshot_path="after.png",
+    )
+
+    def invalid_provider(prompt, *, before_screenshot_path, after_screenshot_path):
+        return '{"candidate_added_facts":[],"candidate_removed_facts":[],"visual_change_kind":"unsupported"}'
+
+    invalid = summarize_visual_delta(request, provider=invalid_provider)
+    assert invalid.visual_change_kind == "unknown"
+
+    def failing_provider(prompt, *, before_screenshot_path, after_screenshot_path):
+        raise RuntimeError("unavailable")
+
+    failed = summarize_visual_delta(request, provider=failing_provider)
+    assert failed.visual_change_kind == "unknown"
+
+
 def test_summarize_visual_delta_does_not_generate_business_transition_fields():
     request = VisualDeltaRequest(
         goal="Add one item to the cart.",
