@@ -23,7 +23,7 @@
 - VLM Visual Affordance 只提出业务动作候选假设；本地逻辑选择一个候选，Stagehand 负责执行尝试，动作后观察负责验证可见结果。候选能力不等于已验证转换，只有成功且有观察证据支持的 edge 才能作为已验证转换。
 - `graph.json` 是可独立加载的紧凑 Raw Graph；详细执行证据通过 `graph_evidence.json` sidecar 和 `evidence_ref` 保留，`raw_graph.json` 保留输入 JSON 的原始形状。每个完成动作后由 checkpoint 配对保存 embedding、trace、graph/evidence；checkpoint 不提供 resume、replay 或 browser-back recovery。
 - `planning_abstraction.py` 离线把可保守合并的 presentation-equivalent raw observations 归入 Planning Graph，并聚合候选能力及精确观察 provenance；`planning_graph.json` 与 `planning_abstraction_report.json` 是离线抽象/审计产物，sidecar 不参与 PDDL。
-- profile facts 是本地 verifier 的强/弱边界和候选谓词词表，不是网页状态全集；Visual Delta 不接收 profile facts。Visual observations 只保留在 `execution_trace.metadata.visual_delta_trace`，不进入 `PlanningState`、planning transitions、target matching planning facts 或 Phase A PDDL。embedding 只用于状态记忆、相似匹配和局部动作去重，不定义 node identity，也不是 PDDL facts。
+- profile facts 是本地 verifier 确认的、强但不完整的语义锚点/状态分界和候选谓词词表，不是网页状态全集；Visual Delta 不接收 profile facts。Visual observations 只保留在 `execution_trace.metadata.visual_delta_trace`，不进入 `PlanningState`、planning transitions、target matching planning facts 或 Phase A PDDL。embedding 只用于状态记忆、相似匹配和局部动作去重，不定义 node identity，也不是 PDDL facts。
 - Phase A 只从 Planning Graph 投影 canonical locations 和符合条件的、已观察成功的非自环业务转换，生成 `domain.pddl`；本阶段不生成 `problem.pddl`，Visual Delta、supporting facts、raw candidate facts 和 `PlanningState` 都不是 Phase A predicates、preconditions 或 effects。
 - 当前探索器是 forward-only，只沿当前路线处理固定候选，候选耗尽或最大步数到达即可结束，不代表全站探索完成。Visual Delta 当前有 bounded 分类实现，但分类体系仍待审查；planning abstraction 已实现并有单测覆盖，但尚未通过新的真实网页实验验证。
 
@@ -215,7 +215,9 @@
 - target matching 仍是 V1，不替代后续 UI-KOBE 风格的二次图优化。
 - 本地 fixture 探索的 edge source 更接近真实执行轨迹，避免所有低层动作都从 start node 发散。
 
-## 2026-08-02 - 确立 graph 质量评价原则
+## 2026-08-02 - 确立 graph 质量评价原则（历史内容；单层 graph identity / merge-before-create 已被 2026-08-10 双层决策取代）
+
+> 本条保留当时的单层 graph 质量背景；其中“节点表达业务状态唯一性”和“merge-before-create”原则已被 2026-08-10 的 Raw Graph + Planning Graph 决策取代。
 
 更改：
 - 在 `docs/current-project-overview.zh-CN.md` 和 `docs/current-project-overview.md` 中新增 graph 质量原则。
@@ -231,6 +233,7 @@
 - 后续 graph 质量审查至少要检查：节点唯一性、merge-before-create、边表达路径而节点表达状态、PDDL location predicate 可读性、evidence 可追溯性。
 - embedding 不应只作为 metadata 记录，还应参与目标节点定位和合并。
 - PDDL 中大量 `at_xxx_002` / `at_xxx_003` 应被视为 graph merge 或命名策略的质量信号，而不是单纯 projector 后处理问题。
+- 当前 Raw Graph 允许保留明确、稳定的观察节点；业务语义唯一性改在 Planning Graph 的 grouping 层评价，不能用本条的单层原则约束 Raw observation identity。
 
 ## 2026-08-02 - 修正通用探索实验入口与动作记忆边界（部分字段描述已被当前 schema 取代）
 

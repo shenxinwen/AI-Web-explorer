@@ -358,7 +358,8 @@ stable enough:
 - materialized business nodes now derive labels from profile-provided hints /
   facts / actions, but non-business nodes and repeated labels can still be weak;
 - action preconditions depend on correct source-node localization;
-- incomplete profile facts make PDDL degrade into a location path;
+- Phase A intentionally remains a location-level skeleton; a future richer
+  business-fact projection would be limited by verifier and profile coverage;
 - Phase A currently projects only canonical locations and eligible non-self-loop
   business transitions; Visual Delta facts do not enter `domain.pddl`.
 

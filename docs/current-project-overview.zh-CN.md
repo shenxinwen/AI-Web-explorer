@@ -71,8 +71,8 @@ Stagehand、Playwright、VLM/LLM、embedding 都是工具或证据来源。Web-K
   -> 更新 raw node 和 edge evidence
   -> 写入已完成动作的 checkpoint
   -> 离线运行 planning abstraction 和 Phase A
-  -> 如果当前节点候选耗尽，则以 `current_state_exhausted` 停止，不执行 browser back
-  -> 根据步数、重复、frontier 或目标覆盖决定是否继续
+  -> 如果当前节点候选耗尽，则以 `current_state_exhausted` 自然停止，不执行 browser back
+  -> 否则继续，直到达到最大步数或显式终止条件；真实 runner 不按重复/无进展阈值提前终止，也不按 frontier 或目标覆盖恢复探索
 ```
 
 当前客观状态：
@@ -267,7 +267,7 @@ SafeSym 可以结构性消费当前产物，但 PDDL 的语义质量还不稳定
 - location predicate 仍可能出现 `at_shopping_002` 这类不可读名字；
 - VLM state label 已用于节点展示；名称只做本地技术清洗，不参与 node identity 或 matching；
 - action precondition 依赖 source node 定位，需要继续用实验确认；
-- profile facts 不完整时，PDDL 会退化为 location path；
+- Phase A 当前有意保持 location-level skeleton；未来若增强事实投影以获得更丰富业务语义，才会受 verifier/profile coverage 限制；
 - Phase A 当前从 planning graph 投影 planning locations 和非自环业务转换；Visual Delta facts 不进入 domain PDDL。
 
 ### P1: 探索仍是受限的 forward-only frontier
