@@ -23,6 +23,7 @@
 - 当前真实 Stagehand runner 以请求的最大步数作为主要终止条件。
 - 当前节点没有可执行候选时仍可自然提前结束；真实 runner 暂时关闭连续无进展提前终止，通用 controller 仍保留该可选机制。
 - 每个完成动作后原子更新 latest 的 embedding、Stagehand trace 和 graph/evidence；正常完成后再写一次最终结果，graph/evidence 是最后提交的配对标记。
+- 正常完成后的 `graph.meta.exploration_summary` 记录 `requested_steps`、`steps_completed` 和 `stop_reason`；中途 checkpoint 不写入尚未确定的终止摘要。
 - checkpoint 只保护已经完成的探索，不提供 resume、replay 或逐步历史版本。
 
 原因：
@@ -83,7 +84,7 @@
 - 已观察到的业务边即使节点仍有未尝试候选，也应成为 Phase A 的可审查事实；未完成候选不等于已观察边无效。
 
 影响：
-- `current_state_exhausted`、连续无进展和最大步数共同决定探索停止。
+- 通用 controller 仍可由 `current_state_exhausted`、可选连续无进展阈值和最大步数决定停止；自 2026-08-10 起，真实 Stagehand runner 关闭连续无进展阈值，主要由最大步数和当前节点候选耗尽决定。
 - raw graph 仍原样保留；canonical graph/domain 只消费符合现有成功、目标存在和非自环规则的 observed edges。
 - 不新增持久化 graph 字段、memory 表或 PDDL 事实来源。
 
@@ -101,7 +102,7 @@
 - 这个方向更接近 SEE / UI-KOBE 类探索图构建的 frontier 思路，同时保持第一版实现足够简单。
 
 影响：
-- 后续实验应验证 forward-only 候选耗尽停止、连续无进展阈值和重复节点命中。
+- 后续实验应验证 forward-only 候选耗尽停止和重复节点命中；连续无进展阈值只在通用 controller 中单独评估，真实 Stagehand runner 自 2026-08-10 起不使用该提前终止条件。
 - embedding 继续服务 target merge 和当前/可信历史节点上下文内的动作记忆，不在正常探索中每步覆盖 source。
 - graph/PDDL 质量评估继续关注候选耗尽、重复节点命中和观察成功边，不把 browser back 次数作为当前闭环指标。
 

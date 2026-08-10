@@ -139,7 +139,6 @@ embedding memory 只辅助定位和避免重复，不直接进入 PDDL。
 - `WebKobeGraphManager.build_planning_transition`
 - `WebKobeGraphManager.apply_planning_transition`
 - `resolve_business_target_node`
-- `WebKobeExplorer._avoid_incompatible_existing_target_state`，用于避免同页面壳但 planning facts 不兼容时污染已有节点。
 - `find_best_state_match`
 - `build_exploration_context`
 
@@ -161,7 +160,7 @@ embedding memory 只辅助定位和避免重复，不直接进入 PDDL。
 - 更新 graph；
 - 按 step budget 或 terminal condition 停止。
 - 当前节点候选耗尽时以 `current_state_exhausted` 停止，不执行 browser back；连续没有新 graph information 时累计无进展。真实 Stagehand runner 暂时关闭连续无进展提前终止，主要受最大步数约束。
-- 每个完成动作后原子更新 latest checkpoint（embedding、trace、graph/evidence），正常完成后再写一次；checkpoint 不提供 resume/replay。
+- 每个完成动作后更新 latest checkpoint（embedding、Stagehand trace、graph/evidence），正常完成后再写一次；最终 `graph.meta.exploration_summary` 记录 `requested_steps`、`steps_completed` 和 `stop_reason`。checkpoint 不提供 resume、replay、browser-back recovery 或逐步历史版本。
 
 低层 DOM interactables 可以继续作为运行时 state summary / embedding matching 的辅助输入，但不再输出到 canonical `graph.json` node，也不作为 graph memory 或探索决策单位。旧的 LLM action selector 路径已经移除，避免系统回退到 selector/locator 驱动的探索。
 
@@ -175,7 +174,6 @@ embedding memory 只辅助定位和避免重复，不直接进入 PDDL。
 - `WebKobeExplorer._match_current_state`
 - `WebKobeExplorer._record_source_business_affordances`
 - `WebKobeExplorationController.run`
-- `select_action_with_llm`
 
 ### PDDL 映射与 SafeSym Bridge 层
 
@@ -225,7 +223,7 @@ graph artifact 的布局由 `src/ai_web_explorer/safesym_bridge/graph_artifacts.
 - 配置 VLM 和 embedding provider；
 - 注入 benchmark/test context；
 - 写出 graph、trace、screenshots、embedding、PDDL、smoke outputs。
-- generic `run_stagehand_exploration` 在每个完成动作后写入 checkpoint，并在正常结束时再次写入最终 artifact；graph/evidence 是最后提交的配对标记。
+- generic `run_stagehand_exploration` 在每个完成动作后按 embedding、Stagehand trace、graph/evidence 的顺序写入 checkpoint，并在正常结束时写入带 `exploration_summary` 的最终 artifact；graph/evidence 是最后提交的配对标记。
 
 这一层是工程 glue。它不应该成为 graph 语义或 planning 语义的来源。
 
@@ -272,8 +270,10 @@ WebKobeExplorer.explore_one_step
   -> summarize_visual_delta (observation trace only) / verify_planning_delta
   -> GraphManager.build_planning_transition
   -> resolve_business_target_node
-  -> 拆分同页面但 planning facts 不兼容的状态变体
   -> GraphManager.add_edge
+  -> controller 调用可选的完成步骤 checkpoint
+  -> 真实 runner 依次写入 embedding、Stagehand trace、graph/evidence
+  -> 正常结束时写入 `graph.meta.exploration_summary`
   -> PDDL projector consumes graph JSON
 ```
 

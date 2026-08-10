@@ -52,8 +52,8 @@ observe current state
   -> observe before/after business changes
   -> update node, edge, planning_state, and planning_transition
   -> generate or update PDDL/SafeSym artifacts
-  -> if the current node is exhausted, backtrack to an older node with frontier
-  -> continue or stop based on budget, repetition, frontier, or business coverage
+  -> stop with `current_state_exhausted` when the current node has no candidate
+  -> otherwise continue until the configured maximum step count
 ```
 
 Current objective status:
@@ -73,10 +73,13 @@ explicit URL/signature/visual changes cannot merge the candidate back to the
 source, while reliable non-source history may still be reused
 source localization: normal exploration trusts the current-node pointer;
 source embedding match is recovery/diagnostic only
-frontier / DFS exploration policy: minimal business-affordance selector/backtrack
-behavior is implemented; graph meta now emits frontier_metrics
-consecutive unproductive stop policy: implemented; failed/no-op steps no
-longer stop the run until the threshold is reached
+forward-only frontier policy: the current node consumes its fixed first-visit
+candidates and stops when they are exhausted; graph meta emits frontier_metrics
+consecutive unproductive stop policy: retained as an optional generic-controller
+mechanism, but disabled by the real Stagehand runner
+checkpoint persistence: after every completed action, latest embedding, trace,
+graph, and evidence artifacts are refreshed; normal completion writes
+`graph.meta.exploration_summary`
 Stagehand thinking/tool_choice errors: continue after-state observation; a
 change is a successful transition, no change is `no_observed_change`, and
 unknown failures remain failed self-loops without Visual Delta
@@ -98,7 +101,6 @@ confirms profile facts from local structured signatures
 PDDL semantic quality: consumable, but not stable or readable enough
 business node naming: materialized business nodes can derive labels from
 profile hints / facts / actions
-same-page state variants: split when planning facts are incompatible
 previous real-site runs: historical evidence only; the latest controlled
 conclusion still needs revalidation
 ```
@@ -264,8 +266,8 @@ generated. It must also preserve stable business-state identity:
 
 ### 7. Exploration policy should be frontier-first
 
-The confirmed V1 exploration policy is simple DFS / frontier, not free-form
-planning by Stagehand or VLM:
+The confirmed V1 exploration policy is a simple forward-only frontier, not
+free-form planning by Stagehand or VLM:
 
 - each business node owns 3-5 immediately executable business affordances; these
   candidates are written when the node first receives a frontier, and later
@@ -275,19 +277,19 @@ planning by Stagehand or VLM:
 - the current node prefers untried candidates; after execution, move to a new
   node, move to an accepted existing target node, or stay put if no effective
   change occurred;
-- once a node has no untried candidates, do not repeat a successful non-avoid
-  action; backtrack to an older node with frontier;
-- stop on max steps, no frontier, repeated-state budget, consecutive no-op /
-  failures, or an explicit terminal state.
+- once the current node has no untried candidates, record
+  `current_state_exhausted` and stop instead of repeating an older action;
+- use the configured maximum step count as the main real-run limit. The generic
+  controller retains an optional consecutive-unproductive threshold, but the
+  real Stagehand runner currently disables it.
 
 Short term, tried/no-op/failed state is derived from existing edges. Do not add
 a large memory table yet. The old selector/locator fallback has been removed;
 the business-affordance selector no longer chooses already-tried successful
-actions after a node's local candidates are exhausted. Successful browser back
-now pops a lightweight visit stack and restores `_current_node_id`.
-`graph.meta.frontier_metrics` records per-node candidates, tried/untried/no-op/
-failed action ids, repeated target hits, and backtrack count. Full DFS recovery
-can later use source embedding relocalization.
+actions after a node's local candidates are exhausted. Browser-back recovery is
+not part of the current loop. `graph.meta.frontier_metrics` records per-node
+candidates, tried/untried/no-op/failed action ids, and repeated target hits.
+Replay and broader frontier recovery remain later work.
 
 ## Main Problems
 
@@ -330,19 +332,13 @@ stable enough:
 - Phase A currently projects only canonical locations and eligible non-self-loop
   business transitions; Visual Delta facts do not enter `domain.pddl`.
 
-Recent fix: same-page states with incompatible planning facts are now split
-into state variants instead of overwriting the existing page node. This reduces
-the risk that a later state, such as `cart_has_items`, pollutes the exploration
-start node.
-
 ### P1: exploration still needs frontier validation and refinement
 
-The system has business affordances and embedding memory, but not mature:
+The system has business affordances, local tried-action memory, semantic action
+deduplication, and embedding memory, but it still lacks mature:
 
-- candidate action ranking;
-- tried-action memory;
-- duplicate/no-op penalty;
-- backtracking;
+- candidate ranking and richer duplicate/no-op penalties;
+- replay or browser-back recovery;
 - coverage stop conditions.
 
 It is closer to bounded exploration V1 than mature free exploration. A previous
@@ -351,17 +347,17 @@ that VLM produced no candidates; it was that the old selector fell back to
 "successful but non-avoid" actions after all local candidates had been tried,
 so low-progress successful actions could repeat. The minimal fix is now in
 place: if a node has no untried business candidates, selection returns `None`
-and triggers browser back / visit-stack backtracking. The old LLM action
+and the run ends with `current_state_exhausted`. The old LLM action
 selector / OpenAI action selector modules have been deleted so exploration
 cannot silently return to locator-driven behavior.
 
-The controller now uses a consecutive-unproductive-step policy. A single
-`failed_execution`, `no_observed_change`, or productive control backtrack does
-not stop exploration. The run stops on max steps, terminal condition, no edge
-with no productive control action, or `consecutive_unproductive_steps` reaching
-the configured threshold. `graph.meta` records `last_step_kind`,
-`last_step_status`, `consecutive_unproductive_steps`, and
-`max_consecutive_unproductive_steps`.
+The generic controller still tracks consecutive unproductive steps and can use
+the configured threshold. The real Stagehand runner disables that early stop:
+it continues through failed/no-op/repeated steps until the maximum step count or
+current-state exhaustion. Each completed action writes a latest checkpoint;
+normal completion adds `graph.meta.exploration_summary` with requested steps,
+completed steps, and stop reason. Checkpointing does not provide resume, replay,
+or per-step artifact history.
 
 Recent cleanup moved the generic Stagehand exploration default to
 `observed_action`, preserves VLM candidate `supporting_facts` in graph
@@ -381,7 +377,7 @@ semantic overlap and remain a deferred schema-review item.
 ### P1: WebKobeExplorer has centralization risk
 
 `WebKobeExplorer` coordinates observation, action choice, VLM, embedding,
-source matching, edge construction, planning transition, and backtracking. It is
+source matching, edge construction, and planning transition. It is
 the current mainline core, but new exploration policy should not keep growing
 inside `explore_one_step`.
 
@@ -407,50 +403,28 @@ Short term, preserve provenance and evidence.
 
 ## Historical Experiment Context
 
-A previous run on Practice Automated Testing Shopping wrote:
+A previous Practice Automated Testing Shopping run produced graph, embedding,
+trace, screenshot, and domain artifacts under:
 
 ```text
 outputs/experiments/practice_automated_testing/latest/
 ```
 
-Historical high-signal result:
-
-- 6 nodes and 8 edges were produced.
-- The run completed all 8 steps after treating the known Stagehand
-  `Thinking mode does not support this tool_choice` exception as non-fatal.
-- Target matching accepted some repeated states, but the graph still produced
-  duplicate-looking product list/detail state variants.
-- `domain_only/domain.pddl` was generated without choosing a concrete
-  `problem.pddl` goal.
-- The run stayed around product list/detail and cart-related states; it did not
-  progress reliably to checkout.
-
-Open problems from this run:
-
-- The old selector/locator fallback that could loop after exhausting local
-  candidates has been removed. Next runs should verify that business-affordance
-  selection now backtracks instead of repeating successful low-progress actions.
-- Business action memory is derived from graph edges, not stored as explicit
-  candidate status on each node; this is acceptable short term but needs a
-  clearer frontier policy.
-- Similar business states still produce duplicate-looking `at_*_002`
-  predicates, so merge-before-create still needs real-site improvement.
-- Graph edge metadata still embeds large visual prompt/response traces. These
-  should mostly live in trace artifacts, while graph should keep compact
-  evidence and planner-relevant state.
-- Low-value or already-covered actions such as `download_invoice_pdf` can still
-  appear as planner actions.
+Those artifacts are historical evidence, not proof of the current checkpointed
+runner. They still show the important unresolved quality problem: similar
+business states can become duplicate-looking graph/PDDL locations. The next
+controlled run should validate the current forward-only stop behavior,
+checkpoint persistence, and target matching before drawing new conclusions.
 
 ## Next Priorities
 
 1. Re-run Practice Automated Testing Shopping under controlled conditions and
-   check whether the minimal frontier/DFS behavior escapes the product
-   list/detail loop and reaches
-   cart/checkout states.
+   verify forward-only exhaustion, maximum-step behavior, checkpoint persistence,
+   and progress toward cart/checkout states.
 2. Use `graph.meta.frontier_metrics` to inspect candidates per node,
-   tried/untried/no-op/failed counts, backtracks, and repeated-node hits.
-3. Check whether the default consecutive-unproductive threshold of 3 is too
-   strict or too loose for real websites.
+   tried/untried/no-op/failed counts, repeated-node hits, and stop reason.
+3. Evaluate the generic controller's default consecutive-unproductive threshold
+   separately; the real Stagehand runner does not currently use it.
 4. Continue validating target matching and keep source embeddings limited to
    recovery/diagnostic use.
 5. Inspect graph and domain PDDL quality, especially source/target,

@@ -126,8 +126,6 @@ Main responsibilities:
 - derive readable `node_label` values for materialized business nodes from
   profile-provided state label hints, planning facts, and business-action
   fallback;
-- split same-page state variants when an existing node's planning facts are
-  incompatible with the current transition post-state;
 - propagate source-aware planning state;
 - keep state embedding summaries focused on page/business evidence instead of
   Stagehand policy prompt boilerplate;
@@ -153,7 +151,6 @@ Main functions/classes:
 - `WebKobeGraphManager.build_planning_transition`
 - `WebKobeGraphManager.apply_planning_transition`
 - `resolve_business_target_node`
-- `WebKobeExplorer._avoid_incompatible_existing_target_state`
 - `find_best_state_match`
 - `build_exploration_context`
 
@@ -177,7 +174,11 @@ Main responsibilities:
   incompatible node;
 - call the Stagehand operation layer and VLM/DOM observation layers;
 - update graph state;
-- stop by budget or controller terminal condition.
+- stop with `current_state_exhausted` when the current node has no candidate;
+- stop by budget or an optional controller terminal condition;
+- expose an optional per-completed-step checkpoint callback. The generic
+  controller retains a consecutive-unproductive threshold, while the real
+  Stagehand runner disables that threshold.
 
 Low-level DOM interactables may still be used as runtime state summary /
 embedding-matching input, but they are no longer emitted in canonical
@@ -198,7 +199,6 @@ Main functions/classes:
 - `WebKobeExplorer._resolve_current_source_id`
 - `WebKobeExplorer._record_source_business_affordances`
 - `WebKobeExplorationController.run`
-- `select_action_with_llm`
 
 ### PDDL Mapping And SafeSym Bridge
 
@@ -249,7 +249,14 @@ Main responsibilities:
 - configure Stagehand;
 - configure VLM and embedding providers;
 - wire benchmark/test context;
-- write graph, trace, screenshot, embedding, PDDL, and smoke outputs.
+- write graph, trace, screenshot, embedding, PDDL, and smoke outputs;
+- checkpoint embeddings and Stagehand trace before committing the graph/evidence
+  pair after each completed action;
+- write the final `graph.meta.exploration_summary` (`requested_steps`,
+  `steps_completed`, and `stop_reason`) after normal completion.
+
+Checkpointing overwrites the latest artifacts. It protects completed work but
+does not provide resume, replay, browser-back recovery, or per-step history.
 
 This layer is practical glue. Keep it from growing into the source of graph or
 planning semantics.
@@ -299,8 +306,10 @@ WebKobeExplorer.explore_one_step
      verify_planning_delta
   -> GraphManager.build_planning_transition
   -> resolve_business_target_node
-  -> split incompatible same-page planning-state variants
   -> GraphManager.add_edge
+  -> controller invokes the optional completed-step checkpoint
+  -> real runner writes embedding, Stagehand trace, then graph/evidence
+  -> normal completion writes `graph.meta.exploration_summary`
   -> PDDL projector consumes graph JSON
 ```
 
