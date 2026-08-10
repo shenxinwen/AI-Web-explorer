@@ -258,6 +258,8 @@ def _aggregate_capabilities(
                 existing_names.add(canonical)
 
     for edge in graph.edges:
+        if not edge.execution_trace.success or edge.status == "failed_execution":
+            continue
         group_id = raw_to_planning.get(edge.source_node_id)
         if group_id is None:
             continue

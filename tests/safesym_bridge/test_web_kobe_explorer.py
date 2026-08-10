@@ -460,6 +460,63 @@ async def test_explore_one_step_preserves_initial_start_node_across_steps():
 
 
 @pytest.mark.anyio
+async def test_two_steps_with_current_pointer_do_not_materialize_orphan_before_draft():
+    adapter = FakeAdapter()
+    explorer = _business_explorer(adapter)
+
+    first_graph = await explorer.explore_one_step()
+    first_snapshots = {
+        node.node_id: dict(node.last_state_snapshot) for node in first_graph.nodes
+    }
+    second_graph = await explorer.explore_one_step()
+
+    edge_endpoints = {
+        node_id
+        for edge in second_graph.edges
+        for node_id in (edge.source_node_id, edge.target_node_id)
+    }
+    assert {node.node_id for node in second_graph.nodes} == edge_endpoints
+    assert {
+        node.node_id: dict(node.last_state_snapshot)
+        for node in second_graph.nodes
+        if node.node_id in first_snapshots
+    } == {
+        node_id: snapshot
+        for node_id, snapshot in first_snapshots.items()
+        if node_id in edge_endpoints
+    }
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("change_kind", ["presentation", "state_indicator", "surface", "mixed"])
+async def test_explicit_visual_change_kind_materializes_observed_transition(change_kind):
+    adapter = SamePageBusinessChangeAdapter()
+
+    def provider(
+        prompt,
+        *,
+        current_screenshot_path=None,
+        before_screenshot_path=None,
+        after_screenshot_path=None,
+    ):
+        if current_screenshot_path is not None:
+            return _business_affordance_response("observe_page")
+        return (
+            '{"candidate_added_facts":[],"candidate_removed_facts":[],'
+            f'"visual_change_kind":"{change_kind}"}}'
+        )
+
+    explorer = _business_explorer(adapter, visual_delta_provider=provider)
+
+    graph = await explorer.explore_one_step()
+
+    edge = graph.edges[0]
+    assert edge.status == "succeeded_with_observed_change"
+    assert edge.source_node_id != edge.target_node_id
+    assert edge.visual_change_kind == change_kind
+
+
+@pytest.mark.anyio
 async def test_explore_one_step_marks_repeated_self_loop_edge_unproductive():
     adapter = RepeatedStateAdapter()
     provider = _default_visual_provider(added_facts=[], removed_facts=[])

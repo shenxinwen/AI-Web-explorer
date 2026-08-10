@@ -214,3 +214,27 @@ def test_ambiguous_action_embedding_does_not_choose_an_earliest_alias():
         affordance.action_name
         for affordance in artifacts.planning_graph.nodes[0].business_affordances
     ] == ["sort_by_name", "order_items_alphabetically"]
+
+
+def test_failed_edge_does_not_add_its_action_to_capability_report():
+    graph = WebKobeGraph(
+        app="example",
+        start_node_id="A",
+        total_steps_completed=1,
+        nodes=[_node("A"), _node("B")],
+        edges=[
+            _edge(
+                "A",
+                "B",
+                "failed_action",
+                visual_change_kind="presentation",
+                success=False,
+            )
+        ],
+    )
+
+    artifacts = build_planning_state_graph(graph)
+
+    assert "failed_action" not in {
+        item["action_name"] for item in artifacts.report.capabilities
+    }

@@ -65,6 +65,9 @@ def test_visual_delta_prompt_describes_set_difference_and_allows_empty_sets():
     assert "visible after the action and not before" in prompt
     assert "visible before the action and not after" in prompt
     assert "unchanged" in prompt
+    assert "ordering" in prompt
+    assert "filtering" in prompt
+    assert "pagination" in prompt
     assert "Both lists may be empty" in prompt
     assert "supporting_facts" not in prompt
     assert "business_relevance" not in prompt

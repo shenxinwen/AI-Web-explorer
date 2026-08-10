@@ -258,7 +258,18 @@ class WebKobeExplorer:
             snapshot=before,
             interactables=before_interactables,
         )
-        source_id = self.manager.identify_or_add_node(_node_from_draft(before_draft))
+        current_pointer_id = self._current_node_id
+        if current_pointer_id is not None:
+            try:
+                self.manager.node_for_id(current_pointer_id)
+            except KeyError:
+                self._current_node_id = None
+                current_pointer_id = None
+        source_id = (
+            current_pointer_id
+            if current_pointer_id is not None
+            else self.manager.identify_or_add_node(_node_from_draft(before_draft))
+        )
         if self._start_node_id is None:
             self._start_node_id = source_id
         source_id = self._current_source_id(default_source_id=source_id)
@@ -281,12 +292,6 @@ class WebKobeExplorer:
             before=before,
             before_interactables=before_interactables,
         )
-        if before_draft.node_id != source_id:
-            self._ensure_source_embedding(
-                node_id=before_draft.node_id,
-                before=before,
-                before_interactables=before_interactables,
-            )
         before_screenshot_path = await self._capture_screenshot("before")
         if before_screenshot_path is not None:
             self._record_source_business_affordances(
@@ -419,7 +424,18 @@ class WebKobeExplorer:
         visual_fact_change = bool(visual_delta_facts[0] or visual_delta_facts[1])
         path_changed = _url_path(before.url) != _url_path(after.url)
         signature_changed = before.signature != after.signature
-        state_changed = path_changed or signature_changed or visual_fact_change
+        visual_kind_change = visual_change_kind in {
+            "presentation",
+            "state_indicator",
+            "surface",
+            "mixed",
+        }
+        state_changed = (
+            path_changed
+            or signature_changed
+            or visual_fact_change
+            or visual_kind_change
+        )
 
         target_node = _node_from_draft(after_draft)
         if not observation_allowed or not state_changed:
@@ -460,7 +476,9 @@ class WebKobeExplorer:
         }
         target_id = self.manager.identify_or_add_node(target_node)
         node_was_new = target_id not in known_node_ids
-        if edge_status == "no_observed_change" and visual_fact_change:
+        if edge_status == "no_observed_change" and (
+            visual_fact_change or visual_kind_change
+        ):
             edge_status = "succeeded_with_observed_change"
         if source_id != target_id and edge_status in {
             "no_observed_change",
