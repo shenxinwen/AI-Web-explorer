@@ -77,7 +77,7 @@
 - 命中已有节点时继续使用该节点已经建立的固定候选，不重新生成候选。
 - 重复已知 `(source, action, target)` transition，或连续没有新节点/新语义转换，计为无进展；最大步数仍然有效。
 - runtime memory 只在当前节点或可靠匹配的历史节点上下文内避免同义动作；embedding 相似度用于局部语义去重，不做全局屏蔽。
-- Phase A 不再因为 frontier 尚未覆盖全部 affordance 而拒绝节点；部分 frontier 上已经真实观察成功、目标存在的边仍可进入 canonical graph 和 `domain.pddl`，失败或缺失目标的边仍排除。
+- Phase A 不再因为 frontier 尚未覆盖全部 affordance 而拒绝节点；部分 frontier 上已经真实观察成功、目标存在的边仍可进入 planning graph，跨 planning-state 的边可进入 `domain.pddl`，失败或缺失目标的边仍排除。
 
 原因：
 - 当前阶段需要先验证单向探索和停止边界，browser back、replay 和复杂 DFS recovery 不属于本轮最小闭环。
@@ -321,7 +321,7 @@
 
 更改：
 
-- `business_state_policy.resolve_business_target_node` 在 materialize 业务节点时，会根据 `planning_transition.added_facts` / `post_facts` 和 `business_transition.action_name` 生成更可读的 `node_label`。
+- 该历史实现后来已被 VLM 自由状态命名和离线 `planning_abstraction.py` 取代；`business_state_policy.resolve_business_target_node` 与 `BusinessTransition` 当前已移除，仅兼容读取历史 JSON key。
 - 业务节点的 `node_id` 前缀同步使用该语义 label，例如 `cart_with_items__business_*`，而不是退回 `shopping__business_*`。
 - PDDL projector 仍只读取 graph 中已有的 `node_label`，不直接调用 LLM/VLM，也不自行猜测网页含义。
 

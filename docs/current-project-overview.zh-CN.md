@@ -267,17 +267,17 @@ SafeSym 可以结构性消费当前产物，但 PDDL 的语义质量还不稳定
 
 `WebKobeExplorer` 目前同时处理观察、动作选择、VLM、embedding、source/target matching、edge 构造和 planning transition。它是当前主线核心，短期可以保留，但后续新增探索策略时不应该继续把所有逻辑塞进 `explore_one_step`。
 
-### P2: 低层 UI 证据已退出 canonical graph
+### P2: 低层 UI 证据已退出紧凑 raw graph
 
-低层 DOM interactables 可以在运行时作为 state summary / embedding matching 的辅助输入，但不再输出到 canonical `graph.json` 的 node 结构中。它不承担动作选择、动作记忆或 frontier 单位职责；`mark_interactable_explored`、`interactables_for_node`、旧 LLM action selector 和对应测试已经删除。业务探索图应围绕：
+低层 DOM interactables 可以在运行时作为 state summary / embedding matching 的辅助输入，但不再输出到紧凑 `graph.json` 的 node 结构中。它不承担动作选择、动作记忆或 frontier 单位职责；`mark_interactable_explored`、`interactables_for_node`、旧 LLM action selector 和对应测试已经删除。业务探索图应围绕：
 
 ```text
-business_affordances + business_transition + planning_transition
+business_affordances + raw observed edges + planning_transition
 ```
 
-### P2: verifier 缺失
+### P2: verifier 覆盖仍然有限
 
-当前 facts 多来自 VLM candidate 或轻量结构化规则。未来 verifier 应判断 candidate facts 是否可以成为 planner-facing truth。
+当前已有本地结构化 verifier，可确认少量 profile boundaries；它仍覆盖有限。VLM candidate facts 只作为观察证据，未来若要晋升为 planner-facing truth，仍需要显式本地规则或审查流程。
 
 短期先不做完整 verifier，但必须保留 provenance 和 evidence。
 

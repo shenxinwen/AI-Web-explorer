@@ -111,7 +111,7 @@ Main modules:
 
 - `src/ai_web_explorer/grounded_web/graph.py`
 - `src/ai_web_explorer/grounded_web/graph_manager.py`
-- `src/ai_web_explorer/grounded_web/business_state_policy.py`
+- `src/ai_web_explorer/grounded_web/planning_abstraction.py`
 - `src/ai_web_explorer/grounded_web/state_embedding.py`
 - `src/ai_web_explorer/grounded_web/embedding_provider.py`
 - `src/ai_web_explorer/grounded_web/exploration_index.py`
@@ -122,10 +122,10 @@ Main responsibilities:
 - record `BusinessAffordance`, `PlanningDelta`, `PlanningState`, and
   `PlanningTransition`, while remaining compatible with historical
   `BusinessTransition` data;
-- decide whether a business transition should materialize a new node;
-- derive readable `node_label` values for materialized business nodes from
-  profile-provided state label hints, planning facts, and business-action
-  fallback;
+- preserve explicit visible changes as distinct raw observations before
+  embedding target matching can rewrite them;
+- conservatively group presentation-equivalent observations offline and
+  aggregate observed capabilities with provenance;
 - propagate source-aware planning state;
 - keep state embedding summaries focused on page/business evidence instead of
   Stagehand policy prompt boilerplate;
@@ -150,7 +150,7 @@ Main functions/classes:
 - `WebKobeGraphManager.identify_or_add_node`
 - `WebKobeGraphManager.build_planning_transition`
 - `WebKobeGraphManager.apply_planning_transition`
-- `resolve_business_target_node`
+- `WebKobeExplorer._avoid_incompatible_existing_target_state`
 - `find_best_state_match`
 - `build_exploration_context`
 
@@ -305,12 +305,12 @@ WebKobeExplorer.explore_one_step
   -> summarize_visual_delta (raw observation trace only) /
      verify_planning_delta
   -> GraphManager.build_planning_transition
-  -> resolve_business_target_node
   -> GraphManager.add_edge
   -> controller invokes the optional completed-step checkpoint
   -> real runner writes embedding, Stagehand trace, then graph/evidence
   -> normal completion writes `graph.meta.exploration_summary`
-  -> PDDL projector consumes graph JSON
+  -> planning abstraction groups raw observations and aggregates capabilities
+  -> Phase A projector consumes planning graph
 ```
 
 For `Thinking mode does not support this tool_choice`, the explorer continues

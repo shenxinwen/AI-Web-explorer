@@ -122,12 +122,11 @@ WebKobeEdge
 PlanningState
 PlanningTransition
 BusinessAffordance
-BusinessTransition
 ```
 
 Historical `WebObservedGraph` designs remain only in old spec/plan documents.
-`BusinessTransition` remains load-compatible for historical graphs, but new
-exploration does not ask the VLM to produce BusinessTransition judgments.
+Historical `BusinessTransition` JSON keys remain load-compatible, but the
+runtime model and VLM judgment path have been removed.
 
 ### 2. Profile facts should have lower influence
 
@@ -381,23 +380,25 @@ source matching, edge construction, and planning transition. It is
 the current mainline core, but new exploration policy should not keep growing
 inside `explore_one_step`.
 
-### P2: low-level UI evidence is out of the canonical graph
+### P2: low-level UI evidence is out of the compact raw graph
 
 Low-level DOM interactables may still be used at runtime as state summary /
-embedding-matching input, but they are no longer emitted in canonical
+embedding-matching input, but they are no longer emitted in compact
 `graph.json` nodes. They do not own action choice, action memory, or frontier state.
 `mark_interactable_explored`, `interactables_for_node`, the old LLM action
 selector modules, and their tests have been removed. The business graph should
 gradually center on:
 
 ```text
-business_affordances + business_transition + planning_transition
+business_affordances + raw observed edges + planning_transition
 ```
 
-### P2: verifier is missing
+### P2: verifier coverage is still limited
 
-Facts currently come mostly from VLM candidates or lightweight structured rules.
-A future verifier must decide which facts become planner-facing truth.
+The local structured verifier can confirm a small set of profile boundaries,
+but its coverage remains limited. VLM candidate facts stay observation-only;
+promotion to planner-facing truth still requires an explicit local rule or
+review process.
 
 Short term, preserve provenance and evidence.
 

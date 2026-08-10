@@ -110,7 +110,7 @@ profile facts 位于这一层。它们的定位是“优先观察目标 + PDDL �
 
 - `src/ai_web_explorer/grounded_web/graph.py`
 - `src/ai_web_explorer/grounded_web/graph_manager.py`
-- `src/ai_web_explorer/grounded_web/business_state_policy.py`
+- `src/ai_web_explorer/grounded_web/planning_abstraction.py`
 - `src/ai_web_explorer/grounded_web/state_embedding.py`
 - `src/ai_web_explorer/grounded_web/embedding_provider.py`
 - `src/ai_web_explorer/grounded_web/exploration_index.py`
@@ -119,8 +119,8 @@ profile facts 位于这一层。它们的定位是“优先观察目标 + PDDL �
 
 - 定义 `WebKobeGraph`、`WebKobeNode`、`WebKobeEdge`；
 - 记录 `BusinessAffordance`、`PlanningDelta`、`PlanningState`、`PlanningTransition`，并兼容读取历史 `BusinessTransition`；
-- 判断一次业务变化是否应该生成新节点；
-- 基于 profile 提供的 state label hints、planning facts 和 business action，为 materialized business node 生成可读 `node_label`；
+- 明确可见变化先保留为独立 raw observation，避免 embedding 提前覆盖；
+- 离线把 presentation-equivalent observations 保守归入 planning groups，并聚合实际观察到的能力及来源；
 - 传播 source-aware planning state；
 - 在 `PlanningState` 中同时保留 `active_facts`、`profile_fact_ids` 和 `generated_fact_ids`；
 - 将 Visual Delta 观察事实写入 raw edge 的 `execution_trace.metadata.visual_delta_trace`，不参与 planning transition、target matching planning facts 或 Phase A PDDL；
@@ -194,7 +194,7 @@ embedding memory 只辅助定位和避免重复，不直接进入 PDDL。
 - 运行 PDDL readiness smoke；
 - 运行 SafeSym parser、safety injection、planner smoke。
 
-这一层应保持确定性。它应该消费 graph 中已经记录的语义，不应该直接调用 LLM/VLM。Phase A 只投影 canonical locations 和非自环 business transitions；部分 frontier 不因尚未覆盖全部 affordance 而被拒绝，已经真实观察成功且目标存在的边仍可进入 canonical graph/domain，失败或缺失目标的边仍被排除。Visual Delta 观察事实不作为 Phase A 的 predicates、preconditions 或 effects。其他事实是否长期晋升为 planner-facing 语义，仍由后续审查和晋升策略决定。
+这一层应保持确定性。它应该消费 graph 中已经记录的语义，不应该直接调用 LLM/VLM。Phase A 先由 `planning_abstraction.py` 生成 planning graph，再只投影跨 planning-state 的成功转换；presentation 自环保留在 planning graph 中用于审计和能力发现，但不进入 PDDL。失败或缺失目标的边仍被排除。Visual Delta 观察事实、supporting facts 和 `PlanningState` 不作为 Phase A 的 predicates、preconditions 或 effects。
 
 主要函数/类：
 
@@ -269,12 +269,12 @@ WebKobeExplorer.explore_one_step
   -> capture after state/screenshots when execution succeeds or the known Stagehand tool_choice error is reported
   -> summarize_visual_delta (observation trace only) / verify_planning_delta
   -> GraphManager.build_planning_transition
-  -> resolve_business_target_node
   -> GraphManager.add_edge
   -> controller 调用可选的完成步骤 checkpoint
   -> 真实 runner 依次写入 embedding、Stagehand trace、graph/evidence
   -> 正常结束时写入 `graph.meta.exploration_summary`
-  -> PDDL projector consumes graph JSON
+  -> planning abstraction groups raw observations and aggregates capabilities
+  -> Phase A projector consumes planning graph
 ```
 
 对 `Thinking mode does not support this tool_choice`，探索器会继续动作后观察：有 URL path、结构签名或 Visual Delta 变化时记录成功转换，无变化时记录 `no_observed_change` 自环，并保留原始错误与 `backend_reported_success=false`。未知执行错误仍记录失败自环且跳过 Visual Delta。
