@@ -160,7 +160,8 @@ embedding memory 只辅助定位和避免重复，不直接进入 PDDL。
 - 调用 Stagehand 操作层和 VLM/DOM 观察层；
 - 更新 graph；
 - 按 step budget 或 terminal condition 停止。
-- 当前节点候选耗尽时以 `current_state_exhausted` 停止，不执行 browser back；连续没有新 graph information 时累计无进展。
+- 当前节点候选耗尽时以 `current_state_exhausted` 停止，不执行 browser back；连续没有新 graph information 时累计无进展。真实 Stagehand runner 暂时关闭连续无进展提前终止，主要受最大步数约束。
+- 每个完成动作后原子更新 latest checkpoint（embedding、trace、graph/evidence），正常完成后再写一次；checkpoint 不提供 resume/replay。
 
 低层 DOM interactables 可以继续作为运行时 state summary / embedding matching 的辅助输入，但不再输出到 canonical `graph.json` node，也不作为 graph memory 或探索决策单位。旧的 LLM action selector 路径已经移除，避免系统回退到 selector/locator 驱动的探索。
 
@@ -224,6 +225,7 @@ graph artifact 的布局由 `src/ai_web_explorer/safesym_bridge/graph_artifacts.
 - 配置 VLM 和 embedding provider；
 - 注入 benchmark/test context；
 - 写出 graph、trace、screenshots、embedding、PDDL、smoke outputs。
+- generic `run_stagehand_exploration` 在每个完成动作后写入 checkpoint，并在正常结束时再次写入最终 artifact；graph/evidence 是最后提交的配对标记。
 
 这一层是工程 glue。它不应该成为 graph 语义或 planning 语义的来源。
 

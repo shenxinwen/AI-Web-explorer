@@ -66,7 +66,8 @@ embedding memory：已接入，用于相似状态定位和重复提示
 target matching：已有初版，动作后会用 embedding 相似度和可靠的本地 revisit evidence 复用已有业务节点；state summary 可包含本地确认的 planning context，但不是独立否决或裁决门槛；存在明确 URL/signature/visual 变化时不得回并到 source
 source 定位：正常探索默认信任当前节点指针；embedding source match 只作为恢复/诊断信号
 forward-only frontier 探索策略：当前节点候选耗尽即停止；graph meta 记录 frontier/step 诊断信息
-连续无进展终止：已实现；failed/no-op 不再单次终止，达到阈值才停止
+连续无进展终止：通用 controller 仍支持该机制；真实 Stagehand runner 暂时关闭这一提前终止条件，主要受最大步数约束
+checkpoint：每个完成动作后原子更新 latest 的 embedding、trace、graph/evidence；正常结束后再写一次最终结果
 Stagehand thinking/tool_choice 异常：已定义为需要继续动作后观察；有变化时记为成功转换，无变化时记为 `no_observed_change`
 Visual observations：只保留在 raw edge trace，不进入 `PlanningState` 或 Phase A PDDL
 Phase A domain：当前只投影 canonical locations 和非自环 business transitions
@@ -199,7 +200,8 @@ edge.planning_transition 中属于 profile facts 的 pre/added/removed facts
 - 本地系统把候选动作标记为未尝试、已尝试、no-op 或失败；VLM 只负责提出候选和证据，不负责记忆。
 - 当前节点优先执行未尝试候选；动作成功后，若产生新业务状态就移动到新节点，若命中已有业务状态就移动到已有节点，若没有有效变化就留在原节点。
 - 命中已有节点时继续使用该节点首次建立的固定候选，不重新生成或追加候选。
-- 当前节点候选都尝试完后，直接记录 `current_state_exhausted` 并停止，不执行 browser back；连续没有新节点或新语义转换时计为无进展，最大步数仍有效。
+- 当前节点候选都尝试完后，直接记录 `current_state_exhausted` 并停止，不执行 browser back；连续没有新节点或新语义转换时计为无进展，但真实 Stagehand runner 暂时不因此提前终止，最大步数仍有效。
+- 每个完成的探索动作都会写入 latest checkpoint；checkpoint 只保护已完成探索，不提供 resume、replay 或逐步历史版本。
 - runtime memory 只在当前节点或可靠 embedding 匹配的历史节点上下文内避免同义动作，不做全局动作屏蔽。
 
 短期先从已有 edges 反查 tried/no-op/failed 状态，不新增复杂 memory 表。旧的 selector/locator fallback 已删除；business-affordance selector 不再在候选耗尽后继续选择成功但已尝试的动作。`graph.meta` 记录 step kind/status、连续无进展和 frontier 诊断信息。后续可再评估 replay、browser back recovery 或更完整的 frontier 恢复，但不属于当前闭环。
@@ -239,7 +241,7 @@ SafeSym 可以结构性消费当前产物，但 PDDL 的语义质量还不稳定
 
 现在更像 bounded exploration V1，还不是成熟自由探索。此前实验中页面在商品列表和商品详情之间来回切换，核心原因不是 VLM 完全不会提候选，而是旧 selector 在当前节点候选都尝试完后，会回退到“非 avoid 的成功动作”，导致成功但低进展的动作被重复执行。当前修复已改为：当前节点无未尝试业务候选时返回 None 并以 `current_state_exhausted` 停止；重复的已知 transition 或连续没有新 graph information 会计为无进展。旧的 LLM action selector / OpenAI action selector 模块已删除，避免探索链路回退到 locator-driven 行为。
 
-controller 已改为连续无进展策略：单次 `failed_execution`、`no_observed_change` 或重复已知 transition 都不会立刻终止；只有连续无进展达到阈值、当前节点候选耗尽、terminal condition 命中或达到最大步数时才停止。`graph.meta` 会记录 `last_step_kind`、`last_step_status`、`consecutive_unproductive_steps` 和 `max_consecutive_unproductive_steps`。
+controller 仍保留连续无进展策略：单次 `failed_execution`、`no_observed_change` 或重复已知 transition 都不会立刻终止；默认调用者可在连续无进展达到阈值时停止。真实 Stagehand runner 显式关闭该阈值，仅在当前节点候选耗尽、达到最大步数或其他显式条件时停止。`graph.meta` 会记录 `last_step_kind`、`last_step_status`、`consecutive_unproductive_steps` 和 `max_consecutive_unproductive_steps`。
 
 最近的清理已经把通用 Stagehand exploration 默认模式改为 `observed_action`，保留 VLM 候选动作的 `supporting_facts`，并移除了业务候选选择中的全局 completed action 降权；重复策略应基于当前节点或 embedding 命中的相似节点上下文。
 
@@ -267,9 +269,9 @@ business_affordances + business_transition + planning_transition
 
 ## 下一阶段优先级
 
-1. 重跑 Practice Automated Testing Shopping，验证 forward-only 候选耗尽停止和连续无进展阈值，并继续观察 cart / checkout 等业务状态。
+1. 重跑 Practice Automated Testing Shopping，验证 forward-only 候选耗尽停止、最大步数边界和 checkpoint 落盘，并继续观察 cart / checkout 等业务状态。
 2. 根据 graph meta 和 edge trace 分析每个节点候选数量、已尝试/未尝试/no-op/失败统计、重复节点命中和 stop reason。
-3. 检查连续无进展阈值是否合理；第一版 controller 默认阈值为 3。
+3. 单独评估通用 controller 的连续无进展默认阈值（当前为 3）；真实 Stagehand runner 当前不使用该提前终止条件。
 4. 继续检查 target matching 是否减少重复业务节点，以及 embedding source/target matching 是否只在正确位置发挥作用。
 5. 检查 graph 和 domain PDDL 质量，尤其是 source/target、precondition/effect、node label 和重复 `at_*_002`。
 6. 讨论 generated facts 的晋升/可选投影策略。

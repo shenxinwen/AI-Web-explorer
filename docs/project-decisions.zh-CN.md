@@ -17,6 +17,22 @@
 - ...
 ```
 
+## 2026-08-10 - 真实 Stagehand 实验采用有界 checkpoint
+
+更改：
+- 当前真实 Stagehand runner 以请求的最大步数作为主要终止条件。
+- 当前节点没有可执行候选时仍可自然提前结束；真实 runner 暂时关闭连续无进展提前终止，通用 controller 仍保留该可选机制。
+- 每个完成动作后原子更新 latest 的 embedding、Stagehand trace 和 graph/evidence；正常完成后再写一次最终结果，graph/evidence 是最后提交的配对标记。
+- checkpoint 只保护已经完成的探索，不提供 resume、replay 或逐步历史版本。
+
+原因：
+- 真实实验中的单步 Stagehand/VLM/embedding 调用可能较慢或被外部中断；必须先保留已完成步骤，避免只在整轮结束时落盘。
+- 在当前 forward-only 路径中，连续无进展不应暂时抢先于用户配置的最大步数终止真实 runner。
+
+影响：
+- 中断时最近一次成功 checkpoint 仍可读取；未完成的当前动作不会被虚构成 graph edge。
+- embedding 或 trace 可能在 graph 提交前包含同轮较新的内容，但 graph/evidence 配对仍是正式 checkpoint 依据。
+
 ## 2026-08-06 - 分离 VLM 观察事实与本地 profile facts
 
 更改：
