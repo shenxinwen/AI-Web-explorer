@@ -23,6 +23,25 @@
 如何把真实网页交互转换成稳定、可审查、可规划、可被 SafeSym 消费的状态图。
 ```
 
+## 当前主线
+
+```text
+VLM 提出可能可执行的业务动作
+  -> 本地 graph/embedding memory 选择一个候选并做语义去重
+  -> Stagehand 尝试执行选中的动作
+  -> 动作后观察验证可见结果
+  -> 本地 verifier 确认已知 profile 边界
+  -> Raw Graph 保留稳定观察和可审查结果
+  -> 确定性 planning abstraction 只合并证据充分的等价状态
+  -> Planning Graph 聚合候选能力并保留精确观察 provenance
+  -> Phase A 将跨 planning state 的业务转换写入 domain.pddl
+```
+
+VLM affordance 只是“可能可执行”的候选假设，不是已验证能力。Stagehand
+只报告执行尝试，不证明状态转换已经发生；动作后观察才是把 raw edge 分类为
+观察成功转换、no-op 或失败的证据。候选能力可以被 planning group 聚合，但只有
+动作后观察成功的边才能验证转换。
+
 Stagehand、Playwright、VLM/LLM、embedding 都是工具或证据来源。Web-KOBE 自己必须拥有图结构、状态记忆、PDDL 语义和探索控制权。
 
 当前实验必须明确区分三套模型配置：
@@ -49,8 +68,9 @@ Stagehand、Playwright、VLM/LLM、embedding 都是工具或证据来源。Web-K
   -> 根据当前节点 frontier、已尝试候选、graph memory 和 embedding memory 选择一个未完成业务动作
   -> 执行动作
   -> 观察 before/after 业务变化
-  -> 更新 node、edge、planning_state、planning_transition
-  -> 生成或更新 PDDL/SafeSym 产物
+  -> 更新 raw node 和 edge evidence
+  -> 写入已完成动作的 checkpoint
+  -> 离线运行 planning abstraction 和 Phase A
   -> 如果当前节点候选耗尽，则以 `current_state_exhausted` 停止，不执行 browser back
   -> 根据步数、重复、frontier 或目标覆盖决定是否继续
 ```
@@ -70,8 +90,9 @@ forward-only frontier 探索策略：当前节点候选耗尽即停止；graph m
 checkpoint：每个完成动作后更新 latest 的 embedding、Stagehand trace、graph/evidence；正常结束后写入带 `exploration_summary` 的最终结果
 Stagehand thinking/tool_choice 异常：已定义为需要继续动作后观察；有变化时记为成功转换，无变化时记为 `no_observed_change`
 Visual observations：只保留在 raw edge trace，不进入 `PlanningState` 或 Phase A PDDL
-planning abstraction：已接入，保守合并 presentation 等价观察并聚合已观察能力
+planning abstraction：已实现且已有单元测试，但尚未通过新的真实网页实验验证分组和能力 provenance
 Phase A domain：当前只投影 planning locations 和非自环业务转换
+Visual Delta taxonomy：当前有限分类已实现，但分类质量和最终 taxonomy 仍是待审查议题
 自由探索策略：尚未稳定
 profile fact verifier：已接入最小确定性 verifier，只负责从本地结构化签名确认 profile facts
 PDDL 语义质量：可消费，但还不够稳定和可读
@@ -145,8 +166,8 @@ Graph 层仍需兼容读取历史 profile/generated facts；但当前新探索�
 VLM 观察当前页面，并提出业务动作候选
 本地 current-node pointer 维护 source 位置
 本地 graph / embedding memory 做 target merge、recovery 和动作去重
-Stagehand 只执行被选中的动作
-VLM 总结动作前后的可见业务变化
+Stagehand 只尝试执行被选中的动作
+动作后观察总结可见业务变化并验证结果
 graph policy 决定 create / merge / revisit
 PDDL projector 确定性消费 graph 中已经记录的语义
 ```
@@ -168,7 +189,7 @@ Profile facts 可以帮助对齐 planner-facing 语义，但不是唯一探索�
 
 ### 4. Stagehand 是操作层，不是状态真相层
 
-Stagehand 可以看页面、生成候选、执行动作和提供 trace，但不能直接决定：
+Stagehand 尝试执行选中的动作并提供 execution trace；它不负责候选生成，也不能直接决定：
 
 - node identity；
 - planning facts；
@@ -182,7 +203,7 @@ Stagehand 可以看页面、生成候选、执行动作和提供 trace，但不�
 
 ### 5. PDDL projector 应保持确定性
 
-PDDL projector 应消费 graph 中已经记录的语义，不应直接调用 LLM/VLM，也不应自由发明谓词。
+PDDL projector 应消费 planning graph 中已经记录的语义，不应直接调用 LLM/VLM，也不应自由发明谓词。
 
 当前 PDDL 主要来自：
 
@@ -222,11 +243,11 @@ edge.planning_transition 中属于 profile facts 的 pre/added/removed facts
 
 ## 当前主要问题
 
-### P0: 相同业务状态还没有稳定合并
+### P0: planning abstraction 和 target matching 仍需真实网页验证
 
 此前 Practice Automated Testing Shopping 实验曾生成重复的页面/业务状态变体；该历史结果不作为当前最新结论，仍需要新的受控实验确认 graph merge 质量。
 
-当前已接入 target matching V1：动作后的目标状态会先用 embedding 相似度和可靠的本地 revisit evidence 匹配已有节点；state summary 可包含本地确认的 planning context，但不是独立否决或裁决门槛。匹配成功则 edge 指向已有节点，而不是生成新的状态变体。明确变化时 source 节点受到保护，但其他有可靠证据的历史节点仍可复用。下一步需要通过真实网站实验确认它是否能减少重复业务节点。
+planning abstraction 和 target matching 已实现并有单元测试，但尚未通过新的真实网页实验验证二者组合行为。当前已接入 target matching V1：动作后的目标状态会先用 embedding 相似度和可靠的本地 revisit evidence 匹配已有节点；state summary 可包含本地确认的 planning context，但不是独立否决或裁决门槛。匹配成功则 edge 指向已有节点，而不是生成新的状态变体。明确变化时 source 节点受到保护，但其他有可靠证据的历史节点仍可复用。下一步需要通过真实网站实验确认它是否能减少重复业务节点。
 
 ### P0: Visual observations 与规划状态保持隔离
 

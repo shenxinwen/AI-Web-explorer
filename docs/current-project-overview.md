@@ -28,6 +28,26 @@ turn real web interaction into a stable, reviewable, plannable state graph that
 SafeSym can consume.
 ```
 
+## Current Mainline
+
+```text
+VLM proposes possible business actions
+  -> local graph/embedding memory selects one candidate and deduplicates it
+  -> Stagehand attempts the selected action
+  -> after-action observation verifies the visible result
+  -> local verifier confirms known profile boundaries
+  -> Raw Graph preserves stable observations and auditable outcomes
+  -> planning abstraction groups only strongly supported equivalents
+  -> Planning Graph aggregates candidate capabilities with exact provenance
+  -> Phase A emits cross-planning-state business transitions into domain.pddl
+```
+
+A VLM affordance is a candidate hypothesis, not a verified capability.
+Stagehand reports an execution attempt, not a state transition. After-action
+observation is the evidence used to classify the raw edge as an observed
+transition, no-op, or failure. Planning groups may aggregate candidate
+capabilities, but only observed successful edges verify transitions.
+
 Stagehand, Playwright, VLM/LLM providers, and embeddings are tools or evidence
 sources. Web-KOBE must own graph structure, state memory, PDDL semantics, and
 exploration control.
@@ -50,8 +70,9 @@ observe current state
      candidates, graph memory, and embedding memory
   -> execute the action
   -> observe before/after business changes
-  -> update node, edge, planning_state, and planning_transition
-  -> generate or update PDDL/SafeSym artifacts
+  -> update raw node and edge evidence
+  -> checkpoint completed artifacts
+  -> run planning abstraction and Phase A offline
   -> stop with `current_state_exhausted` when the current node has no candidate
   -> otherwise continue until the configured maximum step count
 ```
@@ -75,6 +96,8 @@ source localization: normal exploration trusts the current-node pointer;
 source embedding match is recovery/diagnostic only
 forward-only frontier policy: the current node consumes its fixed first-visit
 candidates and stops when they are exhausted; graph meta emits frontier_metrics
+planning abstraction: implemented and covered by unit tests, but not yet
+validated by a new real-browser experiment
 consecutive unproductive stop policy: retained as an optional generic-controller
 mechanism, but disabled by the real Stagehand runner
 checkpoint persistence: after every completed action, latest embedding, trace,
@@ -88,19 +111,21 @@ visual observations: retained only in
 planning transitions, target-matching planning facts, and Phase A PDDL
 Phase A domain: projects canonical locations and eligible non-self-loop
 business transitions only
+Visual Delta taxonomy: bounded categories are implemented, but their quality
+and final taxonomy remain a pending review topic
 ecommerce profile facts: first quality pass completed with product detail,
 checkout required/complete, cart total, invoice, and availability facts
 exploration responsibility boundary: VLM observes and proposes candidates,
-local graph/embedding memory chooses and deduplicates, Stagehand executes only
-the selected action; first prompt/runner boundary fixes are implemented
+local graph/embedding memory chooses and deduplicates, Stagehand attempts only
+the selected action, and after-action observation verifies the outcome
 domain-first projection: available through web-kobe-domain-from-graph
 problem generation: diagnostic/query-stage only, requires explicit start/goal
 free exploration strategy: not stable yet
 profile fact verifier: minimal deterministic verifier connected; it only
 confirms profile facts from local structured signatures
 PDDL semantic quality: consumable, but not stable or readable enough
-business node naming: materialized business nodes can derive labels from
-profile hints / facts / actions
+business node naming: new state labels are optional VLM suggestions and are
+locally cleaned; labels do not define identity or matching
 previous real-site runs: historical evidence only; the latest controlled
 conclusion still needs revalidation
 ```
@@ -157,8 +182,8 @@ VLM observes the current page and proposes business action candidates
 local current-node pointer maintains source location
 local graph / embedding memory handles target merge, recovery, and action
 deduplication
-Stagehand executes exactly the selected action
-VLM summarizes before/after visible business change
+Stagehand attempts exactly the selected action
+after-action observation summarizes the visible business change
 graph policy decides create / merge / revisit
 PDDL projector consumes stored graph semantics deterministically
 ```
@@ -192,8 +217,8 @@ state and are not used as Phase A predicates, preconditions, or effects.
 
 ### 4. Stagehand is the operation layer, not state truth
 
-Stagehand can observe, propose candidates, execute actions, and provide traces.
-It should not directly decide:
+Stagehand attempts the selected action and provides an execution trace. It does
+not own candidate generation or state truth, and should not directly decide:
 
 - node identity;
 - planning facts;
@@ -218,21 +243,22 @@ Stagehand exploration prompts should only be fallback behavior.
 
 ### 5. PDDL projection should stay deterministic
 
-The PDDL projector should consume graph semantics. It should not call LLM/VLM
-directly and should not freely invent predicates.
+The PDDL projector should consume the planning graph. It should not call
+LLM/VLM directly and should not freely invent predicates.
 
 Exploration should prioritize domain quality first. `domain.pddl` represents
 the observed state/action model and can be generated without a concrete goal.
 `problem.pddl` represents a specific planning query and should be produced only
 for smoke tests, SafeSym checks, or user/task-selected start and goal states.
 
-Current PDDL inputs are mainly:
+Planning abstraction produces `planning_graph.json` and
+`planning_abstraction_report.json` from the Raw Graph. Phase A then consumes
+the planning graph. Its relevant inputs are mainly:
 
 ```text
-node location
-node.planning_state.profile_fact_ids by default
-edge.action.canonical_action_name
-profile facts from edge.planning_transition pre/added/removed facts
+planning-group location
+planning-group business affordances and observed capabilities
+eligible non-self-loop edge action names
 ```
 
 Naming work is deferred. The intended boundary is that LLM/VLM may help produce
@@ -254,8 +280,8 @@ generated. It must also preserve stable business-state identity:
   `cart_has_items` is already true and item count changes are not modeled,
   adding the same item again should not create another business-state node;
 - merge-before-create is the default policy; after an action, match the target
-  state against existing nodes using planning facts, VLM state summary, and
-  embeddings before materializing a new node; explicit URL/signature/visual
+  state against existing nodes using embedding similarity and reliable local
+  revisit evidence before materializing a new node; explicit URL/signature/visual
   changes prevent matching back to the source, but reliable non-source history
   may still be reused;
 - node labels must be semantically stable; many `at_product_details_002` or
@@ -292,15 +318,15 @@ Replay and broader frontier recovery remain later work.
 
 ## Main Problems
 
-### P0: identical business states do not merge reliably yet
+### P0: planning abstraction and target matching still need real-browser validation
 
 Previous Practice Automated Testing Shopping runs produced duplicate-looking
 page/business state variants. Those historical results are not the current
 latest conclusion; graph merge quality still needs a new controlled run.
 
-This means embeddings already provide similar-state signals, but target-node
-materialization and merge logic did not consume those signals strongly enough.
-Target matching V1 is now connected: after an action, the target state is
+Planning abstraction and target matching are implemented and covered by unit
+tests, but no new real-browser experiment has validated their behavior together.
+Target matching V1 is connected: after an action, the target state is
 matched against existing nodes using embedding similarity and reliable local
 revisit evidence. State summaries may include locally verified planning
 context, but it is not an independent veto or decision gate. If a match is
@@ -333,8 +359,8 @@ stable enough:
 
 ### P1: exploration still needs frontier validation and refinement
 
-The system has business affordances, local tried-action memory, semantic action
-deduplication, and embedding memory, but it still lacks mature:
+The system has candidate business affordances, local tried-action memory,
+semantic action deduplication, and embedding memory, but it still lacks mature:
 
 - candidate ranking and richer duplicate/no-op penalties;
 - replay or browser-back recovery;
