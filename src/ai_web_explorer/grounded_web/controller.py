@@ -14,6 +14,10 @@ SUCCESS_EDGE_STATUSES = frozenset(
         "no_observed_change",
     }
 )
+
+StepCheckpoint = Callable[[WebKobeGraph], None]
+
+
 class StepExplorer(Protocol):
     async def explore_one_step(self) -> WebKobeGraph: ...
 
@@ -27,7 +31,7 @@ class WebKobeExplorationSummary:
     edge_count: int
     failed_edge_count: int
     consecutive_unproductive_steps: int = 0
-    max_consecutive_unproductive_steps: int = 3
+    max_consecutive_unproductive_steps: int | None = 3
 
 
 @dataclass(frozen=True)
@@ -47,8 +51,8 @@ def _summary(
     baseline_completed: int,
     stop_reason: str,
     consecutive_unproductive_steps: int = 0,
-    max_consecutive_unproductive_steps: int = 3,
-) -> WebKobeExplorationSummary:
+    max_consecutive_unproductive_steps: int | None = 3,
+    ) -> WebKobeExplorationSummary:
     return WebKobeExplorationSummary(
         requested_steps=requested_steps,
         steps_completed=max(graph.total_steps_completed - baseline_completed, 0),
@@ -71,14 +75,17 @@ class WebKobeExplorationController:
         explorer: StepExplorer,
         *,
         terminal_condition: Callable[[WebKobeGraph], bool] | None = None,
-        max_consecutive_unproductive_steps: int = 3,
+        max_consecutive_unproductive_steps: int | None = 3,
+        step_checkpoint: StepCheckpoint | None = None,
     ):
         self.explorer = explorer
         self.terminal_condition = terminal_condition
-        self.max_consecutive_unproductive_steps = max(
-            max_consecutive_unproductive_steps,
-            1,
+        self.max_consecutive_unproductive_steps = (
+            None
+            if max_consecutive_unproductive_steps is None
+            else max(max_consecutive_unproductive_steps, 1)
         )
+        self.step_checkpoint = step_checkpoint
 
     async def run(self, *, max_steps: int = 1) -> WebKobeExplorationResult:
         requested_steps = max(max_steps, 0)
@@ -113,8 +120,11 @@ class WebKobeExplorationController:
             graph.meta["max_consecutive_unproductive_steps"] = (
                 self.max_consecutive_unproductive_steps
             )
+            if self.step_checkpoint is not None:
+                self.step_checkpoint(graph)
             if (
-                consecutive_unproductive_steps
+                self.max_consecutive_unproductive_steps is not None
+                and consecutive_unproductive_steps
                 >= self.max_consecutive_unproductive_steps
             ):
                 stop_reason = "consecutive_unproductive_steps"

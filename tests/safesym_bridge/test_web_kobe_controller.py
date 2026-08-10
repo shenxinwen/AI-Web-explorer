@@ -281,3 +281,60 @@ async def test_controller_stops_when_terminal_condition_matches():
     assert result.graph.total_steps_completed == 1
     assert result.summary.steps_completed == 1
     assert result.summary.stop_reason == "terminal_condition"
+
+
+@pytest.mark.anyio
+async def test_controller_checkpoints_each_completed_step():
+    explorer = FakeExplorer([_graph(completed=1), _graph(completed=2)])
+    checkpoints = []
+    controller = WebKobeExplorationController(
+        explorer,
+        step_checkpoint=lambda graph: checkpoints.append(
+            graph.total_steps_completed
+        ),
+    )
+
+    await controller.run(max_steps=2)
+
+    assert checkpoints == [1, 2]
+
+
+@pytest.mark.anyio
+async def test_controller_does_not_checkpoint_current_state_exhaustion_probe():
+    explorer = FakeExplorer(
+        [
+            _graph(completed=1),
+            _graph(completed=1, meta={"last_step_kind": "current_state_exhausted"}),
+        ]
+    )
+    checkpoints = []
+    result = await WebKobeExplorationController(
+        explorer,
+        step_checkpoint=lambda graph: checkpoints.append(
+            graph.total_steps_completed
+        ),
+    ).run(max_steps=3)
+
+    assert checkpoints == [1]
+    assert result.summary.stop_reason == "current_state_exhausted"
+
+
+@pytest.mark.anyio
+async def test_controller_can_disable_unproductive_step_stop():
+    explorer = FakeExplorer(
+        [
+            _graph(completed=index, meta={"last_step_graph_changed": False})
+            for index in range(1, 5)
+        ]
+    )
+    controller = WebKobeExplorationController(
+        explorer,
+        max_consecutive_unproductive_steps=None,
+    )
+
+    result = await controller.run(max_steps=4)
+
+    assert explorer.calls == 4
+    assert result.summary.stop_reason == "max_steps"
+    assert result.summary.consecutive_unproductive_steps == 4
+    assert result.summary.max_consecutive_unproductive_steps is None
