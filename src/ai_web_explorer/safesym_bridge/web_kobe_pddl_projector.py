@@ -23,6 +23,7 @@ from ai_web_explorer.grounded_web.graph import (
 from ai_web_explorer.grounded_web.business_profile import PlanningDelta
 from ai_web_explorer.grounded_web.business_profile import PlanningState
 from ai_web_explorer.grounded_web.business_profile import PlanningTransition
+from ai_web_explorer.safesym_bridge.location_pddl import compile_location_domain
 
 PROJECTABLE_EDGE_STATUSES = {
     "verified",
@@ -847,50 +848,9 @@ def compile_phase_a_domain(
     *,
     options: PddlProjectionOptions | None = None,
 ) -> str:
-    """Project a planning-state graph to the Phase-A location domain.
-
-    Phase A deliberately keeps planning and observation evidence on the graph
-    for auditability, but excludes those fields from the planner-facing domain.
-    Self-loops remain in the planning graph and are omitted only here.
-    """
-    phase_a_nodes = [replace(node, planning_state=None) for node in graph.nodes]
-    known_node_ids = {node.node_id for node in phase_a_nodes}
-    phase_a_edges = []
-    for edge in graph.edges:
-        if (
-            edge.source_node_id == edge.target_node_id
-            or edge.source_node_id not in known_node_ids
-            or edge.target_node_id not in known_node_ids
-        ):
-            continue
-        phase_a_edges.append(
-            replace(
-                edge,
-                action=replace(edge.action, supporting_facts=[]),
-                observed_delta=[],
-                pddl_hint=None,
-                planning_delta=None,
-                planning_transition=None,
-            )
-        )
-    phase_a_graph = replace(
-        graph,
-        nodes=phase_a_nodes,
-        edges=phase_a_edges,
-    )
-    base_options = options or PddlProjectionOptions()
-    phase_a_options = replace(
-        base_options,
-        include_observed_delta_facts=False,
-        include_generated_planning_facts=False,
-    )
-    return _compile_domain(
-        phase_a_graph,
-        options=phase_a_options,
-        location_predicates=_location_predicates_by_node_id(phase_a_graph),
-        extra_predicate_names=[],
-        action_name_factory=_phase_a_action_name,
-    )
+    """Project only the generalized Location PDDL Phase-A contract."""
+    del options
+    return compile_location_domain(graph).domain
 
 
 def _compile_domain(

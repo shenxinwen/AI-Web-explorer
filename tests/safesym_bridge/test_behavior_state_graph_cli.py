@@ -105,12 +105,17 @@ def test_phase_a_cli_writes_raw_planning_report_and_domain_only(tmp_path, monkey
         "raw_graph.json",
         "planning_graph.json",
         "planning_abstraction_report.json",
+        "projection_report.json",
         "domain.pddl",
     }
     assert json.loads((output_dir / "raw_graph.json").read_text(encoding="utf-8")) == graph.to_dict()
-    assert "view_details__from_listing" in (
-        output_dir / "domain.pddl"
-    ).read_text(encoding="utf-8")
+    domain = (output_dir / "domain.pddl").read_text(encoding="utf-8")
+    projection = json.loads(
+        (output_dir / "projection_report.json").read_text(encoding="utf-8")
+    )
+    assert "(:types location)" in domain
+    assert "(at ?location - location)" in domain
+    assert projection["schema_version"] == "location-pddl-projection-v1"
     assert not (output_dir / "problem.pddl").exists()
 
 
@@ -172,6 +177,11 @@ def test_phase_a_compact_input_is_semantically_equivalent_and_raw_shape_is_prese
     assert (full_output / "domain.pddl").read_text(encoding="utf-8") == (
         compact_output / "domain.pddl"
     ).read_text(encoding="utf-8")
+    assert json.loads(
+        (full_output / "projection_report.json").read_text(encoding="utf-8")
+    ) == json.loads(
+        (compact_output / "projection_report.json").read_text(encoding="utf-8")
+    )
 
 
 def test_phase_a_cli_without_embedding_configuration_is_conservative(tmp_path, monkeypatch):
@@ -251,8 +261,8 @@ def test_phase_a_projects_only_cross_group_edges_and_keeps_capability_self_loop(
         and edge["action"]["semantic_id"] == "view_details"
         for edge in planning["edges"]
     )
-    assert "add_to_cart__from_listing" in domain
-    assert "view_details__from_listing" not in domain
+    assert "(:action add_to_cart" in domain
+    assert "(:action view_details" not in domain
     assert "cart_has_items" not in domain
     assert "visible_control" not in domain
 
@@ -341,4 +351,4 @@ def test_phase_a_cli_keeps_rejected_source_edges_only_in_raw_artifacts(
         edge["source_node_id"] == "incomplete" for edge in planning["edges"]
     )
     assert report["raw_to_planning_node"]["incomplete"] == "incomplete"
-    assert "different_action__from_incomplete" in domain
+    assert "(:action different_action" in domain

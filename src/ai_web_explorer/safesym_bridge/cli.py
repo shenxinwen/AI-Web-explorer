@@ -22,6 +22,7 @@ from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
     load_web_kobe_graph_json,
     read_web_kobe_graph_json_data,
 )
+from ai_web_explorer.safesym_bridge.location_pddl import compile_location_domain
 from ai_web_explorer.grounded_web.planning_abstraction import (
     build_planning_state_graph,
 )
@@ -559,8 +560,21 @@ def main(argv: list[str] | None = None) -> int:
                 json.dumps(artifacts.report.to_dict(), indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )
+            projection = compile_location_domain(
+                artifacts.planning_graph,
+                edge_mappings=artifacts.report.edge_mappings,
+            )
             (args.output / "domain.pddl").write_text(
-                compile_phase_a_domain(artifacts.planning_graph),
+                projection.domain,
+                encoding="utf-8",
+            )
+            (args.output / "projection_report.json").write_text(
+                json.dumps(
+                    projection.report,
+                    indent=2,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                ),
                 encoding="utf-8",
             )
             output_path = args.output
