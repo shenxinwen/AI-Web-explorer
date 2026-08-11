@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -139,6 +140,22 @@ def test_compile_location_domain_uses_one_typed_location_predicate():
     assert result.report["actions"][0]["planning_edge_id"] == graph.edges[0].edge_id
 
 
+def test_custom_domain_name_is_normalized_consistently_in_report_and_problem():
+    graph = _three_location_graph()
+
+    domain_result = compile_location_domain(graph, domain_name="My Domain")
+    problem_result = compile_location_problem(
+        graph,
+        start_node_id="home-id",
+        goal_node_id="details-id",
+        domain_name="My Domain",
+    )
+
+    assert "(define (domain my_domain)" in domain_result.domain
+    assert domain_result.report["domain_name"] == "my_domain"
+    assert "(:domain my_domain)" in problem_result.problem
+
+
 def test_location_domain_is_deterministic_and_reports_excluded_edges():
     base = _graph_with_cross_self_failed_and_missing_edges()
     mappings = [
@@ -240,4 +257,3 @@ def test_location_compiler_has_no_domain_action_rules():
     source = Path(location_pddl.__file__).read_text(encoding="utf-8").lower()
     for token in ("checkout", "cart", "login", "search", "filter", "payment"):
         assert token not in source
-from dataclasses import replace

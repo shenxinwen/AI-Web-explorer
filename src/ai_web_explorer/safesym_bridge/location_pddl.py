@@ -217,9 +217,14 @@ def compile_location_domain(
         }
         for edge in sorted(projectable, key=lambda item: item.edge_id)
     ]
+    normalized_domain_name = _slug(
+        domain_name,
+        fallback_prefix="domain",
+        stable_id=domain_name,
+    )
     report = {
         "schema_version": LOCATION_PROJECTION_SCHEMA_VERSION,
-        "domain_name": domain_name,
+        "domain_name": normalized_domain_name,
         "locations": [
             {
                 "planning_node_id": node_id,
@@ -230,11 +235,6 @@ def compile_location_domain(
         "actions": actions,
         "excluded_edges": excluded,
     }
-    normalized_domain_name = _slug(
-        domain_name,
-        fallback_prefix="domain",
-        stable_id=domain_name,
-    )
     return LocationDomainProjection(
         domain=_render_domain(
             domain_name=normalized_domain_name,
