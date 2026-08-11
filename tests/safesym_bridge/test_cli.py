@@ -869,6 +869,7 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
         visual_delta_model=None,
         stagehand_execution_mode="business_milestone",
         max_candidates=5,
+        frontier_replay=False,
     ):
         calls.append(
             (
@@ -989,6 +990,33 @@ def test_main_web_kobe_stagehand_explore_rejects_invalid_max_candidates(
         )
 
     assert "must be at least 1" in capsys.readouterr().err
+
+
+def test_main_web_kobe_stagehand_explore_accepts_frontier_replay(monkeypatch, tmp_path):
+    calls = []
+
+    async def fake_run(*args, **kwargs):
+        calls.append(kwargs)
+        output_path = args[0]
+        output_path.write_text("{}", encoding="utf-8")
+        return output_path
+
+    monkeypatch.setattr(cli, "run_stagehand_exploration", fake_run, raising=False)
+
+    assert (
+        main(
+            [
+                "web-kobe-stagehand-explore",
+                "--url",
+                "https://fixture.test/shop",
+                "--output",
+                str(tmp_path / "graph.json"),
+                "--frontier-replay",
+            ]
+        )
+        == 0
+    )
+    assert calls[0]["frontier_replay"] is True
 
 
 def test_main_web_kobe_stagehand_explore_cleans_latest_output_dir(

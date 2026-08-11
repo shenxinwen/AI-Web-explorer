@@ -1107,6 +1107,98 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
 
 
 @pytest.mark.anyio
+async def test_run_stagehand_exploration_opt_in_wires_frontier_replay(
+    tmp_path,
+    monkeypatch,
+):
+    import playwright.async_api as playwright_async_api
+
+    output_path = tmp_path / "graph.json"
+    calls = []
+
+    class FakePage:
+        async def goto(self, url):
+            pass
+
+    class FakeBrowser:
+        async def new_page(self):
+            return FakePage()
+
+        async def close(self):
+            pass
+
+    class FakeChromium:
+        async def launch(self, *, headless=True, args=None):
+            return FakeBrowser()
+
+    class FakePlaywright:
+        chromium = FakeChromium()
+
+    class FakeContext:
+        async def __aenter__(self):
+            return FakePlaywright()
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+    class FakeBaseAdapter:
+        def __init__(self, page, *, app_name, page_id=None, screenshot_dir=None):
+            self.app_name = app_name
+
+    class FakeStagehandBackend:
+        def __init__(self, *, base_backend, provider, goal, execution_mode, **kwargs):
+            self.app_name = base_backend.app_name
+
+    class FakeReplayRunner:
+        def __init__(self, explorer):
+            self.explorer = explorer
+            calls.append(("replay_runner", self))
+
+    class FakeController:
+        def __init__(self, explorer, **kwargs):
+            calls.append(("controller", kwargs))
+
+        async def run(self, *, max_steps):
+            return WebKobeExplorationResult(
+                graph=WebKobeGraph(
+                    app="fixture",
+                    start_node_id="start",
+                    total_steps_completed=max_steps,
+                ),
+                summary=WebKobeExplorationSummary(
+                    requested_steps=max_steps,
+                    steps_completed=max_steps,
+                    stop_reason="max_steps",
+                    node_count=0,
+                    edge_count=0,
+                    failed_edge_count=0,
+                ),
+            )
+
+    monkeypatch.setattr(
+        playwright_async_api,
+        "async_playwright",
+        lambda: FakeContext(),
+    )
+    monkeypatch.setattr(browser_runner, "WebKobePlaywrightAdapter", FakeBaseAdapter)
+    monkeypatch.setattr(browser_runner, "StagehandAutomationBackend", FakeStagehandBackend)
+    monkeypatch.setattr(browser_runner, "FrontierReplayRunner", FakeReplayRunner)
+    monkeypatch.setattr(browser_runner, "WebKobeExplorationController", FakeController)
+
+    await browser_runner.run_stagehand_exploration(
+        output_path,
+        start_url="https://fixture.test/shop",
+        provider=object(),
+        frontier_replay=True,
+    )
+
+    assert calls[0][0] == "replay_runner"
+    assert calls[1][0] == "controller"
+    assert calls[1][1]["frontier_replay_runner"] is calls[0][1]
+    assert calls[1][1]["start_url"] == "https://fixture.test/shop"
+
+
+@pytest.mark.anyio
 async def test_run_stagehand_exploration_preserves_checkpoint_when_step_raises(
     tmp_path,
     monkeypatch,

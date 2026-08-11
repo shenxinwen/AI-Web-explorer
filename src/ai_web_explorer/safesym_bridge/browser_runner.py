@@ -26,6 +26,7 @@ from ai_web_explorer.grounded_web.experiment_plan import (
     ecommerce_checkout_experiment_plan,
 )
 from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
+from ai_web_explorer.grounded_web.frontier_replay import FrontierReplayRunner
 from ai_web_explorer.grounded_web.playwright_backend import (
     WebKobePlaywrightAdapter,
 )
@@ -543,6 +544,7 @@ async def run_stagehand_exploration(
     business_profile: str | BusinessFlowProfile | None = None,
     stagehand_execution_mode: str = "observed_action",
     max_candidates: int = 5,
+    frontier_replay: bool = False,
 ) -> Path:
     from playwright.async_api import async_playwright
 
@@ -625,11 +627,18 @@ async def run_stagehand_exploration(
                     stagehand_trace_path=stagehand_trace_path,
                 )
 
-            controller = WebKobeExplorationController(
-                explorer,
-                max_consecutive_unproductive_steps=None,
-                step_checkpoint=checkpoint,
-            )
+            controller_kwargs = {
+                "max_consecutive_unproductive_steps": None,
+                "step_checkpoint": checkpoint,
+            }
+            if frontier_replay:
+                controller_kwargs.update(
+                    {
+                        "frontier_replay_runner": FrontierReplayRunner(explorer),
+                        "start_url": start_url,
+                    }
+                )
+            controller = WebKobeExplorationController(explorer, **controller_kwargs)
             result = await controller.run(max_steps=max(steps, 1))
             result.graph.meta["exploration_summary"] = {
                 "requested_steps": result.summary.requested_steps,

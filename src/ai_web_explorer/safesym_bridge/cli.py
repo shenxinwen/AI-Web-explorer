@@ -486,6 +486,11 @@ def main(argv: list[str] | None = None) -> int:
         choices=["business_milestone", "observed_action"],
         default="observed_action",
     )
+    stagehand_explore_parser.add_argument(
+        "--frontier-replay",
+        action="store_true",
+        help="Opt in to reset-and-replay of reachable under-explored frontiers.",
+    )
     stagehand_explore_parser.add_argument("--headed", action="store_true")
     args = parser.parse_args(argv)
 
@@ -715,6 +720,7 @@ def main(argv: list[str] | None = None) -> int:
                     visual_delta_model=args.visual_delta_model,
                     stagehand_execution_mode=args.stagehand_execution_mode,
                     max_candidates=args.max_candidates,
+                    frontier_replay=args.frontier_replay,
                 )
             )
         else:

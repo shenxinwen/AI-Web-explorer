@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Protocol
+from typing import Any, Callable, Protocol
 
+from ai_web_explorer.grounded_web.frontier_replay import select_frontier
 from ai_web_explorer.grounded_web.graph import WebKobeGraph
 
 SUCCESS_EDGE_STATUSES = frozenset(
@@ -20,6 +21,10 @@ StepCheckpoint = Callable[[WebKobeGraph], None]
 
 class StepExplorer(Protocol):
     async def explore_one_step(self) -> WebKobeGraph: ...
+
+
+class FrontierReplayRunner(Protocol):
+    async def replay(self, target: Any, *, start_url: str) -> Any: ...
 
 
 @dataclass(frozen=True)
@@ -77,6 +82,8 @@ class WebKobeExplorationController:
         terminal_condition: Callable[[WebKobeGraph], bool] | None = None,
         max_consecutive_unproductive_steps: int | None = 3,
         step_checkpoint: StepCheckpoint | None = None,
+        frontier_replay_runner: FrontierReplayRunner | None = None,
+        start_url: str | None = None,
     ):
         self.explorer = explorer
         self.terminal_condition = terminal_condition
@@ -86,6 +93,8 @@ class WebKobeExplorationController:
             else max(max_consecutive_unproductive_steps, 1)
         )
         self.step_checkpoint = step_checkpoint
+        self.frontier_replay_runner = frontier_replay_runner
+        self.start_url = start_url
 
     async def run(self, *, max_steps: int = 1) -> WebKobeExplorationResult:
         requested_steps = max(max_steps, 0)
@@ -94,6 +103,7 @@ class WebKobeExplorationController:
         previous_completed = 0
         stop_reason = "max_steps"
         consecutive_unproductive_steps = 0
+        blocked_replay_node_ids: set[str] = set()
 
         for index in range(requested_steps):
             graph = await self.explorer.explore_one_step()
@@ -101,12 +111,62 @@ class WebKobeExplorationController:
                 baseline_completed = max(graph.total_steps_completed - 1, 0)
                 previous_completed = baseline_completed
 
-            if graph.total_steps_completed == previous_completed:
-                stop_reason = (
-                    "current_state_exhausted"
-                    if graph.meta.get("last_step_kind") == "current_state_exhausted"
-                    else "no_available_action"
+            while (
+                graph.total_steps_completed == previous_completed
+                and graph.meta.get("last_step_kind") == "current_state_exhausted"
+                and self.frontier_replay_runner is not None
+                and self.start_url is not None
+            ):
+                graph.meta.setdefault("replay_attempt_count", 0)
+                graph.meta.setdefault("replay_success_count", 0)
+                graph.meta.setdefault("replay_failure_count", 0)
+                graph.meta.setdefault("blocked_replay_node_ids", [])
+                frontier = select_frontier(
+                    graph,
+                    blocked_node_ids=blocked_replay_node_ids,
                 )
+                if frontier is None:
+                    stop_reason = "frontier_replay_exhausted"
+                    break
+                graph.meta["replay_attempt_count"] = int(
+                    graph.meta.get("replay_attempt_count", 0)
+                ) + 1
+                replay_result = await self.frontier_replay_runner.replay(
+                    frontier,
+                    start_url=self.start_url,
+                )
+                graph.meta["last_replay_reason"] = replay_result.reason
+                if not replay_result.success:
+                    graph.meta["replay_failure_count"] = int(
+                        graph.meta.get("replay_failure_count", 0)
+                    ) + 1
+                    blocked_replay_node_ids.add(frontier.node_id)
+                    graph.meta["blocked_replay_node_ids"] = sorted(
+                        blocked_replay_node_ids
+                    )
+                    continue
+                graph.meta["replay_success_count"] = int(
+                    graph.meta.get("replay_success_count", 0)
+                ) + 1
+                next_graph = await self.explorer.explore_one_step()
+                for key in (
+                    "replay_attempt_count",
+                    "replay_success_count",
+                    "replay_failure_count",
+                    "last_replay_reason",
+                    "blocked_replay_node_ids",
+                ):
+                    if key in graph.meta:
+                        next_graph.meta[key] = graph.meta[key]
+                graph = next_graph
+
+            if graph.total_steps_completed == previous_completed:
+                if stop_reason == "max_steps":
+                    stop_reason = (
+                        "current_state_exhausted"
+                        if graph.meta.get("last_step_kind") == "current_state_exhausted"
+                        else "no_available_action"
+                    )
                 break
 
             previous_completed = graph.total_steps_completed

@@ -1,13 +1,16 @@
 import pytest
 
-from ai_web_explorer.grounded_web.capability_graph import ExecutionTrace
+from ai_web_explorer.grounded_web.capability_graph import ExecutionTrace, PageFrame
 from ai_web_explorer.grounded_web.controller import (
     WebKobeExplorationController,
 )
+from ai_web_explorer.grounded_web.frontier_replay import ReplayResult
 from ai_web_explorer.grounded_web.graph import (
     BrowserAction,
+    BusinessAffordance,
     WebKobeEdge,
     WebKobeGraph,
+    WebKobeNode,
 )
 
 
@@ -71,6 +74,49 @@ def _graph(
         meta=graph_meta,
     )
 
+def _frontier_graph() -> WebKobeGraph:
+    def node(node_id: str, actions=()):
+        return WebKobeNode(
+            node_id=node_id,
+            page_description=node_id,
+            page_frame=PageFrame(
+                page_id=node_id,
+                page_type=node_id,
+                url="https://fixture.test/shop",
+                url_pattern="https://fixture.test/shop",
+                title=node_id,
+            ),
+            state_schema={},
+            last_state_snapshot={},
+            business_affordances=[BusinessAffordance(action) for action in actions],
+        )
+
+    edge = WebKobeEdge(
+        source_node_id="start",
+        target_node_id="frontier",
+        instruction="open frontier",
+        action=BrowserAction("click", "#frontier", "open_frontier"),
+        capability=None,
+        target_observation="frontier",
+        observed_delta=[],
+        schema_delta={},
+        execution_trace=ExecutionTrace(
+            "click", "#frontier", "open_frontier", {}, "start", "frontier", True
+        ),
+        status="succeeded_with_navigation",
+    )
+    return WebKobeGraph(
+        app="fake",
+        start_node_id="start",
+        total_steps_completed=0,
+        nodes=[node("start"), node("frontier", ("inspect_frontier",))],
+        edges=[edge],
+        meta={
+            "last_step_kind": "current_state_exhausted",
+            "last_step_status": "unproductive",
+        },
+    )
+
 
 class FakeExplorer:
     def __init__(self, graphs):
@@ -81,6 +127,17 @@ class FakeExplorer:
         graph = self.graphs[min(self.calls, len(self.graphs) - 1)]
         self.calls += 1
         return graph
+
+
+class ReplayFakeExplorer(FakeExplorer):
+    def __init__(self, graphs, replay_result):
+        super().__init__(graphs)
+        self.replay_result = replay_result
+        self.replay_calls = []
+
+    async def replay(self, target, *, start_url):
+        self.replay_calls.append((target.node_id, start_url))
+        return self.replay_result
 
 
 @pytest.mark.anyio
@@ -181,6 +238,58 @@ async def test_controller_reports_current_state_exhausted():
 
     assert explorer.calls == 1
     assert result.summary.stop_reason == "current_state_exhausted"
+
+
+@pytest.mark.anyio
+async def test_controller_replays_frontier_only_when_enabled_then_resumes_exploration():
+    explorer = ReplayFakeExplorer(
+        [_frontier_graph(), _graph(completed=1)],
+        ReplayResult(True, "frontier", None, "replay_succeeded", 1),
+    )
+    controller = WebKobeExplorationController(
+        explorer,
+        frontier_replay_runner=explorer,
+        start_url="https://fixture.test/shop",
+    )
+
+    result = await controller.run(max_steps=1)
+
+    assert explorer.replay_calls == [("frontier", "https://fixture.test/shop")]
+    assert explorer.calls == 2
+    assert result.summary.steps_completed == 1
+    assert result.summary.stop_reason == "max_steps"
+    assert result.graph.meta["replay_attempt_count"] == 1
+    assert result.graph.meta["replay_success_count"] == 1
+    assert result.graph.meta["replay_failure_count"] == 0
+
+
+@pytest.mark.anyio
+async def test_controller_blocks_failed_frontier_replay_and_stops_without_graph_edge():
+    explorer = ReplayFakeExplorer(
+        [_frontier_graph()],
+        ReplayResult(
+            False,
+            "start",
+            "start__open_frontier__frontier",
+            "target_state_mismatch",
+            0,
+        ),
+    )
+    controller = WebKobeExplorationController(
+        explorer,
+        frontier_replay_runner=explorer,
+        start_url="https://fixture.test/shop",
+    )
+
+    result = await controller.run(max_steps=3)
+
+    assert explorer.replay_calls == [("frontier", "https://fixture.test/shop")]
+    assert result.summary.stop_reason == "frontier_replay_exhausted"
+    assert result.graph.meta["replay_attempt_count"] == 1
+    assert result.graph.meta["replay_success_count"] == 0
+    assert result.graph.meta["replay_failure_count"] == 1
+    assert result.graph.meta["last_replay_reason"] == "target_state_mismatch"
+    assert result.graph.meta["blocked_replay_node_ids"] == ["frontier"]
 
 
 @pytest.mark.anyio
