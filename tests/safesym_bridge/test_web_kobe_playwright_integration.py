@@ -1,15 +1,26 @@
 import os
 import json
+import subprocess
+from dataclasses import replace
 
 import pytest
 
-from ai_web_explorer.safesym_bridge.browser_runner import run_web_kobe_exploration
+from ai_web_explorer.grounded_web.controller import WebKobeExplorationController
 from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
-from ai_web_explorer.safesym_bridge.web_kobe_playwright_adapter import (
-    WebKobePlaywrightAdapter,
-)
+from ai_web_explorer.grounded_web.frontier_replay import FrontierReplayRunner
+from ai_web_explorer.grounded_web.graph import BrowserAction
+from ai_web_explorer.grounded_web.models import StateSnapshot
+from ai_web_explorer.grounded_web.playwright_backend import WebKobePlaywrightAdapter
 from ai_web_explorer.grounded_web.semantic_assistor import (
     DeterministicSemanticAssistor,
+)
+from ai_web_explorer.safesym_bridge.browser_runner import run_web_kobe_exploration
+from ai_web_explorer.safesym_bridge.surface_pddl import (
+    compile_surface_domain,
+    compile_surface_problem,
+)
+from ai_web_explorer.safesym_bridge.web_kobe_safesym_smoke import (
+    analyze_web_kobe_safesym_smoke,
 )
 
 
@@ -39,6 +50,133 @@ FIXTURE_HTML = """
   </body>
 </html>
 """
+
+
+FRONTIER_REPLAY_FIXTURE_HTML = """
+<!doctype html>
+<html><head><title>Frontier Fixture</title></head>
+<body data-surface="shopping" data-filtered="false">
+  <main>
+    <h1>Frontier Fixture</h1>
+    <p data-state="surface">shopping</p>
+    <button id="open-product">Open product</button>
+    <button id="sort">Sort</button>
+    <button id="filter">Filter</button>
+    <button id="inspect-product">Inspect product</button>
+  </main>
+  <script>
+    const surface = value => {
+      document.body.dataset.surface = value;
+      document.querySelector('[data-state="surface"]').textContent = value;
+    };
+    document.querySelector('#open-product').onclick = () => surface('product');
+    document.querySelector('#inspect-product').onclick = () => surface('product');
+    document.querySelector('#sort').onclick = () => surface('checkout');
+    document.querySelector('#filter').onclick = () => {
+      document.body.dataset.filtered = 'true';
+      surface('shopping');
+    };
+  </script>
+</body></html>
+"""
+
+
+class _FrontierFixtureAdapter(WebKobePlaywrightAdapter):
+    def __init__(self, page, *, screenshot_dir):
+        async def state_observer(current_page):
+            return StateSnapshot(
+                page_id=await current_page.locator("body").get_attribute("data-surface"),
+                url="http://fixture.test/shop",
+                title="Frontier Fixture",
+                signature={
+                    "surface": await current_page.locator("body").get_attribute(
+                        "data-surface"
+                    ),
+                    "filtered": (
+                        await current_page.locator("body").get_attribute("data-filtered")
+                    )
+                    == "true",
+                },
+            )
+
+        def action_provider(state):
+            actions = {
+                "shopping": [
+                    BrowserAction("click", "#open-product", "open_product"),
+                    BrowserAction("click", "#sort", "sort"),
+                    BrowserAction("click", "#filter", "filter"),
+                ],
+                "product": [
+                    BrowserAction("click", "#inspect-product", "inspect_product"),
+                ],
+                "checkout": [],
+            }
+            return actions.get(state.signature.get("surface"), [])
+
+        super().__init__(
+            page,
+            app_name="fixture",
+            state_observer=state_observer,
+            action_provider=action_provider,
+            screenshot_dir=screenshot_dir,
+        )
+
+    async def reset_to(self, url: str) -> bool:
+        await self.page.set_content(FRONTIER_REPLAY_FIXTURE_HTML)
+        await self.page.wait_for_timeout(100)
+        return True
+
+    async def execute(self, action):
+        locators = {
+            "open_product": "#open-product",
+            "inspect_product": "#inspect-product",
+            "sort": "#sort",
+            "filter": "#filter",
+        }
+        return await super().execute(replace(action, locator=locators[action.semantic_id]))
+
+
+class _FrontierFixtureSemanticAssistor(DeterministicSemanticAssistor):
+    def describe_state(self, *, snapshot, interactables):
+        draft = super().describe_state(
+            snapshot=snapshot,
+            interactables=interactables,
+        )
+        label = str(snapshot.signature.get("surface"))
+        return replace(
+            draft,
+            page_description=f"{label} surface",
+            node_label=label,
+            state_summary=f"{label} surface",
+        )
+
+
+class _FixtureSafeSymRunner:
+    def __init__(self, task_dir):
+        self.task_dir = task_dir
+
+    def __call__(self, command, **kwargs):
+        command = [str(item) for item in command]
+        if command[-1] == "parse":
+            return subprocess.CompletedProcess(command, 0, "parse ok", "")
+        if "inject_safety" in command:
+            (self.task_dir / "safe_domain.pddl").write_text(
+                (self.task_dir / "domain.pddl").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (self.task_dir / "safe_problem.pddl").write_text(
+                (self.task_dir / "problem.pddl").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, "injected", "")
+        if "safeww.cli.solve" in command:
+            plan_name = "safe_sas_plan" if "--safe" in command else "sas_plan"
+            (self.task_dir / plan_name).write_text(
+                "(go_goal )\n; cost = 1 (unit cost)\n",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, "solved", "")
+        raise AssertionError(command)
 
 
 @pytest.mark.skipif(
@@ -83,6 +221,124 @@ async def test_playwright_web_kobe_explorer_records_real_self_loop_delta():
                 "cart_count": (0, 1),
                 "cart_has_items": (False, True),
             }
+        finally:
+            await browser.close()
+
+
+@pytest.mark.skipif(
+    os.getenv("RUN_WEB_KOBE_BROWSER_TEST") != "1",
+    reason="Set RUN_WEB_KOBE_BROWSER_TEST=1 to run the local browser fixture.",
+)
+@pytest.mark.anyio
+async def test_frontier_replay_surface_pddl_local_fixture(tmp_path):
+    from playwright.async_api import async_playwright
+
+    candidates_seen = 0
+
+    def visual_provider(prompt, *, current_screenshot_path=None, **kwargs):
+        nonlocal candidates_seen
+        if current_screenshot_path is None:
+            return (
+                '{"visible_change_summary":"observed",'
+                '"candidate_added_facts":[],"candidate_removed_facts":[],'
+                '"evidence":[],"confidence":0.5}'
+            )
+        candidates_seen += 1
+        candidates = {
+            1: ["open_product", "sort", "filter"],
+            2: ["inspect_product"],
+        }.get(candidates_seen, [])
+        return json.dumps(
+            {
+                "business_affordances": [
+                    {
+                        "action_name": action,
+                        "label": action,
+                        "relevance_hint": "core",
+                        "confidence": 0.9,
+                    }
+                    for action in candidates
+                ],
+                "state_summary": "fixture surface",
+            }
+        )
+
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(headless=True)
+        page = await browser.new_page()
+        try:
+            await page.set_content(FRONTIER_REPLAY_FIXTURE_HTML)
+            adapter = _FrontierFixtureAdapter(
+                page,
+                screenshot_dir=tmp_path / "screenshots",
+            )
+            explorer = WebKobeExplorer(
+                adapter=adapter,
+                semantic_assistor=_FrontierFixtureSemanticAssistor(app="fixture"),
+                visual_delta_provider=visual_provider,
+                capture_screenshots=True,
+                business_profile=None,
+            )
+            controller = WebKobeExplorationController(
+                explorer,
+                max_consecutive_unproductive_steps=None,
+                frontier_replay_runner=FrontierReplayRunner(explorer),
+                start_url="http://fixture.test/shop",
+            )
+            result = await controller.run(max_steps=4)
+
+            assert result.graph.meta["replay_success_count"] >= 1
+            assert any(
+                edge.target_node_id
+                and next(
+                    node.page_frame.page_type
+                    for node in result.graph.nodes
+                    if node.node_id == edge.target_node_id
+                )
+                == "checkout"
+                for edge in result.graph.edges
+            )
+            sibling_sources = {
+                edge.source_node_id
+                for edge in result.graph.edges
+                if edge.action.semantic_id in {"filter", "sort"}
+            }
+            assert len(sibling_sources) == 1
+
+            checkout_id = next(
+                node.node_id
+                for node in result.graph.nodes
+                if node.page_frame.page_type == "checkout"
+            )
+            surface_domain = compile_surface_domain(result.graph)
+            surface_problem = compile_surface_problem(
+                result.graph,
+                goal_node_id=checkout_id,
+            )
+            task_dir = tmp_path / "surface_pddl"
+            task_dir.mkdir()
+            (task_dir / "domain.pddl").write_text(
+                surface_domain.domain,
+                encoding="utf-8",
+            )
+            (task_dir / "problem.pddl").write_text(
+                surface_problem.problem,
+                encoding="utf-8",
+            )
+            rules = tmp_path / "rules.json"
+            rules.write_text("[]", encoding="utf-8")
+            fast_downward = tmp_path / "fast-downward.py"
+            fast_downward.write_text("# fixture", encoding="utf-8")
+            safesym_result = analyze_web_kobe_safesym_smoke(
+                task_dir,
+                safesym_root=tmp_path / "SafeSym",
+                rules=rules,
+                fast_downward=fast_downward,
+                runner=_FixtureSafeSymRunner(task_dir),
+                python_executable="python",
+            )
+            assert safesym_result.safe_plan_ready is True
+            assert "checkpoint" not in surface_domain.domain
         finally:
             await browser.close()
 

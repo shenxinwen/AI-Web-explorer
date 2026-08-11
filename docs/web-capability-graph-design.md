@@ -1088,3 +1088,24 @@ The first implementation should be conservative:
 This avoids replacing the current working MVP too early while giving the
 project a clear path from SauceDemo-specific facts toward a reusable website
 capability graph.
+
+## Frontier Replay and Surface PDDL V1
+
+The current experimental path keeps Trace PDDL as an ordered audit artifact,
+but uses the aggregated observed graph for Surface PDDL. Surface actions are
+grounded from successful observed edges and are not dependent on checkpoint
+ordering. Same-surface actions retain the current `(at surface)` predicate and
+record an independent `executed` marker; cross-surface actions move the
+surface predicate.
+
+Frontier replay is opt-in. When the current node has no remaining candidates,
+the controller may select a reachable previously observed node with an
+untried candidate, reset to the configured entry URL, replay the shortest
+stored path one atomic action at a time, and validate the expected surface
+after each step. A mismatch or action failure is fail-closed: it blocks that
+replay target for the run and never creates a successful graph edge. Only the
+subsequent normal exploration action can add an edge.
+
+This V1 intentionally provides coarse state validation, no replay retry, no
+hidden-state guarantee, and no claim of complete site coverage. It does not
+add domain-specific facts or coverage optimization.
