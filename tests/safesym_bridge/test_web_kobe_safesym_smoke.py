@@ -13,15 +13,13 @@ def _write_base_pddl(task_dir: Path) -> None:
     (task_dir / "domain.pddl").write_text(
         "\n".join(
             [
-                "(define (domain web_kobe_location)",
-                "  (:requirements :strips :typing)",
-                "  (:types location)",
-                "  (:constants start goal - location)",
-                "  (:predicates (at ?location - location))",
+                "(define (domain web_kobe_trace)",
+                "  (:requirements :strips)",
+                "  (:predicates (state_initial) (state_goal))",
                 "  (:action go_goal",
                 "    :parameters ()",
-                "    :precondition (and (at start))",
-                "    :effect (and (not (at start)) (at goal))",
+                "    :precondition (state_initial)",
+                "    :effect (and (not (state_initial)) (state_goal))",
                 "  )",
                 ")",
             ]
@@ -31,10 +29,10 @@ def _write_base_pddl(task_dir: Path) -> None:
     (task_dir / "problem.pddl").write_text(
         "\n".join(
             [
-                "(define (problem web_kobe_location_problem)",
-                "  (:domain web_kobe_location)",
-                "  (:init (at start))",
-                "  (:goal (at goal))",
+                "(define (problem web_kobe_trace_problem)",
+                "  (:domain web_kobe_trace)",
+                "  (:init (state_initial))",
+                "  (:goal (state_goal))",
                 ")",
             ]
         ),

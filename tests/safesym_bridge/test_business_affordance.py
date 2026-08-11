@@ -1,5 +1,6 @@
 import dataclasses
 import json
+from pathlib import Path
 
 import pytest
 
@@ -7,6 +8,42 @@ from ai_web_explorer.grounded_web.business_affordance import (
     VisualAffordanceRequest,
     summarize_visual_affordances,
 )
+
+
+def test_exploration_and_prompts_do_not_consume_trace_planning_inputs():
+    module_sources = []
+    for module_name in (
+        "ai_web_explorer.grounded_web.explorer",
+        "ai_web_explorer.grounded_web.business_affordance",
+        "ai_web_explorer.grounded_web.stagehand_prompt",
+    ):
+        module = __import__(module_name, fromlist=["__file__"])
+        module_sources.append(Path(module.__file__).read_text(encoding="utf-8"))
+
+    for source in module_sources:
+        assert "trace_pddl" not in source
+        assert "goal_checkpoint" not in source
+        assert "problem.pddl" not in source
+
+
+def test_trace_compiler_does_not_consume_non_trace_graph_fields():
+    module = __import__(
+        "ai_web_explorer.safesym_bridge.trace_pddl",
+        fromlist=["__file__"],
+    )
+    source = Path(module.__file__).read_text(encoding="utf-8")
+
+    for token in (
+        "observed_delta",
+        "schema_delta",
+        "visual_change_kind",
+        "planning_delta",
+        "planning_transition",
+        "node_label",
+        "page_frame",
+        "business_affordance",
+    ):
+        assert token not in source
 
 
 def test_summarize_visual_affordances_maps_provider_json():

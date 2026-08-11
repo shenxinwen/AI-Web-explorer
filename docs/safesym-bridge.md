@@ -48,10 +48,60 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-domain-from-graph \
 only `domain.pddl`, so it does not require choosing a concrete start/goal
 planning query.
 
-## Location PDDL V1
+## Explored Trace PDDL V1
 
-The Phase A path uses the frozen Planning Graph as its only planner-facing
-input. It deterministically emits the generalized schema
+Trace V1 is the recommended Phase A projection. It consumes the ordered
+successful events in the frozen Raw Graph and emits an untyped, zero-argument
+STRIPS checkpoint machine. A successful action remains eligible when URL and
+Raw/Planning nodes are unchanged; successful same-URL/self-loop actions with a
+completed `after_observation_id` therefore become trace transitions. Failed
+actions and structurally incomplete events remain in `projection_report.json`
+with exclusion reasons but do not become checkpoints or actions. DOM and Visual
+Delta differences are diagnostic only.
+
+Generate the domain-only trace artifacts:
+
+```powershell
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-phase-a `
+  --projection trace `
+  --graph outputs/experiments/site/graph.json `
+  --output outputs/experiments/site/trace_pddl_v1
+```
+
+Read the first and last `checkpoint_id` values from
+`outputs/experiments/site/trace_pddl_v1/projection_report.json`, then rerun with
+both explicit checkpoint flags to create `problem.pddl`:
+
+```powershell
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-phase-a `
+  --projection trace `
+  --graph outputs/experiments/site/graph.json `
+  --output outputs/experiments/site/trace_pddl_v1 `
+  --start-checkpoint <start_checkpoint_id> `
+  --goal-checkpoint <goal_checkpoint_id>
+```
+
+The checkpoint query is retrospective and never flows back into exploration,
+candidate generation, ranking, or Stagehand prompts. Then run the unchanged
+SafeSym smoke over the generated `domain.pddl` and `problem.pddl`:
+
+```powershell
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-safesym-smoke `
+  --task-dir outputs/experiments/site/trace_pddl_v1 `
+  --safesym-root C:\Users\moon\Desktop\Projects\SafeSym `
+  --rules C:\Users\moon\Desktop\Projects\SafeSym\configs\constraint_rules.json `
+  --fast-downward C:\Users\moon\Desktop\Projects\AutoWebWorld\downward\fast-downward.py
+```
+
+Trace V1 describes only the recorded exploration path. It does not claim full
+site coverage, branch completeness, semantic state equality, or an optimal
+business workflow.
+
+## Location PDDL V1 Compatibility
+
+Use `--projection location` to retain the page-level Planning Graph model. It
+uses the frozen Planning Graph as its only planner-facing input and
+deterministically emits the generalized schema
 `location + (at ?location - location)` and excludes unverified, missing-target,
 self-loop, and invalid-action transitions. Visual Delta, profile/supporting
 facts, `PlanningState`, embeddings, and the evidence sidecar are not PDDL
@@ -60,6 +110,7 @@ Raw edge provenance, and excluded-edge reasons.
 
 ```powershell
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-phase-a `
+  --projection location `
   --graph outputs/experiments/site/graph.json `
   --output outputs/experiments/site/location_pddl_v1
 ```
@@ -71,6 +122,7 @@ After the Planning Graph is frozen, an explicit query may add both parameters:
 
 ```powershell
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-phase-a `
+  --projection location `
   --graph outputs/experiments/site/graph.json `
   --output outputs/experiments/site/location_pddl_v1 `
   --start-node <planning_node_id> `
