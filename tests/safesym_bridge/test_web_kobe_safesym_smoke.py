@@ -2,6 +2,17 @@ import json
 import subprocess
 from pathlib import Path
 
+from ai_web_explorer.grounded_web.capability_graph import ExecutionTrace, PageFrame
+from ai_web_explorer.grounded_web.graph import (
+    BrowserAction,
+    WebKobeEdge,
+    WebKobeGraph,
+    WebKobeNode,
+)
+from ai_web_explorer.safesym_bridge.surface_pddl import (
+    compile_surface_domain,
+    compile_surface_problem,
+)
 from ai_web_explorer.safesym_bridge.web_kobe_safesym_smoke import (
     analyze_web_kobe_safesym_smoke,
     write_web_kobe_safesym_smoke,
@@ -107,6 +118,93 @@ def test_analyze_web_kobe_safesym_smoke_reports_success_without_inserted_checks(
     assert any("safeww.cli.inject_safety" in command for command in runner.commands)
     assert any(str(task_dir.resolve()) in command for command in runner.commands)
     assert any("safeww.cli.solve" in command for command in runner.commands)
+
+
+def test_surface_pddl_safe_sym_smoke_handles_sibling_and_deep_edges(tmp_path):
+    graph = WebKobeGraph(
+        app="fixture",
+        start_node_id="shopping",
+        total_steps_completed=3,
+        nodes=[
+            WebKobeNode(
+                node_id="shopping",
+                page_description="shopping",
+                page_frame=PageFrame(
+                    page_id="shopping",
+                    page_type="shopping",
+                    url="https://fixture.test/shop",
+                    url_pattern="https://fixture.test/shop",
+                    title="shopping",
+                ),
+                state_schema={},
+                last_state_snapshot={},
+                node_label="shopping",
+            ),
+            WebKobeNode(
+                node_id="deep",
+                page_description="deep",
+                page_frame=PageFrame(
+                    page_id="deep",
+                    page_type="deep",
+                    url="https://fixture.test/shop",
+                    url_pattern="https://fixture.test/shop",
+                    title="deep",
+                ),
+                state_schema={},
+                last_state_snapshot={},
+                node_label="deep",
+            ),
+        ],
+        edges=[],
+    )
+    for source, target, action in [
+        ("shopping", "shopping", "filter"),
+        ("shopping", "shopping", "sort"),
+        ("shopping", "deep", "open_deep"),
+    ]:
+        graph.edges.append(
+            WebKobeEdge(
+                source_node_id=source,
+                target_node_id=target,
+                instruction=action,
+                action=BrowserAction("click", f"#{action}", action),
+                capability=None,
+                target_observation=target,
+                observed_delta=[],
+                schema_delta={},
+                execution_trace=ExecutionTrace(
+                    "click", f"#{action}", action, {}, source, target, True
+                ),
+                status="succeeded_with_navigation"
+                if source != target
+                else "succeeded_with_observed_change",
+            )
+        )
+    domain_result = compile_surface_domain(graph)
+    problem_result = compile_surface_problem(graph, goal_node_id="deep")
+    task_dir = tmp_path / "surface_task"
+    task_dir.mkdir()
+    (task_dir / "domain.pddl").write_text(domain_result.domain, encoding="utf-8")
+    (task_dir / "problem.pddl").write_text(problem_result.problem, encoding="utf-8")
+    rules = tmp_path / "rules.json"
+    rules.write_text("[]", encoding="utf-8")
+    fast_downward = tmp_path / "fast-downward.py"
+    fast_downward.write_text("# fake", encoding="utf-8")
+    runner = FakeSafeSymRunner(task_dir)
+
+    report = analyze_web_kobe_safesym_smoke(
+        task_dir,
+        safesym_root=tmp_path / "SafeSym",
+        rules=rules,
+        fast_downward=fast_downward,
+        runner=runner,
+        python_executable="python",
+    )
+
+    assert report.safesym_parse_ready is True
+    assert report.safety_injection_ready is True
+    assert report.base_plan_ready is True
+    assert report.safe_plan_ready is True
 
 
 def test_write_web_kobe_safesym_smoke_writes_report(tmp_path):

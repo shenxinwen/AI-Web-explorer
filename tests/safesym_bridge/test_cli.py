@@ -1083,3 +1083,70 @@ def test_main_web_kobe_stagehand_explore_cleans_latest_output_dir(
 
     assert exit_code == 0
     assert calls == [(output, trace, stale_screenshot_dir, embeddings)]
+
+
+def test_main_web_kobe_phase_a_surface_projection_writes_problem(tmp_path):
+    graph_path = tmp_path / "graph.json"
+    output_dir = tmp_path / "surface"
+    node = WebKobeNode(
+        node_id="shopping",
+        page_description="shopping",
+        page_frame=PageFrame(
+            page_id="shopping",
+            page_type="shopping",
+            url="https://fixture.test/shop",
+            url_pattern="https://fixture.test/shop",
+            title="shopping",
+        ),
+        state_schema={},
+        last_state_snapshot={},
+        node_label="shopping",
+    )
+    edge = WebKobeEdge(
+        source_node_id="shopping",
+        target_node_id="shopping",
+        instruction="filter",
+        action=BrowserAction("click", "#filter", "filter"),
+        capability=None,
+        target_observation="shopping",
+        observed_delta=[],
+        schema_delta={},
+        execution_trace=ExecutionTrace(
+            "click", "#filter", "filter", {}, "shopping", "shopping", True
+        ),
+        status="succeeded_with_observed_change",
+    )
+    graph_path.write_text(
+        json.dumps(
+            WebKobeGraph(
+                app="fixture",
+                start_node_id="shopping",
+                total_steps_completed=1,
+                nodes=[node],
+                edges=[edge],
+            ).to_dict()
+        ),
+        encoding="utf-8",
+    )
+
+    assert (
+        main(
+            [
+                "web-kobe-phase-a",
+                "--graph",
+                str(graph_path),
+                "--output",
+                str(output_dir),
+                "--projection",
+                "surface",
+                "--goal-node",
+                "shopping",
+            ]
+        )
+        == 0
+    )
+    domain = (output_dir / "domain.pddl").read_text(encoding="utf-8")
+    problem = (output_dir / "problem.pddl").read_text(encoding="utf-8")
+    assert "(executed transition_filter_on_shopping)" in domain
+    assert "(:domain web_kobe_surface)" in problem
+    assert "checkpoint" not in domain

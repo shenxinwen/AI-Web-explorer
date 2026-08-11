@@ -26,6 +26,8 @@ from ai_web_explorer.safesym_bridge.location_pddl import compile_location_domain
 from ai_web_explorer.safesym_bridge.location_pddl import compile_location_problem
 from ai_web_explorer.safesym_bridge.trace_pddl import compile_trace_domain
 from ai_web_explorer.safesym_bridge.trace_pddl import compile_trace_problem
+from ai_web_explorer.safesym_bridge.surface_pddl import compile_surface_domain
+from ai_web_explorer.safesym_bridge.surface_pddl import compile_surface_problem
 from ai_web_explorer.grounded_web.planning_abstraction import (
     build_planning_state_graph,
 )
@@ -246,7 +248,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     web_kobe_phase_a_parser.add_argument(
         "--projection",
-        choices=["trace", "location"],
+        choices=["trace", "location", "surface"],
         default="trace",
     )
     web_kobe_phase_a_parser.add_argument("--start-node", default=None)
@@ -560,7 +562,7 @@ def main(argv: list[str] | None = None) -> int:
                 web_kobe_phase_a_parser.error(
                     "node query flags require --projection location"
                 )
-            if args.projection == "location" and (
+            if args.projection in {"location", "surface"} and (
                 args.start_checkpoint is not None
                 or args.goal_checkpoint is not None
             ):
@@ -579,6 +581,10 @@ def main(argv: list[str] | None = None) -> int:
             ):
                 web_kobe_phase_a_parser.error(
                     "--start-node and --goal-node must be provided together"
+                )
+            if args.projection == "surface" and args.start_node is not None:
+                web_kobe_phase_a_parser.error(
+                    "surface projection uses graph.start_node_id; omit --start-node"
                 )
             args.output.mkdir(parents=True, exist_ok=True)
             problem_path = args.output / "problem.pddl"
@@ -607,11 +613,13 @@ def main(argv: list[str] | None = None) -> int:
             )
             if args.projection == "trace":
                 projection = compile_trace_domain(graph)
-            else:
+            elif args.projection == "location":
                 projection = compile_location_domain(
                     artifacts.planning_graph,
                     edge_mappings=artifacts.report.edge_mappings,
                 )
+            else:
+                projection = compile_surface_domain(graph)
             (args.output / "domain.pddl").write_text(
                 projection.domain,
                 encoding="utf-8",
@@ -639,6 +647,15 @@ def main(argv: list[str] | None = None) -> int:
                 problem = compile_location_problem(
                     artifacts.planning_graph,
                     start_node_id=args.start_node,
+                    goal_node_id=args.goal_node,
+                )
+                problem_path.write_text(
+                    problem.problem,
+                    encoding="utf-8",
+                )
+            elif args.projection == "surface" and args.goal_node is not None:
+                problem = compile_surface_problem(
+                    graph,
                     goal_node_id=args.goal_node,
                 )
                 problem_path.write_text(
