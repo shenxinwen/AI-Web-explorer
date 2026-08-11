@@ -48,6 +48,41 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-domain-from-graph \
 only `domain.pddl`, so it does not require choosing a concrete start/goal
 planning query.
 
+## Location PDDL V1
+
+The Phase A path uses the frozen Planning Graph as its only planner-facing
+input. It deterministically emits the generalized schema
+`location + (at ?location - location)` and excludes unverified, missing-target,
+self-loop, and invalid-action transitions. Visual Delta, profile/supporting
+facts, `PlanningState`, embeddings, and the evidence sidecar are not PDDL
+inputs. The resulting `projection_report.json` records location/action maps,
+Raw edge provenance, and excluded-edge reasons.
+
+```powershell
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-phase-a `
+  --graph outputs/experiments/site/graph.json `
+  --output outputs/experiments/site/location_pddl_v1
+```
+
+By default `web-kobe-phase-a` writes `raw_graph.json`,
+`planning_graph.json`, `planning_abstraction_report.json`,
+`projection_report.json`, and `domain.pddl`. It does not write a problem.
+After the Planning Graph is frozen, an explicit query may add both parameters:
+
+```powershell
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-phase-a `
+  --graph outputs/experiments/site/graph.json `
+  --output outputs/experiments/site/location_pddl_v1 `
+  --start-node <planning_node_id> `
+  --goal-node <planning_node_id>
+```
+
+This writes `problem.pddl` only when the goal is reachable through the same
+projectable transitions used for the domain. Start/goal are retrospective
+planning-query inputs; they are never passed back to Explorer, candidate
+selection, or Stagehand prompts. The legacy fact-rich
+`web-kobe-pddl-from-graph` path remains available for diagnostics.
+
 When a diagnostic planning query is needed, generate both `domain.pddl` and
 `problem.pddl` with an explicit goal node:
 
