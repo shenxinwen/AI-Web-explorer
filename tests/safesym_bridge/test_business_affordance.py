@@ -1,6 +1,8 @@
 import dataclasses
 import json
 
+import pytest
+
 from ai_web_explorer.grounded_web.business_affordance import (
     VisualAffordanceRequest,
     summarize_visual_affordances,
@@ -51,9 +53,13 @@ def test_summarize_visual_affordances_maps_provider_json():
     ]
 
 
-def test_visual_affordance_prompt_keeps_vlm_stateless_about_graph_and_profile():
+@pytest.mark.parametrize(
+    "external_goal",
+    ["Reach checkout immediately", "Delete the selected document"],
+)
+def test_visual_affordance_prompt_ignores_external_task_goal(external_goal):
     request = VisualAffordanceRequest(
-        goal="Explore visible business capabilities.",
+        goal=external_goal,
         current_screenshot_path="current.png",
         current_signature={"url_path": "/inventory"},
     )

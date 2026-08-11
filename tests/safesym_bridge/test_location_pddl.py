@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from ai_web_explorer.grounded_web.capability_graph import ExecutionTrace, PageFrame
@@ -9,6 +11,7 @@ from ai_web_explorer.grounded_web.graph import (
 )
 from ai_web_explorer.safesym_bridge.location_pddl import compile_location_domain
 from ai_web_explorer.safesym_bridge.location_pddl import compile_location_problem
+from ai_web_explorer.safesym_bridge import location_pddl
 
 
 def _node(node_id: str, label: str) -> WebKobeNode:
@@ -207,4 +210,34 @@ def test_compile_location_problem_rejects_unreachable_goal():
             start_node_id="home-id",
             goal_node_id="isolated-id",
         )
+
+
+@pytest.mark.parametrize(
+    ("labels", "action"),
+    [
+        (("catalog", "details"), "open_item"),
+        (("documents", "editor"), "open_document"),
+        (("meeting_list", "meeting_room"), "join_meeting"),
+    ],
+)
+def test_location_compiler_is_domain_agnostic(labels, action):
+    graph = WebKobeGraph(
+        app="generic_site",
+        start_node_id="source",
+        total_steps_completed=1,
+        nodes=[_node("source", labels[0]), _node("target", labels[1])],
+        edges=[_edge("source", action, "target")],
+    )
+
+    result = compile_location_domain(graph)
+
+    assert "(at ?location - location)" in result.domain
+    assert f"(:action {action}" in result.domain
+    assert "cart_has_items" not in result.domain
+
+
+def test_location_compiler_has_no_domain_action_rules():
+    source = Path(location_pddl.__file__).read_text(encoding="utf-8").lower()
+    for token in ("checkout", "cart", "login", "search", "filter", "payment"):
+        assert token not in source
 from dataclasses import replace
