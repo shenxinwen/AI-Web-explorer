@@ -72,8 +72,39 @@ def _graph_fixture() -> WebKobeGraph:
     )
 
 
-def test_phase_a_cli_writes_raw_planning_report_and_domain_only(tmp_path, monkeypatch):
+def _trace_graph_fixture() -> WebKobeGraph:
     graph = _graph_fixture()
+    first_edge = replace(
+        graph.edges[0],
+        target_node_id="listing",
+        target_observation="listing",
+        execution_trace=replace(
+            graph.edges[0].execution_trace,
+            after_observation_id="listing",
+        ),
+        status="no_observed_change",
+    )
+    second_edge = replace(
+        first_edge,
+        instruction="sort_items",
+        action=BrowserAction(
+            "business_intent",
+            None,
+            "sort_items",
+            canonical_action_name="sort_items",
+        ),
+        execution_trace=replace(
+            first_edge.execution_trace,
+            concrete_target_sample="sort_items",
+        ),
+    )
+    return replace(graph, edges=[first_edge, second_edge], total_steps_completed=2)
+
+
+def test_phase_a_cli_writes_raw_planning_report_and_trace_domain_only(
+    tmp_path, monkeypatch
+):
+    graph = _trace_graph_fixture()
     graph_path = tmp_path / "raw.json"
     graph_path.write_text(
         json.dumps(graph.to_dict(), ensure_ascii=False),
@@ -115,9 +146,17 @@ def test_phase_a_cli_writes_raw_planning_report_and_domain_only(tmp_path, monkey
     projection = json.loads(
         (output_dir / "projection_report.json").read_text(encoding="utf-8")
     )
-    assert "(:types location)" in domain
-    assert "(at ?location - location)" in domain
-    assert projection["schema_version"] == "location-pddl-projection-v1"
+    assert "(:requirements :strips)" in domain
+    assert "(:types location)" not in domain
+    assert "(at ?location - location)" not in domain
+    assert "(state_initial)" in domain
+    assert "(:action view_details" in domain
+    assert "(:action sort_items" in domain
+    assert projection["schema_version"] == "trace-pddl-projection-v1"
+    assert [item["pddl_action"] for item in projection["actions"]] == [
+        "view_details",
+        "sort_items",
+    ]
     assert not (output_dir / "problem.pddl").exists()
 
 
@@ -142,6 +181,8 @@ def test_phase_a_cli_writes_problem_for_explicit_reachable_query(
             str(graph_path),
             "--output",
             str(output_dir),
+            "--projection",
+            "location",
             "--start-node",
             "listing",
             "--goal-node",
@@ -154,7 +195,7 @@ def test_phase_a_cli_writes_problem_for_explicit_reachable_query(
     assert "(:goal (at details))" in problem
 
 
-def test_phase_a_cli_requires_start_and_goal_together(
+def test_phase_a_location_problem_requires_node_pair(
     tmp_path,
     monkeypatch,
     capfd,
@@ -176,6 +217,8 @@ def test_phase_a_cli_requires_start_and_goal_together(
                 str(graph_path),
                 "--output",
                 str(tmp_path / "phase_a"),
+                "--projection",
+                "location",
                 "--start-node",
                 "listing",
             ]
@@ -183,6 +226,71 @@ def test_phase_a_cli_requires_start_and_goal_together(
 
     assert error.value.code == 2
     assert "--start-node and --goal-node must be provided together" in (
+        capfd.readouterr().err
+    )
+
+
+def test_phase_a_trace_problem_requires_checkpoint_pair(
+    tmp_path,
+    capfd,
+):
+    with pytest.raises(SystemExit) as error:
+        main(
+            [
+                "web-kobe-phase-a",
+                "--graph",
+                str(tmp_path / "raw.json"),
+                "--output",
+                str(tmp_path / "phase_a"),
+                "--start-checkpoint",
+                "checkpoint_000",
+            ]
+        )
+
+    assert error.value.code == 2
+    assert "--start-checkpoint and --goal-checkpoint must be provided together" in (
+        capfd.readouterr().err
+    )
+
+
+def test_phase_a_rejects_trace_flags_in_location_mode(tmp_path, capfd):
+    with pytest.raises(SystemExit) as error:
+        main(
+            [
+                "web-kobe-phase-a",
+                "--graph",
+                str(tmp_path / "raw.json"),
+                "--output",
+                str(tmp_path / "phase_a"),
+                "--projection",
+                "location",
+                "--start-checkpoint",
+                "checkpoint_000",
+            ]
+        )
+
+    assert error.value.code == 2
+    assert "checkpoint query flags require --projection trace" in (
+        capfd.readouterr().err
+    )
+
+
+def test_phase_a_rejects_node_flags_in_trace_mode(tmp_path, capfd):
+    with pytest.raises(SystemExit) as error:
+        main(
+            [
+                "web-kobe-phase-a",
+                "--graph",
+                str(tmp_path / "raw.json"),
+                "--output",
+                str(tmp_path / "phase_a"),
+                "--start-node",
+                "listing",
+            ]
+        )
+
+    assert error.value.code == 2
+    assert "node query flags require --projection location" in (
         capfd.readouterr().err
     )
 
@@ -319,7 +427,15 @@ def test_phase_a_projects_only_cross_group_edges_and_keeps_capability_self_loop(
     )
 
     assert main(
-        ["web-kobe-phase-a", "--graph", str(graph_path), "--output", str(output_dir)]
+        [
+            "web-kobe-phase-a",
+            "--graph",
+            str(graph_path),
+            "--output",
+            str(output_dir),
+            "--projection",
+            "location",
+        ]
     ) == 0
 
     planning = json.loads((output_dir / "planning_graph.json").read_text())
@@ -402,6 +518,8 @@ def test_phase_a_cli_keeps_rejected_source_edges_only_in_raw_artifacts(
             str(graph_path),
             "--output",
             str(output_dir),
+            "--projection",
+            "location",
         ]
     ) == 0
 

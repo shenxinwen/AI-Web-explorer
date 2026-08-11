@@ -24,6 +24,8 @@ from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
 )
 from ai_web_explorer.safesym_bridge.location_pddl import compile_location_domain
 from ai_web_explorer.safesym_bridge.location_pddl import compile_location_problem
+from ai_web_explorer.safesym_bridge.trace_pddl import compile_trace_domain
+from ai_web_explorer.safesym_bridge.trace_pddl import compile_trace_problem
 from ai_web_explorer.grounded_web.planning_abstraction import (
     build_planning_state_graph,
 )
@@ -242,8 +244,15 @@ def main(argv: list[str] | None = None) -> int:
         default=Path("outputs/web_kobe_phase_a"),
         help="Directory to write raw/planning/report/domain artifacts.",
     )
+    web_kobe_phase_a_parser.add_argument(
+        "--projection",
+        choices=["trace", "location"],
+        default="trace",
+    )
     web_kobe_phase_a_parser.add_argument("--start-node", default=None)
     web_kobe_phase_a_parser.add_argument("--goal-node", default=None)
+    web_kobe_phase_a_parser.add_argument("--start-checkpoint", default=None)
+    web_kobe_phase_a_parser.add_argument("--goal-checkpoint", default=None)
     web_kobe_pddl_smoke_parser = subparsers.add_parser(
         "web-kobe-pddl-smoke",
         help="Write Web-KOBE PDDL plus planning-readiness smoke report.",
@@ -540,7 +549,29 @@ def main(argv: list[str] | None = None) -> int:
             (args.output / "domain.pddl").write_text(domain, encoding="utf-8")
             output_path = args.output
         elif args.mode in {"web-kobe-phase-a", "web-kobe-consolidate"}:
-            if (args.start_node is None) != (args.goal_node is None):
+            if args.projection == "trace" and (
+                args.start_node is not None or args.goal_node is not None
+            ):
+                web_kobe_phase_a_parser.error(
+                    "node query flags require --projection location"
+                )
+            if args.projection == "location" and (
+                args.start_checkpoint is not None
+                or args.goal_checkpoint is not None
+            ):
+                web_kobe_phase_a_parser.error(
+                    "checkpoint query flags require --projection trace"
+                )
+            if args.projection == "trace" and (
+                (args.start_checkpoint is None)
+                != (args.goal_checkpoint is None)
+            ):
+                web_kobe_phase_a_parser.error(
+                    "--start-checkpoint and --goal-checkpoint must be provided together"
+                )
+            if args.projection == "location" and (
+                (args.start_node is None) != (args.goal_node is None)
+            ):
                 web_kobe_phase_a_parser.error(
                     "--start-node and --goal-node must be provided together"
                 )
@@ -567,10 +598,13 @@ def main(argv: list[str] | None = None) -> int:
                 json.dumps(artifacts.report.to_dict(), indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )
-            projection = compile_location_domain(
-                artifacts.planning_graph,
-                edge_mappings=artifacts.report.edge_mappings,
-            )
+            if args.projection == "trace":
+                projection = compile_trace_domain(graph)
+            else:
+                projection = compile_location_domain(
+                    artifacts.planning_graph,
+                    edge_mappings=artifacts.report.edge_mappings,
+                )
             (args.output / "domain.pddl").write_text(
                 projection.domain,
                 encoding="utf-8",
@@ -584,16 +618,29 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 encoding="utf-8",
             )
-            if args.start_node is not None:
+            problem_path = args.output / "problem.pddl"
+            if args.projection == "trace" and args.start_checkpoint is not None:
+                problem = compile_trace_problem(
+                    graph,
+                    start_checkpoint_id=args.start_checkpoint,
+                    goal_checkpoint_id=args.goal_checkpoint,
+                )
+                problem_path.write_text(
+                    problem.problem,
+                    encoding="utf-8",
+                )
+            elif args.projection == "location" and args.start_node is not None:
                 problem = compile_location_problem(
                     artifacts.planning_graph,
                     start_node_id=args.start_node,
                     goal_node_id=args.goal_node,
                 )
-                (args.output / "problem.pddl").write_text(
+                problem_path.write_text(
                     problem.problem,
                     encoding="utf-8",
                 )
+            else:
+                problem_path.unlink(missing_ok=True)
             output_path = args.output
         elif args.mode == "web-kobe-pddl-smoke":
             graph = load_web_kobe_graph_json(args.graph)
