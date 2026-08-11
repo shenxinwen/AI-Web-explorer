@@ -17,6 +17,22 @@ class TraceDomainProjection:
     report: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class TraceProblemProjection:
+    problem: str
+    start_checkpoint: str
+    goal_checkpoint: str
+
+
+@dataclass(frozen=True)
+class _TraceCompilation:
+    domain_name: str
+    checkpoints: list[dict[str, Any]]
+    predicates: list[str]
+    actions: list[dict[str, Any]]
+    excluded_edges: list[dict[str, str]]
+
+
 def _stable_digest(edge_id: str, trace_index: int) -> str:
     value = f"{edge_id}:{trace_index}"
     return hashlib.sha256(value.encode("utf-8")).hexdigest()[:8]
@@ -37,6 +53,14 @@ def _domain_name(value: str) -> str:
         return normalized
     digest = hashlib.sha256(value.encode("utf-8")).hexdigest()[:8]
     return f"domain_{digest}"
+
+
+def _problem_name(value: str) -> str:
+    normalized = _normalized_symbol(value)
+    if normalized:
+        return normalized
+    digest = hashlib.sha256(value.encode("utf-8")).hexdigest()[:8]
+    return f"problem_{digest}"
 
 
 def _action_identity(edge: WebKobeEdge) -> str:
@@ -100,12 +124,11 @@ def _render_domain(
     return "\n".join(lines)
 
 
-def compile_trace_domain(
+def _compile_trace(
     graph: WebKobeGraph,
     *,
     domain_name: str = "web_kobe_trace",
-) -> TraceDomainProjection:
-    normalized_domain_name = _domain_name(domain_name)
+) -> _TraceCompilation:
     checkpoints: list[dict[str, Any]] = [
         {
             "checkpoint_id": "checkpoint_000",
@@ -176,18 +199,74 @@ def compile_trace_domain(
         )
         source_checkpoint = target_checkpoint
 
+    return _TraceCompilation(
+        domain_name=_domain_name(domain_name),
+        checkpoints=checkpoints,
+        predicates=predicates,
+        actions=actions,
+        excluded_edges=excluded_edges,
+    )
+
+
+def compile_trace_domain(
+    graph: WebKobeGraph,
+    *,
+    domain_name: str = "web_kobe_trace",
+) -> TraceDomainProjection:
+    compilation = _compile_trace(graph, domain_name=domain_name)
     report = {
         "schema_version": TRACE_PROJECTION_SCHEMA_VERSION,
-        "domain_name": normalized_domain_name,
-        "checkpoints": checkpoints,
-        "actions": actions,
-        "excluded_edges": excluded_edges,
+        "domain_name": compilation.domain_name,
+        "checkpoints": compilation.checkpoints,
+        "actions": compilation.actions,
+        "excluded_edges": compilation.excluded_edges,
     }
     return TraceDomainProjection(
         domain=_render_domain(
-            domain_name=normalized_domain_name,
-            predicates=predicates,
-            actions=actions,
+            domain_name=compilation.domain_name,
+            predicates=compilation.predicates,
+            actions=compilation.actions,
         ),
         report=report,
+    )
+
+
+def compile_trace_problem(
+    graph: WebKobeGraph,
+    *,
+    start_checkpoint_id: str,
+    goal_checkpoint_id: str,
+    domain_name: str = "web_kobe_trace",
+    problem_name: str = "web_kobe_trace_problem",
+) -> TraceProblemProjection:
+    compilation = _compile_trace(graph, domain_name=domain_name)
+    checkpoints = {
+        checkpoint["checkpoint_id"]: checkpoint
+        for checkpoint in compilation.checkpoints
+    }
+    if start_checkpoint_id not in checkpoints:
+        raise ValueError(f"unknown_start_checkpoint: {start_checkpoint_id}")
+    if goal_checkpoint_id not in checkpoints:
+        raise ValueError(f"unknown_goal_checkpoint: {goal_checkpoint_id}")
+    start_checkpoint = checkpoints[start_checkpoint_id]
+    goal_checkpoint = checkpoints[goal_checkpoint_id]
+    if start_checkpoint["trace_index"] > goal_checkpoint["trace_index"]:
+        raise ValueError(
+            "goal_unreachable_in_explored_trace: "
+            f"{start_checkpoint_id} -> {goal_checkpoint_id}"
+        )
+    problem = "\n".join(
+        [
+            f"(define (problem {_problem_name(problem_name)})",
+            f"  (:domain {compilation.domain_name})",
+            f"  (:init ({start_checkpoint['pddl_predicate']}))",
+            f"  (:goal ({goal_checkpoint['pddl_predicate']}))",
+            ")",
+            "",
+        ]
+    )
+    return TraceProblemProjection(
+        problem=problem,
+        start_checkpoint=start_checkpoint_id,
+        goal_checkpoint=goal_checkpoint_id,
     )

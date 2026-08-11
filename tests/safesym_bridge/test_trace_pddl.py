@@ -2,6 +2,8 @@ import hashlib
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
+
 from ai_web_explorer.grounded_web.capability_graph import ExecutionTrace, PageFrame
 from ai_web_explorer.grounded_web.graph import (
     BrowserAction,
@@ -11,6 +13,7 @@ from ai_web_explorer.grounded_web.graph import (
 )
 import ai_web_explorer.safesym_bridge.trace_pddl as trace_pddl
 from ai_web_explorer.safesym_bridge.trace_pddl import compile_trace_domain
+from ai_web_explorer.safesym_bridge.trace_pddl import compile_trace_problem
 
 
 def _node(node_id: str) -> WebKobeNode:
@@ -106,6 +109,79 @@ def test_trace_domain_projects_successful_self_loops_as_ordered_checkpoints():
     ]
     assert "(not (state_initial))" in result.domain
     assert "(state_after_search_items)" in result.domain
+
+
+def _three_step_trace() -> WebKobeGraph:
+    return _graph(
+        edges=[
+            _edge("page", "open_item", "page"),
+            _edge("page", "apply_filter", "page"),
+            _edge("page", "open_checkout", "page"),
+        ]
+    )
+
+
+def test_trace_problem_uses_explicit_reachable_checkpoints():
+    graph = _three_step_trace()
+    checkpoints = compile_trace_domain(graph).report["checkpoints"]
+
+    result = compile_trace_problem(
+        graph,
+        start_checkpoint_id=checkpoints[0]["checkpoint_id"],
+        goal_checkpoint_id=checkpoints[-1]["checkpoint_id"],
+    )
+
+    assert "(:domain web_kobe_trace)" in result.problem
+    assert "(:init (state_initial))" in result.problem
+    assert "(:goal (state_after_open_checkout))" in result.problem
+    assert result.start_checkpoint == checkpoints[0]["checkpoint_id"]
+    assert result.goal_checkpoint == checkpoints[-1]["checkpoint_id"]
+
+
+def test_trace_problem_rejects_unknown_start_checkpoint():
+    with pytest.raises(ValueError, match="unknown_start_checkpoint"):
+        compile_trace_problem(
+            _three_step_trace(),
+            start_checkpoint_id="missing",
+            goal_checkpoint_id="checkpoint_000",
+        )
+
+
+def test_trace_problem_rejects_unknown_goal_checkpoint():
+    with pytest.raises(ValueError, match="unknown_goal_checkpoint"):
+        compile_trace_problem(
+            _three_step_trace(),
+            start_checkpoint_id="checkpoint_000",
+            goal_checkpoint_id="missing",
+        )
+
+
+def test_trace_problem_rejects_goal_earlier_than_selected_start():
+    graph = _three_step_trace()
+    checkpoints = compile_trace_domain(graph).report["checkpoints"]
+
+    with pytest.raises(ValueError, match="goal_unreachable_in_explored_trace"):
+        compile_trace_problem(
+            graph,
+            start_checkpoint_id=checkpoints[-1]["checkpoint_id"],
+            goal_checkpoint_id=checkpoints[0]["checkpoint_id"],
+        )
+
+
+def test_trace_problem_allows_zero_step_query():
+    graph = _three_step_trace()
+    checkpoint_id = compile_trace_domain(graph).report["checkpoints"][1][
+        "checkpoint_id"
+    ]
+
+    result = compile_trace_problem(
+        graph,
+        start_checkpoint_id=checkpoint_id,
+        goal_checkpoint_id=checkpoint_id,
+    )
+
+    assert f"(:init (state_after_open_item))" in result.problem
+    assert f"(:goal (state_after_open_item))" in result.problem
 
 
 def test_trace_domain_excludes_failed_missing_observation_and_invalid_identity():
