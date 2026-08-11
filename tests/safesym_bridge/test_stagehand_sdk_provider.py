@@ -8,6 +8,7 @@ from ai_web_explorer.grounded_web.stagehand_sdk_provider import (
     StagehandSdkProvider,
     create_async_stagehand_provider_from_env,
 )
+from ai_web_explorer.grounded_web.stagehand_actions import StagehandActResult
 
 
 @pytest.fixture
@@ -313,6 +314,24 @@ class FakeSession:
         )
 
 
+def _install_fake_stagehand(monkeypatch, calls):
+    class FakeSessions:
+        async def start(self, **kwargs):
+            calls.append(("start", kwargs))
+            return FakeSession()
+
+    class FakeAsyncStagehand:
+        def __init__(self, **kwargs):
+            calls.append(("client", kwargs))
+            self.sessions = FakeSessions()
+
+    monkeypatch.setitem(
+        sys.modules,
+        "stagehand",
+        SimpleNamespace(AsyncStagehand=FakeAsyncStagehand),
+    )
+
+
 @pytest.mark.anyio
 async def test_stagehand_sdk_provider_acts_on_instruction_text():
     session = FakeSession()
@@ -346,3 +365,135 @@ async def test_stagehand_sdk_provider_executes_instruction_with_step_limit():
     assert result.success is True
     assert result.message == "Logged in and reached a product listing"
     assert result.raw["result"]["actions"][0]["action"] == "fill username"
+
+
+@pytest.mark.anyio
+async def test_stagehand_model_relay_isolated_from_visual_openai_base_url(monkeypatch):
+    calls = []
+    _install_fake_stagehand(monkeypatch, calls)
+
+    provider = await create_async_stagehand_provider_from_env(
+        load_dotenv=lambda: None,
+        environ={
+            "STAGEHAND_SERVER": "local",
+            "STAGEHAND_MODEL": "openai/gemini-3-flash-preview",
+            "MODEL_API_KEY": "cun-test-key",
+            "STAGEHAND_MODEL_BASE_URL": "https://www.cun.ai/v1",
+            "STAGEHAND_MODEL_USER_AGENT": "CUN.AI-Python/1.0",
+            "OPENAI_BASE_URL": "https://visual.example.test/v1",
+        },
+    )
+
+    result = await provider.execute_instruction("Advance one step.")
+
+    assert provider.session.executed_agent_config == {
+        "mode": "dom",
+        "model": {
+            "model_name": "openai/gemini-3-flash-preview",
+            "provider": "openai",
+            "api_key": "cun-test-key",
+            "base_url": "https://www.cun.ai/v1",
+            "headers": {"User-Agent": "CUN.AI-Python/1.0"},
+        },
+    }
+    assert provider.session.executed_agent_config["model"]["base_url"] != (
+        "https://visual.example.test/v1"
+    )
+    raw_text = str(result.raw)
+    assert "cun-test-key" not in raw_text
+    assert "www.cun.ai" not in raw_text
+    assert "CUN.AI-Python" not in raw_text
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("environment", "message"),
+    [
+        (
+            {"STAGEHAND_MODEL_BASE_URL": "ftp://relay.test"},
+            "STAGEHAND_MODEL_BASE_URL",
+        ),
+        (
+            {
+                "STAGEHAND_MODEL": "google/gemini-3-flash-preview",
+                "STAGEHAND_MODEL_BASE_URL": "https://relay.test/v1",
+            },
+            "STAGEHAND_MODEL",
+        ),
+        (
+            {"STAGEHAND_MODEL_BASE_URL": "https://relay.test/v1"},
+            "MODEL_API_KEY",
+        ),
+        (
+            {"STAGEHAND_MODEL_USER_AGENT": "CUN.AI-Python/1.0"},
+            "STAGEHAND_MODEL_USER_AGENT",
+        ),
+    ],
+)
+async def test_stagehand_model_relay_rejects_invalid_configuration(
+    monkeypatch,
+    environment,
+    message,
+):
+    _install_fake_stagehand(monkeypatch, [])
+    environ = {
+        "STAGEHAND_SERVER": "local",
+        "STAGEHAND_MODEL": "openai/gemini-3-flash-preview",
+        "MODEL_API_KEY": "cun-test-key",
+    }
+    environ.update(environment)
+    if "MODEL_API_KEY" not in environment:
+        environ["MODEL_API_KEY"] = "cun-test-key"
+    if message == "MODEL_API_KEY":
+        environ.pop("MODEL_API_KEY")
+
+    with pytest.raises(ValueError, match=message):
+        await create_async_stagehand_provider_from_env(
+            load_dotenv=lambda: None,
+            environ=environ,
+        )
+
+
+@pytest.mark.anyio
+async def test_stagehand_provider_preserves_legacy_factory_and_method_contracts(
+    monkeypatch,
+):
+    calls = []
+    _install_fake_stagehand(monkeypatch, calls)
+    page = object()
+
+    provider = await create_async_stagehand_provider_from_env(
+        page=page,
+        load_dotenv=lambda: None,
+        environ={
+            "STAGEHAND_SERVER": "local",
+            "STAGEHAND_MODEL": "deepseek/deepseek-v4-pro",
+            "MODEL_API_KEY": "model-test-key",
+        },
+    )
+
+    act_result = await provider.act_instruction("Click the selected action.")
+    execute_result = await provider.execute_instruction(
+        "Advance one milestone.",
+        max_steps=5,
+    )
+
+    assert isinstance(act_result, StagehandActResult)
+    assert isinstance(execute_result, StagehandActResult)
+    assert calls == [
+        (
+            "client",
+            {
+                "model_api_key": "model-test-key",
+                "server": "local",
+            },
+        ),
+        (
+            "start",
+            {
+                "model_name": "deepseek/deepseek-v4-pro",
+                "browser": {"type": "local"},
+            },
+        ),
+    ]
+    assert provider.session.executed_agent_config == {"mode": "dom"}
