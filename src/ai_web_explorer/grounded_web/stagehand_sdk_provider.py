@@ -43,9 +43,18 @@ def _to_jsonable(value: Any) -> Any:
 
 
 class StagehandSdkProvider:
-    def __init__(self, *, session: Any, page: Any | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        session: Any,
+        page: Any | None = None,
+        agent_model_config: Mapping[str, Any] | None = None,
+    ) -> None:
         self.session = session
         self.page = page
+        self._agent_model_config = (
+            dict(agent_model_config) if agent_model_config is not None else None
+        )
 
     async def act_instruction(self, instruction: str) -> StagehandActResult:
         act_args = {"input": instruction}
@@ -70,8 +79,11 @@ class StagehandSdkProvider:
         *,
         max_steps: int = 5,
     ) -> StagehandActResult:
+        agent_config: dict[str, Any] = {"mode": "dom"}
+        if self._agent_model_config is not None:
+            agent_config["model"] = dict(self._agent_model_config)
         execute_args = {
-            "agent_config": {"mode": "dom"},
+            "agent_config": agent_config,
             "execute_options": {
                 "instruction": instruction,
                 "max_steps": max_steps,
@@ -132,6 +144,45 @@ def _resolve_model_api_key(*, model_name: str, env: Mapping[str, str]) -> str | 
     return None
 
 
+def _resolve_agent_model_config(
+    *,
+    model_name: str,
+    model_api_key: str | None,
+    env: Mapping[str, str],
+) -> dict[str, Any] | None:
+    base_url = (env.get("STAGEHAND_MODEL_BASE_URL") or "").strip()
+    user_agent = (env.get("STAGEHAND_MODEL_USER_AGENT") or "").strip()
+    if not base_url and not user_agent:
+        return None
+    if user_agent and not base_url:
+        raise ValueError(
+            "STAGEHAND_MODEL_USER_AGENT requires STAGEHAND_MODEL_BASE_URL."
+        )
+    if not base_url.lower().startswith(("http://", "https://")):
+        raise ValueError(
+            "STAGEHAND_MODEL_BASE_URL must start with http:// or https://."
+        )
+    if not model_name.startswith("openai/"):
+        raise ValueError(
+            "STAGEHAND_MODEL must start with openai/ when using "
+            "STAGEHAND_MODEL_BASE_URL."
+        )
+    if not model_api_key:
+        raise ValueError(
+            "MODEL_API_KEY or a provider-specific model key is required when "
+            "using STAGEHAND_MODEL_BASE_URL."
+        )
+    config: dict[str, Any] = {
+        "model_name": model_name,
+        "provider": "openai",
+        "api_key": model_api_key,
+        "base_url": base_url,
+    }
+    if user_agent:
+        config["headers"] = {"User-Agent": user_agent}
+    return config
+
+
 def _merge_no_proxy(value: str | None) -> str:
     existing = [item.strip() for item in (value or "").split(",") if item.strip()]
     merged = list(existing)
@@ -184,11 +235,17 @@ async def create_async_stagehand_provider_from_env(
     if server == "local":
         _ensure_local_no_proxy()
 
+    model_api_key = _resolve_model_api_key(
+        model_name=resolved_model_name,
+        env=env,
+    )
+    agent_model_config = _resolve_agent_model_config(
+        model_name=resolved_model_name,
+        model_api_key=model_api_key,
+        env=env,
+    )
     client_options: dict[str, Any] = {
-        "model_api_key": _resolve_model_api_key(
-            model_name=resolved_model_name,
-            env=env,
-        ),
+        "model_api_key": model_api_key,
         "server": server,
     }
     stagehand_api_url = env.get("STAGEHAND_API_URL")
@@ -208,4 +265,5 @@ async def create_async_stagehand_provider_from_env(
     return StagehandSdkProvider(
         session=session,
         page=page if server == "local" else None,
+        agent_model_config=agent_model_config,
     )
