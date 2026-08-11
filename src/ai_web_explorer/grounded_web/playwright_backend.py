@@ -184,6 +184,15 @@ class WebKobePlaywrightAdapter:
         except Exception as exc:
             return self._fail_execution(f"browser_back_error:{type(exc).__name__}")
 
+    async def reset_to(self, url: str) -> bool:
+        self.last_execution_error = None
+        try:
+            await self.page.goto(url, wait_until="domcontentloaded", timeout=5000)
+            await self.page.wait_for_timeout(100)
+            return True
+        except Exception as exc:
+            return self._fail_execution(f"reset_error:{type(exc).__name__}")
+
     async def capture_screenshot(self, label: str) -> str | None:
         if self.screenshot_dir is None:
             return None

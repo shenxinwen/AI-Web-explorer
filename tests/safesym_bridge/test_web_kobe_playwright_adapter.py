@@ -131,6 +131,18 @@ class FakePage:
         self.screenshots.append(path)
 
 
+class ResetPage(FakePage):
+    def __init__(self, *, goto_error=None):
+        super().__init__()
+        self.goto_calls = []
+        self.goto_error = goto_error
+
+    async def goto(self, url, wait_until=None, timeout=None):
+        self.goto_calls.append((url, wait_until, timeout))
+        if self.goto_error is not None:
+            raise self.goto_error
+
+
 @pytest.mark.anyio
 async def test_observe_state_reads_title_url_and_cart_count():
     adapter = WebKobePlaywrightAdapter(
@@ -313,6 +325,28 @@ async def test_go_back_reports_unavailable_browser_history():
 
     assert result is False
     assert adapter.last_execution_error == "browser_back_unavailable"
+
+
+@pytest.mark.anyio
+async def test_reset_to_navigates_to_entry_and_settles():
+    page = ResetPage()
+    adapter = WebKobePlaywrightAdapter(page, page_id="fixture_shop")
+
+    assert await adapter.reset_to("https://example.test/start") is True
+    assert page.goto_calls == [
+        ("https://example.test/start", "domcontentloaded", 5000)
+    ]
+    assert page.waits == [100]
+    assert adapter.last_execution_error is None
+
+
+@pytest.mark.anyio
+async def test_reset_to_reports_navigation_error():
+    page = ResetPage(goto_error=RuntimeError("navigation failed"))
+    adapter = WebKobePlaywrightAdapter(page, page_id="fixture_shop")
+
+    assert await adapter.reset_to("https://example.test/start") is False
+    assert adapter.last_execution_error == "reset_error:RuntimeError"
 
 
 @pytest.mark.anyio

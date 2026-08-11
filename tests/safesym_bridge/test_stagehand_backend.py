@@ -40,6 +40,18 @@ class FakeBaseBackend:
         return True
 
 
+class ResetBaseBackend(FakeBaseBackend):
+    def __init__(self, *, reset_result=True, reset_error=None):
+        super().__init__()
+        self.reset_calls = []
+        self.reset_result = reset_result
+        self.last_execution_error = reset_error
+
+    async def reset_to(self, url):
+        self.reset_calls.append(url)
+        return self.reset_result
+
+
 class DeterministicInteractablesBaseBackend(FakeBaseBackend):
     async def list_interactables(self, state):
         return [
@@ -134,6 +146,39 @@ async def test_stagehand_backend_delegates_go_back_to_base_backend():
 
     assert await backend.go_back() is True
     assert base.back_calls == 1
+
+
+@pytest.mark.anyio
+async def test_stagehand_backend_delegates_entry_reset():
+    base = ResetBaseBackend()
+    backend = StagehandAutomationBackend(
+        base_backend=base,
+        provider=FakeStagehandProvider(),
+        goal="Explore shopping capabilities.",
+    )
+
+    assert await backend.reset_to("https://example.test/start") is True
+    assert base.reset_calls == ["https://example.test/start"]
+    assert backend.last_execution_error is None
+    assert backend.last_execution_metadata == {
+        "action_source": "stagehand",
+        "stagehand_execution_mode": "entry_reset",
+        "backend_reported_success": True,
+    }
+
+
+@pytest.mark.anyio
+async def test_stagehand_backend_reports_entry_reset_failure():
+    base = ResetBaseBackend(reset_result=False, reset_error="reset_error:TimeoutError")
+    backend = StagehandAutomationBackend(
+        base_backend=base,
+        provider=FakeStagehandProvider(),
+        goal="Explore shopping capabilities.",
+    )
+
+    assert await backend.reset_to("https://example.test/start") is False
+    assert backend.last_execution_error == "reset_error:TimeoutError"
+    assert backend.last_execution_metadata["stagehand_execution_mode"] == "entry_reset"
 
 
 @pytest.mark.anyio

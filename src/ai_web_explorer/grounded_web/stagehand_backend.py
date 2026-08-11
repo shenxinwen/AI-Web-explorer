@@ -77,6 +77,25 @@ class StagehandAutomationBackend:
         }
         return success
 
+    async def reset_to(self, url: str) -> bool:
+        reset_to = getattr(self.base_backend, "reset_to", None)
+        if reset_to is None:
+            self.last_execution_error = "reset_unavailable"
+            success = False
+        else:
+            success = await reset_to(url)
+            self.last_execution_error = getattr(
+                self.base_backend,
+                "last_execution_error",
+                None,
+            )
+        self.last_execution_metadata = {
+            "action_source": "stagehand",
+            "stagehand_execution_mode": "entry_reset",
+            "backend_reported_success": success,
+        }
+        return success
+
     async def list_interactables(
         self,
         state: StateSnapshot,
