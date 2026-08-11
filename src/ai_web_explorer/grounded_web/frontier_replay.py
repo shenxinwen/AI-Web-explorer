@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Any, Iterable, TYPE_CHECKING
 
 from ai_web_explorer.grounded_web.graph import WebKobeEdge, WebKobeGraph
+
+if TYPE_CHECKING:
+    from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
 
 
 REPLAYABLE_EDGE_STATUSES = frozenset(
@@ -31,6 +34,61 @@ class FrontierTarget:
     node_id: str
     path: tuple[ReplayStep, ...]
     untried_action_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ReplayResult:
+    success: bool
+    reached_node_id: str | None
+    failed_edge_id: str | None
+    reason: str
+    completed_steps: int
+
+
+class FrontierReplayRunner:
+    def __init__(self, explorer: "WebKobeExplorer"):
+        self.explorer = explorer
+
+    async def replay(
+        self,
+        target: Any,
+        *,
+        start_url: str,
+    ) -> ReplayResult:
+        start_node_id = self.explorer.start_node_id
+        if start_node_id is None:
+            return ReplayResult(False, None, None, "entry_state_unavailable", 0)
+        if not await self.explorer.adapter.reset_to(start_url):
+            return ReplayResult(False, None, None, "entry_reset_failed", 0)
+        if not await self.explorer.validate_current_node(start_node_id):
+            return ReplayResult(False, None, None, "entry_state_mismatch", 0)
+
+        completed_steps = 0
+        for step in target.path:
+            if not await self.explorer.execute_replay_action(step.edge.action):
+                return ReplayResult(
+                    False,
+                    start_node_id if completed_steps == 0 else step.source_node_id,
+                    step.edge_id,
+                    "replay_action_failed",
+                    completed_steps,
+                )
+            if not await self.explorer.validate_current_node(step.target_node_id):
+                return ReplayResult(
+                    False,
+                    step.source_node_id,
+                    step.edge_id,
+                    "target_state_mismatch",
+                    completed_steps,
+                )
+            completed_steps += 1
+        return ReplayResult(
+            True,
+            target.node_id,
+            None,
+            "replay_succeeded",
+            completed_steps,
+        )
 
 
 def select_frontier(

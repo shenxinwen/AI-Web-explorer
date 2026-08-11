@@ -250,6 +250,10 @@ class WebKobeExplorer:
         self._visit_stack: list[str] = []
         self._visual_affordance_observed_node_ids: set[str] = set()
 
+    @property
+    def start_node_id(self) -> str | None:
+        return self._start_node_id
+
     async def explore_one_step(self) -> WebKobeGraph:
         before = await self.adapter.observe_state()
         before_facts = getattr(self.adapter, "last_state_facts", None)
@@ -636,6 +640,44 @@ class WebKobeExplorer:
     def _set_current_node(self, node_id: str) -> None:
         self._current_node_id = node_id
         self._record_visit_node(node_id)
+
+    async def execute_replay_action(self, action: BrowserAction) -> bool:
+        """Execute one stored action without recording a new exploration edge."""
+        return await self.adapter.execute(action)
+
+    async def validate_current_node(self, expected_node_id: str) -> bool:
+        """Check the observed surface against an existing graph node."""
+        try:
+            expected = self.manager.node_for_id(expected_node_id)
+        except KeyError:
+            return False
+        snapshot = await self.adapter.observe_state()
+        interactables = await self.adapter.list_interactables(snapshot)
+        draft = self.semantic_assistor.describe_state(
+            snapshot=snapshot,
+            interactables=interactables,
+        )
+        if draft.node_id != expected_node_id:
+            if draft.last_state_snapshot != expected.last_state_snapshot:
+                return False
+            if _url_path(snapshot.url) != _url_path(expected.page_frame.url):
+                return False
+            expected_actions = {
+                item.get("semantic_id")
+                or item.get("canonical_action_name")
+                for item in expected.interactable_elements
+                if item.get("semantic_id") or item.get("canonical_action_name")
+            }
+            actual_actions = {
+                item.get("semantic_id")
+                or item.get("canonical_action_name")
+                for item in interactables
+                if item.get("semantic_id") or item.get("canonical_action_name")
+            }
+            if expected_actions and expected_actions != actual_actions:
+                return False
+        self._set_current_node(expected_node_id)
+        return True
 
     def _record_visit_node(self, node_id: str) -> None:
         if not self._visit_stack:

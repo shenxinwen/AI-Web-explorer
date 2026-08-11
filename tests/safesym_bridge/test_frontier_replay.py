@@ -1,5 +1,12 @@
+import pytest
+
 from ai_web_explorer.grounded_web.capability_graph import ExecutionTrace, PageFrame
-from ai_web_explorer.grounded_web.frontier_replay import select_frontier
+from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
+from ai_web_explorer.grounded_web.frontier_replay import (
+    FrontierReplayRunner,
+    ReplayStep,
+    select_frontier,
+)
 from ai_web_explorer.grounded_web.graph import (
     BrowserAction,
     BusinessAffordance,
@@ -7,6 +14,13 @@ from ai_web_explorer.grounded_web.graph import (
     WebKobeGraph,
     WebKobeNode,
 )
+from ai_web_explorer.grounded_web.models import StateSnapshot
+from ai_web_explorer.grounded_web.semantic_assistor import DeterministicSemanticAssistor
+
+
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
 
 
 def _node(node_id: str, *actions: str) -> WebKobeNode:
@@ -117,3 +131,161 @@ def test_select_frontier_returns_none_when_all_candidates_are_exhausted():
     )
 
     assert select_frontier(graph) is None
+
+
+class _ReplayAdapter:
+    app_name = "fixture"
+
+    def __init__(self, states, *, failing_actions=()):
+        self.states = list(states)
+        self.index = 0
+        self.reset_calls = []
+        self.executed = []
+        self.failing_actions = set(failing_actions)
+        self.last_execution_error = None
+
+    async def reset_to(self, url):
+        self.reset_calls.append(url)
+        self.index = 0
+        return True
+
+    async def observe_state(self):
+        return self.states[self.index]
+
+    async def list_interactables(self, state):
+        return []
+
+    async def execute(self, action):
+        self.executed.append(action.semantic_id)
+        if action.semantic_id in self.failing_actions:
+            self.last_execution_error = "replay_failed"
+            return False
+        self.index = min(self.index + 1, len(self.states) - 1)
+        return True
+
+
+def _replay_node(node_id: str, state: str) -> WebKobeNode:
+    return WebKobeNode(
+        node_id=node_id,
+        page_description=node_id,
+        page_frame=PageFrame(
+            page_id=state,
+            page_type=state,
+            url="https://fixture.test/shop",
+            url_pattern="https://fixture.test/shop",
+            title=state,
+        ),
+        state_schema={},
+        last_state_snapshot={"surface": state},
+    )
+
+
+def _replay_step(source: str, target: str, action_id: str) -> ReplayStep:
+    edge = _edge(source, target, action_id)
+    return ReplayStep(
+        edge_id=edge.edge_id,
+        source_node_id=source,
+        target_node_id=target,
+        edge=edge,
+    )
+
+
+def _replay_explorer(adapter):
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=DeterministicSemanticAssistor(app="fixture"),
+        business_profile=None,
+    )
+    explorer.manager.identify_or_add_node(_replay_node("start", "start"))
+    explorer.manager.identify_or_add_node(_replay_node("target", "target"))
+    explorer._start_node_id = "start"
+    explorer._current_node_id = "start"
+    return explorer
+
+
+@pytest.mark.anyio
+async def test_frontier_replay_resets_executes_and_validates_without_graph_edges():
+    adapter = _ReplayAdapter(
+        [
+            StateSnapshot("start", "https://fixture.test/shop", "start", {"surface": "start"}),
+            StateSnapshot("target", "https://fixture.test/shop", "target", {"surface": "target"}),
+        ]
+    )
+    explorer = _replay_explorer(adapter)
+    target = type(
+        "Target",
+        (),
+        {
+            "node_id": "target",
+            "path": (_replay_step("start", "target", "open_target"),),
+        },
+    )()
+    initial_edge_count = len(explorer.manager.to_graph().edges)
+
+    result = await FrontierReplayRunner(explorer).replay(
+        target,
+        start_url="https://fixture.test/shop",
+    )
+
+    assert result.success is True
+    assert result.reached_node_id == "target"
+    assert result.completed_steps == 1
+    assert adapter.reset_calls == ["https://fixture.test/shop"]
+    assert adapter.executed == ["open_target"]
+    assert len(explorer.manager.to_graph().edges) == initial_edge_count
+
+
+@pytest.mark.anyio
+async def test_frontier_replay_fails_closed_on_target_mismatch():
+    adapter = _ReplayAdapter(
+        [
+            StateSnapshot("start", "https://fixture.test/shop", "start", {"surface": "start"}),
+            StateSnapshot("wrong", "https://fixture.test/shop", "wrong", {"surface": "wrong"}),
+        ]
+    )
+    explorer = _replay_explorer(adapter)
+    target = type(
+        "Target",
+        (),
+        {
+            "node_id": "target",
+            "path": (_replay_step("start", "target", "open_target"),),
+        },
+    )()
+
+    result = await FrontierReplayRunner(explorer).replay(
+        target,
+        start_url="https://fixture.test/shop",
+    )
+
+    assert result.success is False
+    assert result.reason == "target_state_mismatch"
+    assert result.failed_edge_id == "start__open_target__target"
+    assert result.completed_steps == 0
+    assert len(explorer.manager.to_graph().edges) == 0
+
+
+@pytest.mark.anyio
+async def test_frontier_replay_stops_on_action_failure_without_observation():
+    adapter = _ReplayAdapter(
+        [StateSnapshot("start", "https://fixture.test/shop", "start", {"surface": "start"})],
+        failing_actions={"open_target"},
+    )
+    explorer = _replay_explorer(adapter)
+    target = type(
+        "Target",
+        (),
+        {
+            "node_id": "target",
+            "path": (_replay_step("start", "target", "open_target"),),
+        },
+    )()
+
+    result = await FrontierReplayRunner(explorer).replay(
+        target,
+        start_url="https://fixture.test/shop",
+    )
+
+    assert result.success is False
+    assert result.reason == "replay_action_failed"
+    assert result.completed_steps == 0
