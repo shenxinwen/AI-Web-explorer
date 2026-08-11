@@ -1,3 +1,4 @@
+import json
 from dataclasses import replace
 
 from ai_web_explorer.grounded_web.business_profile import PlanningDelta
@@ -17,6 +18,10 @@ from ai_web_explorer.grounded_web.graph import (
     WebKobeNode,
 )
 from ai_web_explorer.grounded_web.graph_manager import WebKobeGraphManager
+from ai_web_explorer.safesym_bridge.trace_pddl import compile_trace_domain
+from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
+    load_web_kobe_graph_json,
+)
 
 
 def _node(node_id: str, values: dict, interactables=None) -> WebKobeNode:
@@ -108,6 +113,96 @@ def test_identify_or_add_node_upgrades_fallback_naming_to_vlm():
     assert node.node_label == "product_list"
     assert node.state_summary == "Visible product list."
     assert node.naming_provenance == {"source": "visual_affordance_vlm"}
+
+
+def _trace_edge(action_name: str, *, success: bool, status: str) -> WebKobeEdge:
+    return WebKobeEdge(
+        source_node_id="page",
+        target_node_id="page",
+        instruction=action_name,
+        action=BrowserAction(
+            "business_intent",
+            None,
+            action_name,
+            canonical_action_name=action_name,
+        ),
+        capability=None,
+        target_observation="page",
+        observed_delta=[],
+        schema_delta=None,
+        execution_trace=ExecutionTrace(
+            "business_intent",
+            None,
+            action_name,
+            {},
+            "page",
+            "page",
+            success,
+        ),
+        status=status,
+    )
+
+
+def test_execution_events_preserve_a_b_a_through_json_and_trace_compiler(
+    tmp_path,
+):
+    manager = WebKobeGraphManager(app="example")
+    manager.identify_or_add_node(_node("page", {}))
+    for action_name in ("action_a", "action_b", "action_a"):
+        manager.add_edge(
+            _trace_edge(action_name, success=True, status="no_observed_change")
+        )
+
+    frozen = manager.to_graph(start_node_id="page")
+    graph_path = tmp_path / "graph.json"
+    graph_path.write_text(json.dumps(frozen.to_dict()), encoding="utf-8")
+    loaded = load_web_kobe_graph_json(graph_path)
+    result = compile_trace_domain(loaded)
+
+    assert len(frozen.edges) == 2
+    assert len(frozen.execution_events) == 3
+    assert len(loaded.execution_events) == 3
+    assert [item["original_action_identity"] for item in result.report["actions"]] == [
+        "action_a",
+        "action_b",
+        "action_a",
+    ]
+    assert len(result.report["checkpoints"]) == 4
+
+    legacy_data = frozen.to_dict()
+    legacy_data.pop("execution_events")
+    legacy_path = tmp_path / "legacy-graph.json"
+    legacy_path.write_text(json.dumps(legacy_data), encoding="utf-8")
+    legacy_loaded = load_web_kobe_graph_json(legacy_path)
+    legacy_result = compile_trace_domain(legacy_loaded)
+
+    assert legacy_loaded.execution_events == []
+    assert [
+        item["original_action_identity"] for item in legacy_result.report["actions"]
+    ] == ["action_a", "action_b"]
+
+
+def test_execution_events_preserve_failed_then_successful_retry():
+    manager = WebKobeGraphManager(app="example")
+    manager.identify_or_add_node(_node("page", {}))
+    manager.add_edge(
+        _trace_edge("action_a", success=False, status="failed_execution")
+    )
+    manager.add_edge(
+        _trace_edge("action_a", success=True, status="no_observed_change")
+    )
+
+    graph = manager.to_graph(start_node_id="page")
+    result = compile_trace_domain(graph)
+
+    assert len(graph.edges) == 1
+    assert len(graph.execution_events) == 2
+    assert [item["reason"] for item in result.report["excluded_edges"]] == [
+        "failed_execution"
+    ]
+    assert [item["original_action_identity"] for item in result.report["actions"]] == [
+        "action_a"
+    ]
 
 
 def test_identify_or_add_node_preserves_first_vlm_naming_on_revisit():

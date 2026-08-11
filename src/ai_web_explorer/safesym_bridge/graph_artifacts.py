@@ -201,6 +201,12 @@ def build_graph_artifact_payload(graph: WebKobeGraph) -> GraphArtifactPayload:
             evidence_sidecar["edges"][evidence_ref] = sidecar_edge
         compact_graph["edges"].append(compact_edge)
 
+    if full_graph.get("execution_events"):
+        compact_graph["execution_events"] = [
+            _compact_edge(event)[0]
+            for event in full_graph["execution_events"]
+        ]
+
     if not evidence_sidecar["nodes"]:
         evidence_sidecar.pop("nodes")
     if not evidence_sidecar["edges"]:

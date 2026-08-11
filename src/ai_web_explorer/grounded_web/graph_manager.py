@@ -130,6 +130,7 @@ class WebKobeGraphManager:
         self.app = app
         self._nodes: OrderedDict[str, WebKobeNode] = OrderedDict()
         self._edges: OrderedDict[str, WebKobeEdge] = OrderedDict()
+        self._execution_events: list[WebKobeEdge] = []
         self.total_steps_completed = 0
         self.meta: dict[str, Any] = {}
 
@@ -173,6 +174,7 @@ class WebKobeGraphManager:
         return node.node_id
 
     def add_edge(self, edge: WebKobeEdge) -> None:
+        self._execution_events.append(edge)
         existing = self._edges.get(edge.edge_id)
         if existing is None:
             self._edges[edge.edge_id] = edge
@@ -336,4 +338,5 @@ class WebKobeGraphManager:
             nodes=list(self._nodes.values()),
             edges=list(self._edges.values()),
             meta=dict(self.meta),
+            execution_events=list(self._execution_events),
         )

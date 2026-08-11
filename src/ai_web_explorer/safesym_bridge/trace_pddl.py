@@ -79,6 +79,10 @@ def _exclusion_reason(edge: WebKobeEdge) -> str | None:
     return None
 
 
+def _trace_events(graph: WebKobeGraph) -> list[WebKobeEdge]:
+    return graph.execution_events or graph.edges
+
+
 def _unique_name(
     base: str,
     *,
@@ -146,7 +150,7 @@ def _compile_trace(
     trace_index = 0
     source_checkpoint = checkpoints[0]
 
-    for edge in graph.edges:
+    for edge in _trace_events(graph):
         reason = _exclusion_reason(edge)
         if reason is not None:
             excluded_edges.append(

@@ -273,6 +273,9 @@ def _web_kobe_graph_from_dict(data: dict[str, Any]) -> WebKobeGraph:
         nodes=[_node_from_dict(item) for item in data.get("nodes", [])],
         edges=[_edge_from_dict(item) for item in data.get("edges", [])],
         meta=meta,
+        execution_events=[
+            _edge_from_dict(item) for item in data.get("execution_events", [])
+        ],
     )
 
 

@@ -575,13 +575,15 @@ def main(argv: list[str] | None = None) -> int:
                 web_kobe_phase_a_parser.error(
                     "--start-node and --goal-node must be provided together"
                 )
+            args.output.mkdir(parents=True, exist_ok=True)
+            problem_path = args.output / "problem.pddl"
+            problem_path.unlink(missing_ok=True)
             raw_graph_data = read_web_kobe_graph_json_data(args.graph)
             graph = load_web_kobe_graph_json(args.graph)
             artifacts = build_planning_state_graph(
                 graph,
                 embedding_provider=_phase_a_embedding_provider(),
             )
-            args.output.mkdir(parents=True, exist_ok=True)
             (args.output / "raw_graph.json").write_text(
                 json.dumps(raw_graph_data, indent=2, ensure_ascii=False),
                 encoding="utf-8",
@@ -618,7 +620,6 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 encoding="utf-8",
             )
-            problem_path = args.output / "problem.pddl"
             if args.projection == "trace" and args.start_checkpoint is not None:
                 problem = compile_trace_problem(
                     graph,

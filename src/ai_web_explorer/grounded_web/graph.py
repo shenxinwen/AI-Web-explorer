@@ -255,6 +255,7 @@ class WebKobeGraph:
     nodes: list[WebKobeNode] = field(default_factory=list)
     edges: list[WebKobeEdge] = field(default_factory=list)
     meta: dict[str, Any] = field(default_factory=dict)
+    execution_events: list[WebKobeEdge] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         meta = dict(self.meta)
@@ -266,8 +267,11 @@ class WebKobeGraph:
                 "total_steps_completed": self.total_steps_completed,
             }
         )
-        return {
+        payload = {
             "meta": meta,
             "nodes": _list_to_dict(self.nodes),
             "edges": _list_to_dict(self.edges),
         }
+        if self.execution_events:
+            payload["execution_events"] = _list_to_dict(self.execution_events)
+        return payload

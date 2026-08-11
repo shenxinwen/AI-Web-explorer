@@ -295,6 +295,95 @@ def test_phase_a_rejects_node_flags_in_trace_mode(tmp_path, capfd):
     )
 
 
+def _phase_a_output_with_stale_problem(tmp_path):
+    graph = _graph_fixture()
+    graph_path = tmp_path / "raw.json"
+    graph_path.write_text(json.dumps(graph.to_dict()), encoding="utf-8")
+    output_dir = tmp_path / "phase_a"
+    output_dir.mkdir()
+    (output_dir / "problem.pddl").write_text("stale", encoding="utf-8")
+    (output_dir / "keep.txt").write_text("keep", encoding="utf-8")
+    return graph_path, output_dir
+
+
+def test_phase_a_without_query_deletes_stale_problem_only(tmp_path, monkeypatch):
+    graph_path, output_dir = _phase_a_output_with_stale_problem(tmp_path)
+    monkeypatch.setattr(
+        cli_module,
+        "create_embedding_provider_from_env",
+        lambda: (_ for _ in ()).throw(ValueError("missing embedding config")),
+    )
+
+    assert main(
+        [
+            "web-kobe-phase-a",
+            "--graph",
+            str(graph_path),
+            "--output",
+            str(output_dir),
+        ]
+    ) == 0
+
+    assert not (output_dir / "problem.pddl").exists()
+    assert (output_dir / "keep.txt").read_text(encoding="utf-8") == "keep"
+
+
+def test_phase_a_unknown_checkpoint_deletes_stale_problem_before_failure(
+    tmp_path, monkeypatch
+):
+    graph_path, output_dir = _phase_a_output_with_stale_problem(tmp_path)
+    monkeypatch.setattr(
+        cli_module,
+        "create_embedding_provider_from_env",
+        lambda: (_ for _ in ()).throw(ValueError("missing embedding config")),
+    )
+
+    assert main(
+            [
+                "web-kobe-phase-a",
+                "--graph",
+                str(graph_path),
+                "--output",
+                str(output_dir),
+                "--start-checkpoint",
+                "missing",
+                "--goal-checkpoint",
+                "checkpoint_000",
+            ]
+        ) == 1
+
+    assert not (output_dir / "problem.pddl").exists()
+    assert (output_dir / "keep.txt").read_text(encoding="utf-8") == "keep"
+
+
+def test_phase_a_unreachable_checkpoint_deletes_stale_problem_before_failure(
+    tmp_path, monkeypatch
+):
+    graph_path, output_dir = _phase_a_output_with_stale_problem(tmp_path)
+    monkeypatch.setattr(
+        cli_module,
+        "create_embedding_provider_from_env",
+        lambda: (_ for _ in ()).throw(ValueError("missing embedding config")),
+    )
+
+    assert main(
+            [
+                "web-kobe-phase-a",
+                "--graph",
+                str(graph_path),
+                "--output",
+                str(output_dir),
+                "--start-checkpoint",
+                "checkpoint_001",
+                "--goal-checkpoint",
+                "checkpoint_000",
+            ]
+        ) == 1
+
+    assert not (output_dir / "problem.pddl").exists()
+    assert (output_dir / "keep.txt").read_text(encoding="utf-8") == "keep"
+
+
 def test_phase_a_compact_input_is_semantically_equivalent_and_raw_shape_is_preserved(
     tmp_path, monkeypatch
 ):
