@@ -23,6 +23,7 @@ from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
     read_web_kobe_graph_json_data,
 )
 from ai_web_explorer.safesym_bridge.location_pddl import compile_location_domain
+from ai_web_explorer.safesym_bridge.location_pddl import compile_location_problem
 from ai_web_explorer.grounded_web.planning_abstraction import (
     build_planning_state_graph,
 )
@@ -241,6 +242,8 @@ def main(argv: list[str] | None = None) -> int:
         default=Path("outputs/web_kobe_phase_a"),
         help="Directory to write raw/planning/report/domain artifacts.",
     )
+    web_kobe_phase_a_parser.add_argument("--start-node", default=None)
+    web_kobe_phase_a_parser.add_argument("--goal-node", default=None)
     web_kobe_pddl_smoke_parser = subparsers.add_parser(
         "web-kobe-pddl-smoke",
         help="Write Web-KOBE PDDL plus planning-readiness smoke report.",
@@ -537,6 +540,10 @@ def main(argv: list[str] | None = None) -> int:
             (args.output / "domain.pddl").write_text(domain, encoding="utf-8")
             output_path = args.output
         elif args.mode in {"web-kobe-phase-a", "web-kobe-consolidate"}:
+            if (args.start_node is None) != (args.goal_node is None):
+                web_kobe_phase_a_parser.error(
+                    "--start-node and --goal-node must be provided together"
+                )
             raw_graph_data = read_web_kobe_graph_json_data(args.graph)
             graph = load_web_kobe_graph_json(args.graph)
             artifacts = build_planning_state_graph(
@@ -577,6 +584,16 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 encoding="utf-8",
             )
+            if args.start_node is not None:
+                problem = compile_location_problem(
+                    artifacts.planning_graph,
+                    start_node_id=args.start_node,
+                    goal_node_id=args.goal_node,
+                )
+                (args.output / "problem.pddl").write_text(
+                    problem.problem,
+                    encoding="utf-8",
+                )
             output_path = args.output
         elif args.mode == "web-kobe-pddl-smoke":
             graph = load_web_kobe_graph_json(args.graph)

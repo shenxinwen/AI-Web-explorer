@@ -1,3 +1,5 @@
+import pytest
+
 from ai_web_explorer.grounded_web.capability_graph import ExecutionTrace, PageFrame
 from ai_web_explorer.grounded_web.graph import (
     BrowserAction,
@@ -6,6 +8,7 @@ from ai_web_explorer.grounded_web.graph import (
     WebKobeNode,
 )
 from ai_web_explorer.safesym_bridge.location_pddl import compile_location_domain
+from ai_web_explorer.safesym_bridge.location_pddl import compile_location_problem
 
 
 def _node(node_id: str, label: str) -> WebKobeNode:
@@ -79,6 +82,33 @@ def _graph_with_cross_self_failed_and_missing_edges() -> WebKobeGraph:
             ),
             _edge("raw-details", "open_missing", "raw-missing"),
         ],
+    )
+
+
+def _three_location_graph() -> WebKobeGraph:
+    return WebKobeGraph(
+        app="generic_site",
+        start_node_id="home-id",
+        total_steps_completed=2,
+        nodes=[
+            _node("home-id", "Home"),
+            _node("details-id", "Details"),
+            _node("done-id", "Done"),
+        ],
+        edges=[
+            _edge("home-id", "open_details", "details-id"),
+            _edge("details-id", "finish", "done-id"),
+        ],
+    )
+
+
+def _graph_with_disconnected_goal() -> WebKobeGraph:
+    return WebKobeGraph(
+        app="generic_site",
+        start_node_id="home-id",
+        total_steps_completed=0,
+        nodes=[_node("home-id", "Home"), _node("isolated-id", "Isolated")],
+        edges=[],
     )
 
 
@@ -156,4 +186,25 @@ def test_location_domain_does_not_project_fact_or_visual_fields():
     assert "cart_has_items" not in result.domain
     assert "content" not in result.domain
     assert "supporting" not in result.domain
+
+
+def test_compile_location_problem_uses_explicit_reachable_nodes():
+    result = compile_location_problem(
+        _three_location_graph(),
+        start_node_id="home-id",
+        goal_node_id="details-id",
+    )
+
+    assert "(:domain web_kobe_location)" in result.problem
+    assert "(:init (at home))" in result.problem
+    assert "(:goal (at details))" in result.problem
+
+
+def test_compile_location_problem_rejects_unreachable_goal():
+    with pytest.raises(ValueError, match="goal_unreachable"):
+        compile_location_problem(
+            _graph_with_disconnected_goal(),
+            start_node_id="home-id",
+            goal_node_id="isolated-id",
+        )
 from dataclasses import replace

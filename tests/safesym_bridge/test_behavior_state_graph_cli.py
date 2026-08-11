@@ -1,6 +1,8 @@
 import json
 from dataclasses import replace
 
+import pytest
+
 from ai_web_explorer.grounded_web.capability_graph import ExecutionTrace, PageFrame
 from ai_web_explorer.grounded_web.graph import (
     BusinessAffordance,
@@ -117,6 +119,72 @@ def test_phase_a_cli_writes_raw_planning_report_and_domain_only(tmp_path, monkey
     assert "(at ?location - location)" in domain
     assert projection["schema_version"] == "location-pddl-projection-v1"
     assert not (output_dir / "problem.pddl").exists()
+
+
+def test_phase_a_cli_writes_problem_for_explicit_reachable_query(
+    tmp_path,
+    monkeypatch,
+):
+    graph = _graph_fixture()
+    graph_path = tmp_path / "raw.json"
+    graph_path.write_text(json.dumps(graph.to_dict()), encoding="utf-8")
+    output_dir = tmp_path / "phase_a"
+    monkeypatch.setattr(
+        cli_module,
+        "create_embedding_provider_from_env",
+        lambda: (lambda text: [1.0, 0.0]),
+    )
+
+    assert main(
+        [
+            "web-kobe-phase-a",
+            "--graph",
+            str(graph_path),
+            "--output",
+            str(output_dir),
+            "--start-node",
+            "listing",
+            "--goal-node",
+            "details",
+        ]
+    ) == 0
+
+    problem = (output_dir / "problem.pddl").read_text(encoding="utf-8")
+    assert "(:init (at listing))" in problem
+    assert "(:goal (at details))" in problem
+
+
+def test_phase_a_cli_requires_start_and_goal_together(
+    tmp_path,
+    monkeypatch,
+    capfd,
+):
+    graph = _graph_fixture()
+    graph_path = tmp_path / "raw.json"
+    graph_path.write_text(json.dumps(graph.to_dict()), encoding="utf-8")
+    monkeypatch.setattr(
+        cli_module,
+        "create_embedding_provider_from_env",
+        lambda: (lambda text: [1.0, 0.0]),
+    )
+
+    with pytest.raises(SystemExit) as error:
+        main(
+            [
+                "web-kobe-phase-a",
+                "--graph",
+                str(graph_path),
+                "--output",
+                str(tmp_path / "phase_a"),
+                "--start-node",
+                "listing",
+            ]
+        )
+
+    assert error.value.code == 2
+    assert "--start-node and --goal-node must be provided together" in (
+        capfd.readouterr().err
+    )
 
 
 def test_phase_a_compact_input_is_semantically_equivalent_and_raw_shape_is_preserved(
