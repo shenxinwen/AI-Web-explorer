@@ -80,6 +80,23 @@ def _optional_semantic_id(value: object) -> str:
     return normalize_semantic_id(text) if text else ""
 
 
+def _semantic_location_anchor(node: WebKobeNode) -> tuple[str | None, bool]:
+    unresolved = bool(
+        (node.naming_provenance or {}).get("semantic_location_hint_conflict")
+    )
+    if unresolved:
+        return None, True
+    for candidate in (
+        node.semantic_location_hint,
+        node.node_label,
+        node.page_frame.page_type,
+    ):
+        normalized = _optional_semantic_id(candidate)
+        if normalized:
+            return normalized, False
+    return None, False
+
+
 def _safe_vlm_state_label(value: str | None, *, fallback: str) -> str:
     if value:
         cleaned = slug_identifier(value, fallback="")
@@ -325,19 +342,8 @@ class WebKobeExplorer:
                 before_draft=before_draft,
             )
         source_node = self.manager.node_for_id(source_id)
-        source_anchor = next(
-            (
-                _optional_semantic_id(candidate)
-                for candidate in (
-                    source_node.semantic_location_hint,
-                    source_node.node_label,
-                    source_node.page_frame.page_type,
-                )
-                if _optional_semantic_id(candidate)
-            ),
-            None,
-        )
-        if source_anchor and source_node.semantic_location_hint != source_anchor:
+        source_anchor, anchor_unresolved = _semantic_location_anchor(source_node)
+        if source_anchor and not anchor_unresolved and source_node.semantic_location_hint != source_anchor:
             self.manager.identify_or_add_node(
                 replace(source_node, semantic_location_hint=source_anchor)
             )
@@ -447,11 +453,7 @@ class WebKobeExplorer:
         visual_delta_facts = ([], [])
         visual_change_kind = "unknown"
         semantic_observation = None
-        source_location_hint = (
-            source_node.semantic_location_hint
-            or _optional_semantic_id(source_node.node_label)
-            or _optional_semantic_id(source_node.page_frame.page_type)
-        ) or None
+        source_location_hint = None if anchor_unresolved else source_anchor
         allowed_location_ids = sorted(
             {
                 node.semantic_location_hint
@@ -475,6 +477,7 @@ class WebKobeExplorer:
                     after_signature=after.signature,
                     source_location_hint=source_location_hint,
                     source_location_hint_confirmed=bool(source_location_hint),
+                    source_location_anchor_unresolved=anchor_unresolved,
                     allowed_location_ids=allowed_location_ids,
                     current_location_context=(
                         source_node.state_summary or source_node.page_description

@@ -77,14 +77,45 @@ def test_identify_or_add_node_persists_and_audits_semantic_location_hint():
         replace(_node("listing", {}), semantic_location_hint="other_surface")
     )
     node = manager.node_for_id("listing")
-    assert node.semantic_location_hint == "product_list"
+    assert node.semantic_location_hint is None
     assert node.naming_provenance["semantic_location_hint_conflict"]["candidates"] == [
         "other_surface",
         "product_list",
     ]
+    assert node.naming_provenance["semantic_location_hint_conflict"]["selected"] is None
 
     restored = WebKobeGraphManager.from_graph(manager.to_graph(start_node_id="listing"))
-    assert restored.node_for_id("listing").semantic_location_hint == "product_list"
+    restored_node = restored.node_for_id("listing")
+    assert restored_node.semantic_location_hint is None
+    assert restored_node.naming_provenance["semantic_location_hint_conflict"][
+        "selected"
+    ] is None
+
+
+def test_location_hint_conflict_is_order_independent_and_cannot_be_resolved_by_revisit():
+    import itertools
+
+    hints = ["product_list", "filters_panel", "search_results"]
+    results = []
+    for ordered in itertools.permutations(hints):
+        manager = WebKobeGraphManager(app="example")
+        for hint in ordered:
+            manager.identify_or_add_node(
+                replace(_node("listing", {}), semantic_location_hint=hint)
+            )
+        manager.identify_or_add_node(
+            replace(_node("listing", {}), semantic_location_hint="product_list")
+        )
+        results.append(manager.node_for_id("listing").to_dict())
+
+    assert all(result == results[0] for result in results)
+    conflict = results[0]["naming_provenance"]["semantic_location_hint_conflict"]
+    assert conflict == {
+        "policy": "unresolved_fail_closed",
+        "candidates": ["filters_panel", "product_list", "search_results"],
+        "selected": None,
+    }
+    assert results[0]["semantic_location_hint"] is None
 
 
 def test_graph_manager_from_graph_is_lossless_and_does_not_reappend_events():
@@ -274,6 +305,18 @@ def test_repeated_edge_fills_missing_semantic_observation_and_survives_reload(tm
     assert loaded.edges[0].semantic_observation == incoming.semantic_observation
 
 
+def test_identical_semantic_observation_retries_do_not_conflict():
+    manager = WebKobeGraphManager(app="example")
+    manager.identify_or_add_node(_node("page", {}))
+    edge = _trace_edge("sort_products", success=True, status="succeeded")
+    observation = _semantic_observation("product_list")
+    manager.add_edge(replace(edge, semantic_observation=observation))
+    manager.add_edge(replace(edge, semantic_observation=observation))
+    canonical = manager.to_graph().edges[0]
+    assert canonical.semantic_observation == observation
+    assert "semantic_observation_conflict" not in canonical.execution_trace.metadata
+
+
 def test_repeated_edge_semantic_conflict_uses_sorted_auditable_value():
     first = replace(
         _trace_edge("sort_products", success=True, status="succeeded"),
@@ -294,12 +337,71 @@ def test_repeated_edge_semantic_conflict_uses_sorted_auditable_value():
     forward = canonical([first, second])
     reverse = canonical([second, first])
     assert forward == reverse
-    assert forward["semantic_observation"]["source_location"] == "a_surface"
+    assert forward["semantic_observation"] is None
     conflict = forward["execution_trace"]["metadata"]["semantic_observation_conflict"]
     assert [item["source_location"] for item in conflict["candidates"]] == [
         "a_surface",
         "z_surface",
     ]
+
+
+def test_three_semantic_conflicts_are_order_independent_and_remain_unresolved():
+    observations = [
+        _semantic_observation("z_surface"),
+        _semantic_observation("a_surface"),
+        _semantic_observation("m_surface"),
+    ]
+    results = []
+    import itertools
+
+    for ordered in itertools.permutations(observations):
+        manager = WebKobeGraphManager(app="example")
+        manager.identify_or_add_node(_node("page", {}))
+        edge = _trace_edge("sort_products", success=True, status="succeeded")
+        for observation in ordered:
+            manager.add_edge(replace(edge, semantic_observation=observation))
+        results.append(manager.to_graph(start_node_id="page").to_dict())
+
+    assert all(result["edges"] == results[0]["edges"] for result in results)
+    canonical = results[0]["edges"][0]
+    assert canonical["semantic_observation"] is None
+    assert [
+        item["source_location"]
+        for item in canonical["execution_trace"]["metadata"][
+            "semantic_observation_conflict"
+        ]["candidates"]
+    ] == ["a_surface", "m_surface", "z_surface"]
+
+
+def test_conflict_audit_cannot_be_overwritten_by_incoming_metadata():
+    first = replace(
+        _trace_edge("sort_products", success=True, status="succeeded"),
+        semantic_observation=_semantic_observation("z_surface"),
+    )
+    second = replace(
+        first,
+        semantic_observation=_semantic_observation("a_surface"),
+        execution_trace=replace(
+            first.execution_trace,
+            metadata={
+                "semantic_observation_conflict": {
+                    "status": "resolved",
+                    "candidates": [],
+                    "selected": "forged",
+                }
+            },
+        ),
+    )
+    manager = WebKobeGraphManager(app="example")
+    manager.identify_or_add_node(_node("page", {}))
+    manager.add_edge(first)
+    manager.add_edge(second)
+    audit = manager.to_graph().edges[0].execution_trace.metadata[
+        "semantic_observation_conflict"
+    ]
+    assert audit["status"] == "unresolved"
+    assert audit["selected"] is None
+    assert len(audit["candidates"]) == 2
 
 
 def test_identify_or_add_node_preserves_first_vlm_naming_on_revisit():

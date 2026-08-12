@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 
 from ai_web_explorer.grounded_web.business_profile import PlanningDelta, PlanningState
@@ -11,6 +13,9 @@ from ai_web_explorer.grounded_web.graph import (
 from ai_web_explorer.grounded_web.semantic_model import SemanticObservation
 from ai_web_explorer.grounded_web.semantic_planning import (
     build_semantic_planning_graph,
+)
+from ai_web_explorer.safesym_bridge.minimal_semantic_pddl import (
+    compile_minimal_semantic_domain,
 )
 from ai_web_explorer.safesym_bridge.minimal_semantic_pddl import (
     compile_minimal_semantic_domain,
@@ -192,6 +197,29 @@ def test_supporting_facts_never_become_requirements():
     )
     semantic, _ = build_semantic_planning_graph(graph)
     assert semantic.actions[0].required_facts == []
+
+
+def test_semantic_observation_conflict_is_explicitly_excluded_from_projection():
+    edge = _edge(action_name="sort_products", role="presentation_capability")
+    edge = replace(
+        edge,
+        semantic_observation=None,
+        execution_trace=replace(
+            edge.execution_trace,
+            metadata={
+                "semantic_observation_conflict": {
+                    "status": "unresolved",
+                    "policy": "unresolved_fail_closed",
+                    "candidates": [{"source_location": "a"}, {"source_location": "b"}],
+                    "selected": None,
+                }
+            },
+        ),
+    )
+    semantic, report = build_semantic_planning_graph(_graph_with_edge(edge))
+    assert semantic.actions == []
+    assert report.excluded_edges[0]["reason"] == "semantic_observation_conflict"
+    assert "sort_products" not in compile_minimal_semantic_domain(semantic).domain
 
 
 def test_uncertain_requirement_is_reported_but_omitted():

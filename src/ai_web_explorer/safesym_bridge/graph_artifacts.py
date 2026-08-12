@@ -91,6 +91,13 @@ def _compact_node(node: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]
         if node.get(key) is not None:
             compact[key] = node[key]
     compact = _without_empty_optional_values(compact)
+    semantic_location_conflict = (node.get("naming_provenance") or {}).get(
+        "semantic_location_hint_conflict"
+    )
+    if semantic_location_conflict is not None:
+        compact.setdefault("naming_provenance", {})[
+            "semantic_location_hint_conflict"
+        ] = deepcopy(semantic_location_conflict)
 
     page_frame = node.get("page_frame", {})
     removed_fields = {
@@ -139,7 +146,15 @@ def _compact_execution_trace(trace: dict[str, Any]) -> dict[str, Any]:
         compact["metadata"] = {
             "replay_validation_status": replay_validation_status,
         }
-    return _without_empty_optional_values(compact)
+    semantic_conflict = (trace.get("metadata") or {}).get(
+        "semantic_observation_conflict"
+    )
+    compact = _without_empty_optional_values(compact)
+    if semantic_conflict is not None:
+        compact.setdefault("metadata", {})[
+            "semantic_observation_conflict"
+        ] = deepcopy(semantic_conflict)
+    return compact
 
 
 def _compact_edge(edge: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -164,6 +179,13 @@ def _compact_edge(edge: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]
     if edge.get("semantic_observation") is not None:
         compact["semantic_observation"] = edge["semantic_observation"]
     compact = _without_empty_optional_values(compact)
+    semantic_conflict = (edge.get("execution_trace", {}).get("metadata") or {}).get(
+        "semantic_observation_conflict"
+    )
+    if semantic_conflict is not None:
+        compact.setdefault("execution_trace", {}).setdefault("metadata", {})[
+            "semantic_observation_conflict"
+        ] = deepcopy(semantic_conflict)
 
     action = edge.get("action", {})
     sidecar = {

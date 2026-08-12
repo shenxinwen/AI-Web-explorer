@@ -8,6 +8,7 @@ from ai_web_explorer.grounded_web.exploration_index import ExplorationContext
 from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.grounded_web.explorer import (
     WebKobeExplorer,
+    _semantic_location_anchor,
     _business_action_from_affordance,
 )
 from ai_web_explorer.grounded_web.graph import (
@@ -2305,6 +2306,22 @@ async def test_explore_one_step_persists_semantic_observation_on_successful_edge
     assert graph.edges[0].execution_trace.metadata["visual_delta_trace"][
         "llm_response"
     ]["source_location"] == "listing"
+
+
+def test_explorer_does_not_reconfirm_an_unresolved_location_anchor():
+    node = replace(
+        _selection_node("listing"),
+        semantic_location_hint=None,
+        naming_provenance={
+            "source": "deterministic_fallback",
+            "semantic_location_hint_conflict": {
+                "policy": "unresolved_fail_closed",
+                "candidates": ["filters_panel", "product_list"],
+                "selected": None,
+            },
+        },
+    )
+    assert _semantic_location_anchor(node) == (None, True)
 
 
 class TypedFactsAdapter(FakeAdapter):

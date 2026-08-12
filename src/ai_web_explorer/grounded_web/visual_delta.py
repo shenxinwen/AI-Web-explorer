@@ -33,6 +33,7 @@ class VisualDeltaRequest:
     after_signature: dict[str, Any] | None = None
     source_location_hint: str | None = None
     source_location_hint_confirmed: bool = True
+    source_location_anchor_unresolved: bool = False
     allowed_location_ids: list[str] = field(default_factory=list)
     current_location_context: str | None = None
 
@@ -111,6 +112,7 @@ def _prompt_for_request(request: VisualDeltaRequest) -> str:
         "location_context": {
             "source_location_hint": request.source_location_hint,
             "source_location_hint_confirmed": request.source_location_hint_confirmed,
+            "source_location_anchor_unresolved": request.source_location_anchor_unresolved,
             "allowed_location_ids": list(request.allowed_location_ids),
             "current_location_context": request.current_location_context,
         },
@@ -189,6 +191,8 @@ def _semantic_observation(
 ) -> SemanticObservation | None:
     observation = semantic_observation_from_dict(parsed)
     if observation is None:
+        return None
+    if request.source_location_anchor_unresolved:
         return None
     if (
         observation.action_role == "unknown"

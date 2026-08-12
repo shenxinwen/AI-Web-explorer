@@ -44,7 +44,13 @@ def _merge_execution_trace_metadata(
     incoming: dict[str, Any],
 ) -> dict[str, Any]:
     merged = dict(existing)
-    merged.update(incoming)
+    merged.update(
+        {
+            key: value
+            for key, value in incoming.items()
+            if key != "semantic_observation_conflict"
+        }
+    )
     statuses = [
         status
         for status in (
@@ -149,21 +155,100 @@ def _merge_node_location_hint(
     existing_hint = _normalized_location_hint(existing.semantic_location_hint)
     incoming_hint = _normalized_location_hint(incoming.semantic_location_hint)
     provenance = dict(naming_provenance or {})
+    existing_conflict = provenance.get("semantic_location_hint_conflict") or (
+        existing.naming_provenance or {}
+    ).get("semantic_location_hint_conflict")
+    if existing_conflict:
+        candidates = set(existing_conflict.get("candidates", []))
+        candidates.update(filter(None, (existing_hint, incoming_hint)))
+        for candidate in (
+            (incoming.naming_provenance or {})
+            .get("semantic_location_hint_conflict", {})
+            .get("candidates", [])
+        ):
+            normalized = _normalized_location_hint(candidate)
+            if normalized:
+                candidates.add(normalized)
+        provenance["semantic_location_hint_conflict"] = {
+            "policy": "unresolved_fail_closed",
+            "candidates": sorted(candidates),
+            "selected": None,
+        }
+        return None, provenance
     if existing_hint and incoming_hint and existing_hint != incoming_hint:
         candidates = sorted({existing_hint, incoming_hint})
         provenance["semantic_location_hint_conflict"] = {
-            "policy": "existing_stable_value",
+            "policy": "unresolved_fail_closed",
             "candidates": candidates,
-            "selected": existing_hint,
+            "selected": None,
         }
-        return existing_hint, provenance
+        return None, provenance
     return existing_hint or incoming_hint, (provenance or None)
 
 
-def _semantic_observation_fingerprint(observation: SemanticObservation) -> str:
+def _semantic_content_dict(observation: SemanticObservation) -> dict[str, Any]:
+    canonical = _canonical_observation_dict(observation)
+    return {
+        key: canonical[key]
+        for key in (
+            "action_role",
+            "source_location",
+            "target_location",
+            "completion_facts",
+            "candidate_required_facts",
+            "preserved_facts",
+            "confidence",
+        )
+    }
+
+
+def _canonical_observation_dict(observation: SemanticObservation) -> dict[str, Any]:
+    return {
+        "action_role": normalize_semantic_id(observation.action_role),
+        "source_location": normalize_semantic_id(observation.source_location),
+        "target_location": normalize_semantic_id(observation.target_location),
+        "completion_facts": sorted(
+            {_normalized_location_hint(fact) for fact in observation.completion_facts}
+            - {None}
+        ),
+        "candidate_required_facts": sorted(
+            {
+                _normalized_location_hint(fact)
+                for fact in observation.candidate_required_facts
+            }
+            - {None}
+        ),
+        "preserved_facts": sorted(
+            {_normalized_location_hint(fact) for fact in observation.preserved_facts}
+            - {None}
+        ),
+        "evidence": sorted({str(item).strip() for item in observation.evidence if str(item).strip()}),
+        "confidence": observation.confidence,
+    }
+
+
+def _semantic_content_fingerprint(observation: SemanticObservation) -> str:
     return json.dumps(
-        observation.to_dict(), sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        _semantic_content_dict(observation),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
     )
+
+
+def _conflict_candidates(
+    metadata: dict[str, Any],
+    observations: list[SemanticObservation],
+) -> list[dict[str, Any]]:
+    candidates: dict[str, dict[str, Any]] = {}
+    existing = metadata.get("semantic_observation_conflict") or {}
+    for item in existing.get("candidates", []):
+        if isinstance(item, dict):
+            candidates[json.dumps(item, sort_keys=True, separators=(",", ":"), ensure_ascii=False)] = item
+    for observation in observations:
+        item = _canonical_observation_dict(observation)
+        candidates[json.dumps(item, sort_keys=True, separators=(",", ":"), ensure_ascii=False)] = item
+    return [candidates[key] for key in sorted(candidates)]
 
 
 def _merge_semantic_observation(
@@ -171,54 +256,33 @@ def _merge_semantic_observation(
     incoming: SemanticObservation | None,
     metadata: dict[str, Any],
 ) -> tuple[SemanticObservation | None, dict[str, Any]]:
+    existing_conflict = metadata.get("semantic_observation_conflict")
+    if existing_conflict and existing_conflict.get("status") == "unresolved":
+        observations = [item for item in (existing, incoming) if item is not None]
+        metadata = dict(metadata)
+        metadata["semantic_observation_conflict"] = {
+            "status": "unresolved",
+            "policy": "unresolved_fail_closed",
+            "candidates": _conflict_candidates(metadata, observations),
+            "selected": None,
+        }
+        return None, metadata
     if existing is None:
         return incoming, metadata
     if incoming is None:
         return existing, metadata
-    if _semantic_observation_fingerprint(existing) == _semantic_observation_fingerprint(
+    if _semantic_content_fingerprint(existing) == _semantic_content_fingerprint(
         incoming
     ):
         return existing, metadata
-
-    conflict = metadata.get("semantic_observation_conflict", {})
-    candidates: list[dict[str, Any]] = [
-        item for item in conflict.get("candidates", []) if isinstance(item, dict)
-    ]
-    candidates.extend([existing.to_dict(), incoming.to_dict()])
-    unique: dict[str, dict[str, Any]] = {
-        _semantic_observation_fingerprint(
-            SemanticObservation(
-                action_role=item.get("action_role", "unknown"),
-                source_location=item.get("source_location", ""),
-                target_location=item.get("target_location", ""),
-                completion_facts=list(item.get("completion_facts", [])),
-                candidate_required_facts=list(item.get("candidate_required_facts", [])),
-                preserved_facts=list(item.get("preserved_facts", [])),
-                evidence=list(item.get("evidence", [])),
-                confidence=item.get("confidence"),
-            )
-        ): item
-        for item in candidates
-    }
-    ordered = [unique[key] for key in sorted(unique)]
-    selected = ordered[0]
-    selected_observation = SemanticObservation(
-        action_role=selected["action_role"],
-        source_location=selected["source_location"],
-        target_location=selected["target_location"],
-        completion_facts=list(selected.get("completion_facts", [])),
-        candidate_required_facts=list(selected.get("candidate_required_facts", [])),
-        preserved_facts=list(selected.get("preserved_facts", [])),
-        evidence=list(selected.get("evidence", [])),
-        confidence=selected.get("confidence"),
-    )
     metadata = dict(metadata)
     metadata["semantic_observation_conflict"] = {
-        "policy": "lexicographically_smallest_canonical_observation",
-        "candidates": ordered,
-        "selected": selected,
+        "status": "unresolved",
+        "policy": "unresolved_fail_closed",
+        "candidates": _conflict_candidates(metadata, [existing, incoming]),
+        "selected": None,
     }
-    return selected_observation, metadata
+    return None, metadata
 
 
 def _merge_edge_status(existing: str, incoming: str) -> str:

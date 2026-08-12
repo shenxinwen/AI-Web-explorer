@@ -310,3 +310,41 @@ def test_compact_location_hint_survives_save_load(tmp_path):
     )
     loaded = load_web_kobe_graph_json(path)
     assert loaded.nodes[0].semantic_location_hint == "product_list"
+
+
+def test_compact_checkpoint_roundtrip_preserves_semantic_conflict_audit(tmp_path):
+    from dataclasses import replace
+
+    from ai_web_explorer.grounded_web.graph_manager import WebKobeGraphManager
+    from tests.safesym_bridge.test_web_kobe_graph_manager import (
+        _node,
+        _semantic_observation,
+        _trace_edge,
+    )
+
+    manager = WebKobeGraphManager(app="example")
+    manager.identify_or_add_node(_node("page", {}))
+    edge = _trace_edge("sort_products", success=True, status="succeeded")
+    manager.add_edge(replace(edge, semantic_observation=_semantic_observation("z_surface")))
+    manager.add_edge(replace(edge, semantic_observation=_semantic_observation("a_surface")))
+    compact = build_graph_artifact_payload(manager.to_graph(start_node_id="page")).compact_graph
+    path = tmp_path / "compact-checkpoint.json"
+    path.write_text(json.dumps(compact), encoding="utf-8")
+    loaded = load_web_kobe_graph_json(path)
+    metadata = loaded.edges[0].execution_trace.metadata
+    assert loaded.edges[0].semantic_observation is None
+    assert metadata["semantic_observation_conflict"]["policy"] == "unresolved_fail_closed"
+    assert len(metadata["semantic_observation_conflict"]["candidates"]) == 2
+    assert metadata["semantic_observation_conflict"]["selected"] is None
+    resumed = WebKobeGraphManager.from_graph(loaded)
+    resumed.add_edge(
+        replace(
+            edge,
+            semantic_observation=_semantic_observation("a_surface"),
+        )
+    )
+    resumed_edge = resumed.to_graph().edges[0]
+    assert resumed_edge.semantic_observation is None
+    assert resumed_edge.execution_trace.metadata["semantic_observation_conflict"][
+        "selected"
+    ] is None

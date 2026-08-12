@@ -102,7 +102,16 @@ def build_semantic_planning_graph(
             excluded_edges.append(_excluded(edge, "non_projectable_status"))
             continue
         if observation is None:
-            excluded_edges.append(_excluded(edge, "no_semantic_observation"))
+            reason = (
+                "semantic_observation_conflict"
+                if (
+                    edge.execution_trace.metadata.get("semantic_observation_conflict", {})
+                    .get("status")
+                    == "unresolved"
+                )
+                else "no_semantic_observation"
+            )
+            excluded_edges.append(_excluded(edge, reason))
             continue
         source_location = normalize_semantic_id(observation.source_location)
         target_location = normalize_semantic_id(observation.target_location)

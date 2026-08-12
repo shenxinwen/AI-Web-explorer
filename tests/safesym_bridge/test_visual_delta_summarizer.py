@@ -218,6 +218,27 @@ def test_visual_delta_rejects_presentation_drift_from_first_entry_anchor():
     assert result.semantic_observation is None
 
 
+def test_visual_delta_rejects_all_semantics_when_location_anchor_is_unresolved():
+    request = VisualDeltaRequest(
+        goal="Sort products.",
+        action=BrowserAction("click", "button.sort", "sort_products"),
+        before_screenshot_path="before.png",
+        after_screenshot_path="after.png",
+        source_location_hint="product_list",
+        source_location_hint_confirmed=False,
+        source_location_anchor_unresolved=True,
+    )
+
+    def provider(prompt, *, before_screenshot_path, after_screenshot_path):
+        return (
+            '{"action_role":"presentation_capability",'
+            '"source_location":"product_list","target_location":"product_list"}'
+        )
+
+    result = summarize_visual_delta(request, provider=provider)
+    assert result.semantic_observation is None
+
+
 def test_first_entry_sibling_presentations_share_one_anchor_fail_closed():
     responses = [
         '{"action_role":"presentation_capability","source_location":"filters_panel","target_location":"search_results"}',
