@@ -14,6 +14,7 @@ from ai_web_explorer.grounded_web.graph import (
     BusinessAffordance,
     BrowserAction,
     WebKobeEdge,
+    WebKobeGraph,
     WebKobeNode,
 )
 from ai_web_explorer.grounded_web.business_profile import (
@@ -168,6 +169,34 @@ def _business_explorer(
         state_embedding_records=state_embedding_records,
         enable_exploration_memory=enable_exploration_memory,
     )
+
+
+def test_explorer_restore_graph_preserves_candidates_without_current_browser_pointer():
+    explorer = _business_explorer(FakeAdapter())
+    graph = WebKobeGraph(
+        app="fake",
+        start_node_id="start",
+        total_steps_completed=4,
+        nodes=[
+            _selection_node(
+                "start",
+                business_affordances=[BusinessAffordance("open_item")],
+            ),
+            _selection_node(
+                "target",
+                business_affordances=[BusinessAffordance("inspect")],
+            ),
+        ],
+        edges=[],
+        meta={"resume_cursor_node_id": "target"},
+    )
+
+    explorer.restore_graph(graph)
+
+    assert explorer.start_node_id == graph.start_node_id
+    assert explorer._current_node_id is None
+    assert explorer.manager.to_graph(graph.start_node_id).to_dict() == graph.to_dict()
+    assert explorer._visual_affordance_observed_node_ids == {"start", "target"}
 
 
 def _selection_node(

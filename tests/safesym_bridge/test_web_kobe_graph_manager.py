@@ -66,6 +66,29 @@ def test_identify_or_add_node_merges_schema_and_visit_count():
     assert node.last_state_snapshot == {"cart_has_items": True, "filter_open": False}
 
 
+def test_graph_manager_from_graph_is_lossless_and_does_not_reappend_events():
+    manager = WebKobeGraphManager(app="example")
+    manager.identify_or_add_node(_node("page", {"ready": True}))
+    edge = _trace_edge("open_item", success=True, status="succeeded")
+    manager.add_edge(edge)
+    manager.add_edge(replace(edge, visit_count=2))
+    graph = manager.to_graph(start_node_id="page")
+
+    restored_manager = WebKobeGraphManager.from_graph(graph)
+    restored = restored_manager.to_graph(start_node_id=graph.start_node_id)
+
+    assert restored.to_dict() == graph.to_dict()
+    assert len(restored.execution_events) == 2
+
+    graph.meta["mutated_after_restore"] = True
+    graph.nodes[0].business_affordances.append(BusinessAffordance("late_action"))
+    isolated = restored_manager.to_graph(start_node_id=graph.start_node_id)
+    assert "mutated_after_restore" not in isolated.meta
+    assert [item.action_name for item in isolated.nodes[0].business_affordances] != [
+        "late_action"
+    ]
+
+
 def test_identify_or_add_node_keeps_existing_business_frontier_on_revisit():
     manager = WebKobeGraphManager(app="example")
     first = replace(

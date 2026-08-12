@@ -254,6 +254,17 @@ class WebKobeExplorer:
     def start_node_id(self) -> str | None:
         return self._start_node_id
 
+    def restore_graph(self, graph: WebKobeGraph) -> None:
+        if graph.app != self.adapter.app_name:
+            raise ValueError("resume_app_mismatch")
+        self.manager = WebKobeGraphManager.from_graph(graph)
+        self._start_node_id = graph.start_node_id
+        self._current_node_id = None
+        self._visit_stack = []
+        self._visual_affordance_observed_node_ids = {
+            node.node_id for node in graph.nodes if node.business_affordances
+        }
+
     async def explore_one_step(self) -> WebKobeGraph:
         before = await self.adapter.observe_state()
         before_facts = getattr(self.adapter, "last_state_facts", None)

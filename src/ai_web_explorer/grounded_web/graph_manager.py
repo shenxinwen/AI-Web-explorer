@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from collections import OrderedDict
 from dataclasses import replace
 from typing import Any
@@ -165,6 +166,23 @@ class WebKobeGraphManager:
         self._execution_events: list[WebKobeEdge] = []
         self.total_steps_completed = 0
         self.meta: dict[str, Any] = {}
+
+    @classmethod
+    def from_graph(cls, graph: WebKobeGraph) -> "WebKobeGraphManager":
+        restored = copy.deepcopy(graph)
+        node_ids = [node.node_id for node in restored.nodes]
+        edge_ids = [edge.edge_id for edge in restored.edges]
+        if len(node_ids) != len(set(node_ids)):
+            raise ValueError("duplicate_resume_node_id")
+        if len(edge_ids) != len(set(edge_ids)):
+            raise ValueError("duplicate_resume_edge_id")
+        manager = cls(app=restored.app)
+        manager._nodes = OrderedDict((node.node_id, node) for node in restored.nodes)
+        manager._edges = OrderedDict((edge.edge_id, edge) for edge in restored.edges)
+        manager._execution_events = copy.deepcopy(restored.execution_events)
+        manager.total_steps_completed = restored.total_steps_completed
+        manager.meta = copy.deepcopy(restored.meta)
+        return manager
 
     def identify_or_add_node(self, node: WebKobeNode) -> str:
         existing = self._nodes.get(node.node_id)
