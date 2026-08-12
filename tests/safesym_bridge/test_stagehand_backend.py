@@ -221,6 +221,24 @@ async def test_stagehand_backend_business_milestone_mode_acts_without_observe():
 
 
 @pytest.mark.anyio
+async def test_stagehand_backend_replay_action_forces_one_provider_step():
+    provider = FakeStagehandProvider()
+    backend = StagehandAutomationBackend(
+        base_backend=FakeBaseBackend(),
+        provider=provider,
+        goal="Advance one meaningful checkout milestone.",
+        execution_mode="business_milestone",
+    )
+    state = await backend.observe_state()
+    action = (await backend.list_interactables(state))[0]
+
+    assert await backend.execute_replay_action(action) is True
+    assert provider.executed_instructions == [
+        ("Advance one meaningful checkout milestone.", 1)
+    ]
+
+
+@pytest.mark.anyio
 async def test_stagehand_backend_business_milestone_falls_back_to_act_instruction():
     class ActOnlyProvider:
         def __init__(self):

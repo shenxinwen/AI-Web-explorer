@@ -183,6 +183,17 @@ class StagehandAutomationBackend:
         }
         return False
 
+    async def execute_replay_action(
+        self,
+        action: BrowserAction | dict[str, Any],
+    ) -> bool:
+        original_max_steps = self.business_milestone_max_steps
+        self.business_milestone_max_steps = 1
+        try:
+            return await self.execute(action)
+        finally:
+            self.business_milestone_max_steps = original_max_steps
+
     async def _execute_business_intent(
         self,
         instruction: str,
