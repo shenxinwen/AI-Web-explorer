@@ -7,7 +7,7 @@ import time
 import urllib.request
 from dataclasses import replace
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
 from ai_web_explorer.grounded_web.capability_graph import Evidence, PageFrame
 from ai_web_explorer.grounded_web.graph import (
@@ -16,6 +16,7 @@ from ai_web_explorer.grounded_web.graph import (
     WebKobeNode,
 )
 from ai_web_explorer.grounded_web.controller import (
+    RUNTIME_BUDGET_META_KEY,
     WebKobeExplorationController,
 )
 from ai_web_explorer.grounded_web.business_profile import (
@@ -91,6 +92,34 @@ ECOMMERCE_CHECKOUT_COMPLETE_EXPLORER_GOAL = (
     "Complete an e-commerce test checkout flow through the confirmation page."
 )
 SAUCEDEMO_BENCHMARK_START_URL = "https://www.saucedemo.com/"
+
+_RUNTIME_STATE_KEYS = (
+    "formal_action_attempts",
+    "consecutive_no_progress",
+    "semantic_progress_count",
+    "replay_attempt_count",
+    "replay_success_count",
+    "replay_failure_count",
+    "replay_mismatch_count",
+    "frontier_replay_attempts",
+    "blocked_replay_node_ids",
+)
+
+
+def _runtime_state_from_graph(graph: WebKobeGraph) -> dict[str, Any]:
+    payload = graph.meta.get(RUNTIME_BUDGET_META_KEY)
+    if isinstance(payload, dict):
+        return dict(payload)
+    return {
+        key: graph.meta[key]
+        for key in _RUNTIME_STATE_KEYS
+        if key in graph.meta
+    }
+
+
+def _mirror_runtime_state(graph: WebKobeGraph, state: dict[str, Any]) -> None:
+    graph.meta[RUNTIME_BUDGET_META_KEY] = dict(state)
+    graph.meta.update(state)
 
 
 def _resolve_business_profile(
@@ -724,9 +753,14 @@ async def run_stagehand_exploration(
                     else 8
                 )
             )
+            resume_runtime_state = (
+                _runtime_state_from_graph(resume_graph)
+                if resume_graph is not None
+                else {}
+            )
             replay_metric_baseline = (
                 {
-                    key: int(resume_graph.meta.get(key, 0))
+                    key: int(resume_runtime_state.get(key, 0))
                     for key in (
                         "replay_attempt_count",
                         "replay_success_count",
@@ -754,7 +788,7 @@ async def run_stagehand_exploration(
                     ),
                     "last_replay_reason": None,
                     "blocked_replay_node_ids": list(
-                        resume_graph.meta.get("blocked_replay_node_ids", [])
+                        resume_runtime_state.get("blocked_replay_node_ids", [])
                     )
                     if location_scoped
                     else [],
@@ -767,15 +801,35 @@ async def run_stagehand_exploration(
                 bootstrap_frontier_attempts = {
                     str(key): int(value)
                     for key, value in (
-                        resume_graph.meta.get("frontier_replay_attempts", {})
+                        resume_runtime_state.get("frontier_replay_attempts", {})
                         if location_scoped
                         and isinstance(
-                            resume_graph.meta.get("frontier_replay_attempts", {}),
+                            resume_runtime_state.get("frontier_replay_attempts", {}),
                             dict,
                         )
                         else {}
                     ).items()
                 }
+
+                def persist_bootstrap_runtime(graph: WebKobeGraph) -> dict[str, Any]:
+                    state = _runtime_state_from_graph(graph)
+                    for key in (
+                        "replay_attempt_count",
+                        "replay_success_count",
+                        "replay_failure_count",
+                        "replay_mismatch_count",
+                    ):
+                        state[key] = int(bootstrap_metrics[key])
+                    state["frontier_replay_attempts"] = dict(
+                        sorted(bootstrap_frontier_attempts.items())
+                    )
+                    state["blocked_replay_node_ids"] = sorted(
+                        blocked_resume_node_ids
+                    )
+                    _mirror_runtime_state(graph, state)
+                    graph.meta.update(bootstrap_metrics)
+                    return state
+
                 replay_attempted = False
                 while True:
                     current_graph = explorer.manager.to_graph(
@@ -787,17 +841,20 @@ async def run_stagehand_exploration(
                         and bootstrap_metrics["replay_attempt_count"]
                         >= limits.max_total_replays
                     ):
-                        current_graph.meta.update(bootstrap_metrics)
-                        current_graph.meta["frontier_replay_attempts"] = dict(
-                            sorted(bootstrap_frontier_attempts.items())
-                        )
+                        state = persist_bootstrap_runtime(current_graph)
                         current_graph.meta["exploration_summary"] = {
                             "requested_steps": max(resolved_steps, 0),
                             "steps_completed": 0,
                             "stop_reason": "total_replay_limit_reached",
-                            "formal_action_attempts": 0,
-                            "semantic_progress_count": 0,
-                            "consecutive_no_progress": 0,
+                            "formal_action_attempts": int(
+                                state.get("formal_action_attempts", 0)
+                            ),
+                            "semantic_progress_count": int(
+                                state.get("semantic_progress_count", 0)
+                            ),
+                            "consecutive_no_progress": int(
+                                state.get("consecutive_no_progress", 0)
+                            ),
                             "replay_attempt_count": bootstrap_metrics[
                                 "replay_attempt_count"
                             ],
@@ -829,21 +886,21 @@ async def run_stagehand_exploration(
                                 )
                             )
                         )
-                        current_graph.meta.update(bootstrap_metrics)
-                        current_graph.meta["blocked_replay_node_ids"] = sorted(
-                            blocked_resume_node_ids
-                        )
+                        state = persist_bootstrap_runtime(current_graph)
                         if location_scoped and limits is not None:
-                            current_graph.meta["frontier_replay_attempts"] = dict(
-                                sorted(bootstrap_frontier_attempts.items())
-                            )
                             current_graph.meta["exploration_summary"] = {
                                 "requested_steps": max(resolved_steps, 0),
                                 "steps_completed": 0,
                                 "stop_reason": stop_reason,
-                                "formal_action_attempts": 0,
-                                "semantic_progress_count": 0,
-                                "consecutive_no_progress": 0,
+                                "formal_action_attempts": int(
+                                    state.get("formal_action_attempts", 0)
+                                ),
+                                "semantic_progress_count": int(
+                                    state.get("semantic_progress_count", 0)
+                                ),
+                                "consecutive_no_progress": int(
+                                    state.get("consecutive_no_progress", 0)
+                                ),
                                 "replay_attempt_count": bootstrap_metrics[
                                     "replay_attempt_count"
                                 ],
@@ -928,21 +985,41 @@ async def run_stagehand_exploration(
             if location_scoped and limits is not None:
                 controller_kwargs["limits"] = limits
                 if resume_graph is not None:
-                    controller_kwargs["runtime_budget_state"] = {
-                        key: resume_graph.meta.get(key)
-                        for key in (
-                            "formal_action_attempts",
-                            "consecutive_no_progress",
-                            "semantic_progress_count",
-                            "replay_attempt_count",
-                            "replay_success_count",
-                            "replay_failure_count",
-                            "replay_mismatch_count",
-                            "frontier_replay_attempts",
-                            "blocked_replay_node_ids",
+                    runtime_state_for_controller = dict(resume_runtime_state)
+                    for key in (
+                        "replay_attempt_count",
+                        "replay_success_count",
+                        "replay_failure_count",
+                        "replay_mismatch_count",
+                    ):
+                        runtime_state_for_controller[key] = max(
+                            int(runtime_state_for_controller.get(key, 0)),
+                            int(bootstrap_metrics[key]),
                         )
-                        if key in resume_graph.meta
+                    existing_frontier_attempts = runtime_state_for_controller.get(
+                        "frontier_replay_attempts", {}
+                    )
+                    if not isinstance(existing_frontier_attempts, dict):
+                        existing_frontier_attempts = {}
+                    runtime_state_for_controller["frontier_replay_attempts"] = {
+                        key: max(
+                            int(existing_frontier_attempts.get(key, 0)),
+                            int(bootstrap_frontier_attempts.get(key, 0)),
+                        )
+                        for key in set(existing_frontier_attempts)
+                        | set(bootstrap_frontier_attempts)
                     }
+                    runtime_state_for_controller["blocked_replay_node_ids"] = sorted(
+                        set(
+                            runtime_state_for_controller.get(
+                                "blocked_replay_node_ids", []
+                            )
+                        )
+                        | blocked_resume_node_ids
+                    )
+                    controller_kwargs["runtime_budget_state"] = (
+                        runtime_state_for_controller
+                    )
             if frontier_replay or resume_graph is not None:
                 controller_kwargs.update(
                     {
@@ -959,31 +1036,52 @@ async def run_stagehand_exploration(
                 )
             controller = WebKobeExplorationController(explorer, **controller_kwargs)
             result = await controller.run(max_steps=max(resolved_steps, 1))
+            runtime_state = _runtime_state_from_graph(result.graph)
             if resume_graph is not None:
                 blocked_after_controller = set(
-                    result.graph.meta.get("blocked_replay_node_ids", [])
+                    runtime_state.get("blocked_replay_node_ids", [])
                 )
-                result.graph.meta["blocked_replay_node_ids"] = sorted(
+                runtime_state["blocked_replay_node_ids"] = sorted(
                     blocked_after_controller | blocked_resume_node_ids
                 )
+                controller_frontier_attempts = runtime_state.get(
+                    "frontier_replay_attempts", {}
+                )
+                if not isinstance(controller_frontier_attempts, dict):
+                    controller_frontier_attempts = {}
+                runtime_state["frontier_replay_attempts"] = {
+                    key: max(
+                        int(controller_frontier_attempts.get(key, 0)),
+                        int(value),
+                    )
+                    for key, value in {
+                        **controller_frontier_attempts,
+                        **bootstrap_frontier_attempts,
+                    }.items()
+                }
+            _mirror_runtime_state(result.graph, runtime_state)
             if location_scoped and limits is not None:
-                result.graph.meta["formal_action_attempts"] = int(
-                    result.summary.steps_completed
-                )
-                result.graph.meta["semantic_progress_count"] = int(
-                    result.summary.semantic_progress_count
-                )
-                result.graph.meta["consecutive_no_progress"] = int(
-                    result.summary.consecutive_unproductive_steps
-                )
-                result.graph.meta["frontier_replay_attempts"] = dict(
-                    sorted(
-                        (
-                            result.summary.frontier_replay_attempts
-                            or result.graph.meta.get("frontier_replay_attempts", {})
-                        ).items()
+                formal_action_attempts = int(
+                    runtime_state.get(
+                        "formal_action_attempts",
+                        result.graph.meta.get("formal_action_attempts", 0),
                     )
                 )
+                semantic_progress_count = int(
+                    runtime_state.get("semantic_progress_count", 0)
+                )
+                consecutive_no_progress = int(
+                    runtime_state.get("consecutive_no_progress", 0)
+                )
+                frontier_replay_attempts = runtime_state.get(
+                    "frontier_replay_attempts", {}
+                )
+                if not isinstance(frontier_replay_attempts, dict):
+                    frontier_replay_attempts = {}
+                runtime_state["frontier_replay_attempts"] = dict(
+                    sorted(frontier_replay_attempts.items())
+                )
+                _mirror_runtime_state(result.graph, runtime_state)
             exploration_summary = {
                 "requested_steps": result.summary.requested_steps,
                 "steps_completed": result.summary.steps_completed,
@@ -992,19 +1090,14 @@ async def run_stagehand_exploration(
             if location_scoped and limits is not None:
                 exploration_summary.update(
                     {
-                        "formal_action_attempts": result.summary.steps_completed,
-                        "semantic_progress_count": result.summary.semantic_progress_count,
-                        "consecutive_no_progress": result.summary.consecutive_unproductive_steps,
-                        "replay_attempt_count": result.summary.replay_attempt_count,
+                        "formal_action_attempts": formal_action_attempts,
+                        "semantic_progress_count": semantic_progress_count,
+                        "consecutive_no_progress": consecutive_no_progress,
+                        "replay_attempt_count": int(
+                            runtime_state.get("replay_attempt_count", 0)
+                        ),
                         "frontier_replay_attempts": dict(
-                            sorted(
-                                (
-                                    result.summary.frontier_replay_attempts
-                                    or result.graph.meta.get(
-                                        "frontier_replay_attempts", {}
-                                    )
-                                ).items()
-                            )
+                            sorted(runtime_state["frontier_replay_attempts"].items())
                         ),
                         "limits": limits.to_dict(),
                     }
