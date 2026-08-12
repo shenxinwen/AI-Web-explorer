@@ -44,12 +44,31 @@ class FrontierTarget:
 
 
 @dataclass(frozen=True)
+class ReplayCheckpointResult:
+    success: bool
+    observed_semantic_location: str | None = None
+    verified_business_facts: tuple[str, ...] = ()
+    evidence: tuple[str, ...] = ()
+    reason: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "success": self.success,
+            "observed_semantic_location": self.observed_semantic_location,
+            "verified_business_facts": list(self.verified_business_facts),
+            "evidence": list(self.evidence),
+            "reason": self.reason,
+        }
+
+
+@dataclass(frozen=True)
 class ReplayResult:
     success: bool
     reached_node_id: str | None
     failed_edge_id: str | None
     reason: str
     completed_steps: int
+    checkpoint: ReplayCheckpointResult | None = None
 
 
 class FrontierReplayRunner:
@@ -67,8 +86,6 @@ class FrontierReplayRunner:
             return ReplayResult(False, None, None, "entry_state_unavailable", 0)
         if not await self.explorer.adapter.reset_to(start_url):
             return ReplayResult(False, None, None, "entry_reset_failed", 0)
-        if not await self.explorer.validate_current_node(start_node_id):
-            return ReplayResult(False, None, None, "entry_state_mismatch", 0)
 
         completed_steps = 0
         for step in target.path:
@@ -80,35 +97,50 @@ class FrontierReplayRunner:
                     "replay_action_failed",
                     completed_steps,
                 )
-            if not await self.explorer.validate_current_node(step.target_node_id):
-                return ReplayResult(
-                    False,
-                    None,
-                    step.edge_id,
-                    "target_state_mismatch",
-                    completed_steps,
-                )
             completed_steps += 1
-        if not await self.explorer.validate_current_node(
-            target.node_id,
-            expected_semantic_location=getattr(target, "semantic_location", None),
-            expected_business_facts=getattr(target, "required_business_facts", ()),
-        ):
+
+        checkpoint_validator = getattr(
+            self.explorer, "validate_replay_checkpoint", None
+        )
+        if checkpoint_validator is None:
+            checkpoint_ok = await self.explorer.validate_current_node(
+                target.node_id,
+                expected_semantic_location=getattr(target, "semantic_location", None),
+                expected_business_facts=getattr(target, "required_business_facts", ()),
+            )
+            checkpoint = ReplayCheckpointResult(
+                success=checkpoint_ok,
+                reason="replay_succeeded" if checkpoint_ok else "target_state_mismatch",
+            )
+        else:
+            checkpoint = await checkpoint_validator(
+                expected_semantic_location=getattr(target, "semantic_location", None),
+                expected_business_facts=getattr(target, "required_business_facts", ()),
+            )
+        if not checkpoint.success:
             return ReplayResult(
                 False,
                 None,
                 None,
-                "target_business_facts_mismatch"
-                if getattr(target, "required_business_facts", ())
-                else "target_state_mismatch",
+                checkpoint.reason
+                or (
+                    "target_business_facts_mismatch"
+                    if getattr(target, "required_business_facts", ())
+                    else "target_state_mismatch"
+                ),
                 completed_steps,
+                checkpoint,
             )
+        # The checkpoint is semantic rather than a raw-node restoration, but
+        # the next exploration step must still start from the replay target.
+        self.explorer._set_current_node(target.node_id)
         return ReplayResult(
             True,
             target.node_id,
             None,
             "replay_succeeded",
             completed_steps,
+            checkpoint,
         )
 
 def select_frontier(
@@ -298,16 +330,22 @@ def _required_facts_for_candidates(
     node,
     action_ids: Iterable[str],
 ) -> tuple[str, ...]:
-    wanted = set(action_ids)
-    facts: set[str] = set()
-    for affordance in getattr(node, "business_affordances", ()):
-        if affordance.action_name in wanted:
-            facts.update(
-                normalize_semantic_id(fact)
-                for fact in affordance.supporting_facts
-                if normalize_semantic_id(fact)
-            )
-    return tuple(sorted(facts))
+    del action_ids
+    planning_state = getattr(node, "planning_state", None)
+    if planning_state is None:
+        return ()
+    profile_fact_ids = {
+        normalize_semantic_id(fact)
+        for fact in planning_state.profile_fact_ids
+        if normalize_semantic_id(fact)
+    }
+    return tuple(
+        dict.fromkeys(
+            normalize_semantic_id(fact)
+            for fact in planning_state.active_facts
+            if normalize_semantic_id(fact) in profile_fact_ids
+        )
+    )
 
 
 def _location_memory(graph: WebKobeGraph) -> LocationExplorationMemory | None:

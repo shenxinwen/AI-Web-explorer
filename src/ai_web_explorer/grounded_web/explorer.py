@@ -39,6 +39,7 @@ from ai_web_explorer.grounded_web.exploration_index import (
 from ai_web_explorer.grounded_web.exploration_semantics import (
     SemanticExperimentProfile,
 )
+from ai_web_explorer.grounded_web.frontier_replay import ReplayCheckpointResult
 from ai_web_explorer.grounded_web.location_exploration import (
     LOCATION_EXPLORATION_META_KEY,
     ExplorationLimits,
@@ -80,6 +81,14 @@ OBSERVATION_WAIT_TIMEOUT_MS = 1200
 OBSERVATION_WAIT_INTERVAL_MS = 200
 CURRENT_NODE_MATCH_THRESHOLD = 0.88
 TARGET_NODE_MATCH_THRESHOLD = 0.90
+
+
+def _checkpoint_value_is_true(value: object) -> bool:
+    return value is True or (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and value > 0
+    )
 
 
 def _url_path(url: str) -> str:
@@ -963,6 +972,176 @@ class WebKobeExplorer:
 
     def mark_replay_edge_validation(self, edge_id: str, status: str) -> None:
         self.manager.update_edge_replay_validation(edge_id, status)
+
+    async def validate_replay_checkpoint(
+        self,
+        *,
+        expected_semantic_location: str | None = None,
+        expected_business_facts: tuple[str, ...] = (),
+    ) -> ReplayCheckpointResult:
+        """Verify only the semantic endpoint of a replayed path.
+
+        This method is deliberately observation-only.  It does not identify a
+        node, record a visit, synchronize candidates, or update graph facts.
+        """
+        snapshot = await self.adapter.observe_state()
+        interactables = await self.adapter.list_interactables(snapshot)
+        draft = self.semantic_assistor.describe_state(
+            snapshot=snapshot,
+            interactables=interactables,
+        )
+        observed_location = normalize_semantic_id(
+            draft.page_frame.page_type or snapshot.page_id
+        )
+        expected_location = normalize_semantic_id(expected_semantic_location or "")
+        profile = self.semantic_experiment_profile
+        allowed_locations = (
+            set(profile.allowed_locations) if profile is not None else set()
+        )
+        if profile is not None and observed_location not in allowed_locations:
+            return ReplayCheckpointResult(
+                success=False,
+                observed_semantic_location=observed_location or None,
+                reason="target_semantic_location_not_allowed",
+            )
+        if expected_location and observed_location != expected_location:
+            return ReplayCheckpointResult(
+                success=False,
+                observed_semantic_location=observed_location or None,
+                reason="target_semantic_location_mismatch",
+            )
+        if expected_location and profile is not None and expected_location not in allowed_locations:
+            return ReplayCheckpointResult(
+                success=False,
+                observed_semantic_location=observed_location or None,
+                reason="target_semantic_location_not_allowed",
+            )
+
+        required = tuple(
+            dict.fromkeys(
+                normalize_semantic_id(fact)
+                for fact in expected_business_facts
+                if normalize_semantic_id(fact)
+            )
+        )
+        if profile is not None:
+            unknown_facts = set(required) - set(profile.business_fact_ids)
+            if unknown_facts:
+                return ReplayCheckpointResult(
+                    success=False,
+                    observed_semantic_location=observed_location or None,
+                    reason="target_business_facts_unknown",
+                )
+
+        verified: list[str] = []
+        evidence: list[str] = []
+        signature = snapshot.signature
+        typed_facts = getattr(self.adapter, "last_state_facts", None) or ()
+        typed_by_id = {
+            normalize_semantic_id(getattr(fact, "fact_id", "")): fact
+            for fact in typed_facts
+            if normalize_semantic_id(getattr(fact, "fact_id", ""))
+        }
+        for fact_id in required:
+            if _checkpoint_value_is_true(signature.get(fact_id)):
+                verified.append(fact_id)
+                evidence.append(f"signature:{fact_id}")
+                continue
+            if fact_id == "cart_has_items" and any(
+                _checkpoint_value_is_true(signature.get(key))
+                for key in ("cart_count", "item_count", "cart_items_count")
+            ):
+                verified.append(fact_id)
+                evidence.append("signature:cart_count")
+                continue
+            fact = typed_by_id.get(fact_id)
+            if fact is not None and _checkpoint_value_is_true(
+                getattr(fact, "value", None)
+            ):
+                verified.append(fact_id)
+                evidence.append(f"typed_state_fact:{fact_id}")
+
+        missing = [fact_id for fact_id in required if fact_id not in verified]
+        if missing and self.visual_delta_provider is not None:
+            screenshot = await self._capture_screenshot("replay_checkpoint")
+            descriptions = {
+                rule.fact_id: list(rule.descriptions)
+                for rule in (profile.business_facts if profile is not None else ())
+                if rule.fact_id in missing
+            }
+            prompt = json.dumps(
+                {
+                    "expected_semantic_location": expected_location or None,
+                    "allowed_semantic_locations": sorted(
+                        allowed_locations or ({expected_location} if expected_location else set())
+                    ),
+                    "requested_business_facts": descriptions,
+                    "current_screenshot_path": screenshot,
+                    "current_signature": dict(signature),
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+            try:
+                raw_response = self.visual_delta_provider(
+                    prompt,
+                    current_screenshot_path=screenshot,
+                    before_screenshot_path=screenshot,
+                    after_screenshot_path=screenshot,
+                )
+                parsed = json.loads(raw_response)
+            except Exception:
+                parsed = None
+            if isinstance(parsed, dict):
+                provider_location = normalize_semantic_id(
+                    parsed.get("observed_semantic_location") or ""
+                )
+                provider_facts = parsed.get("verified_business_facts")
+                provider_evidence: dict[str, list[str]] = {}
+                if isinstance(provider_facts, dict):
+                    for raw_fact_id, raw_evidence in provider_facts.items():
+                        fact_id = normalize_semantic_id(raw_fact_id)
+                        if isinstance(raw_evidence, str):
+                            values = [raw_evidence.strip()] if raw_evidence.strip() else []
+                        elif isinstance(raw_evidence, list) and all(
+                            isinstance(item, str) and item.strip()
+                            for item in raw_evidence
+                        ):
+                            values = [item.strip() for item in raw_evidence]
+                        else:
+                            values = []
+                        provider_evidence[fact_id] = values
+                if (
+                    provider_location
+                    and provider_location == observed_location
+                    and (not expected_location or provider_location == expected_location)
+                    and (
+                        profile is None
+                        or provider_location in allowed_locations
+                    )
+                    and set(provider_evidence) <= set(required)
+                    and all(provider_evidence.values())
+                ):
+                    for fact_id in missing:
+                        if fact_id in provider_evidence:
+                            verified.append(fact_id)
+                            evidence.extend(provider_evidence[fact_id])
+
+        if any(fact_id not in verified for fact_id in required):
+            return ReplayCheckpointResult(
+                success=False,
+                observed_semantic_location=observed_location or None,
+                verified_business_facts=tuple(verified),
+                evidence=tuple(evidence),
+                reason="target_business_facts_mismatch",
+            )
+        return ReplayCheckpointResult(
+            success=True,
+            observed_semantic_location=observed_location or None,
+            verified_business_facts=tuple(verified),
+            evidence=tuple(evidence),
+            reason="replay_succeeded",
+        )
 
     async def validate_current_node(
         self,
