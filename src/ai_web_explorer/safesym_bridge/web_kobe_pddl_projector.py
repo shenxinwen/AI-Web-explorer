@@ -23,6 +23,10 @@ from ai_web_explorer.grounded_web.graph import (
 from ai_web_explorer.grounded_web.business_profile import PlanningDelta
 from ai_web_explorer.grounded_web.business_profile import PlanningState
 from ai_web_explorer.grounded_web.business_profile import PlanningTransition
+from ai_web_explorer.grounded_web.semantic_model import (
+    SemanticObservation,
+    semantic_observation_from_dict,
+)
 from ai_web_explorer.safesym_bridge.location_pddl import compile_location_domain
 
 PROJECTABLE_EDGE_STATUSES = {
@@ -226,6 +230,12 @@ def _planning_transition_from_dict(
     )
 
 
+def _semantic_observation_from_dict(
+    data: dict[str, Any] | None,
+) -> SemanticObservation | None:
+    return semantic_observation_from_dict(data)
+
+
 def _pddl_action_hint_from_dict(data: dict[str, Any] | None) -> PddlActionHint | None:
     if data is None:
         return None
@@ -256,6 +266,9 @@ def _edge_from_dict(data: dict[str, Any]) -> WebKobeEdge:
         planning_delta=_planning_delta_from_dict(data.get("planning_delta")),
         planning_transition=_planning_transition_from_dict(
             data.get("planning_transition")
+        ),
+        semantic_observation=_semantic_observation_from_dict(
+            data.get("semantic_observation")
         ),
         visual_change_kind=str(data.get("visual_change_kind", "unknown")),
         visit_count=int(data.get("visit_count", 1)),

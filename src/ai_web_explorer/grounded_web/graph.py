@@ -14,6 +14,7 @@ from ai_web_explorer.grounded_web.capability_graph import (
 from ai_web_explorer.grounded_web.business_profile import PlanningDelta
 from ai_web_explorer.grounded_web.business_profile import PlanningState
 from ai_web_explorer.grounded_web.business_profile import PlanningTransition
+from ai_web_explorer.grounded_web.semantic_model import SemanticObservation
 
 WEB_KOBE_SCHEMA_VERSION = "web-kobe-graph-v1"
 
@@ -205,6 +206,7 @@ class WebKobeEdge:
     pddl_hint: PddlActionHint | None = None
     planning_delta: PlanningDelta | None = None
     planning_transition: PlanningTransition | None = None
+    semantic_observation: SemanticObservation | None = None
     visual_change_kind: str = "unknown"
     visit_count: int = 1
     status: str = "verified"
@@ -238,6 +240,11 @@ class WebKobeEdge:
             "planning_transition": (
                 self.planning_transition.to_dict()
                 if self.planning_transition is not None
+                else None
+            ),
+            "semantic_observation": (
+                self.semantic_observation.to_dict()
+                if self.semantic_observation is not None
                 else None
             ),
             "visual_change_kind": self.visual_change_kind,
