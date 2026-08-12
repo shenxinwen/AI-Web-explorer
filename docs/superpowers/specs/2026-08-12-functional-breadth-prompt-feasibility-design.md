@@ -25,7 +25,8 @@ The prompt will:
 - rank major same-surface functions as `supporting`;
 - rank local presentation/refinement operations as `low_value` when broader actions exist;
 - require one concrete visible target and reject ambiguous umbrella actions;
-- include the explorer goal in the prompt payload;
+- continue to exclude external task goals and planning/profile state so the
+  observer remains exploration-oriented;
 - remain domain-neutral, using functional scope rather than hard-coded names such as filters, products, or carts.
 
 No response-model or graph-schema field will be added. The existing parser already consumes `relevance_hint` and `confidence`, and the existing selector already ranks them.
@@ -33,7 +34,7 @@ No response-model or graph-schema field will be added. The existing parser alrea
 ## Data flow
 
 ```text
-current screenshot + exploration goal
+current screenshot
   -> functional-breadth affordance prompt
   -> diverse visible action candidates with relevance_hint
   -> existing affordance parser
