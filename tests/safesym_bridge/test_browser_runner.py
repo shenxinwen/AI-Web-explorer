@@ -1152,6 +1152,126 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
 
 
 @pytest.mark.anyio
+async def test_run_stagehand_exploration_wires_location_feasibility_profile(
+    tmp_path, monkeypatch
+):
+    import playwright.async_api as playwright_async_api
+    from ai_web_explorer.grounded_web.location_exploration import ExplorationLimits
+
+    output_path = tmp_path / "graph.json"
+    captured = {}
+
+    class FakePage:
+        async def goto(self, url):
+            captured["url"] = url
+
+    class FakeBrowser:
+        async def new_page(self):
+            return FakePage()
+
+        async def close(self):
+            pass
+
+    class FakeChromium:
+        async def launch(self, **kwargs):
+            return FakeBrowser()
+
+    class FakePlaywright:
+        chromium = FakeChromium()
+
+    class FakeContext:
+        async def __aenter__(self):
+            return FakePlaywright()
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+    class FakeBaseAdapter:
+        def __init__(self, page, *, app_name, page_id=None, screenshot_dir=None):
+            self.app_name = app_name
+
+    class FakeStagehandBackend:
+        def __init__(self, *, base_backend, provider, goal, execution_mode, **kwargs):
+            captured["goal"] = goal
+            captured["stagehand_timeout"] = kwargs["action_timeout_seconds"]
+            self.app_name = base_backend.app_name
+
+    class FakeExplorer:
+        def __init__(self, **kwargs):
+            captured["explorer_limits"] = kwargs["exploration_limits"]
+            captured["profile_context"] = kwargs["semantic_profile_context"]
+            self.state_embedding_records = []
+
+    class FakeController:
+        def __init__(self, explorer, **kwargs):
+            captured["controller_limits"] = kwargs["limits"]
+            self.checkpoint = kwargs["step_checkpoint"]
+
+        async def run(self, *, max_steps):
+            captured["max_steps"] = max_steps
+            graph = WebKobeGraph(
+                app="demo",
+                start_node_id="start",
+                total_steps_completed=0,
+                meta={"frontier_replay_attempts": {}},
+            )
+            result = WebKobeExplorationResult(
+                graph=graph,
+                summary=WebKobeExplorationSummary(
+                    requested_steps=max_steps,
+                    steps_completed=0,
+                    stop_reason="frontier_exhausted",
+                    node_count=0,
+                    edge_count=0,
+                    failed_edge_count=0,
+                ),
+            )
+            self.checkpoint(graph)
+            return result
+
+    limits = ExplorationLimits()
+    monkeypatch.setattr(playwright_async_api, "async_playwright", lambda: FakeContext())
+    monkeypatch.setattr(browser_runner, "WebKobePlaywrightAdapter", FakeBaseAdapter)
+    monkeypatch.setattr(browser_runner, "StagehandAutomationBackend", FakeStagehandBackend)
+    monkeypatch.setattr(browser_runner, "WebKobeExplorer", FakeExplorer)
+    monkeypatch.setattr(browser_runner, "WebKobeExplorationController", FakeController)
+
+    await browser_runner.run_stagehand_exploration(
+        output_path,
+        start_url="https://fixture.test/shop",
+        app_name="demo",
+        provider=object(),
+        max_candidates=8,
+        limits=limits,
+        semantic_experiment_profile="practice_shopping_feasibility",
+        allow_test_site_final_order=True,
+        test_data_seed="practice-v1",
+        stagehand_action_timeout_seconds=240,
+    )
+
+    assert captured["max_steps"] == 20
+    assert captured["controller_limits"] == limits
+    assert captured["explorer_limits"] == limits
+    assert captured["stagehand_timeout"] == 240
+    assert "@example.test" in captured["goal"]
+    assert "final confirmation is allowed" in captured["goal"]
+    summary = json.loads(output_path.read_text(encoding="utf-8"))["meta"][
+        "exploration_summary"
+    ]
+    assert summary == {
+        "requested_steps": 20,
+        "steps_completed": 0,
+        "stop_reason": "frontier_exhausted",
+        "formal_action_attempts": 0,
+        "semantic_progress_count": 0,
+        "consecutive_no_progress": 0,
+        "replay_attempt_count": 0,
+        "frontier_replay_attempts": {},
+        "limits": limits.to_dict(),
+    }
+
+
+@pytest.mark.anyio
 async def test_run_stagehand_exploration_opt_in_wires_frontier_replay(
     tmp_path,
     monkeypatch,

@@ -113,6 +113,24 @@ def test_create_openai_visual_delta_provider_uses_separate_env_model(monkeypatch
     assert created == [("openai-test-key", "https://api.example.test/v1")]
 
 
+def test_create_openai_visual_delta_provider_passes_request_timeout():
+    calls = {}
+
+    def fake_factory(**kwargs):
+        calls.update(kwargs)
+        return _FakeClient()
+
+    provider = create_openai_visual_delta_provider_from_env(
+        request_timeout_seconds=180,
+        openai_factory=fake_factory,
+        load_dotenv=lambda: None,
+        environ={"OPENAI_API_KEY": "test"},
+    )
+
+    assert provider.client is not None
+    assert calls["timeout"] == 180
+
+
 def test_create_openai_visual_delta_provider_requires_openai_key():
     with pytest.raises(ValueError, match="OPENAI_API_KEY"):
         create_openai_visual_delta_provider_from_env(

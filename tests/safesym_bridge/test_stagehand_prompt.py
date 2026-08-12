@@ -6,6 +6,9 @@ from ai_web_explorer.grounded_web.stagehand_prompt import (
     build_generic_stagehand_exploration_goal,
     build_ecommerce_checkout_stagehand_goal,
 )
+from ai_web_explorer.grounded_web.exploration_semantics import (
+    generate_checkout_test_data,
+)
 
 
 def test_ecommerce_domain_guidance_avoids_site_specific_terms():
@@ -135,3 +138,17 @@ def test_generic_stagehand_exploration_goal_is_not_checkout_specific():
     assert "Avoid low-value footer, legal, social, theme, and language actions" in goal
     assert "checkout" not in goal.lower()
     assert "payment" not in goal.lower()
+
+
+def test_generic_stagehand_goal_can_include_controlled_benchmark_context():
+    goal = build_generic_stagehand_exploration_goal(
+        site_purpose="controlled shopping test",
+        benchmark_context=generate_checkout_test_data(
+            "practice-v1"
+        ).to_benchmark_context(),
+        allow_final_order=True,
+    )
+
+    assert "@example.test" in goal
+    assert "final confirmation is allowed" in goal
+    assert "Advance the checkout task" not in goal

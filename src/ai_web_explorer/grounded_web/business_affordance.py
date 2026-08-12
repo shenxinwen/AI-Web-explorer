@@ -365,7 +365,7 @@ def summarize_visual_affordances(
         )
 
     is_targeted = str(request.scan_kind or "initial").strip().lower() == "targeted"
-    location_id = None
+    location_id = _clean_text(parsed.get("location_id"))
     replacements: list[tuple[str, str]] = []
     disabled_action_ids: list[str] = []
     if is_targeted:
@@ -377,7 +377,8 @@ def summarize_visual_affordances(
                 for action_id in request.completed_action_ids
             },
         )
-        location_id, replacements, disabled_action_ids = _targeted_metadata(parsed)
+        targeted_location, replacements, disabled_action_ids = _targeted_metadata(parsed)
+        location_id = targeted_location or location_id
     else:
         affordances = _affordances_from_response(
             parsed,

@@ -22,12 +22,22 @@ from ai_web_explorer.grounded_web.business_profile import (
     BusinessFlowProfile,
     ecommerce_checkout_profile,
 )
+from ai_web_explorer.grounded_web.exploration_semantics import (
+    GeneratedCheckoutData,
+    SemanticExperimentProfile,
+    generate_checkout_test_data,
+    resolve_semantic_experiment_profile,
+)
 from ai_web_explorer.grounded_web.experiment_plan import (
     ExperimentPlan,
     ecommerce_checkout_experiment_plan,
 )
 from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
 from ai_web_explorer.grounded_web.frontier_replay import FrontierReplayRunner
+from ai_web_explorer.grounded_web.location_exploration import (
+    LOCATION_EXPLORATION_META_KEY,
+    ExplorationLimits,
+)
 from ai_web_explorer.grounded_web.resume import (
     ActionAttemptKey,
     ResumePolicy,
@@ -536,7 +546,7 @@ async def run_stagehand_exploration(
     app_name: str = "web",
     stagehand_trace_path: Path | None = None,
     headless: bool = True,
-    steps: int = 8,
+    steps: int | None = None,
     provider=None,
     model: str | None = None,
     screenshot_dir: Path | None = None,
@@ -555,8 +565,37 @@ async def run_stagehand_exploration(
     frontier_replay: bool = False,
     resume_graph: WebKobeGraph | None = None,
     resume_policy: ResumePolicy | None = None,
+    limits: ExplorationLimits | None = None,
+    semantic_experiment_profile: str | SemanticExperimentProfile | None = None,
+    allow_test_site_final_order: bool = False,
+    test_data_seed: str = "practice-v1",
+    vlm_request_timeout_seconds: float | None = None,
+    stagehand_action_timeout_seconds: float | None = None,
 ) -> Path:
     from playwright.async_api import async_playwright
+
+    resolved_semantic_profile = (
+        resolve_semantic_experiment_profile(semantic_experiment_profile)
+        if isinstance(semantic_experiment_profile, str)
+        else semantic_experiment_profile
+    )
+    if resume_graph is not None and limits is None:
+        persisted_memory = resume_graph.meta.get(LOCATION_EXPLORATION_META_KEY)
+        if isinstance(persisted_memory, dict):
+            limits = ExplorationLimits.from_dict(persisted_memory.get("limits"))
+    location_scoped = limits is not None or resolved_semantic_profile is not None
+    if location_scoped and limits is None:
+        limits = ExplorationLimits()
+    benchmark_context = (
+        generate_checkout_test_data(test_data_seed).to_benchmark_context()
+        if resolved_semantic_profile is not None
+        else None
+    )
+    semantic_profile_context = (
+        resolved_semantic_profile.to_prompt_context()
+        if resolved_semantic_profile is not None
+        else None
+    )
 
     if (visual_delta_provider is not None or use_openai_visual_delta) and (
         screenshot_dir is None
@@ -566,6 +605,7 @@ async def run_stagehand_exploration(
     if resolved_visual_delta_provider is None and use_openai_visual_delta:
         resolved_visual_delta_provider = create_openai_visual_delta_provider_from_env(
             model=visual_delta_model,
+            request_timeout_seconds=vlm_request_timeout_seconds,
         )
     resolved_embedding_provider = state_embedding_provider
     if resolved_embedding_provider is None and use_state_embeddings:
@@ -580,26 +620,31 @@ async def run_stagehand_exploration(
     )
     stagehand_goal = build_generic_stagehand_exploration_goal(
         site_purpose=site_purpose,
+        benchmark_context=benchmark_context,
+        allow_final_order=allow_test_site_final_order,
     )
     resolved_business_profile = _resolve_business_profile(business_profile)
+    if resolved_business_profile is None and resolved_semantic_profile is not None:
+        resolved_business_profile = resolved_semantic_profile.to_business_flow_profile()
     if resume_policy is not None and resume_graph is None:
         raise ValueError("resume_policy_requires_resume_graph")
     if resume_graph is not None:
         validate_resume_graph(resume_graph, app_name=app_name)
         resume_policy = resume_policy or ResumePolicy()
-        resume_graph = replace(
-            resume_graph,
-            meta={
-                key: value
-                for key, value in resume_graph.meta.items()
-                if key
-                not in {
-                    "blocked_replay_node_ids",
-                    "consecutive_unproductive_steps",
-                    "max_consecutive_unproductive_steps",
-                }
-            },
-        )
+        if not location_scoped:
+            resume_graph = replace(
+                resume_graph,
+                meta={
+                    key: value
+                    for key, value in resume_graph.meta.items()
+                    if key
+                    not in {
+                        "blocked_replay_node_ids",
+                        "consecutive_unproductive_steps",
+                        "max_consecutive_unproductive_steps",
+                    }
+                },
+            )
     cdp_port = _pick_free_port() if provider is None else None
     launch_args = (
         [f"--remote-debugging-port={cdp_port}"] if cdp_port is not None else None
@@ -632,6 +677,7 @@ async def run_stagehand_exploration(
                 provider=resolved_provider,
                 goal=stagehand_goal,
                 execution_mode=stagehand_execution_mode,
+                action_timeout_seconds=stagehand_action_timeout_seconds,
             )
             explorer = WebKobeExplorer(
                 adapter=adapter,
@@ -646,8 +692,12 @@ async def run_stagehand_exploration(
                 state_embedding_records=embedding_records,
                 max_candidates=max_candidates,
                 resume_policy=resume_policy,
+                exploration_limits=limits,
+                semantic_profile_context=semantic_profile_context,
             )
             def checkpoint(graph: WebKobeGraph) -> None:
+                if location_scoped and limits is not None:
+                    graph.meta["exploration_limits"] = limits.to_dict()
                 _write_stagehand_checkpoint(
                     graph,
                     output_path=output_path,
@@ -659,6 +709,15 @@ async def run_stagehand_exploration(
             explorer.attempt_checkpoint = checkpoint
 
             historical_steps = resume_graph.total_steps_completed if resume_graph else 0
+            resolved_steps = (
+                steps
+                if steps is not None
+                else (
+                    limits.max_exploration_steps
+                    if location_scoped and limits is not None
+                    else 8
+                )
+            )
             replay_metric_baseline = (
                 {
                     key: int(resume_graph.meta.get(key, 0))
@@ -688,16 +747,63 @@ async def run_stagehand_exploration(
                         (replay_metric_baseline or {}).get("replay_mismatch_count", 0)
                     ),
                     "last_replay_reason": None,
-                    "blocked_replay_node_ids": [],
+                    "blocked_replay_node_ids": list(
+                        resume_graph.meta.get("blocked_replay_node_ids", [])
+                    )
+                    if location_scoped
+                    else [],
                 }
                 policy = resume_policy or ResumePolicy()
                 resume_replay_runner = FrontierReplayRunner(explorer)
-                blocked_resume_node_ids: set[str] = set()
+                blocked_resume_node_ids: set[str] = set(
+                    bootstrap_metrics["blocked_replay_node_ids"]
+                )
+                bootstrap_frontier_attempts = {
+                    str(key): int(value)
+                    for key, value in (
+                        resume_graph.meta.get("frontier_replay_attempts", {})
+                        if location_scoped
+                        and isinstance(
+                            resume_graph.meta.get("frontier_replay_attempts", {}),
+                            dict,
+                        )
+                        else {}
+                    ).items()
+                }
                 replay_attempted = False
                 while True:
                     current_graph = explorer.manager.to_graph(
                         start_node_id=explorer.start_node_id,
                     )
+                    if (
+                        location_scoped
+                        and limits is not None
+                        and bootstrap_metrics["replay_attempt_count"]
+                        >= limits.max_total_replays
+                    ):
+                        current_graph.meta.update(bootstrap_metrics)
+                        current_graph.meta["frontier_replay_attempts"] = dict(
+                            sorted(bootstrap_frontier_attempts.items())
+                        )
+                        current_graph.meta["exploration_summary"] = {
+                            "requested_steps": max(resolved_steps, 0),
+                            "steps_completed": 0,
+                            "stop_reason": "total_replay_limit_reached",
+                            "formal_action_attempts": 0,
+                            "semantic_progress_count": 0,
+                            "consecutive_no_progress": 0,
+                            "replay_attempt_count": bootstrap_metrics[
+                                "replay_attempt_count"
+                            ],
+                            "frontier_replay_attempts": dict(
+                                sorted(bootstrap_frontier_attempts.items())
+                            ),
+                            "limits": limits.to_dict(),
+                            "historical_steps": historical_steps,
+                            "total_steps_completed": historical_steps,
+                        }
+                        checkpoint(current_graph)
+                        return output_path
                     resume_target = select_resume_frontier(
                         current_graph,
                         policy=policy,
@@ -705,24 +811,65 @@ async def run_stagehand_exploration(
                     )
                     if resume_target is None:
                         stop_reason = (
-                            "resume_replay_failed"
-                            if replay_attempted
-                            else "resume_frontier_exhausted"
+                            "no_recoverable_frontier"
+                            if location_scoped and replay_attempted
+                            else (
+                                "frontier_exhausted"
+                                if location_scoped
+                                else (
+                                    "resume_replay_failed"
+                                    if replay_attempted
+                                    else "resume_frontier_exhausted"
+                                )
+                            )
                         )
                         current_graph.meta.update(bootstrap_metrics)
                         current_graph.meta["blocked_replay_node_ids"] = sorted(
                             blocked_resume_node_ids
                         )
-                        current_graph.meta["exploration_summary"] = {
-                            "requested_steps": max(steps, 0),
-                            "steps_completed": 0,
-                            "stop_reason": stop_reason,
-                            "historical_steps": historical_steps,
-                            "total_steps_completed": historical_steps,
-                        }
+                        if location_scoped and limits is not None:
+                            current_graph.meta["frontier_replay_attempts"] = dict(
+                                sorted(bootstrap_frontier_attempts.items())
+                            )
+                            current_graph.meta["exploration_summary"] = {
+                                "requested_steps": max(resolved_steps, 0),
+                                "steps_completed": 0,
+                                "stop_reason": stop_reason,
+                                "formal_action_attempts": 0,
+                                "semantic_progress_count": 0,
+                                "consecutive_no_progress": 0,
+                                "replay_attempt_count": bootstrap_metrics[
+                                    "replay_attempt_count"
+                                ],
+                                "frontier_replay_attempts": dict(
+                                    sorted(bootstrap_frontier_attempts.items())
+                                ),
+                                "limits": limits.to_dict(),
+                                "historical_steps": historical_steps,
+                                "total_steps_completed": historical_steps,
+                            }
+                        else:
+                            current_graph.meta["exploration_summary"] = {
+                                "requested_steps": max(resolved_steps, 0),
+                                "steps_completed": 0,
+                                "stop_reason": stop_reason,
+                                "historical_steps": historical_steps,
+                                "total_steps_completed": historical_steps,
+                            }
                         checkpoint(current_graph)
                         return output_path
                     replay_attempted = True
+                    if location_scoped and limits is not None:
+                        target_key = str(resume_target.node_id)
+                        if (
+                            bootstrap_frontier_attempts.get(target_key, 0)
+                            >= limits.max_replay_attempts_per_frontier
+                        ):
+                            blocked_resume_node_ids.add(target_key)
+                            continue
+                        bootstrap_frontier_attempts[target_key] = (
+                            bootstrap_frontier_attempts.get(target_key, 0) + 1
+                        )
                     bootstrap_metrics["replay_attempt_count"] += 1
                     replay_result = await resume_replay_runner.replay(
                         resume_target,
@@ -736,7 +883,17 @@ async def run_stagehand_exploration(
                             "target_state_mismatch",
                         }:
                             bootstrap_metrics["replay_mismatch_count"] += 1
-                        blocked_resume_node_ids.add(resume_target.node_id)
+                        if (
+                            not location_scoped
+                            or (
+                                limits is not None
+                                and bootstrap_frontier_attempts[
+                                    str(resume_target.node_id)
+                                ]
+                                >= limits.max_replay_attempts_per_frontier
+                            )
+                        ):
+                            blocked_resume_node_ids.add(resume_target.node_id)
                         continue
                     bootstrap_metrics["replay_success_count"] += 1
                     for action_id in resume_target.untried_action_ids:
@@ -747,6 +904,10 @@ async def run_stagehand_exploration(
                     bootstrap_metrics["blocked_replay_node_ids"] = sorted(
                         blocked_resume_node_ids
                     )
+                    if location_scoped:
+                        bootstrap_metrics["frontier_replay_attempts"] = dict(
+                            sorted(bootstrap_frontier_attempts.items())
+                        )
                     break
                 replay_metric_baseline = bootstrap_metrics
 
@@ -754,6 +915,8 @@ async def run_stagehand_exploration(
                 "max_consecutive_unproductive_steps": None,
                 "step_checkpoint": checkpoint,
             }
+            if location_scoped and limits is not None:
+                controller_kwargs["limits"] = limits
             if frontier_replay or resume_graph is not None:
                 controller_kwargs.update(
                     {
@@ -769,7 +932,7 @@ async def run_stagehand_exploration(
                     }
                 )
             controller = WebKobeExplorationController(explorer, **controller_kwargs)
-            result = await controller.run(max_steps=max(steps, 1))
+            result = await controller.run(max_steps=max(resolved_steps, 1))
             if resume_graph is not None:
                 blocked_after_controller = set(
                     result.graph.meta.get("blocked_replay_node_ids", [])
@@ -777,11 +940,49 @@ async def run_stagehand_exploration(
                 result.graph.meta["blocked_replay_node_ids"] = sorted(
                     blocked_after_controller | blocked_resume_node_ids
                 )
+            if location_scoped and limits is not None:
+                result.graph.meta["formal_action_attempts"] = int(
+                    result.summary.steps_completed
+                )
+                result.graph.meta["semantic_progress_count"] = int(
+                    result.summary.semantic_progress_count
+                )
+                result.graph.meta["consecutive_no_progress"] = int(
+                    result.summary.consecutive_unproductive_steps
+                )
+                result.graph.meta["frontier_replay_attempts"] = dict(
+                    sorted(
+                        (
+                            result.summary.frontier_replay_attempts
+                            or result.graph.meta.get("frontier_replay_attempts", {})
+                        ).items()
+                    )
+                )
             exploration_summary = {
                 "requested_steps": result.summary.requested_steps,
                 "steps_completed": result.summary.steps_completed,
                 "stop_reason": result.summary.stop_reason,
             }
+            if location_scoped and limits is not None:
+                exploration_summary.update(
+                    {
+                        "formal_action_attempts": result.summary.steps_completed,
+                        "semantic_progress_count": result.summary.semantic_progress_count,
+                        "consecutive_no_progress": result.summary.consecutive_unproductive_steps,
+                        "replay_attempt_count": result.summary.replay_attempt_count,
+                        "frontier_replay_attempts": dict(
+                            sorted(
+                                (
+                                    result.summary.frontier_replay_attempts
+                                    or result.graph.meta.get(
+                                        "frontier_replay_attempts", {}
+                                    )
+                                ).items()
+                            )
+                        ),
+                        "limits": limits.to_dict(),
+                    }
+                )
             if resume_graph is not None:
                 exploration_summary.update(
                     {

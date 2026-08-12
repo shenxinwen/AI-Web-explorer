@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from ai_web_explorer.grounded_web.models import StateSnapshot
@@ -362,4 +364,28 @@ async def test_stagehand_business_milestone_appends_exploration_context():
     assert "Explore one useful action." in provider.executed_instructions[0][0]
     assert (
         "Avoid repeating actions: theme_toggle" in provider.executed_instructions[0][0]
+    )
+
+
+@pytest.mark.anyio
+async def test_stagehand_backend_bounds_provider_execution_time():
+    class SlowProvider(FakeStagehandProvider):
+        async def execute_instruction(self, instruction, *, max_steps):
+            await asyncio.sleep(0.02)
+            return await super().execute_instruction(instruction, max_steps=max_steps)
+
+    backend = StagehandAutomationBackend(
+        base_backend=FakeBaseBackend(),
+        provider=SlowProvider(),
+        goal="Advance one useful milestone.",
+        execution_mode="business_milestone",
+        action_timeout_seconds=0.001,
+    )
+    state = await backend.observe_state()
+    action = (await backend.list_interactables(state))[0]
+
+    assert await backend.execute(action) is False
+    assert backend.last_execution_error == "stagehand_action_timeout"
+    assert backend.last_execution_metadata["stagehand_error"] == (
+        "stagehand_action_timeout"
     )

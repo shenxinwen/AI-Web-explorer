@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 from typing import Callable
 from typing import Literal
@@ -27,6 +28,7 @@ class StagehandAutomationBackend:
             "observed_action"
         ),
         business_milestone_max_steps: int = 5,
+        action_timeout_seconds: float | None = None,
         goal_provider: Callable[[int], str] | None = None,
         business_step_metadata_provider: Callable[[int], dict[str, Any]] | None = None,
     ) -> None:
@@ -35,6 +37,7 @@ class StagehandAutomationBackend:
         self.goal = goal
         self.execution_mode = execution_mode
         self.business_milestone_max_steps = business_milestone_max_steps
+        self.action_timeout_seconds = action_timeout_seconds
         self.goal_provider = goal_provider
         self.business_step_metadata_provider = business_step_metadata_provider
         self.app_name = base_backend.app_name
@@ -228,13 +231,31 @@ class StagehandAutomationBackend:
         try:
             execute_instruction = getattr(self.provider, "execute_instruction", None)
             if execute_instruction is not None:
-                result = await execute_instruction(
+                invocation = execute_instruction(
                     instruction,
                     max_steps=self.business_milestone_max_steps,
                 )
             else:
                 act_instruction = getattr(self.provider, "act_instruction")
-                result = await act_instruction(instruction)
+                invocation = act_instruction(instruction)
+            if self.action_timeout_seconds is None:
+                result = await invocation
+            else:
+                result = await asyncio.wait_for(
+                    invocation,
+                    timeout=self.action_timeout_seconds,
+                )
+        except asyncio.TimeoutError:
+            self.last_execution_error = "stagehand_action_timeout"
+            trace = StagehandStepTrace(
+                instruction=instruction,
+                act_result=None,
+                error=self.last_execution_error,
+            )
+            self.last_execution_metadata = stagehand_trace_metadata(trace)
+            self.last_execution_metadata["stagehand_execution_mode"] = execution_mode
+            self.last_execution_metadata.update(step_metadata)
+            return False
         except Exception as error:
             self.last_execution_error = str(error)
             trace = StagehandStepTrace(

@@ -1253,6 +1253,92 @@ def test_main_web_kobe_stagehand_explore_accepts_frontier_replay(monkeypatch, tm
     assert calls[0]["stagehand_execution_mode"] == "observed_action"
 
 
+def test_main_stagehand_explore_accepts_location_feasibility_parameters(
+    monkeypatch, tmp_path
+):
+    captured = {}
+
+    async def fake_run(output_path, **kwargs):
+        captured.update(kwargs)
+        output_path.write_text("{}", encoding="utf-8")
+        return output_path
+
+    monkeypatch.setattr(cli, "run_stagehand_exploration", fake_run, raising=False)
+
+    assert (
+        main(
+            [
+                "web-kobe-stagehand-explore",
+                "--url",
+                "https://fixture.test/shop",
+                "--output",
+                str(tmp_path / "graph.json"),
+                "--semantic-experiment-profile",
+                "practice_shopping_feasibility",
+                "--max-exploration-steps",
+                "20",
+                "--max-consecutive-no-progress",
+                "3",
+                "--max-action-attempts-per-candidate",
+                "2",
+                "--max-replay-attempts-per-frontier",
+                "2",
+                "--max-total-replays",
+                "4",
+                "--max-vlm-scan-attempts",
+                "2",
+                "--max-candidates",
+                "8",
+                "--vlm-request-timeout-seconds",
+                "180",
+                "--stagehand-action-timeout-seconds",
+                "240",
+                "--allow-test-site-final-order",
+                "--test-data-seed",
+                "practice-v1",
+            ]
+        )
+        == 0
+    )
+
+    from ai_web_explorer.grounded_web.location_exploration import ExplorationLimits
+
+    assert captured["limits"] == ExplorationLimits()
+    assert captured["allow_test_site_final_order"] is True
+    assert captured["semantic_experiment_profile"] == (
+        "practice_shopping_feasibility"
+    )
+    assert captured["vlm_request_timeout_seconds"] == 180
+    assert captured["stagehand_action_timeout_seconds"] == 240
+
+
+def test_main_stagehand_explore_rejects_steps_and_max_exploration_steps(
+    monkeypatch, capsys
+):
+    monkeypatch.setattr(
+        cli,
+        "run_stagehand_exploration",
+        lambda *args, **kwargs: pytest.fail("runner should not be called"),
+        raising=False,
+    )
+
+    assert (
+        main(
+            [
+                "web-kobe-stagehand-explore",
+                "--url",
+                "https://fixture.test/shop",
+                "--steps",
+                "2",
+                "--max-exploration-steps",
+                "20",
+            ]
+        )
+        == 1
+    )
+    assert "cannot be combined" in capsys.readouterr().out
+
+
 def test_main_web_kobe_stagehand_explore_passes_explicit_resume_defaults(
     monkeypatch, tmp_path
 ):
