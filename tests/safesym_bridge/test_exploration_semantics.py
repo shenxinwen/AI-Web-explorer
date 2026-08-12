@@ -5,6 +5,7 @@ from ai_web_explorer.grounded_web.exploration_semantics import (
     practice_shopping_feasibility_profile,
     resolve_semantic_experiment_profile,
 )
+from ai_web_explorer.grounded_web.semantic_model import SEMANTIC_ACTION_ROLES
 
 
 def test_practice_profile_separates_locations_capabilities_and_business_facts():
@@ -40,6 +41,12 @@ def test_practice_profile_separates_locations_capabilities_and_business_facts():
         "place_order",
     }.issubset(set(profile.canonical_action_examples))
     assert resolve_semantic_experiment_profile(profile.profile_id) == profile
+
+
+def test_practice_profile_action_roles_use_shared_semantic_role_vocabulary():
+    profile = practice_shopping_feasibility_profile()
+
+    assert set(profile.action_role_examples.values()) <= SEMANTIC_ACTION_ROLES
 
 
 def test_generated_checkout_data_is_deterministic_and_fictional():

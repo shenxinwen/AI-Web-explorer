@@ -9,6 +9,10 @@ from ai_web_explorer.grounded_web.business_profile import (
     BusinessFlowProfile,
     PlanningDelta,
 )
+from ai_web_explorer.grounded_web.exploration_semantics import (
+    SemanticExperimentProfile,
+    validate_profile_semantic_observation,
+)
 from ai_web_explorer.grounded_web.graph import BrowserAction
 from ai_web_explorer.grounded_web.semantic_model import (
     SemanticObservation,
@@ -38,6 +42,7 @@ class VisualDeltaRequest:
     current_location_context: str | None = None
     semantic_profile_context: dict[str, Any] | None = None
     observed_change: bool | None = None
+    semantic_experiment_profile: SemanticExperimentProfile | None = None
 
 
 @dataclass(frozen=True)
@@ -48,6 +53,7 @@ class VisualDeltaTrace:
     status: str
     error_type: str | None = None
     error_message: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -59,6 +65,7 @@ class VisualDeltaTrace:
             "status": self.status,
             "error_type": self.error_type,
             "error_message": self.error_message,
+            **dict(self.metadata),
         }
 
 
@@ -153,6 +160,7 @@ def _trace(
     status: str,
     error_type: str | None = None,
     error_message: str | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> VisualDeltaTrace:
     return VisualDeltaTrace(
         prompt=prompt,
@@ -161,6 +169,7 @@ def _trace(
         status=status,
         error_type=error_type,
         error_message=error_message,
+        metadata=dict(metadata or {}),
     )
 
 
@@ -336,16 +345,59 @@ def summarize_visual_delta(
         generated_fact_ids=[],
         evidence=evidence,
     )
+    raw_semantic_observation = semantic_observation_from_dict(parsed)
+    semantic_observation = _semantic_observation(parsed, request)
+    rejection_reasons: list[str] = []
+    if request.semantic_experiment_profile is not None:
+        validation = validate_profile_semantic_observation(
+            raw_semantic_observation,
+            profile=request.semantic_experiment_profile,
+            source_location_hint=request.source_location_hint,
+            source_location_hint_confirmed=request.source_location_hint_confirmed,
+            source_location_anchor_unresolved=request.source_location_anchor_unresolved,
+        )
+        semantic_observation = validation.observation
+        rejection_reasons.extend(validation.rejection_reasons)
+        allowed_facts = (
+            request.semantic_experiment_profile.business_fact_ids
+            | request.semantic_experiment_profile.completion_fact_ids
+        )
+        candidate_added = [fact for fact in candidate_added if fact in allowed_facts]
+        candidate_removed = [
+            fact for fact in candidate_removed if fact in allowed_facts
+        ]
+        rejection_reasons.extend(
+            [
+                f"business_fact_not_allowed:{fact}"
+                for fact in business_added + business_removed
+                if fact not in request.semantic_experiment_profile.business_fact_ids
+            ]
+        )
+        delta = PlanningDelta(
+            candidate_added_facts=candidate_added,
+            candidate_removed_facts=candidate_removed,
+            verified_added_facts=[],
+            verified_removed_facts=[],
+            profile_fact_ids=[],
+            generated_fact_ids=[],
+            evidence=evidence,
+        )
+
     return VisualDeltaResult(
         planning_delta=delta,
         visual_change_kind=visual_change_kind,
-        semantic_observation=_semantic_observation(parsed, request),
+        semantic_observation=semantic_observation,
         observable_change=observable_change,
         trace=_trace(
             prompt=prompt,
             raw_response=raw_response,
             llm_response=parsed,
             status="summarized",
+            metadata={
+                "semantic_observation_rejections": list(
+                    dict.fromkeys(rejection_reasons)
+                )
+            },
         ),
     )
 

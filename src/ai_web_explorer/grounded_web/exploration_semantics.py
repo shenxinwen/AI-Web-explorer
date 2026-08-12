@@ -8,7 +8,7 @@ compilation.
 from __future__ import annotations
 
 import hashlib
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Any, Mapping
 from urllib.parse import urlsplit
 
@@ -17,6 +17,11 @@ from ai_web_explorer.grounded_web.business_profile import (
     PlanningFactSpec,
 )
 from ai_web_explorer.grounded_web.stagehand_prompt import BenchmarkTaskContext
+from ai_web_explorer.grounded_web.semantic_model import (
+    SEMANTIC_ACTION_ROLES,
+    SemanticObservation,
+    normalize_semantic_id,
+)
 
 
 @dataclass(frozen=True)
@@ -76,6 +81,12 @@ class SemanticExperimentProfile:
                 for rule in self.business_facts
             ],
         )
+
+
+@dataclass(frozen=True)
+class SemanticObservationValidation:
+    observation: SemanticObservation | None
+    rejection_reasons: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -161,16 +172,16 @@ def practice_shopping_feasibility_profile() -> SemanticExperimentProfile:
         action_role_examples={
             "sort_products": "presentation_capability",
             "filter_products": "presentation_capability",
-            "search_products": "discovery_capability",
-            "paginate_products": "pagination_capability",
-            "open_product": "detail_navigation",
-            "add_to_cart": "business_mutation",
+            "search_products": "presentation_capability",
+            "paginate_products": "presentation_capability",
+            "open_product": "navigation",
+            "add_to_cart": "state_mutation",
             "open_empty_cart": "guarded_navigation",
             "open_checkout": "guarded_navigation",
-            "close_product_detail": "surface_navigation",
+            "close_product_detail": "navigation",
             "complete_checkout_information": "form_completion",
-            "complete_payment_information": "payment_completion",
-            "place_order": "final_submission",
+            "complete_payment_information": "form_completion",
+            "place_order": "commit",
         },
         canonical_action_examples=(
             "sort_products",
@@ -199,6 +210,92 @@ def resolve_semantic_experiment_profile(
     if name == "practice_shopping_feasibility":
         return practice_shopping_feasibility_profile()
     raise ValueError(f"unknown semantic experiment profile: {name}")
+
+
+def validate_profile_semantic_observation(
+    observation: SemanticObservation | None,
+    *,
+    profile: SemanticExperimentProfile,
+    source_location_hint: str | None = None,
+    source_location_hint_confirmed: bool = False,
+    source_location_anchor_unresolved: bool = False,
+) -> SemanticObservationValidation:
+    """Filter VLM semantics against the experiment's closed vocabulary."""
+
+    if observation is None:
+        return SemanticObservationValidation(None)
+    reasons: list[str] = []
+    allowed_locations = set(profile.allowed_locations)
+    source_location = normalize_semantic_id(observation.source_location)
+    target_location = normalize_semantic_id(observation.target_location)
+    if source_location not in allowed_locations:
+        reasons.append(f"source_location_not_allowed:{source_location}")
+    if target_location not in allowed_locations:
+        reasons.append(f"target_location_not_allowed:{target_location}")
+    if observation.action_role not in SEMANTIC_ACTION_ROLES or observation.action_role == "unknown":
+        reasons.append(f"action_role_not_allowed:{observation.action_role}")
+    if source_location_anchor_unresolved:
+        reasons.append("source_location_anchor_unresolved")
+    if source_location_hint_confirmed and source_location_hint:
+        normalized_hint = normalize_semantic_id(source_location_hint)
+        if source_location != normalized_hint:
+            reasons.append(f"source_location_mismatch:{normalized_hint}")
+
+    completion_facts: list[str] = []
+    for fact_id in observation.completion_facts:
+        normalized = normalize_semantic_id(fact_id)
+        if normalized in profile.completion_fact_ids:
+            if normalized not in completion_facts:
+                completion_facts.append(normalized)
+        else:
+            reasons.append(f"completion_fact_not_allowed:{normalized}")
+
+    def filter_business_facts(values: list[str]) -> list[str]:
+        accepted: list[str] = []
+        for fact_id in values:
+            normalized = normalize_semantic_id(fact_id)
+            if normalized in profile.business_fact_ids:
+                if normalized not in accepted:
+                    accepted.append(normalized)
+            else:
+                reasons.append(f"business_fact_not_allowed:{normalized}")
+        return accepted
+
+    required_facts = filter_business_facts(observation.candidate_required_facts)
+    preserved_facts = filter_business_facts(observation.preserved_facts)
+    if (
+        observation.action_role == "presentation_capability"
+        and source_location != target_location
+    ):
+        reasons.append("presentation_location_drift")
+
+    fatal_reasons = {
+        reason
+        for reason in reasons
+        if reason.startswith(
+            (
+                "source_location_not_allowed",
+                "target_location_not_allowed",
+                "action_role_not_allowed",
+                "source_location_mismatch",
+                "source_location_anchor_unresolved",
+                "presentation_location_drift",
+            )
+        )
+    }
+    if fatal_reasons:
+        return SemanticObservationValidation(None, tuple(dict.fromkeys(reasons)))
+    return SemanticObservationValidation(
+        replace(
+            observation,
+            source_location=source_location,
+            target_location=target_location,
+            completion_facts=completion_facts,
+            candidate_required_facts=required_facts,
+            preserved_facts=preserved_facts,
+        ),
+        tuple(dict.fromkeys(reasons)),
+    )
 
 
 def validate_final_order_authorization(
@@ -269,8 +366,10 @@ __all__ = [
     "FactEvidenceRule",
     "GeneratedCheckoutData",
     "SemanticExperimentProfile",
+    "SemanticObservationValidation",
     "generate_checkout_test_data",
     "practice_shopping_feasibility_profile",
     "resolve_semantic_experiment_profile",
+    "validate_profile_semantic_observation",
     "validate_final_order_authorization",
 ]
