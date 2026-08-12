@@ -36,6 +36,13 @@ from ai_web_explorer.grounded_web.exploration_index import (
     build_exploration_context,
     semantically_matches_action,
 )
+from ai_web_explorer.grounded_web.location_exploration import (
+    LOCATION_EXPLORATION_META_KEY,
+    ExplorationLimits,
+    LocationExplorationCoordinator,
+    LocationExplorationMemory,
+    OutcomeUpdate,
+)
 from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.grounded_web.planning_fact_verifier import verify_planning_delta
 from ai_web_explorer.grounded_web.semantic_assistor import SemanticAssistor
@@ -263,6 +270,9 @@ class WebKobeExplorer:
         max_candidates: int = 5,
         attempt_checkpoint: Callable[[WebKobeGraph], None] | None = None,
         resume_policy: ResumePolicy | None = None,
+        location_exploration_coordinator: LocationExplorationCoordinator | None = None,
+        exploration_limits: ExplorationLimits | None = None,
+        semantic_profile_context: dict[str, Any] | None = None,
     ):
         if max_candidates < 1:
             raise ValueError("max_candidates must be at least 1.")
@@ -279,6 +289,18 @@ class WebKobeExplorer:
         self.enable_exploration_memory = enable_exploration_memory
         self.attempt_checkpoint = attempt_checkpoint
         self.resume_policy = resume_policy
+        self.location_exploration_coordinator = (
+            location_exploration_coordinator
+            or LocationExplorationCoordinator(
+                limits=exploration_limits,
+                semantic_profile_context=semantic_profile_context,
+            )
+        )
+        self.location_scoped_exploration = bool(
+            location_exploration_coordinator is not None
+            or exploration_limits is not None
+            or semantic_profile_context is not None
+        )
         self._preferred_resume_action_key: ActionAttemptKey | None = None
         self.manager = WebKobeGraphManager(app=adapter.app_name)
         self._start_node_id: str | None = None
@@ -294,12 +316,61 @@ class WebKobeExplorer:
         if graph.app != self.adapter.app_name:
             raise ValueError("resume_app_mismatch")
         self.manager = WebKobeGraphManager.from_graph(graph)
+        persisted_memory = graph.meta.get(LOCATION_EXPLORATION_META_KEY)
+        if persisted_memory is not None:
+            self.location_scoped_exploration = True
+            self.location_exploration_coordinator = LocationExplorationCoordinator(
+                memory=LocationExplorationMemory.from_dict(persisted_memory),
+                semantic_profile_context=(
+                    self.location_exploration_coordinator.semantic_profile_context
+                ),
+            )
+        else:
+            self._seed_location_memory_from_graph(graph)
         self._start_node_id = graph.start_node_id
         self._current_node_id = None
         self._visit_stack = []
         self._visual_affordance_observed_node_ids = {
             node.node_id for node in graph.nodes if node.business_affordances
         }
+
+    def _seed_location_memory_from_graph(self, graph: WebKobeGraph) -> None:
+        """Migrate legacy node snapshots into location memory without rewriting meta."""
+
+        coordinator = self.location_exploration_coordinator
+        for node in graph.nodes:
+            location_id, unresolved = _semantic_location_anchor(node)
+            if unresolved or not location_id:
+                continue
+            if node.business_affordances:
+                coordinator.memory.merge_scan(
+                    location_id,
+                    node.business_affordances,
+                    kind="initial",
+                )
+        nodes_by_id = {node.node_id: node for node in graph.nodes}
+        for edge in graph.edges:
+            source = nodes_by_id.get(edge.source_node_id)
+            if source is None:
+                continue
+            location_id, unresolved = _semantic_location_anchor(source)
+            if unresolved or not location_id:
+                continue
+            action_id = edge.action.canonical_action_name or edge.action.semantic_id
+            pool = coordinator.memory.pool_for(location_id)
+            if normalize_semantic_id(action_id) not in pool.candidates:
+                continue
+            coordinator.memory.record_attempt(
+                location_id,
+                action_id,
+                observable_change=edge.status
+                in {
+                    "succeeded",
+                    "succeeded_with_observed_change",
+                    "succeeded_with_navigation",
+                },
+                failed=edge.status == "failed_execution",
+            )
 
     def prefer_resume_action(self, key: ActionAttemptKey) -> None:
         self._preferred_resume_action_key = key
@@ -360,6 +431,8 @@ class WebKobeExplorer:
                 before=before,
                 before_screenshot_path=before_screenshot_path,
             )
+            source_node = self.manager.node_for_id(source_id)
+            source_anchor, anchor_unresolved = _semantic_location_anchor(source_node)
         exploration_context = self._exploration_context_for_source(
             source_id=source_id,
             state_match=accepted_source_match,
@@ -453,6 +526,7 @@ class WebKobeExplorer:
         visual_delta_facts = ([], [])
         visual_change_kind = "unknown"
         semantic_observation = None
+        visual_observable_change = False
         source_location_hint = None if anchor_unresolved else source_anchor
         allowed_location_ids = sorted(
             {
@@ -482,6 +556,9 @@ class WebKobeExplorer:
                     current_location_context=(
                         source_node.state_summary or source_node.page_description
                     ),
+                    semantic_profile_context=(
+                        self.location_exploration_coordinator.semantic_profile_context
+                    ),
                 ),
                 provider=self.visual_delta_provider,
             )
@@ -491,6 +568,7 @@ class WebKobeExplorer:
             )
             visual_change_kind = visual_result.visual_change_kind
             semantic_observation = visual_result.semantic_observation
+            visual_observable_change = visual_result.observable_change
             visual_trace = visual_result.trace.to_dict()
             visual_trace["candidate_added_facts"] = list(visual_delta_facts[0])
             visual_trace["candidate_removed_facts"] = list(visual_delta_facts[1])
@@ -518,6 +596,7 @@ class WebKobeExplorer:
             or signature_changed
             or visual_fact_change
             or visual_kind_change
+            or visual_observable_change
         )
 
         target_node = _node_from_draft(after_draft)
@@ -586,6 +665,46 @@ class WebKobeExplorer:
                 else []
             ),
         )
+        location_before = source_anchor or _optional_semantic_id(source_id)
+        location_after = (
+            semantic_observation.target_location
+            if semantic_observation is not None
+            else location_before
+        )
+        completion_facts = (
+            list(semantic_observation.completion_facts)
+            if semantic_observation is not None
+            else []
+        )
+        business_added = (
+            list(planning_delta.verified_added_facts)
+            if planning_delta is not None
+            else []
+        )
+        business_removed = (
+            list(planning_delta.verified_removed_facts)
+            if planning_delta is not None
+            else []
+        )
+        if self.location_scoped_exploration:
+            outcome = self.location_exploration_coordinator.record_action_outcome(
+                location_before=location_before,
+                location_after=location_after,
+                action_id=selected.canonical_action_name or selected.semantic_id,
+                observable_change=bool(observed_delta or state_changed),
+                completion_facts=completion_facts,
+                business_added=business_added,
+                business_removed=business_removed,
+                failed=edge_status == "failed_execution",
+            )
+        else:
+            outcome = OutcomeUpdate(
+                attempt=None,
+                new_location=location_after != location_before,
+                targeted_scan_required=False,
+                has_progress=False,
+                step_kind="legacy_business_edge",
+            )
         edge = WebKobeEdge(
             source_node_id=source_id,
             target_node_id=target_id,
@@ -621,13 +740,45 @@ class WebKobeExplorer:
         }
         edge_was_new = _edge_novelty_key(edge) not in known_edge_keys
         self.manager.add_edge(edge)
+        targeted_scan_novel = False
+        if (
+            self.location_scoped_exploration
+            and
+            outcome.targeted_scan_required
+            and after_screenshot_path is not None
+            and self.visual_delta_provider is not None
+        ):
+            _targeted_location, _targeted_result, targeted_added = (
+                self.location_exploration_coordinator.ensure_candidates(
+                    location_before,
+                    goal=self.goal,
+                    screenshot_path=after_screenshot_path,
+                    current_signature=after.signature,
+                    provider=self.visual_delta_provider,
+                    max_actions=self.max_candidates,
+                    scan_kind="targeted",
+                    added_business_facts=business_added,
+                    removed_business_facts=business_removed,
+                )
+            )
+            targeted_scan_novel = bool(targeted_added)
+            self._sync_location_affordance_snapshots(location_before)
         self.manager.meta.pop("inflight_action", None)
         graph_changed = node_was_new or edge_was_new
         self.manager.meta["last_step_kind"] = "business_edge"
         self.manager.meta["last_step_graph_changed"] = graph_changed
+        if self.location_scoped_exploration:
+            self.manager.meta["last_step_semantic_progress"] = bool(
+                outcome.has_progress or targeted_scan_novel
+            )
+            self.manager.meta["last_step_kind"] = (
+                "targeted_scan" if targeted_scan_novel else outcome.step_kind
+            )
         self.manager.meta["last_step_status"] = (
             "productive" if graph_changed else "unproductive"
         )
+        if self.location_scoped_exploration:
+            self.location_exploration_coordinator.sync_graph_meta(self.manager)
         if _should_advance_current_node(
             source_id=source_id,
             target_id=target_id,
@@ -640,6 +791,20 @@ class WebKobeExplorer:
             self._current_node_id or source_id
         )
         return self.manager.to_graph(start_node_id=self._start_node_id)
+
+    def _sync_location_affordance_snapshots(self, location_id: str) -> None:
+        normalized_location = _optional_semantic_id(location_id)
+        affordances = self.location_exploration_coordinator.affordances_for(
+            normalized_location
+        )
+        graph = self.manager.to_graph(start_node_id=self._start_node_id)
+        for node in graph.nodes:
+            node_location, unresolved = _semantic_location_anchor(node)
+            if unresolved or node_location != normalized_location:
+                continue
+            self.manager.identify_or_add_node(
+                replace(node, business_affordances=list(affordances))
+            )
 
     def _begin_action_attempt(self, *, source_id: str, action: BrowserAction) -> str:
         attempt_id = uuid.uuid4().hex
@@ -810,23 +975,91 @@ class WebKobeExplorer:
         if self.visual_delta_provider is None:
             return
         source_node = self.manager.node_for_id(source_id)
-        if (
-            source_node.business_affordances
-            or source_id in self._visual_affordance_observed_node_ids
-        ):
+        if not self.location_scoped_exploration:
+            if (
+                source_node.business_affordances
+                or source_id in self._visual_affordance_observed_node_ids
+            ):
+                return
+            result = summarize_visual_affordances(
+                VisualAffordanceRequest(
+                    goal=self.goal,
+                    current_screenshot_path=before_screenshot_path,
+                    current_signature=before.signature,
+                    max_actions=self.max_candidates,
+                ),
+                provider=self.visual_delta_provider,
+            )
+            if result.trace.status != "summarized":
+                return
+            self._visual_affordance_observed_node_ids.add(source_id)
+            fallback_label = (
+                source_node.node_label
+                or source_node.page_frame.page_type
+                or source_node.node_id
+            )
+            accepted_vlm_label = bool(
+                result.state_label
+                and slug_identifier(result.state_label, fallback="")
+            )
+            self.manager.identify_or_add_node(
+                replace(
+                    source_node,
+                    business_affordances=result.business_affordances,
+                    state_summary=result.state_summary or source_node.state_summary,
+                    node_label=_safe_vlm_state_label(
+                        result.state_label,
+                        fallback=fallback_label,
+                    ),
+                    naming_provenance=(
+                        {"source": "visual_affordance_vlm"}
+                        if accepted_vlm_label
+                        else source_node.naming_provenance
+                    ),
+                )
+            )
             return
-        result = summarize_visual_affordances(
-            VisualAffordanceRequest(
-                goal=self.goal,
-                current_screenshot_path=before_screenshot_path,
-                current_signature=before.signature,
-                max_actions=self.max_candidates,
-            ),
-            provider=self.visual_delta_provider,
+        source_anchor, anchor_unresolved = _semantic_location_anchor(source_node)
+        if anchor_unresolved or not source_anchor:
+            return
+        coordinator = self.location_exploration_coordinator
+        pool = coordinator.memory.pool_for(source_anchor)
+        if source_node.business_affordances and not pool.initial_scan_complete:
+            coordinator.memory.merge_scan(
+                source_anchor,
+                source_node.business_affordances,
+                kind="initial",
+            )
+        supplement_needed = (
+            pool.initial_scan_complete
+            and not pool.supplement_scan_complete
+            and (not pool.candidates or pool.exhausted)
         )
-        if result.trace.status != "summarized":
+        if pool.initial_scan_complete and not supplement_needed:
+            affordances = coordinator.affordances_for(source_anchor)
+            if affordances and affordances != source_node.business_affordances:
+                self.manager.identify_or_add_node(
+                    replace(source_node, business_affordances=affordances)
+                )
+            self._visual_affordance_observed_node_ids.add(source_id)
             return
+        effective_location, result, _added = coordinator.ensure_candidates(
+            source_anchor,
+            goal=self.goal,
+            screenshot_path=before_screenshot_path,
+            current_signature=before.signature,
+            provider=self.visual_delta_provider,
+            max_actions=self.max_candidates,
+            scan_kind="supplement" if supplement_needed else "initial",
+        )
+        if result is None or result.trace.status != "summarized":
+            return
+        if result.location_id and effective_location != source_anchor:
+            source_anchor = effective_location
+        if source_node.semantic_location_hint != source_anchor:
+            source_node = replace(source_node, semantic_location_hint=source_anchor)
         self._visual_affordance_observed_node_ids.add(source_id)
+        affordances = coordinator.affordances_for(source_anchor)
         fallback_label = (
             source_node.node_label
             or source_node.page_frame.page_type
@@ -839,7 +1072,7 @@ class WebKobeExplorer:
         self.manager.identify_or_add_node(
             replace(
                 source_node,
-                business_affordances=result.business_affordances,
+                business_affordances=affordances,
                 state_summary=result.state_summary or source_node.state_summary,
                 node_label=_safe_vlm_state_label(
                     result.state_label,
@@ -1100,6 +1333,41 @@ class WebKobeExplorer:
         exploration_context: ExplorationContext,
     ) -> BrowserAction | None:
         node = self.manager.node_for_id(exploration_context.current_node_id)
+
+        location_id, unresolved = _semantic_location_anchor(node)
+        memory_candidate = None
+        if self.location_scoped_exploration and location_id and not unresolved:
+            pool = self.location_exploration_coordinator.memory.pool_for(location_id)
+            if pool.candidates:
+                memory_candidate = self.location_exploration_coordinator.memory.next_candidate(
+                    location_id
+                )
+                if memory_candidate is None:
+                    return None
+                candidate_by_id = {
+                    normalize_semantic_id(item.action_name): item
+                    for item in node.business_affordances
+                }
+                affordance = candidate_by_id.get(
+                    normalize_semantic_id(memory_candidate.action_name),
+                    memory_candidate,
+                )
+                preferred = self._preferred_resume_action_key
+                if preferred is not None and preferred == ActionAttemptKey(
+                    exploration_context.current_node_id,
+                    affordance.action_name,
+                ):
+                    self._preferred_resume_action_key = None
+                    return _business_action_from_affordance(affordance)
+                if self.resume_policy is not None and not is_action_eligible(
+                    self.manager.to_graph(start_node_id=self._start_node_id),
+                    source_node_id=exploration_context.current_node_id,
+                    action_id=affordance.action_name,
+                    policy=self.resume_policy,
+                ):
+                    return None
+                return _business_action_from_affordance(affordance)
+
         if not node.business_affordances:
             return None
 

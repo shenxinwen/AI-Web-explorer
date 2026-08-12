@@ -8,9 +8,14 @@ this control state.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 from ai_web_explorer.grounded_web.graph import BusinessAffordance, WebKobeGraph
+from ai_web_explorer.grounded_web.business_affordance import (
+    VisualAffordanceRequest,
+    VisualAffordanceResult,
+    summarize_visual_affordances,
+)
 from ai_web_explorer.grounded_web.semantic_model import normalize_semantic_id
 
 
@@ -214,6 +219,207 @@ class CandidateAttemptOutcome:
     terminal: bool
 
 
+@dataclass(frozen=True)
+class OutcomeUpdate:
+    attempt: CandidateAttemptOutcome | None
+    new_location: bool
+    targeted_scan_required: bool
+    has_progress: bool
+    step_kind: str
+
+
+class LocationExplorationCoordinator:
+    """Coordinate location-level scans and candidate lifecycle bookkeeping."""
+
+    def __init__(
+        self,
+        *,
+        memory: LocationExplorationMemory | None = None,
+        limits: ExplorationLimits | None = None,
+        semantic_profile_context: dict[str, Any] | None = None,
+    ) -> None:
+        if memory is None:
+            memory = LocationExplorationMemory(limits=limits)
+        elif limits is not None and memory.limits != limits:
+            memory.limits = limits
+        self.memory = memory
+        self.semantic_profile_context = semantic_profile_context
+
+    def ensure_candidates(
+        self,
+        location_id: str,
+        *,
+        goal: str,
+        screenshot_path: str,
+        current_signature: dict[str, Any] | None,
+        provider: Callable[..., str] | None,
+        max_actions: int | None = None,
+        scan_kind: str = "initial",
+        added_business_facts: Iterable[str] = (),
+        removed_business_facts: Iterable[str] = (),
+    ) -> tuple[str, VisualAffordanceResult | None, tuple[str, ...]]:
+        """Ensure a pool exists, scanning only when this location requires it."""
+
+        normalized_location = normalize_semantic_id(location_id)
+        pool = self.memory.pool_for(normalized_location)
+        kind = normalize_semantic_id(scan_kind) or "initial"
+        if kind == "initial" and pool.initial_scan_complete:
+            return normalized_location, None, ()
+        if kind == "supplement" and pool.supplement_scan_complete:
+            return normalized_location, None, ()
+        if kind == "targeted" and not self.memory.should_run_targeted_scan(
+            normalized_location,
+            added=added_business_facts,
+            removed=removed_business_facts,
+        ):
+            return normalized_location, None, ()
+        if provider is None:
+            if kind == "initial":
+                pool.initial_scan_complete = True
+            elif kind == "supplement":
+                pool.supplement_scan_complete = True
+            elif kind == "targeted":
+                self.memory.mark_targeted_scan_complete(
+                    normalized_location,
+                    added=added_business_facts,
+                    removed=removed_business_facts,
+                )
+            return normalized_location, None, ()
+
+        result: VisualAffordanceResult | None = None
+        added: tuple[str, ...] = ()
+        max_attempts = max(1, self.memory.limits.max_vlm_scan_attempts)
+        for attempt_index in range(max_attempts):
+            request = VisualAffordanceRequest(
+                goal=goal,
+                current_screenshot_path=screenshot_path,
+                current_signature=current_signature,
+                max_actions=max_actions or self.memory.limits.max_candidates_per_location,
+                scan_kind=kind,
+                semantic_location=normalized_location,
+                existing_action_ids=sorted(pool.candidates),
+                completed_action_ids=sorted(pool.completed_action_ids()),
+                added_business_facts=list(added_business_facts),
+                removed_business_facts=list(removed_business_facts),
+                semantic_profile_context=self.semantic_profile_context,
+            )
+            result = summarize_visual_affordances(request, provider=provider)
+            if result.trace.status == "summarized":
+                result_location = normalize_semantic_id(result.location_id or "")
+                if kind == "initial" and result_location:
+                    normalized_location = result_location
+                    pool = self.memory.pool_for(normalized_location)
+                added = self.memory.merge_scan(
+                    normalized_location,
+                    result.business_affordances,
+                    kind=kind,
+                    replacements=result.replacements,
+                    disabled_action_ids=result.disabled_action_ids,
+                    trace=result.trace.to_dict(),
+                )
+                if kind == "targeted":
+                    self.memory.mark_targeted_scan_complete(
+                        normalized_location,
+                        added=added_business_facts,
+                        removed=removed_business_facts,
+                    )
+                break
+
+            # Keep the trace for audit but allow the configured retry count.
+            self.memory.merge_scan(
+                normalized_location,
+                [],
+                kind=kind,
+                trace={"trace": result.trace.to_dict(), "attempt": attempt_index + 1},
+            )
+            pool = self.memory.pool_for(normalized_location)
+            if kind == "initial":
+                pool.initial_scan_complete = False
+            elif kind == "supplement":
+                pool.supplement_scan_complete = False
+            if attempt_index + 1 == max_attempts:
+                if kind == "initial":
+                    pool.initial_scan_complete = True
+                elif kind == "supplement":
+                    pool.supplement_scan_complete = True
+        return normalized_location, result, added
+
+    def record_action_outcome(
+        self,
+        *,
+        location_before: str,
+        location_after: str,
+        action_id: str,
+        observable_change: bool,
+        completion_facts: Iterable[str] = (),
+        business_added: Iterable[str] = (),
+        business_removed: Iterable[str] = (),
+        failed: bool = False,
+    ) -> OutcomeUpdate:
+        location_before = normalize_semantic_id(location_before)
+        location_after = normalize_semantic_id(location_after or location_before)
+        action_id = normalize_semantic_id(action_id)
+        completion_facts = list(completion_facts)
+        business_added = list(business_added)
+        business_removed = list(business_removed)
+        pool = self.memory.pool_for(location_before)
+        attempt: CandidateAttemptOutcome | None = None
+        if action_id in pool.candidates:
+            attempt = self.memory.record_attempt(
+                location_before,
+                action_id,
+                observable_change=observable_change,
+                failed=failed,
+            )
+        added = business_added
+        removed = business_removed
+        new_location = location_after != location_before
+        targeted = self.memory.should_run_targeted_scan(
+            location_before,
+            added=added,
+            removed=removed,
+        )
+        has_progress = bool(
+            new_location
+            or completion_facts
+            or added
+            or removed
+        )
+        if new_location:
+            step_kind = "location_transition"
+        elif added or removed:
+            step_kind = "business_fact_change"
+        elif completion_facts:
+            step_kind = "completion_fact_change"
+        elif observable_change:
+            step_kind = "observable_action"
+        else:
+            step_kind = "no_observable_change"
+        return OutcomeUpdate(
+            attempt=attempt,
+            new_location=new_location,
+            targeted_scan_required=targeted,
+            has_progress=has_progress,
+            step_kind=step_kind,
+        )
+
+    def sync_graph_meta(self, manager: Any) -> None:
+        manager.meta[LOCATION_EXPLORATION_META_KEY] = self.memory.to_dict()
+
+    def affordances_for(self, location_id: str) -> list[BusinessAffordance]:
+        pool = self.memory.pool_for(location_id)
+        return [
+            pool.candidates[action_id].affordance
+            for action_id in sorted(
+                pool.candidates,
+                key=lambda action_id: (
+                    pool.candidates[action_id].discovery_order,
+                    action_id,
+                ),
+            )
+        ]
+
+
 class LocationExplorationMemory:
     """Location-keyed candidate pools and persisted scan/outcome memory."""
 
@@ -256,6 +462,7 @@ class LocationExplorationMemory:
         """Merge scan results by canonical action, returning newly added IDs."""
 
         pool = self.pool_for(location_id)
+        disabled_action_ids = tuple(disabled_action_ids)
         normalized_kind = normalize_semantic_id(kind) or "initial"
         pool.scan_attempts[normalized_kind] = (
             pool.scan_attempts.get(normalized_kind, 0) + 1
@@ -266,7 +473,7 @@ class LocationExplorationMemory:
             if old_id in pool.candidates:
                 pool.candidates[old_id].status = "stale/disabled"
             if new_action:
-                disabled_action_ids = tuple(disabled_action_ids) + (old_id,)
+                disabled_action_ids = disabled_action_ids + (old_id,)
 
         for action_id in disabled_action_ids:
             normalized = normalize_semantic_id(action_id)
@@ -511,5 +718,7 @@ __all__ = [
     "LocationCandidatePool",
     "LocationCandidateRecord",
     "LocationExplorationMemory",
+    "LocationExplorationCoordinator",
+    "OutcomeUpdate",
     "TargetedScanKey",
 ]

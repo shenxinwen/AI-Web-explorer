@@ -5,6 +5,11 @@ from dataclasses import dataclass
 from typing import Any, Callable, Iterable, TYPE_CHECKING
 
 from ai_web_explorer.grounded_web.graph import WebKobeEdge, WebKobeGraph
+from ai_web_explorer.grounded_web.location_exploration import (
+    LOCATION_EXPLORATION_META_KEY,
+    LocationExplorationMemory,
+)
+from ai_web_explorer.grounded_web.semantic_model import normalize_semantic_id
 
 if TYPE_CHECKING:
     from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
@@ -117,6 +122,7 @@ def select_frontier(
 
     blocked = set(blocked_node_ids)
     nodes_by_id = {node.node_id: node for node in graph.nodes}
+    location_memory = _location_memory(graph)
     adjacency: dict[str, list[WebKobeEdge]] = {}
     for edge in graph.edges:
         if (
@@ -150,12 +156,15 @@ def select_frontier(
             and (include_start or node_id != graph.start_node_id)
             and node_id not in blocked
         ):
-            candidates = _candidate_action_ids(node)
+            candidates = _location_candidate_action_ids(node, location_memory)
             untried = tuple(
                 action_id
                 for action_id in candidates
                 if (
                     action_id not in tried_by_source.get(node_id, set())
+                    or _location_action_is_pending(
+                        node, action_id, location_memory
+                    )
                     or (action_eligible is not None and action_eligible(node_id, action_id))
                 )
                 and (
@@ -253,6 +262,54 @@ def _candidate_action_ids(node) -> tuple[str, ...]:
             for affordance in node.business_affordances
             if affordance.action_name
         )
+    )
+
+
+def _location_memory(graph: WebKobeGraph) -> LocationExplorationMemory | None:
+    payload = graph.meta.get(LOCATION_EXPLORATION_META_KEY)
+    if not isinstance(payload, dict):
+        return None
+    try:
+        return LocationExplorationMemory.from_dict(payload)
+    except ValueError:
+        return None
+
+
+def _location_candidate_action_ids(
+    node,
+    memory: LocationExplorationMemory | None,
+) -> tuple[str, ...]:
+    location_id = normalize_semantic_id(node.semantic_location_hint or "")
+    if memory is None or not location_id or location_id not in memory.locations:
+        return _candidate_action_ids(node)
+    pool = memory.pool_for(location_id)
+    return tuple(
+        action_id
+        for action_id, record in sorted(
+            pool.candidates.items(),
+            key=lambda item: (item[1].discovery_order, item[0]),
+        )
+        if record.status
+        in {"pending", "retryable_no_change", "retryable_failure"}
+        and record.attempts < memory.limits.max_action_attempts_per_candidate
+    )
+
+
+def _location_action_is_pending(
+    node,
+    action_id: str,
+    memory: LocationExplorationMemory | None,
+) -> bool:
+    if memory is None:
+        return False
+    location_id = normalize_semantic_id(node.semantic_location_hint or "")
+    if not location_id or location_id not in memory.locations:
+        return False
+    record = memory.pool_for(location_id).candidates.get(normalize_semantic_id(action_id))
+    return bool(
+        record is not None
+        and record.status
+        in {"pending", "retryable_no_change", "retryable_failure"}
     )
 
 
