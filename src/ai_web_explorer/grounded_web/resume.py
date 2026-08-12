@@ -151,7 +151,6 @@ def select_resume_frontier(
     for key in ordered_retry_keys:
         if key.source_node_id in blocked or key.source_node_id in seen_retry_sources:
             continue
-        seen_retry_sources.add(key.source_node_id)
         if not is_action_eligible(
             graph,
             source_node_id=key.source_node_id,
@@ -159,6 +158,7 @@ def select_resume_frontier(
             policy=policy,
         ):
             continue
+        seen_retry_sources.add(key.source_node_id)
         target = reachable_frontier_for_node(
             graph,
             key.source_node_id,

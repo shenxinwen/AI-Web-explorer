@@ -228,3 +228,51 @@ def test_resume_prefers_most_recent_authorized_retry_source_before_normal_fronti
     assert target is not None
     assert target.node_id == "newer_retry"
     assert target.untried_action_ids == ("retry_new",)
+
+
+def test_resume_keeps_older_eligible_action_when_newer_same_source_is_exhausted():
+    nodes = [
+        _resume_node("start"),
+        _resume_node("retry_source", ["retry_old", "retry_new"]),
+        _resume_node("sibling", ["ordinary"]),
+    ]
+    sibling_path = _resume_edge("start", "sibling", "a_sibling_path")
+    retry_path = _resume_edge("start", "retry_source", "z_retry_path")
+    failed_old = _resume_edge(
+        "retry_source", "retry_source", "retry_old",
+        status="failed_execution", success=False,
+    )
+    failed_new_1 = _resume_edge(
+        "retry_source", "retry_source", "retry_new",
+        status="failed_execution", success=False,
+    )
+    failed_new_2 = _resume_edge(
+        "retry_source", "retry_source", "retry_new",
+        status="failed_execution", success=False,
+    )
+    events = [sibling_path, retry_path, failed_old, failed_new_1, failed_new_2]
+    graph = WebKobeGraph(
+        app="fixture",
+        start_node_id="start",
+        total_steps_completed=len(events),
+        nodes=nodes,
+        edges=events,
+        execution_events=events,
+        meta={"resume_cursor_node_id": "start"},
+    )
+    policy = ResumePolicy(
+        retry_keys=frozenset(
+            {
+                ActionAttemptKey("retry_source", "retry_old"),
+                ActionAttemptKey("retry_source", "retry_new"),
+            }
+        ),
+        max_attempts=2,
+    )
+
+    target = select_resume_frontier(graph, policy=policy)
+
+    assert target is not None
+    assert target.node_id == "retry_source"
+    assert "retry_old" in target.untried_action_ids
+    assert target.node_id != "sibling"
