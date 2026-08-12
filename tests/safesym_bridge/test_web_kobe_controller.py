@@ -74,7 +74,11 @@ def _graph(
         meta=graph_meta,
     )
 
-def _frontier_graph() -> WebKobeGraph:
+def _frontier_graph(
+    *,
+    start_actions=(),
+    frontier_actions=("inspect_frontier",),
+) -> WebKobeGraph:
     def node(node_id: str, actions=()):
         return WebKobeNode(
             node_id=node_id,
@@ -109,7 +113,7 @@ def _frontier_graph() -> WebKobeGraph:
         app="fake",
         start_node_id="start",
         total_steps_completed=0,
-        nodes=[node("start"), node("frontier", ("inspect_frontier",))],
+        nodes=[node("start", start_actions), node("frontier", frontier_actions)],
         edges=[edge],
         meta={
             "last_step_kind": "current_state_exhausted",
@@ -141,11 +145,15 @@ class ReplayFakeExplorer(FakeExplorer):
         super().__init__(graphs)
         self.replay_result = replay_result
         self.replay_calls = []
+        self.replay_paths = []
+        self.replay_untried_action_ids = []
         self.replay_targets = list(replay_targets or [])
         self.max_replay_calls = max_replay_calls
 
     async def replay(self, target, *, start_url):
         self.replay_calls.append((target.node_id, start_url))
+        self.replay_paths.append(tuple(target.path))
+        self.replay_untried_action_ids.append(tuple(target.untried_action_ids))
         if (
             self.max_replay_calls is not None
             and len(self.replay_calls) > self.max_replay_calls
@@ -277,6 +285,61 @@ async def test_controller_replays_frontier_only_when_enabled_then_resumes_explor
     assert result.graph.meta["replay_attempt_count"] == 1
     assert result.graph.meta["replay_success_count"] == 1
     assert result.graph.meta["replay_failure_count"] == 0
+
+
+@pytest.mark.anyio
+async def test_controller_replays_entry_frontier_with_empty_path_then_explores():
+    explorer = ReplayFakeExplorer(
+        [
+            _frontier_graph(
+                start_actions=("open_frontier", "inspect_start"),
+                frontier_actions=(),
+            ),
+            _graph(completed=1),
+        ],
+        ReplayResult(True, "start", None, "replay_succeeded", 0),
+    )
+    controller = WebKobeExplorationController(
+        explorer,
+        frontier_replay_runner=explorer,
+        start_url="https://fixture.test/shop",
+    )
+
+    result = await controller.run(max_steps=1)
+
+    assert explorer.replay_calls == [("start", "https://fixture.test/shop")]
+    assert explorer.replay_paths == [()]
+    assert explorer.replay_untried_action_ids == [("inspect_start",)]
+    assert explorer.calls == 2
+    assert result.summary.steps_completed == 1
+    assert result.summary.stop_reason == "max_steps"
+
+
+@pytest.mark.anyio
+async def test_controller_blocks_entry_frontier_after_reset_only_replay_makes_no_progress():
+    explorer = ReplayFakeExplorer(
+        [
+            _frontier_graph(
+                start_actions=("open_frontier", "inspect_start"),
+                frontier_actions=(),
+            )
+        ],
+        ReplayResult(True, "start", None, "replay_succeeded", 0),
+        max_replay_calls=1,
+    )
+    controller = WebKobeExplorationController(
+        explorer,
+        frontier_replay_runner=explorer,
+        start_url="https://fixture.test/shop",
+    )
+
+    result = await controller.run(max_steps=1)
+
+    assert explorer.replay_calls == [("start", "https://fixture.test/shop")]
+    assert explorer.replay_paths == [()]
+    assert explorer.replay_untried_action_ids == [("inspect_start",)]
+    assert result.summary.stop_reason == "frontier_replay_exhausted"
+    assert result.graph.meta["blocked_replay_node_ids"] == ["start"]
 
 
 @pytest.mark.anyio

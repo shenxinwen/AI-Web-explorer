@@ -321,6 +321,31 @@ async def test_frontier_replay_resets_executes_and_validates_without_graph_edges
 
 
 @pytest.mark.anyio
+async def test_frontier_replay_entry_target_resets_validates_and_executes_no_actions():
+    adapter = _ReplayAdapter(
+        [StateSnapshot("start", "https://fixture.test/shop", "start", {"surface": "start"})]
+    )
+    explorer = _replay_explorer(adapter)
+    target = type(
+        "Target",
+        (),
+        {"node_id": "start", "path": ()},
+    )()
+
+    result = await FrontierReplayRunner(explorer).replay(
+        target,
+        start_url="https://fixture.test/shop",
+    )
+
+    assert result.success is True
+    assert result.reached_node_id == "start"
+    assert result.completed_steps == 0
+    assert adapter.reset_calls == ["https://fixture.test/shop"]
+    assert adapter.executed == []
+    assert len(explorer.manager.to_graph().edges) == 0
+
+
+@pytest.mark.anyio
 async def test_frontier_replay_fails_closed_on_target_mismatch():
     adapter = _ReplayAdapter(
         [
