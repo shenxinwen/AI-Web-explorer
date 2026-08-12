@@ -16,8 +16,156 @@ from ai_web_explorer.grounded_web.graph import (
     WebKobeNode,
 )
 from ai_web_explorer.grounded_web.business_profile import PlanningDelta
+from ai_web_explorer.grounded_web.semantic_model import SemanticObservation
 from ai_web_explorer.safesym_bridge import cli
 from ai_web_explorer.safesym_bridge.cli import main
+
+
+def _write_semantic_projection_graph(path: Path, *, with_semantics: bool = True) -> None:
+    nodes = [
+        WebKobeNode(
+            node_id="shopping",
+            page_description="shopping",
+            page_frame=PageFrame(
+                page_id="shopping",
+                page_type="shopping",
+                url="https://fixture.test/shopping",
+                url_pattern="https://fixture.test/shopping",
+                title="shopping",
+            ),
+            state_schema={},
+            last_state_snapshot={},
+            node_label="shopping",
+        ),
+        WebKobeNode(
+            node_id="checkout",
+            page_description="checkout",
+            page_frame=PageFrame(
+                page_id="checkout",
+                page_type="checkout",
+                url="https://fixture.test/shopping",
+                url_pattern="https://fixture.test/shopping",
+                title="checkout",
+            ),
+            state_schema={},
+            last_state_snapshot={},
+        ),
+    ]
+    semantic = SemanticObservation(
+        action_role="state_mutation",
+        source_location="shopping",
+        target_location="shopping",
+        evidence=["The cart count changed."],
+        confidence=0.95,
+    )
+    checkout_semantic = SemanticObservation(
+        action_role="guarded_navigation",
+        source_location="shopping",
+        target_location="checkout",
+        candidate_required_facts=["cart_has_items"],
+        evidence=["Checkout modal opened."],
+        confidence=0.95,
+    )
+    edges = [
+        WebKobeEdge(
+            source_node_id="shopping",
+            target_node_id="shopping",
+            instruction="add to cart",
+            action=BrowserAction("click", "#add", "add_to_cart_from_shopping"),
+            capability=None,
+            target_observation="shopping",
+            observed_delta=[],
+            schema_delta={},
+            execution_trace=ExecutionTrace(
+                "click", "#add", "add", {}, "shopping", "shopping", True
+            ),
+            planning_delta=PlanningDelta(verified_added_facts=["cart_has_items"]),
+            semantic_observation=semantic if with_semantics else None,
+            status="succeeded",
+        ),
+        WebKobeEdge(
+            source_node_id="shopping",
+            target_node_id="checkout",
+            instruction="open checkout",
+            action=BrowserAction("click", "#checkout", "open_checkout"),
+            capability=None,
+            target_observation="checkout",
+            observed_delta=[],
+            schema_delta={},
+            execution_trace=ExecutionTrace(
+                "click", "#checkout", "checkout", {}, "shopping", "checkout", True
+            ),
+            planning_delta=None,
+            semantic_observation=checkout_semantic if with_semantics else None,
+            status="succeeded_with_navigation",
+        ),
+    ]
+    path.write_text(
+        json.dumps(
+            WebKobeGraph(
+                app="fixture",
+                start_node_id="shopping",
+                total_steps_completed=2,
+                nodes=nodes,
+                edges=edges,
+            ).to_dict()
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_phase_a_semantic_projection_writes_semantic_artifacts(tmp_path):
+    graph_path = tmp_path / "semantic_graph.json"
+    output_dir = tmp_path / "semantic"
+    _write_semantic_projection_graph(graph_path)
+
+    assert (
+        main(
+            [
+                "web-kobe-phase-a",
+                "--graph",
+                str(graph_path),
+                "--projection",
+                "semantic",
+                "--goal-location",
+                "checkout",
+                "--output",
+                str(output_dir),
+            ]
+        )
+        == 0
+    )
+    assert (output_dir / "semantic_planning_graph.json").exists()
+    assert (output_dir / "semantic_projection_report.json").exists()
+    assert "(cart_has_items)" in (output_dir / "domain.pddl").read_text()
+    assert "(:goal (and (at_checkout)))" in (output_dir / "problem.pddl").read_text()
+
+
+def test_semantic_projection_falls_back_without_semantic_observations(tmp_path):
+    graph_path = tmp_path / "historical_graph.json"
+    output_dir = tmp_path / "fallback"
+    _write_semantic_projection_graph(graph_path, with_semantics=False)
+
+    assert (
+        main(
+            [
+                "web-kobe-phase-a",
+                "--graph",
+                str(graph_path),
+                "--projection",
+                "semantic",
+                "--output",
+                str(output_dir),
+            ]
+        )
+        == 0
+    )
+    report = json.loads(
+        (output_dir / "semantic_projection_report.json").read_text(encoding="utf-8")
+    )
+    assert report["fallback_projection"] == "location"
+    assert report["fallback_reason"] == "no_usable_semantic_actions"
+    assert (output_dir / "domain.pddl").exists()
 
 
 def _write_resume_graph(path: Path, *, app: str = "demo", failed: bool = True) -> None:

@@ -24,12 +24,19 @@ from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
 )
 from ai_web_explorer.safesym_bridge.location_pddl import compile_location_domain
 from ai_web_explorer.safesym_bridge.location_pddl import compile_location_problem
+from ai_web_explorer.safesym_bridge.minimal_semantic_pddl import (
+    compile_minimal_semantic_domain,
+    compile_minimal_semantic_problem,
+)
 from ai_web_explorer.safesym_bridge.trace_pddl import compile_trace_domain
 from ai_web_explorer.safesym_bridge.trace_pddl import compile_trace_problem
 from ai_web_explorer.safesym_bridge.surface_pddl import compile_surface_domain
 from ai_web_explorer.safesym_bridge.surface_pddl import compile_surface_problem
 from ai_web_explorer.grounded_web.planning_abstraction import (
     build_planning_state_graph,
+)
+from ai_web_explorer.grounded_web.semantic_planning import (
+    build_semantic_planning_graph,
 )
 from ai_web_explorer.grounded_web.embedding_provider import (
     create_embedding_provider_from_env,
@@ -253,11 +260,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     web_kobe_phase_a_parser.add_argument(
         "--projection",
-        choices=["trace", "location", "surface"],
+        choices=["trace", "location", "surface", "semantic"],
         default="trace",
     )
     web_kobe_phase_a_parser.add_argument("--start-node", default=None)
     web_kobe_phase_a_parser.add_argument("--goal-node", default=None)
+    web_kobe_phase_a_parser.add_argument("--start-location", default=None)
+    web_kobe_phase_a_parser.add_argument("--goal-location", default=None)
+    web_kobe_phase_a_parser.add_argument(
+        "--goal-fact", action="append", default=[],
+    )
     web_kobe_phase_a_parser.add_argument("--start-checkpoint", default=None)
     web_kobe_phase_a_parser.add_argument("--goal-checkpoint", default=None)
     web_kobe_pddl_smoke_parser = subparsers.add_parser(
@@ -579,6 +591,18 @@ def main(argv: list[str] | None = None) -> int:
             (args.output / "domain.pddl").write_text(domain, encoding="utf-8")
             output_path = args.output
         elif args.mode in {"web-kobe-phase-a", "web-kobe-consolidate"}:
+            if args.projection == "semantic" and any(
+                value is not None
+                for value in (
+                    args.start_node,
+                    args.goal_node,
+                    args.start_checkpoint,
+                    args.goal_checkpoint,
+                )
+            ):
+                web_kobe_phase_a_parser.error(
+                    "semantic projection accepts location/fact goals, not node or checkpoint flags"
+                )
             if args.projection == "trace" and (
                 args.start_node is not None or args.goal_node is not None
             ):
@@ -634,7 +658,48 @@ def main(argv: list[str] | None = None) -> int:
                 json.dumps(artifacts.report.to_dict(), indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )
-            if args.projection == "trace":
+            if args.projection == "semantic":
+                semantic_graph, semantic_report = build_semantic_planning_graph(graph)
+                semantic_report_data = semantic_report.to_dict()
+                (args.output / "semantic_planning_graph.json").write_text(
+                    json.dumps(
+                        semantic_graph.to_dict(), indent=2, ensure_ascii=False
+                    ),
+                    encoding="utf-8",
+                )
+                usable_semantic = bool(
+                    semantic_graph.start_location
+                    and semantic_graph.locations
+                    and semantic_graph.actions
+                )
+                if args.start_location is not None and (
+                    args.start_location.strip().lower()
+                    != semantic_graph.start_location
+                ):
+                    raise ValueError(
+                        "start_location_mismatch: "
+                        f"{args.start_location} != {semantic_graph.start_location}"
+                    )
+                if usable_semantic:
+                    projection = compile_minimal_semantic_domain(semantic_graph)
+                    report_data = dict(semantic_report_data)
+                    report_data["fallback_projection"] = None
+                    if args.goal_location is not None or args.goal_fact:
+                        problem = compile_minimal_semantic_problem(
+                            semantic_graph,
+                            goal_location=args.goal_location,
+                            goal_facts=args.goal_fact,
+                        )
+                        problem_path.write_text(problem.problem, encoding="utf-8")
+                else:
+                    projection = compile_location_domain(
+                        artifacts.planning_graph,
+                        edge_mappings=artifacts.report.edge_mappings,
+                    )
+                    report_data = dict(semantic_report_data)
+                    report_data["fallback_projection"] = "location"
+                    report_data["fallback_reason"] = "no_usable_semantic_actions"
+            elif args.projection == "trace":
                 projection = compile_trace_domain(graph)
             elif args.projection == "location":
                 projection = compile_location_domain(
@@ -649,13 +714,23 @@ def main(argv: list[str] | None = None) -> int:
             )
             (args.output / "projection_report.json").write_text(
                 json.dumps(
-                    projection.report,
+                    report_data if args.projection == "semantic" else projection.report,
                     indent=2,
                     ensure_ascii=False,
                     sort_keys=True,
                 ),
                 encoding="utf-8",
             )
+            if args.projection == "semantic":
+                (args.output / "semantic_projection_report.json").write_text(
+                    json.dumps(
+                        report_data,
+                        indent=2,
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    ),
+                    encoding="utf-8",
+                )
             if args.projection == "trace" and args.start_checkpoint is not None:
                 problem = compile_trace_problem(
                     graph,
@@ -685,6 +760,9 @@ def main(argv: list[str] | None = None) -> int:
                     problem.problem,
                     encoding="utf-8",
                 )
+            elif args.projection == "semantic":
+                # The semantic branch writes a problem only for explicit goals.
+                pass
             else:
                 problem_path.unlink(missing_ok=True)
             output_path = args.output
