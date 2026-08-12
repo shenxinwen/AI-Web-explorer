@@ -10,6 +10,10 @@ from ai_web_explorer.grounded_web.business_profile import (
     PlanningDelta,
 )
 from ai_web_explorer.grounded_web.graph import BrowserAction
+from ai_web_explorer.grounded_web.semantic_model import (
+    SemanticObservation,
+    semantic_observation_from_dict,
+)
 
 VisualDeltaProvider = Callable[..., str]
 VISUAL_CHANGE_KINDS = frozenset(
@@ -55,6 +59,7 @@ class VisualDeltaResult:
     planning_delta: PlanningDelta
     trace: VisualDeltaTrace
     visual_change_kind: str = "unknown"
+    semantic_observation: SemanticObservation | None = None
 
 
 def _prompt_for_request(request: VisualDeltaRequest) -> str:
@@ -78,12 +83,25 @@ def _prompt_for_request(request: VisualDeltaRequest) -> str:
             "surface (a visible page or component surface changed), mixed "
             "(more than one kind), or unknown (insufficient visual basis). This "
             "classification is observation metadata only, not planning authority."
+            " Use the same coarse location when only sorting, filtering, searching, "
+            "pagination, counts, selections, or styling changed. A modal, drawer, "
+            "or workspace may be a new location when it becomes the active business "
+            "surface. Do not infer hidden state. Do not copy every visible fact into "
+            "candidate_required_facts."
         ),
         "action": action,
         "required_json_fields": [
             "candidate_added_facts",
             "candidate_removed_facts",
             "visual_change_kind",
+            "action_role",
+            "source_location",
+            "target_location",
+            "completion_facts",
+            "candidate_required_facts",
+            "preserved_facts",
+            "semantic_evidence",
+            "semantic_confidence",
         ],
     }
     return json.dumps(payload, indent=2, ensure_ascii=False)
@@ -140,6 +158,30 @@ def _visual_change_kind(value: Any) -> str:
         if normalized in VISUAL_CHANGE_KINDS:
             return normalized
     return "unknown"
+
+
+def _semantic_observation(parsed: dict[str, Any]) -> SemanticObservation | None:
+    observation = semantic_observation_from_dict(parsed)
+    if observation is None:
+        return None
+    if (
+        observation.action_role == "unknown"
+        or not observation.source_location
+        or not observation.target_location
+    ):
+        return None
+    if observation.action_role != "presentation_capability":
+        observation = SemanticObservation(
+            action_role=observation.action_role,
+            source_location=observation.source_location,
+            target_location=observation.target_location,
+            completion_facts=[],
+            candidate_required_facts=observation.candidate_required_facts,
+            preserved_facts=observation.preserved_facts,
+            evidence=observation.evidence,
+            confidence=observation.confidence,
+        )
+    return observation
 
 
 def summarize_visual_delta(
@@ -208,6 +250,7 @@ def summarize_visual_delta(
     return VisualDeltaResult(
         planning_delta=delta,
         visual_change_kind=visual_change_kind,
+        semantic_observation=_semantic_observation(parsed),
         trace=_trace(
             prompt=prompt,
             raw_response=raw_response,

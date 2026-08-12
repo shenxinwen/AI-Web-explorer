@@ -28,7 +28,7 @@ def test_summarize_visual_delta_maps_provider_json_to_candidate_planning_delta()
         assert "cart_count" not in prompt
         assert '"profile"' not in prompt
         assert "visible_change_summary" not in prompt
-        assert "evidence" not in prompt
+        assert '"semantic_evidence"' in prompt
         assert before_screenshot_path == "before.png"
         assert after_screenshot_path == "after.png"
         return (
@@ -43,6 +43,53 @@ def test_summarize_visual_delta_maps_provider_json_to_candidate_planning_delta()
     assert result.planning_delta.verified_added_facts == []
     assert result.trace.status == "summarized"
     assert "visual_change_summary" not in result.trace.to_dict()
+
+
+def test_visual_delta_extracts_location_role_and_completion_fact():
+    request = VisualDeltaRequest(
+        goal="Sort the products.",
+        action=BrowserAction("click", "button.sort", "sort_products"),
+        before_screenshot_path="before.png",
+        after_screenshot_path="after.png",
+    )
+
+    def provider(prompt, *, before_screenshot_path, after_screenshot_path):
+        return (
+            '{"candidate_added_facts":[],"candidate_removed_facts":[],'
+            '"visual_change_kind":"presentation",'
+            '"action_role":"presentation_capability",'
+            '"source_location":"shopping","target_location":"shopping",'
+            '"completion_facts":["products_sorted"],'
+            '"candidate_required_facts":[],"preserved_facts":[],'
+            '"semantic_evidence":["The visible product order changed."],'
+            '"semantic_confidence":0.92}'
+        )
+
+    result = summarize_visual_delta(request, provider=provider)
+    assert result.semantic_observation is not None
+    assert result.semantic_observation.source_location == "shopping"
+    assert result.semantic_observation.target_location == "shopping"
+    assert result.semantic_observation.completion_facts == ["products_sorted"]
+
+
+def test_visual_delta_rejects_completion_fact_for_non_presentation_role():
+    request = VisualDeltaRequest(
+        goal="Open checkout.",
+        action=BrowserAction("click", "button.checkout", "open_checkout"),
+        before_screenshot_path="before.png",
+        after_screenshot_path="after.png",
+    )
+
+    def provider(prompt, *, before_screenshot_path, after_screenshot_path):
+        return (
+            '{"candidate_added_facts":[],"candidate_removed_facts":[],'
+            '"action_role":"navigation","source_location":"shopping",'
+            '"target_location":"checkout","completion_facts":["products_sorted"]}'
+        )
+
+    result = summarize_visual_delta(request, provider=provider)
+    assert result.semantic_observation is not None
+    assert result.semantic_observation.completion_facts == []
 
 
 def test_visual_delta_prompt_describes_set_difference_and_allows_empty_sets():
