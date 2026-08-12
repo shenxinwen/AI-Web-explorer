@@ -278,16 +278,30 @@ async def test_frontier_replay_surface_pddl_local_fixture(tmp_path):
                 visual_delta_provider=visual_provider,
                 capture_screenshots=True,
                 business_profile=None,
+                max_candidates=5,
             )
+            replay_target_ids = []
+            replay_paths = []
+            replay_runner = FrontierReplayRunner(explorer)
+
+            class RecordingReplayRunner:
+                async def replay(self, target, *, start_url):
+                    replay_target_ids.append(target.node_id)
+                    replay_paths.append(tuple(target.path))
+                    return await replay_runner.replay(target, start_url=start_url)
+
             controller = WebKobeExplorationController(
                 explorer,
                 max_consecutive_unproductive_steps=None,
-                frontier_replay_runner=FrontierReplayRunner(explorer),
+                frontier_replay_runner=RecordingReplayRunner(),
                 start_url="http://fixture.test/shop",
             )
             result = await controller.run(max_steps=4)
 
+            assert explorer.max_candidates == 5
             assert result.graph.meta["replay_success_count"] >= 1
+            assert replay_target_ids[0] == result.graph.start_node_id
+            assert replay_paths[0] == ()
             assert any(
                 edge.target_node_id
                 and next(

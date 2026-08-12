@@ -1012,11 +1012,22 @@ def test_main_web_kobe_stagehand_explore_accepts_frontier_replay(monkeypatch, tm
                 "--output",
                 str(tmp_path / "graph.json"),
                 "--frontier-replay",
+                "--max-candidates",
+                "5",
+                "--openai-visual-delta",
+                "--screenshot-dir",
+                str(tmp_path / "screenshots"),
+                "--stagehand-execution-mode",
+                "observed_action",
             ]
         )
         == 0
     )
     assert calls[0]["frontier_replay"] is True
+    assert calls[0]["max_candidates"] == 5
+    assert calls[0]["use_openai_visual_delta"] is True
+    assert calls[0]["screenshot_dir"] == tmp_path / "screenshots"
+    assert calls[0]["stagehand_execution_mode"] == "observed_action"
 
 
 def test_main_web_kobe_stagehand_explore_cleans_latest_output_dir(
