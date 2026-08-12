@@ -81,7 +81,13 @@ def _compact_node(node: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]
         _compact_business_affordance(affordance)
         for affordance in node.get("business_affordances", [])
     ]
-    for key in ("node_label", "state_summary", "naming_provenance", "planning_state"):
+    for key in (
+        "node_label",
+        "state_summary",
+        "naming_provenance",
+        "planning_state",
+        "semantic_location_hint",
+    ):
         if node.get(key) is not None:
             compact[key] = node[key]
     compact = _without_empty_optional_values(compact)

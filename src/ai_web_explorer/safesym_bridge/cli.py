@@ -38,6 +38,7 @@ from ai_web_explorer.grounded_web.planning_abstraction import (
 from ai_web_explorer.grounded_web.semantic_planning import (
     build_semantic_planning_graph,
 )
+from ai_web_explorer.grounded_web.semantic_model import normalize_semantic_id
 from ai_web_explorer.grounded_web.embedding_provider import (
     create_embedding_provider_from_env,
 )
@@ -672,9 +673,9 @@ def main(argv: list[str] | None = None) -> int:
                     and semantic_graph.locations
                     and semantic_graph.actions
                 )
-                if args.start_location is not None and (
-                    args.start_location.strip().lower()
-                    != semantic_graph.start_location
+                if usable_semantic and args.start_location is not None and (
+                    normalize_semantic_id(args.start_location)
+                    != normalize_semantic_id(semantic_graph.start_location)
                 ):
                     raise ValueError(
                         "start_location_mismatch: "
@@ -699,6 +700,12 @@ def main(argv: list[str] | None = None) -> int:
                     report_data = dict(semantic_report_data)
                     report_data["fallback_projection"] = "location"
                     report_data["fallback_reason"] = "no_usable_semantic_actions"
+                    if args.goal_location is not None or args.goal_fact:
+                        report_data["fallback_goal_requested"] = {
+                            "goal_location": args.goal_location,
+                            "goal_facts": list(args.goal_fact),
+                        }
+                        report_data["fallback_goal_handled"] = False
             elif args.projection == "trace":
                 projection = compile_trace_domain(graph)
             elif args.projection == "location":
@@ -761,8 +768,16 @@ def main(argv: list[str] | None = None) -> int:
                     encoding="utf-8",
                 )
             elif args.projection == "semantic":
-                # The semantic branch writes a problem only for explicit goals.
-                pass
+                report_data = json.loads(
+                    (args.output / "semantic_projection_report.json").read_text(
+                        encoding="utf-8"
+                    )
+                )
+                if report_data.get("fallback_goal_handled") is False:
+                    raise ValueError(
+                        "semantic_fallback_cannot_verify_goal: "
+                        "explicit semantic goals require a usable semantic projection"
+                    )
             else:
                 problem_path.unlink(missing_ok=True)
             output_path = args.output

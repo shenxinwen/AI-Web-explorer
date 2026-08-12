@@ -1,0 +1,7 @@
+{
+  "experiment": "minimal-semantic-pddl-practice-shopping-v1",
+  "raw_graph": {"steps": 9, "nodes": 10, "edges": 9, "semantic_edge_count": 0},
+  "observed_actions": ["add_to_cart", "filter_by_category", "filter_by_price_range", "search_items", "view_product_details"],
+  "replay": {"attempts": 10, "successes": 2, "failures": 8},
+  "boundary": "open_checkout and place_order were not executed"
+}

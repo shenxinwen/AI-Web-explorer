@@ -132,6 +132,7 @@ def _node_from_dict(data: dict[str, Any]) -> WebKobeNode:
         state_summary=data.get("state_summary"),
         naming_provenance=data.get("naming_provenance"),
         planning_state=_planning_state_from_dict(data.get("planning_state")),
+        semantic_location_hint=data.get("semantic_location_hint"),
         business_affordances=[
             _business_affordance_from_dict(item)
             for item in data.get("business_affordances", [])

@@ -123,6 +123,58 @@ def test_visual_delta_prompt_describes_set_difference_and_allows_empty_sets():
     assert '"candidate_removed_facts"' in prompt
 
 
+def test_visual_delta_prompt_declares_role_contract_and_location_anchor():
+    request = VisualDeltaRequest(
+        goal="Filter products.",
+        action=BrowserAction("click", "button.filter", "filter_products"),
+        before_screenshot_path="before.png",
+        after_screenshot_path="after.png",
+        source_location_hint="shopping",
+        allowed_location_ids=["shopping", "checkout"],
+        current_location_context="Product listing surface",
+    )
+    prompts = []
+
+    def provider(prompt, *, before_screenshot_path, after_screenshot_path):
+        prompts.append(prompt)
+        return '{"action_role":"presentation_capability","source_location":"shopping","target_location":"shopping"}'
+
+    result = summarize_visual_delta(request, provider=provider)
+    prompt = prompts[0]
+    for role in (
+        "presentation_capability",
+        "state_mutation",
+        "navigation",
+        "guarded_navigation",
+        "form_completion",
+        "commit",
+        "unknown",
+    ):
+        assert role in prompt
+    assert "source_location_hint" in prompt
+    assert "shopping" in prompt
+    assert "allowed_location_ids" in prompt
+    assert result.semantic_observation is not None
+    assert result.semantic_observation.source_location == "shopping"
+    assert result.semantic_observation.target_location == "shopping"
+
+
+def test_visual_delta_rejects_invalid_role_and_location_drift():
+    request = VisualDeltaRequest(
+        goal="Filter products.",
+        action=BrowserAction("click", "button.filter", "filter_products"),
+        before_screenshot_path="before.png",
+        after_screenshot_path="after.png",
+        source_location_hint="shopping",
+    )
+
+    def provider(prompt, *, before_screenshot_path, after_screenshot_path):
+        return '{"action_role":"filtering","source_location":"filters_panel","target_location":"search_results"}'
+
+    result = summarize_visual_delta(request, provider=provider)
+    assert result.semantic_observation is None
+
+
 def test_visual_delta_prompt_defines_bounded_change_kinds_without_profile_authority():
     request = VisualDeltaRequest(
         goal="Observe the page.",

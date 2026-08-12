@@ -2278,6 +2278,8 @@ async def test_explore_one_step_persists_semantic_observation_on_successful_edge
     ):
         if current_screenshot_path is not None:
             return _business_affordance_response("add_to_cart_product")
+        assert '"source_location_hint": "listing"' in prompt
+        assert "Do not invent a new location on every step." in prompt
         return (
             '{"candidate_added_facts":["cart_has_items"],'
             '"candidate_removed_facts":[],"visual_change_kind":"state_indicator",'

@@ -73,6 +73,28 @@ def test_compiler_separates_location_capability_and_business_facts():
     assert "(cart_has_items)" in _action(domain, "open_checkout").split(":effect")[1]
 
 
+def test_preserved_facts_are_not_emitted_as_fact_producing_effects():
+    graph = SemanticPlanningGraph(
+        start_location="shopping",
+        locations=["shopping"],
+        capability_facts=[],
+        business_facts=[],
+        initial_business_facts=[],
+        actions=[
+            SemanticAction(
+                action_id="sort_products",
+                action_name="sort_products",
+                action_role="presentation_capability",
+                source_location="shopping",
+                target_location="shopping",
+                preserved_facts=["cart_has_items"],
+            )
+        ],
+    )
+    domain = compile_minimal_semantic_domain(graph).domain
+    assert "cart_has_items" not in domain
+
+
 def test_problem_can_ask_for_checkout_location():
     graph = _practice_shopping_semantic_graph()
     problem = compile_minimal_semantic_problem(graph, goal_location="checkout").problem

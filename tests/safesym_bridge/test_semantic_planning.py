@@ -1,3 +1,5 @@
+import pytest
+
 from ai_web_explorer.grounded_web.business_profile import PlanningDelta, PlanningState
 from ai_web_explorer.grounded_web.capability_graph import ExecutionTrace, PageFrame
 from ai_web_explorer.grounded_web.graph import (
@@ -9,6 +11,10 @@ from ai_web_explorer.grounded_web.graph import (
 from ai_web_explorer.grounded_web.semantic_model import SemanticObservation
 from ai_web_explorer.grounded_web.semantic_planning import (
     build_semantic_planning_graph,
+)
+from ai_web_explorer.safesym_bridge.minimal_semantic_pddl import (
+    compile_minimal_semantic_domain,
+    compile_minimal_semantic_problem,
 )
 
 
@@ -135,6 +141,29 @@ def test_add_to_cart_changes_fact_without_creating_combination_location():
     assert semantic.actions[0].added_facts == ["cart_has_items"]
 
 
+def test_unpromoted_preserved_profile_fact_is_not_created_by_ordinary_action():
+    graph = _graph_with_edge(
+        _edge(
+            action_name="sort_products",
+            role="presentation_capability",
+            completion_facts=["products_sorted"],
+            planning_delta=PlanningDelta(
+                preserved_profile_facts=["cart_has_items"],
+            ),
+        ),
+        source_active_facts=[],
+        source_profile_fact_ids=["cart_has_items"],
+    )
+    semantic, _ = build_semantic_planning_graph(graph)
+    action = semantic.actions[0]
+    assert action.preserved_facts == []
+    assert "cart_has_items" not in semantic.business_facts
+    domain = compile_minimal_semantic_domain(semantic).domain
+    assert "(cart_has_items)" not in domain
+    with pytest.raises(ValueError, match="unknown_goal_fact"):
+        compile_minimal_semantic_problem(semantic, goal_facts=["cart_has_items"])
+
+
 def test_guarded_navigation_uses_only_confirmed_candidate_requirement():
     graph = _graph_with_edge(
         _edge(
@@ -174,8 +203,8 @@ def test_uncertain_requirement_is_reported_but_omitted():
             source_profile_fact_ids=["cart_has_items"],
             confidence=0.79,
         ),
-        source_active_facts=["cart_has_items"],
-        source_profile_fact_ids=["cart_has_items"],
+        source_active_facts=["cart_has_items", "other_verified_fact"],
+        source_profile_fact_ids=["cart_has_items", "other_verified_fact"],
     )
     semantic, report = build_semantic_planning_graph(graph)
     assert semantic.actions[0].required_facts == []
@@ -234,6 +263,39 @@ def test_duplicate_actions_and_edge_order_are_deterministic():
     assert report_a.to_dict() == report_b.to_dict()
     assert len(semantic_a.actions) == 1
     assert semantic_a.actions[0].raw_edge_ids == sorted(semantic_a.actions[0].raw_edge_ids)
+
+
+def test_preserved_fact_difference_does_not_merge_when_edge_order_is_reversed():
+    first = _edge(
+        action_name="open_checkout",
+        role="guarded_navigation",
+        source_location="shopping",
+        target_location="checkout",
+        candidate_required_facts=["cart_has_items"],
+        source_active_facts=["cart_has_items"],
+        source_profile_fact_ids=["cart_has_items"],
+    )
+    second = _edge(
+        action_name="open_checkout",
+        role="guarded_navigation",
+        source_location="shopping",
+        target_location="checkout",
+        candidate_required_facts=["other_verified_fact"],
+    )
+    graph_a = WebKobeGraph(
+        app="test", start_node_id="start", total_steps_completed=2,
+        nodes=[_node("start", active_facts=["cart_has_items", "other_verified_fact"], profile_fact_ids=["cart_has_items", "other_verified_fact"]), _node("after"), _node("other")],
+        edges=[first, second],
+    )
+    graph_b = WebKobeGraph(
+        app=graph_a.app, start_node_id=graph_a.start_node_id,
+        total_steps_completed=graph_a.total_steps_completed,
+        nodes=graph_a.nodes, edges=[second, first],
+    )
+    semantic_a, _ = build_semantic_planning_graph(graph_a)
+    semantic_b, _ = build_semantic_planning_graph(graph_b)
+    assert semantic_a.to_dict() == semantic_b.to_dict()
+    assert len(semantic_a.actions) == 2
 
 
 def test_conflicting_start_locations_are_reported_without_choosing_one():

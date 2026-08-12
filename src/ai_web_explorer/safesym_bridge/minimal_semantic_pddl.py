@@ -68,7 +68,8 @@ def _render_action(action: SemanticAction, action_name: str) -> list[str]:
     effects.append(_at(action.target_location))
     effects.extend(_atom(fact) for fact in action.added_facts)
     effects.extend(f"(not {_atom(fact)})" for fact in action.removed_facts)
-    effects.extend(_atom(fact) for fact in action.preserved_facts)
+    # Required facts persist under STRIPS frame semantics unless removed;
+    # preserved_facts is metadata, never a fact-producing effect.
     effects = _unique(effects)
     lines = [
         f"  (:action {action_name}",
@@ -97,7 +98,6 @@ def compile_minimal_semantic_domain(
                 *[fact for action in graph.actions for fact in action.required_facts],
                 *[fact for action in graph.actions for fact in action.added_facts],
                 *[fact for action in graph.actions for fact in action.removed_facts],
-                *[fact for action in graph.actions for fact in action.preserved_facts],
             ]
             if _predicate(fact)
         }
@@ -192,7 +192,6 @@ def compile_minimal_semantic_problem(
             *[fact for action in graph.actions for fact in action.required_facts],
             *[fact for action in graph.actions for fact in action.added_facts],
             *[fact for action in graph.actions for fact in action.removed_facts],
-            *[fact for action in graph.actions for fact in action.preserved_facts],
         ]
     }
     normalized_goal_location = _predicate(goal_location) if goal_location is not None else None

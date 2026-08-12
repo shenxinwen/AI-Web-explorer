@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from ai_web_explorer.grounded_web.business_profile import (
@@ -30,6 +30,10 @@ class VisualDeltaRequest:
     profile: BusinessFlowProfile | None = None
     before_signature: dict[str, Any] | None = None
     after_signature: dict[str, Any] | None = None
+    source_location_hint: str | None = None
+    source_location_hint_confirmed: bool = True
+    allowed_location_ids: list[str] = field(default_factory=list)
+    current_location_context: str | None = None
 
 
 @dataclass(frozen=True)
@@ -87,9 +91,28 @@ def _prompt_for_request(request: VisualDeltaRequest) -> str:
             "pagination, counts, selections, or styling changed. A modal, drawer, "
             "or workspace may be a new location when it becomes the active business "
             "surface. Do not infer hidden state. Do not copy every visible fact into "
-            "candidate_required_facts."
+            "candidate_required_facts. The action_role must be exactly one of "
+            "the following: presentation_capability (visible sorting, filtering, "
+            "searching, pagination, or view-mode completion at the current "
+            "surface), state_mutation (visible change to business/application "
+            "state), navigation (movement to another visible surface without a "
+            "guarded business prerequisite), guarded_navigation (navigation that "
+            "requires a verified business fact), form_completion (visible "
+            "completion of a required form), commit (a visible commit boundary "
+            "such as final submission), unknown (insufficient evidence). Use "
+            "source_location as the stable anchor supplied below. For ordinary "
+            "sorting, filtering, searching, pagination, counts, selections, or "
+            "styling, source_location and target_location must remain that same "
+            "anchor. Only an active business surface change may introduce a new "
+            "target_location. Do not invent a new location on every step."
         ),
         "action": action,
+        "location_context": {
+            "source_location_hint": request.source_location_hint,
+            "source_location_hint_confirmed": request.source_location_hint_confirmed,
+            "allowed_location_ids": list(request.allowed_location_ids),
+            "current_location_context": request.current_location_context,
+        },
         "required_json_fields": [
             "candidate_added_facts",
             "candidate_removed_facts",
@@ -160,7 +183,9 @@ def _visual_change_kind(value: Any) -> str:
     return "unknown"
 
 
-def _semantic_observation(parsed: dict[str, Any]) -> SemanticObservation | None:
+def _semantic_observation(
+    parsed: dict[str, Any], request: VisualDeltaRequest
+) -> SemanticObservation | None:
     observation = semantic_observation_from_dict(parsed)
     if observation is None:
         return None
@@ -170,6 +195,15 @@ def _semantic_observation(parsed: dict[str, Any]) -> SemanticObservation | None:
         or not observation.target_location
     ):
         return None
+    if request.source_location_hint and request.source_location_hint_confirmed:
+        source_hint = request.source_location_hint.strip().lower()
+        if observation.source_location != source_hint:
+            return None
+        if (
+            observation.action_role == "presentation_capability"
+            and observation.target_location != source_hint
+        ):
+            return None
     if observation.action_role != "presentation_capability":
         observation = SemanticObservation(
             action_role=observation.action_role,
@@ -250,7 +284,7 @@ def summarize_visual_delta(
     return VisualDeltaResult(
         planning_delta=delta,
         visual_change_kind=visual_change_kind,
-        semantic_observation=_semantic_observation(parsed),
+        semantic_observation=_semantic_observation(parsed, request),
         trace=_trace(
             prompt=prompt,
             raw_response=raw_response,

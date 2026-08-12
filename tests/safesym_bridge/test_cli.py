@@ -168,6 +168,33 @@ def test_semantic_projection_falls_back_without_semantic_observations(tmp_path):
     assert (output_dir / "domain.pddl").exists()
 
 
+def test_semantic_fallback_does_not_silently_ignore_explicit_goal(tmp_path):
+    graph_path = tmp_path / "historical_graph.json"
+    output_dir = tmp_path / "fallback_goal"
+    _write_semantic_projection_graph(graph_path, with_semantics=False)
+
+    assert (
+        main(
+            [
+                "web-kobe-phase-a",
+                "--graph",
+                str(graph_path),
+                "--projection",
+                "semantic",
+                "--goal-location",
+                "checkout",
+                "--output",
+                str(output_dir),
+            ]
+        )
+        == 1
+    )
+    report = json.loads(
+        (output_dir / "semantic_projection_report.json").read_text(encoding="utf-8")
+    )
+    assert report["fallback_goal_handled"] is False
+
+
 def _write_resume_graph(path: Path, *, app: str = "demo", failed: bool = True) -> None:
     node = WebKobeNode(
         node_id="start",

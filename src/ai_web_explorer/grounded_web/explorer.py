@@ -421,6 +421,19 @@ class WebKobeExplorer:
         visual_delta_facts = ([], [])
         visual_change_kind = "unknown"
         semantic_observation = None
+        source_node = self.manager.node_for_id(source_id)
+        source_location_hint = (
+            source_node.semantic_location_hint
+            or source_node.node_label
+            or slug_identifier(source_node.page_frame.page_type, fallback="")
+        ) or None
+        allowed_location_ids = sorted(
+            {
+                node.semantic_location_hint
+                for node in self.manager.to_graph().nodes
+                if node.semantic_location_hint
+            }
+        )
         if (
             observation_allowed
             and self.visual_delta_provider is not None
@@ -435,6 +448,14 @@ class WebKobeExplorer:
                     after_screenshot_path=after_screenshot_path,
                     before_signature=before.signature,
                     after_signature=after.signature,
+                    source_location_hint=source_location_hint,
+                    source_location_hint_confirmed=bool(
+                        source_node.semantic_location_hint
+                    ),
+                    allowed_location_ids=allowed_location_ids,
+                    current_location_context=(
+                        source_node.state_summary or source_node.page_description
+                    ),
                 ),
                 provider=self.visual_delta_provider,
             )
@@ -474,6 +495,14 @@ class WebKobeExplorer:
         )
 
         target_node = _node_from_draft(after_draft)
+        target_node = replace(
+            target_node,
+            semantic_location_hint=(
+                semantic_observation.target_location
+                if semantic_observation is not None
+                else source_location_hint
+            ),
+        )
         if not observation_allowed or not state_changed:
             target_node = self.manager.node_for_id(source_id)
         elif not path_changed:

@@ -36,6 +36,18 @@ def _bounded_strings(value: object, *, normalize: bool = True) -> list[str]:
     return result
 
 
+def _normalized_strings(value: object, *, normalize: bool = True) -> list[str]:
+    """Read persisted graph lists without the VLM observation bound."""
+    if not isinstance(value, list):
+        return []
+    result: list[str] = []
+    for item in value:
+        normalized = normalize_semantic_id(item) if normalize else str(item).strip()
+        if normalized and normalized not in result:
+            result.append(normalized)
+    return result
+
+
 def _bounded_evidence(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
@@ -184,11 +196,11 @@ def semantic_action_from_dict(data: dict[str, Any]) -> SemanticAction:
         action_role=_role(data.get("action_role", "unknown")),
         source_location=_location(data.get("source_location", "")),
         target_location=_location(data.get("target_location", "")),
-        required_facts=_bounded_strings(data.get("required_facts", [])),
-        added_facts=_bounded_strings(data.get("added_facts", [])),
-        removed_facts=_bounded_strings(data.get("removed_facts", [])),
-        preserved_facts=_bounded_strings(data.get("preserved_facts", [])),
-        raw_edge_ids=_bounded_strings(data.get("raw_edge_ids", []), normalize=False),
+        required_facts=_normalized_strings(data.get("required_facts", [])),
+        added_facts=_normalized_strings(data.get("added_facts", [])),
+        removed_facts=_normalized_strings(data.get("removed_facts", [])),
+        preserved_facts=_normalized_strings(data.get("preserved_facts", [])),
+        raw_edge_ids=_normalized_strings(data.get("raw_edge_ids", []), normalize=False),
         evidence=_bounded_evidence(data.get("evidence", [])),
     )
 
@@ -196,10 +208,10 @@ def semantic_action_from_dict(data: dict[str, Any]) -> SemanticAction:
 def semantic_planning_graph_from_dict(data: dict[str, Any]) -> SemanticPlanningGraph:
     return SemanticPlanningGraph(
         start_location=_location(data.get("start_location", "")),
-        locations=_bounded_strings(data.get("locations", [])),
-        capability_facts=_bounded_strings(data.get("capability_facts", [])),
-        business_facts=_bounded_strings(data.get("business_facts", [])),
-        initial_business_facts=_bounded_strings(data.get("initial_business_facts", [])),
+        locations=_normalized_strings(data.get("locations", [])),
+        capability_facts=_normalized_strings(data.get("capability_facts", [])),
+        business_facts=_normalized_strings(data.get("business_facts", [])),
+        initial_business_facts=_normalized_strings(data.get("initial_business_facts", [])),
         actions=[
             semantic_action_from_dict(item)
             for item in data.get("actions", [])

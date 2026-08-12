@@ -155,6 +155,7 @@ class WebKobeNode:
     state_summary: str | None = None
     naming_provenance: dict[str, Any] | None = None
     planning_state: PlanningState | None = None
+    semantic_location_hint: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -189,6 +190,7 @@ class WebKobeNode:
                 if self.planning_state is not None
                 else None
             ),
+            "semantic_location_hint": self.semantic_location_hint,
         }
 
 

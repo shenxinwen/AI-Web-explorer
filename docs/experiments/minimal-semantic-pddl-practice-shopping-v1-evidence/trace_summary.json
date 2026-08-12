@@ -1,0 +1,9 @@
+{
+  "runs": [
+    {"kind": "initial", "steps_requested": 5, "checkpoint_written": true},
+    {"kind": "resume_frontier_replay", "steps_requested": 3, "reused_checkpoint": true},
+    {"kind": "resume_validation", "steps_requested": 1, "reused_checkpoint": true}
+  ],
+  "raw_artifacts": "Local temporary files only; full graph/traces/screenshots are not committed",
+  "experiment_status": "did not reach open_checkout"
+}

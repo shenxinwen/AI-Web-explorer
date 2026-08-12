@@ -200,12 +200,9 @@ def build_semantic_planning_graph(
             kind="business_required",
             source="verified_profile_requirement",
         )
-        preserved = _unique_sorted(
-            [
-                *required_facts,
-                *(planning_delta.preserved_profile_facts if planning_delta else []),
-            ]
-        )
+        # Only a verified profile requirement is eligible for preservation.
+        # Other active/preserved profile facts are not action effects.
+        preserved = _unique_sorted(required_facts)
         preserved = [fact for fact in preserved if fact not in verified_removed]
         business_facts.update(preserved)
         locations.update({source_location, target_location})
@@ -236,6 +233,7 @@ def build_semantic_planning_graph(
             tuple(action.required_facts),
             tuple(action.added_facts),
             tuple(action.removed_facts),
+            tuple(action.preserved_facts),
         )
         existing = merged.get(key)
         if existing is None:
@@ -257,6 +255,7 @@ def build_semantic_planning_graph(
             action.required_facts,
             action.added_facts,
             action.removed_facts,
+            action.preserved_facts,
         ),
     )
     used_action_ids: set[str] = set()

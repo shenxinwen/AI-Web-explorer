@@ -241,3 +241,19 @@ def test_compact_payload_preserves_semantic_observation_for_projection():
     edge = payload.compact_graph["edges"][0]
     assert edge["semantic_observation"]["source_location"] == "shopping"
     assert edge["semantic_observation"]["completion_facts"] == ["products_sorted"]
+
+
+def test_compact_payload_preserves_semantic_location_hint():
+    graph = _verbose_graph_fixture()
+    graph = type(graph)(
+        app=graph.app,
+        start_node_id=graph.start_node_id,
+        total_steps_completed=graph.total_steps_completed,
+        nodes=[
+            type(node)(**{**node.__dict__, "semantic_location_hint": "shopping"})
+            for node in graph.nodes
+        ],
+        edges=graph.edges,
+    )
+    payload = build_graph_artifact_payload(graph)
+    assert payload.compact_graph["nodes"][0]["semantic_location_hint"] == "shopping"

@@ -59,12 +59,10 @@ PDDL。该偏差保留在 `stagehand_trace*.json` 与 `graph_evidence.json` 中�
 
 ## 产物
 
-- Raw Graph：[graph.json](minimal-semantic-pddl-practice-shopping-v1/graph.json)
-- Raw evidence：[graph_evidence.json](minimal-semantic-pddl-practice-shopping-v1/graph_evidence.json)
-- 初次 trace：[stagehand_trace.json](minimal-semantic-pddl-practice-shopping-v1/stagehand_trace.json)
-- Resume traces：[stagehand_trace_resume.json](minimal-semantic-pddl-practice-shopping-v1/stagehand_trace_resume.json)、[stagehand_trace_resume2.json](minimal-semantic-pddl-practice-shopping-v1/stagehand_trace_resume2.json)
-- Semantic projection：[semantic_projection](minimal-semantic-pddl-practice-shopping-v1/semantic_projection)
-- Location V1 fallback：[location_fallback](minimal-semantic-pddl-practice-shopping-v1/location_fallback)
+- 可提交的精简证据：[graph_summary.json](minimal-semantic-pddl-practice-shopping-v1-evidence/graph_summary.json)、[trace_summary.json](minimal-semantic-pddl-practice-shopping-v1-evidence/trace_summary.json)
+- Semantic projection 报告：[semantic_projection_report.json](minimal-semantic-pddl-practice-shopping-v1-evidence/semantic_projection_report.json)
+- SafeSym 报告：[safesym_report.json](minimal-semantic-pddl-practice-shopping-v1-evidence/safesym_report.json)
+- 完整 raw graph、trace、截图和 projection 目录是本地临时产物，不纳入仓库；本文不链接这些未提交文件。
 
 ## SafeSym
 
@@ -81,8 +79,7 @@ safe planner: pass
 safety actions inserted: none (本图未包含敏感动作)
 ```
 
-SafeSym 报告在
-`minimal-semantic-pddl-practice-shopping-v1/location_fallback/safesym_smoke_report.json`。
+SafeSym 精简报告见上面的已提交 `safesym_report.json`；完整 smoke 输出仅保留在本地临时目录。
 
 ## 已知限制
 
