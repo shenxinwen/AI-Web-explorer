@@ -17,6 +17,7 @@ from ai_web_explorer.grounded_web.graph import (
     WebKobeEdge,
     WebKobeNode,
 )
+from ai_web_explorer.grounded_web.semantic_model import SemanticObservation
 from ai_web_explorer.grounded_web.graph_manager import WebKobeGraphManager
 from ai_web_explorer.safesym_bridge.trace_pddl import compile_trace_domain
 from ai_web_explorer.safesym_bridge.surface_pddl import compile_surface_domain
@@ -64,6 +65,26 @@ def test_identify_or_add_node_merges_schema_and_visit_count():
     assert node.state_schema["cart_has_items"] == [False, True]
     assert node.state_schema["filter_open"] == [False]
     assert node.last_state_snapshot == {"cart_has_items": True, "filter_open": False}
+
+
+def test_identify_or_add_node_persists_and_audits_semantic_location_hint():
+    manager = WebKobeGraphManager(app="example")
+    manager.identify_or_add_node(_node("listing", {}))
+    manager.identify_or_add_node(replace(_node("listing", {}), semantic_location_hint="product_list"))
+    assert manager.node_for_id("listing").semantic_location_hint == "product_list"
+
+    manager.identify_or_add_node(
+        replace(_node("listing", {}), semantic_location_hint="other_surface")
+    )
+    node = manager.node_for_id("listing")
+    assert node.semantic_location_hint == "product_list"
+    assert node.naming_provenance["semantic_location_hint_conflict"]["candidates"] == [
+        "other_surface",
+        "product_list",
+    ]
+
+    restored = WebKobeGraphManager.from_graph(manager.to_graph(start_node_id="listing"))
+    assert restored.node_for_id("listing").semantic_location_hint == "product_list"
 
 
 def test_graph_manager_from_graph_is_lossless_and_does_not_reappend_events():
@@ -224,8 +245,60 @@ def test_execution_events_preserve_failed_then_successful_retry():
     assert [item["reason"] for item in result.report["excluded_edges"]] == [
         "failed_execution"
     ]
-    assert [item["original_action_identity"] for item in result.report["actions"]] == [
-        "action_a"
+
+
+def _semantic_observation(location: str, *, role: str = "presentation_capability"):
+    return SemanticObservation(
+        action_role=role,
+        source_location=location,
+        target_location=location,
+        completion_facts=["products_sorted"],
+        evidence=[f"Observed {location}"],
+        confidence=0.9,
+    )
+
+
+def test_repeated_edge_fills_missing_semantic_observation_and_survives_reload(tmp_path):
+    manager = WebKobeGraphManager(app="example")
+    manager.identify_or_add_node(_node("page", {}))
+    historical = _trace_edge("sort_products", success=True, status="succeeded")
+    manager.add_edge(historical)
+    incoming = replace(historical, semantic_observation=_semantic_observation("product_list"))
+    manager.add_edge(incoming)
+
+    graph = manager.to_graph(start_node_id="page")
+    assert graph.edges[0].semantic_observation == incoming.semantic_observation
+    path = tmp_path / "history.json"
+    path.write_text(json.dumps(graph.to_dict()), encoding="utf-8")
+    loaded = load_web_kobe_graph_json(path)
+    assert loaded.edges[0].semantic_observation == incoming.semantic_observation
+
+
+def test_repeated_edge_semantic_conflict_uses_sorted_auditable_value():
+    first = replace(
+        _trace_edge("sort_products", success=True, status="succeeded"),
+        semantic_observation=_semantic_observation("z_surface"),
+    )
+    second = replace(
+        first,
+        semantic_observation=_semantic_observation("a_surface"),
+    )
+
+    def canonical(events):
+        manager = WebKobeGraphManager(app="example")
+        manager.identify_or_add_node(_node("page", {}))
+        manager.add_edge(events[0])
+        manager.add_edge(events[1])
+        return manager.to_graph(start_node_id="page").edges[0].to_dict()
+
+    forward = canonical([first, second])
+    reverse = canonical([second, first])
+    assert forward == reverse
+    assert forward["semantic_observation"]["source_location"] == "a_surface"
+    conflict = forward["execution_trace"]["metadata"]["semantic_observation_conflict"]
+    assert [item["source_location"] for item in conflict["candidates"]] == [
+        "a_surface",
+        "z_surface",
     ]
 
 

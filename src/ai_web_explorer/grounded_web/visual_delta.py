@@ -12,6 +12,7 @@ from ai_web_explorer.grounded_web.business_profile import (
 from ai_web_explorer.grounded_web.graph import BrowserAction
 from ai_web_explorer.grounded_web.semantic_model import (
     SemanticObservation,
+    normalize_semantic_id,
     semantic_observation_from_dict,
 )
 
@@ -196,7 +197,7 @@ def _semantic_observation(
     ):
         return None
     if request.source_location_hint and request.source_location_hint_confirmed:
-        source_hint = request.source_location_hint.strip().lower()
+        source_hint = normalize_semantic_id(request.source_location_hint)
         if observation.source_location != source_hint:
             return None
         if (

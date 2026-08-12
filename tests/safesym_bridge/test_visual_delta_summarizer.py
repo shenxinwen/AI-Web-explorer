@@ -72,6 +72,29 @@ def test_visual_delta_extracts_location_role_and_completion_fact():
     assert result.semantic_observation.completion_facts == ["products_sorted"]
 
 
+def test_confirmed_anchor_allows_navigation_to_new_active_surface():
+    request = VisualDeltaRequest(
+        goal="Open checkout.",
+        action=BrowserAction("click", "button.checkout", "open_checkout"),
+        before_screenshot_path="before.png",
+        after_screenshot_path="after.png",
+        source_location_hint="shopping",
+        source_location_hint_confirmed=True,
+        allowed_location_ids=["shopping", "checkout"],
+    )
+
+    def provider(prompt, *, before_screenshot_path, after_screenshot_path):
+        return (
+            '{"action_role":"navigation","source_location":"shopping",'
+            '"target_location":"checkout"}'
+        )
+
+    result = summarize_visual_delta(request, provider=provider)
+    assert result.semantic_observation is not None
+    assert result.semantic_observation.source_location == "shopping"
+    assert result.semantic_observation.target_location == "checkout"
+
+
 def test_visual_delta_rejects_completion_fact_for_non_presentation_role():
     request = VisualDeltaRequest(
         goal="Open checkout.",
@@ -173,6 +196,50 @@ def test_visual_delta_rejects_invalid_role_and_location_drift():
 
     result = summarize_visual_delta(request, provider=provider)
     assert result.semantic_observation is None
+
+
+def test_visual_delta_rejects_presentation_drift_from_first_entry_anchor():
+    request = VisualDeltaRequest(
+        goal="Filter products.",
+        action=BrowserAction("click", "button.filter", "filter_products"),
+        before_screenshot_path="before.png",
+        after_screenshot_path="after.png",
+        source_location_hint="product_list",
+        source_location_hint_confirmed=True,
+    )
+
+    def provider(prompt, *, before_screenshot_path, after_screenshot_path):
+        return (
+            '{"action_role":"presentation_capability",'
+            '"source_location":"filters_panel","target_location":"search_results"}'
+        )
+
+    result = summarize_visual_delta(request, provider=provider)
+    assert result.semantic_observation is None
+
+
+def test_first_entry_sibling_presentations_share_one_anchor_fail_closed():
+    responses = [
+        '{"action_role":"presentation_capability","source_location":"filters_panel","target_location":"search_results"}',
+        '{"action_role":"presentation_capability","source_location":"sort_panel","target_location":"products"}',
+    ]
+    results = []
+    for response in responses:
+        request = VisualDeltaRequest(
+            goal="Explore listing controls.",
+            action=BrowserAction("click", None, "presentation_action"),
+            before_screenshot_path="before.png",
+            after_screenshot_path="after.png",
+            source_location_hint="product_list",
+            source_location_hint_confirmed=True,
+        )
+
+        def provider(prompt, *, before_screenshot_path, after_screenshot_path):
+            return response
+
+        results.append(summarize_visual_delta(request, provider=provider))
+
+    assert [result.semantic_observation for result in results] == [None, None]
 
 
 def test_visual_delta_prompt_defines_bounded_change_kinds_without_profile_authority():

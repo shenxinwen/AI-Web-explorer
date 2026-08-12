@@ -39,6 +39,7 @@ from ai_web_explorer.grounded_web.exploration_index import (
 from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.grounded_web.planning_fact_verifier import verify_planning_delta
 from ai_web_explorer.grounded_web.semantic_assistor import SemanticAssistor
+from ai_web_explorer.grounded_web.semantic_model import normalize_semantic_id
 from ai_web_explorer.grounded_web.typed_delta import (
     observed_deltas_from_typed,
     typed_deltas_from_facts,
@@ -70,6 +71,13 @@ TARGET_NODE_MATCH_THRESHOLD = 0.90
 
 def _url_path(url: str) -> str:
     return urlsplit(url).path or "/"
+
+
+def _optional_semantic_id(value: object) -> str:
+    if value is None:
+        return ""
+    text = str(value).strip()
+    return normalize_semantic_id(text) if text else ""
 
 
 def _safe_vlm_state_label(value: str | None, *, fallback: str) -> str:
@@ -316,6 +324,24 @@ class WebKobeExplorer:
                 source_id=source_id,
                 before_draft=before_draft,
             )
+        source_node = self.manager.node_for_id(source_id)
+        source_anchor = next(
+            (
+                _optional_semantic_id(candidate)
+                for candidate in (
+                    source_node.semantic_location_hint,
+                    source_node.node_label,
+                    source_node.page_frame.page_type,
+                )
+                if _optional_semantic_id(candidate)
+            ),
+            None,
+        )
+        if source_anchor and source_node.semantic_location_hint != source_anchor:
+            self.manager.identify_or_add_node(
+                replace(source_node, semantic_location_hint=source_anchor)
+            )
+            source_node = self.manager.node_for_id(source_id)
         self._ensure_source_embedding(
             node_id=source_id,
             before=before,
@@ -421,11 +447,10 @@ class WebKobeExplorer:
         visual_delta_facts = ([], [])
         visual_change_kind = "unknown"
         semantic_observation = None
-        source_node = self.manager.node_for_id(source_id)
         source_location_hint = (
             source_node.semantic_location_hint
-            or source_node.node_label
-            or slug_identifier(source_node.page_frame.page_type, fallback="")
+            or _optional_semantic_id(source_node.node_label)
+            or _optional_semantic_id(source_node.page_frame.page_type)
         ) or None
         allowed_location_ids = sorted(
             {
@@ -449,9 +474,7 @@ class WebKobeExplorer:
                     before_signature=before.signature,
                     after_signature=after.signature,
                     source_location_hint=source_location_hint,
-                    source_location_hint_confirmed=bool(
-                        source_node.semantic_location_hint
-                    ),
+                    source_location_hint_confirmed=bool(source_location_hint),
                     allowed_location_ids=allowed_location_ids,
                     current_location_context=(
                         source_node.state_summary or source_node.page_description

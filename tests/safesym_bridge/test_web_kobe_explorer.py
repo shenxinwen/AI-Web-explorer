@@ -2283,8 +2283,8 @@ async def test_explore_one_step_persists_semantic_observation_on_successful_edge
         return (
             '{"candidate_added_facts":["cart_has_items"],'
             '"candidate_removed_facts":[],"visual_change_kind":"state_indicator",'
-            '"action_role":"state_mutation","source_location":"shopping",'
-            '"target_location":"shopping","completion_facts":["should_not_survive"],'
+            '"action_role":"state_mutation","source_location":"listing",'
+            '"target_location":"listing","completion_facts":["should_not_survive"],'
             '"candidate_required_facts":[],"preserved_facts":[],'
             '"semantic_evidence":["The cart count changed."],'
             '"semantic_confidence":0.9}'
@@ -2298,12 +2298,13 @@ async def test_explore_one_step_persists_semantic_observation_on_successful_edge
 
     observation = graph.edges[0].semantic_observation
     assert observation is not None
-    assert observation.source_location == "shopping"
-    assert observation.target_location == "shopping"
+    assert observation.source_location == "listing"
+    assert observation.target_location == "listing"
+    assert graph.nodes[0].semantic_location_hint == "listing"
     assert observation.completion_facts == []
     assert graph.edges[0].execution_trace.metadata["visual_delta_trace"][
         "llm_response"
-    ]["source_location"] == "shopping"
+    ]["source_location"] == "listing"
 
 
 class TypedFactsAdapter(FakeAdapter):

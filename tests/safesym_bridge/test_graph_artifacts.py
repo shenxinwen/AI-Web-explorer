@@ -23,6 +23,9 @@ from ai_web_explorer.grounded_web.semantic_model import SemanticObservation
 from ai_web_explorer.safesym_bridge.graph_artifacts import (
     build_graph_artifact_payload,
 )
+from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
+    load_web_kobe_graph_json,
+)
 
 
 def _verbose_graph_fixture() -> WebKobeGraph:
@@ -257,3 +260,53 @@ def test_compact_payload_preserves_semantic_location_hint():
     )
     payload = build_graph_artifact_payload(graph)
     assert payload.compact_graph["nodes"][0]["semantic_location_hint"] == "shopping"
+
+
+def test_compact_payload_preserves_audited_location_hint_conflict():
+    graph = _verbose_graph_fixture()
+    node = graph.nodes[0]
+    node = type(node)(
+        **{
+            **node.__dict__,
+            "semantic_location_hint": "shopping",
+            "naming_provenance": {
+                "source": "deterministic_fallback",
+                "semantic_location_hint_conflict": {
+                    "candidates": ["catalog", "shopping"],
+                    "selected": "shopping",
+                },
+            },
+        }
+    )
+    graph = type(graph)(
+        app=graph.app,
+        start_node_id=graph.start_node_id,
+        total_steps_completed=graph.total_steps_completed,
+        nodes=[node, graph.nodes[1]],
+        edges=graph.edges,
+    )
+    payload = build_graph_artifact_payload(graph)
+    assert payload.compact_graph["nodes"][0]["semantic_location_hint"] == "shopping"
+    assert payload.compact_graph["nodes"][0]["naming_provenance"][
+        "semantic_location_hint_conflict"
+    ]["selected"] == "shopping"
+
+
+def test_compact_location_hint_survives_save_load(tmp_path):
+    graph = _verbose_graph_fixture()
+    node = graph.nodes[0]
+    node = type(node)(**{**node.__dict__, "semantic_location_hint": "product_list"})
+    graph = type(graph)(
+        app=graph.app,
+        start_node_id=graph.start_node_id,
+        total_steps_completed=graph.total_steps_completed,
+        nodes=[node, graph.nodes[1]],
+        edges=graph.edges,
+    )
+    path = tmp_path / "compact.json"
+    path.write_text(
+        json.dumps(build_graph_artifact_payload(graph).compact_graph),
+        encoding="utf-8",
+    )
+    loaded = load_web_kobe_graph_json(path)
+    assert loaded.nodes[0].semantic_location_hint == "product_list"

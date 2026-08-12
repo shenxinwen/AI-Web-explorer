@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import json
 from collections import OrderedDict
 from dataclasses import replace
 from typing import Any
@@ -16,6 +17,10 @@ from ai_web_explorer.grounded_web.business_profile import (
     PlanningState,
     PlanningTransition,
 )
+from ai_web_explorer.grounded_web.semantic_model import (
+    SemanticObservation,
+    normalize_semantic_id,
+)
 
 
 _REPLAY_VALIDATION_STATUS = "replay_validation_status"
@@ -23,6 +28,14 @@ _REPLAY_VALIDATION_PRIORITY = {
     "unknown": 0,
     "verified": 1,
     "unstable": 2,
+}
+_EDGE_STATUS_PRIORITY = {
+    "failed_execution": 0,
+    "no_observed_change": 1,
+    "succeeded": 2,
+    "succeeded_with_observed_change": 3,
+    "succeeded_with_navigation": 3,
+    "verified": 4,
 }
 
 
@@ -123,6 +136,101 @@ def _merge_node_naming(
     )
 
 
+def _normalized_location_hint(value: object) -> str | None:
+    normalized = normalize_semantic_id(value) if value else ""
+    return normalized or None
+
+
+def _merge_node_location_hint(
+    existing: WebKobeNode,
+    incoming: WebKobeNode,
+    naming_provenance: dict[str, Any] | None,
+) -> tuple[str | None, dict[str, Any] | None]:
+    existing_hint = _normalized_location_hint(existing.semantic_location_hint)
+    incoming_hint = _normalized_location_hint(incoming.semantic_location_hint)
+    provenance = dict(naming_provenance or {})
+    if existing_hint and incoming_hint and existing_hint != incoming_hint:
+        candidates = sorted({existing_hint, incoming_hint})
+        provenance["semantic_location_hint_conflict"] = {
+            "policy": "existing_stable_value",
+            "candidates": candidates,
+            "selected": existing_hint,
+        }
+        return existing_hint, provenance
+    return existing_hint or incoming_hint, (provenance or None)
+
+
+def _semantic_observation_fingerprint(observation: SemanticObservation) -> str:
+    return json.dumps(
+        observation.to_dict(), sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    )
+
+
+def _merge_semantic_observation(
+    existing: SemanticObservation | None,
+    incoming: SemanticObservation | None,
+    metadata: dict[str, Any],
+) -> tuple[SemanticObservation | None, dict[str, Any]]:
+    if existing is None:
+        return incoming, metadata
+    if incoming is None:
+        return existing, metadata
+    if _semantic_observation_fingerprint(existing) == _semantic_observation_fingerprint(
+        incoming
+    ):
+        return existing, metadata
+
+    conflict = metadata.get("semantic_observation_conflict", {})
+    candidates: list[dict[str, Any]] = [
+        item for item in conflict.get("candidates", []) if isinstance(item, dict)
+    ]
+    candidates.extend([existing.to_dict(), incoming.to_dict()])
+    unique: dict[str, dict[str, Any]] = {
+        _semantic_observation_fingerprint(
+            SemanticObservation(
+                action_role=item.get("action_role", "unknown"),
+                source_location=item.get("source_location", ""),
+                target_location=item.get("target_location", ""),
+                completion_facts=list(item.get("completion_facts", [])),
+                candidate_required_facts=list(item.get("candidate_required_facts", [])),
+                preserved_facts=list(item.get("preserved_facts", [])),
+                evidence=list(item.get("evidence", [])),
+                confidence=item.get("confidence"),
+            )
+        ): item
+        for item in candidates
+    }
+    ordered = [unique[key] for key in sorted(unique)]
+    selected = ordered[0]
+    selected_observation = SemanticObservation(
+        action_role=selected["action_role"],
+        source_location=selected["source_location"],
+        target_location=selected["target_location"],
+        completion_facts=list(selected.get("completion_facts", [])),
+        candidate_required_facts=list(selected.get("candidate_required_facts", [])),
+        preserved_facts=list(selected.get("preserved_facts", [])),
+        evidence=list(selected.get("evidence", [])),
+        confidence=selected.get("confidence"),
+    )
+    metadata = dict(metadata)
+    metadata["semantic_observation_conflict"] = {
+        "policy": "lexicographically_smallest_canonical_observation",
+        "candidates": ordered,
+        "selected": selected,
+    }
+    return selected_observation, metadata
+
+
+def _merge_edge_status(existing: str, incoming: str) -> str:
+    existing_priority = _EDGE_STATUS_PRIORITY.get(existing, 0)
+    incoming_priority = _EDGE_STATUS_PRIORITY.get(incoming, 0)
+    if incoming_priority > existing_priority:
+        return incoming
+    if existing_priority > incoming_priority:
+        return existing
+    return min(existing, incoming)
+
+
 def _unique_facts(*fact_lists: list[str]) -> list[str]:
     facts: list[str] = []
     for fact_list in fact_lists:
@@ -190,12 +298,20 @@ class WebKobeGraphManager:
             self._nodes[node.node_id] = replace(
                 node,
                 visit_count=max(node.visit_count, 1),
+                semantic_location_hint=_normalized_location_hint(
+                    node.semantic_location_hint
+                ),
             )
             return node.node_id
 
         node_label, state_summary, naming_provenance = _merge_node_naming(
             existing,
             node,
+        )
+        semantic_location_hint, naming_provenance = _merge_node_location_hint(
+            existing,
+            node,
+            naming_provenance,
         )
         self._nodes[node.node_id] = replace(
             existing,
@@ -220,6 +336,7 @@ class WebKobeGraphManager:
             state_summary=state_summary,
             naming_provenance=naming_provenance,
             planning_state=node.planning_state or existing.planning_state,
+            semantic_location_hint=semantic_location_hint,
         )
         return node.node_id
 
@@ -229,6 +346,21 @@ class WebKobeGraphManager:
         if existing is None:
             self._edges[edge.edge_id] = edge
         else:
+            execution_metadata = _merge_execution_trace_metadata(
+                existing.execution_trace.metadata,
+                edge.execution_trace.metadata,
+            )
+            semantic_observation, execution_metadata = _merge_semantic_observation(
+                existing.semantic_observation,
+                edge.semantic_observation,
+                execution_metadata,
+            )
+            merged_status = _merge_edge_status(existing.status, edge.status)
+            trace_source = (
+                edge.execution_trace
+                if edge.execution_trace.success or not existing.execution_trace.success
+                else existing.execution_trace
+            )
             self._edges[edge.edge_id] = replace(
                 existing,
                 visit_count=existing.visit_count + 1,
@@ -243,12 +375,15 @@ class WebKobeGraphManager:
                     else existing.visual_change_kind
                 ),
                 execution_trace=replace(
-                    edge.execution_trace,
-                    metadata=_merge_execution_trace_metadata(
-                        existing.execution_trace.metadata,
-                        edge.execution_trace.metadata,
+                    trace_source,
+                    success=(
+                        existing.execution_trace.success
+                        or edge.execution_trace.success
                     ),
+                    metadata=execution_metadata,
                 ),
+                semantic_observation=semantic_observation,
+                status=merged_status,
                 evidence=list(existing.evidence or edge.evidence),
             )
         self.total_steps_completed += 1
