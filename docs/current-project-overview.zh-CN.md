@@ -241,10 +241,10 @@ Delta observations 都不进入 Phase A 的 preconditions 或 effects。
 - 当前节点优先执行未尝试候选；动作后若有明确观察变化就生成新的 Raw observation node，若有可靠证据命中已有历史 raw observation 就复用，否则没有有效变化时留在原节点；Planning Abstraction 后续可以再把这些 Raw observations 归组。
 - 命中已有节点时继续使用该节点首次建立的固定候选，不重新生成或追加候选。
 - 当前节点候选都尝试完后，直接记录 `current_state_exhausted` 并停止，不执行 browser back；连续没有新节点或新语义转换时计为无进展，但真实 Stagehand runner 暂时不因此提前终止，最大步数仍有效。
-- 每个完成的探索动作都会写入 latest checkpoint；checkpoint 只保护已完成探索，不提供 resume、replay 或逐步历史版本。
+- 每个完成的探索动作都会写入 latest checkpoint；也可以用 `--resume-graph` 显式恢复：在新浏览器中校验入口状态、重放稳定路径到可恢复 frontier，再只用 `--steps` 预算执行新的业务尝试。历史 failed/inflight 动作默认不重试，只有 `--resume-retry-action` 精确授权且受最大尝试次数限制。恢复不还原 cookies、localStorage 或浏览器进程；目标不匹配时 fail-closed，通用 execution-event trace 保留重复尝试供审计。
 - runtime memory 只在当前节点或可靠 embedding 匹配的历史节点上下文内避免同义动作，不做全局动作屏蔽。
 
-短期先从已有 edges 反查 tried/no-op/failed 状态，不新增复杂 memory 表。旧的 selector/locator fallback 已删除；business-affordance selector 不再在候选耗尽后继续选择成功但已尝试的动作。`graph.meta` 记录 step kind/status、连续无进展和 frontier 诊断信息。后续可再评估 replay、browser back recovery 或更完整的 frontier 恢复，但不属于当前闭环。
+短期先从已有 edges 反查 tried/no-op/failed 状态，不新增复杂 memory 表。旧的 selector/locator fallback 已删除；business-affordance selector 不再在候选耗尽后继续选择成功但已尝试的动作。`graph.meta` 记录 step kind/status、连续无进展和 frontier 诊断信息。当前已支持显式 `--resume-graph` 的稳定路径 replay；更成熟的 replay 规划、browser back recovery 和 coverage 仍不属于当前闭环。
 
 ## 当前主要问题
 
@@ -276,7 +276,7 @@ SafeSym 可以结构性消费当前产物，但 PDDL 的语义质量还不稳定
 
 - candidate action ranking；
 - 更丰富的 coverage 评估；
-- replay 或 browser back recovery；
+- 更成熟的 replay 规划或 browser back recovery；
 - 跨节点的长期记忆模型。
 
 现在更像 bounded exploration V1，还不是成熟自由探索。此前实验中页面在商品列表和商品详情之间来回切换，核心原因不是 VLM 完全不会提候选，而是旧 selector 在当前节点候选都尝试完后，会回退到“非 avoid 的成功动作”，导致成功但低进展的动作被重复执行。当前修复已改为：当前节点无未尝试业务候选时返回 None 并以 `current_state_exhausted` 停止；重复的已知 transition 或连续没有新 graph information 会计为无进展。旧的 LLM action selector / OpenAI action selector 模块已删除，避免探索链路回退到 locator-driven 行为。

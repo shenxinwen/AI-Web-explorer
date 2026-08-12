@@ -176,8 +176,8 @@ embedding memory 只辅助定位和避免重复，不直接进入 PDDL。
 - 按 step budget 或 terminal condition 停止。
 - 当前节点候选耗尽时以 `current_state_exhausted` 停止，不执行 browser back；连续没有新 graph information 时累计无进展。
   真实 Stagehand runner 暂时关闭连续无进展提前终止，主要受最大步数约束。当前路线的候选耗尽和步数上限
-  是路线级终止，不提供 replay 或 browser-back recovery，也不代表全站探索完成。
-- 每个完成动作后更新 latest checkpoint（embedding、Stagehand trace、graph/evidence），正常完成后再写一次；最终 `graph.meta.exploration_summary` 记录 `requested_steps`、`steps_completed` 和 `stop_reason`。checkpoint 不提供 resume、replay、browser-back recovery 或逐步历史版本。
+  是路线级终止，不执行 browser-back recovery 或自动 replay，也不代表全站探索完成；显式 resume 才会按稳定路径执行 replay。
+- 每个完成动作后更新 latest checkpoint（embedding、Stagehand trace、graph/evidence），正常完成后再写一次；最终 `graph.meta.exploration_summary` 记录 `requested_steps`、`steps_completed` 和 `stop_reason`。`--resume-graph` 可显式 hydration 已保存 graph，在新浏览器中校验入口并重放稳定路径，再使用新的 step budget；failed/inflight 动作必须有精确 `--resume-retry-action` 授权。恢复不还原 cookies、localStorage 或浏览器进程，unstable replay target fail-closed，execution-event trace 保留重复尝试。
 
 低层 DOM interactables 可以继续作为运行时 state summary / embedding matching 的辅助输入，但不再输出到 canonical `graph.json` node，也不作为 graph memory 或探索决策单位。旧的 LLM action selector 路径已经移除，避免系统回退到 selector/locator 驱动的探索。
 

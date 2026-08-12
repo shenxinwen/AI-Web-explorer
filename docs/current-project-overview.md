@@ -369,7 +369,7 @@ The system has candidate business affordances, local tried-action memory,
 semantic action deduplication, and embedding memory, but it still lacks mature:
 
 - candidate ranking and richer duplicate/no-op penalties;
-- replay or browser-back recovery;
+- mature replay planning and browser-back recovery;
 - coverage stop conditions.
 
 It is closer to bounded exploration V1 than mature free exploration. A previous
@@ -387,8 +387,14 @@ the configured threshold. The real Stagehand runner disables that early stop:
 it continues through failed/no-op/repeated steps until the maximum step count or
 current-state exhaustion. Each completed action writes a latest checkpoint;
 normal completion adds `graph.meta.exploration_summary` with requested steps,
-completed steps, and stop reason. Checkpointing does not provide resume, replay,
-or per-step artifact history.
+completed steps, and stop reason. A saved graph can be resumed explicitly with
+`--resume-graph`: the runner opens a fresh browser, validates the entry state,
+replays a stable path to an eligible frontier, and then spends `--steps` only
+on new business attempts. Failed or inflight historical attempts are not
+retried unless the exact action is authorized with `--resume-retry-action`,
+subject to the configured attempt limit. Resume does not restore cookies,
+localStorage, or a browser process; target mismatch fails closed, and
+event-based Stagehand traces preserve repeated attempts for audit.
 
 Recent cleanup moved the generic Stagehand exploration default to
 `observed_action`, preserves VLM candidate `supporting_facts` in graph

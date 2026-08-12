@@ -21,7 +21,7 @@
 
 更改：
 - VLM Visual Affordance 只提出业务动作候选假设；本地逻辑选择一个候选，Stagehand 负责执行尝试，动作后观察负责验证可见结果。候选能力不等于已验证转换，只有成功且有观察证据支持的 edge 才能作为已验证转换。
-- `graph.json` 是可独立加载的紧凑 Raw Graph；详细执行证据通过 `graph_evidence.json` sidecar 和 `evidence_ref` 保留，`raw_graph.json` 保留输入 JSON 的原始形状。每个完成动作后由 checkpoint 配对保存 embedding、trace、graph/evidence；checkpoint 不提供 resume、replay 或 browser-back recovery。
+- `graph.json` 是可独立加载的紧凑 Raw Graph；详细执行证据通过 `graph_evidence.json` sidecar 和 `evidence_ref` 保留，`raw_graph.json` 保留输入 JSON 的原始形状。每个完成动作后由 checkpoint 配对保存 embedding、trace、graph/evidence；可用 `--resume-graph` 显式恢复到新浏览器并重放稳定路径，failed/inflight 动作只有精确 `--resume-retry-action` 才可重试；不恢复 cookies、localStorage 或浏览器进程。
 - `planning_abstraction.py` 离线把可保守合并的 presentation-equivalent raw observations 归入 Planning Graph，并聚合候选能力及精确观察 provenance；`planning_graph.json` 与 `planning_abstraction_report.json` 是离线抽象/审计产物，sidecar 不参与 PDDL。
 - profile facts 是本地 verifier 确认的、强但不完整的语义锚点/状态分界和候选谓词词表，不是网页状态全集；Visual Delta 不接收 profile facts。Visual observations 只保留在 `execution_trace.metadata.visual_delta_trace`，不进入 `PlanningState`、planning transitions、target matching planning facts 或 Phase A PDDL。embedding 只用于状态记忆、相似匹配和局部动作去重，不定义 node identity，也不是 PDDL facts。
 - Phase A 只从 Planning Graph 投影 canonical locations 和符合条件的、已观察成功的非自环业务转换，生成 `domain.pddl`；本阶段不生成 `problem.pddl`，Visual Delta、supporting facts、raw candidate facts 和 `PlanningState` 都不是 Phase A predicates、preconditions 或 effects。
@@ -42,7 +42,7 @@
 - 当前节点没有可执行候选时仍可自然提前结束；真实 runner 暂时关闭连续无进展提前终止，通用 controller 仍保留该可选机制。
 - 每个完成动作后原子更新 latest 的 embedding、Stagehand trace 和 graph/evidence；正常完成后再写一次最终结果，graph/evidence 是最后提交的配对标记。
 - 正常完成后的 `graph.meta.exploration_summary` 记录 `requested_steps`、`steps_completed` 和 `stop_reason`；中途 checkpoint 不写入尚未确定的终止摘要。
-- checkpoint 只保护已经完成的探索，不提供 resume、replay 或逐步历史版本。
+- checkpoint 既保护已经完成的探索，也支持显式 resume；`--steps` 只计恢复后的新业务尝试，历史 replay 不消耗预算。恢复不继承 blocked/no-progress 等瞬态状态，目标不匹配 fail-closed，execution events 保留重复尝试供审计。
 
 原因：
 - 真实实验中的单步 Stagehand/VLM/embedding 调用可能较慢或被外部中断；必须先保留已完成步骤，避免只在整轮结束时落盘。

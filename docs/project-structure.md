@@ -200,7 +200,7 @@ Main responsibilities:
 - stop with `current_state_exhausted` when the current node has no candidate;
 - stop by budget or an optional controller terminal condition;
 - treat candidate exhaustion and the bounded step budget as route-local
-  termination, without browser-back recovery or replay;
+  termination, without browser-back recovery or automatic replay;
 - expose an optional per-completed-step checkpoint callback. The generic
   controller retains a consecutive-unproductive threshold, while the real
   Stagehand runner disables that threshold.
@@ -291,8 +291,13 @@ completed action. `raw_graph.json`, `planning_graph.json`, and
 `planning_abstraction_report.json` are separate audit/projection artifacts;
 the sidecar is not read by Phase A.
 
-Checkpointing overwrites the latest artifacts. It protects completed work but
-does not provide resume, replay, browser-back recovery, or per-step history.
+Checkpointing overwrites the latest artifacts. `--resume-graph` can explicitly
+hydrate a saved graph in a fresh browser, validate the entry state, replay a
+stable path to an eligible frontier, and continue with a new-step budget.
+Failed/inflight attempts require exact `--resume-retry-action` authorization;
+cookies, localStorage, and browser processes are not restored, and unstable
+replay targets fail closed. The generic execution-event trace preserves
+repeated attempts while the compact graph remains independently loadable.
 
 This layer is practical glue. Keep it from growing into the source of graph or
 planning semantics.

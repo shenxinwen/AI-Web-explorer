@@ -8,13 +8,20 @@ import pytest
 from ai_web_explorer.grounded_web.controller import WebKobeExplorationController
 from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
 from ai_web_explorer.grounded_web.frontier_replay import FrontierReplayRunner
+from ai_web_explorer.grounded_web.resume import ResumePolicy, select_resume_frontier
 from ai_web_explorer.grounded_web.graph import BrowserAction
 from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.grounded_web.playwright_backend import WebKobePlaywrightAdapter
 from ai_web_explorer.grounded_web.semantic_assistor import (
     DeterministicSemanticAssistor,
 )
-from ai_web_explorer.safesym_bridge.browser_runner import run_web_kobe_exploration
+from ai_web_explorer.safesym_bridge.browser_runner import (
+    run_web_kobe_exploration,
+    write_web_kobe_graph,
+)
+from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
+    load_web_kobe_graph_json,
+)
 from ai_web_explorer.safesym_bridge.surface_pddl import (
     compile_surface_domain,
     compile_surface_problem,
@@ -358,6 +365,104 @@ async def test_frontier_replay_surface_pddl_local_fixture(tmp_path):
             )
             assert safesym_result.safe_plan_ready is True
             assert "checkpoint" not in surface_domain.domain
+        finally:
+            await browser.close()
+
+
+@pytest.mark.skipif(
+    os.getenv("RUN_WEB_KOBE_BROWSER_TEST") != "1",
+    reason="Set RUN_WEB_KOBE_BROWSER_TEST=1 to run the local resume browser fixture.",
+)
+@pytest.mark.anyio
+async def test_resumable_local_fixture_preserves_events_and_adds_new_edge(tmp_path):
+    from playwright.async_api import async_playwright
+
+    candidates_seen = 0
+
+    def visual_provider(prompt, *, current_screenshot_path=None, **kwargs):
+        nonlocal candidates_seen
+        if current_screenshot_path is None:
+            return (
+                '{"visible_change_summary":"observed",'
+                '"candidate_added_facts":[],"candidate_removed_facts":[],'
+                '"evidence":[],"confidence":0.5}'
+            )
+        candidates_seen += 1
+        candidates = {
+            1: ["open_product", "sort", "filter"],
+            2: ["inspect_product"],
+        }.get(candidates_seen, [])
+        return json.dumps(
+            {
+                "business_affordances": [
+                    {
+                        "action_name": action,
+                        "label": action,
+                        "relevance_hint": "core",
+                        "confidence": 0.9,
+                    }
+                    for action in candidates
+                ],
+                "state_summary": "fixture surface",
+            }
+        )
+
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(headless=True)
+        first_page = await browser.new_page()
+        second_page = await browser.new_page()
+        try:
+            await first_page.set_content(FRONTIER_REPLAY_FIXTURE_HTML)
+            first_adapter = _FrontierFixtureAdapter(
+                first_page,
+                screenshot_dir=tmp_path / "first-screenshots",
+            )
+            first_explorer = WebKobeExplorer(
+                adapter=first_adapter,
+                semantic_assistor=_FrontierFixtureSemanticAssistor(app="fixture"),
+                visual_delta_provider=visual_provider,
+                capture_screenshots=True,
+                max_candidates=5,
+            )
+            first_result = await WebKobeExplorationController(
+                first_explorer,
+                max_consecutive_unproductive_steps=None,
+            ).run(max_steps=1)
+            assert first_result.summary.steps_completed == 1
+            assert len(first_result.graph.execution_events) == 1
+
+            baseline_path = tmp_path / "baseline.json"
+            write_web_kobe_graph(first_result.graph, baseline_path)
+            baseline = load_web_kobe_graph_json(baseline_path)
+
+            await second_page.set_content(FRONTIER_REPLAY_FIXTURE_HTML)
+            second_adapter = _FrontierFixtureAdapter(
+                second_page,
+                screenshot_dir=tmp_path / "second-screenshots",
+            )
+            second_explorer = WebKobeExplorer(
+                adapter=second_adapter,
+                semantic_assistor=_FrontierFixtureSemanticAssistor(app="fixture"),
+                capture_screenshots=True,
+                max_candidates=5,
+            )
+            second_explorer.restore_graph(baseline)
+            target = select_resume_frontier(baseline, policy=ResumePolicy())
+            assert target is not None
+            assert target.path
+            replay_result = await FrontierReplayRunner(second_explorer).replay(
+                target,
+                start_url="http://fixture.test/shop",
+            )
+            assert replay_result.success is True
+
+            resumed = await second_explorer.explore_one_step()
+            assert resumed.total_steps_completed == baseline.total_steps_completed + 1
+            assert resumed.execution_events[: len(baseline.execution_events)] == (
+                baseline.execution_events
+            )
+            assert len(resumed.execution_events) == len(baseline.execution_events) + 1
+            assert "inflight_action" not in resumed.meta
         finally:
             await browser.close()
 
