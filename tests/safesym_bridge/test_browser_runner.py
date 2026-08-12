@@ -225,6 +225,49 @@ def test_stagehand_checkpoint_writes_embedding_trace_then_graph(
     assert calls == ["embedding", "trace", "graph"]
 
 
+def test_stagehand_checkpoint_trace_uses_ordered_execution_events(tmp_path, monkeypatch):
+    graph = _transactional_graph("duplicate_action")
+    failed = replace(
+        graph.edges[0],
+        status="failed_execution",
+        execution_trace=replace(
+            graph.edges[0].execution_trace,
+            success=False,
+            error="failed",
+            metadata={"action_source": "stagehand", "attempt_id": "a1"},
+        ),
+    )
+    succeeded = replace(
+        graph.edges[0],
+        execution_trace=replace(
+            graph.edges[0].execution_trace,
+            metadata={"action_source": "stagehand", "attempt_id": "a2"},
+        ),
+    )
+    graph = replace(graph, edges=[succeeded], execution_events=[failed, succeeded])
+    captured = []
+    monkeypatch.setattr(
+        browser_runner,
+        "_write_text_atomically",
+        lambda path, text: captured.append(json.loads(text)) or path,
+    )
+    monkeypatch.setattr(
+        browser_runner,
+        "write_web_kobe_graph",
+        lambda graph, path: path,
+    )
+
+    browser_runner._write_stagehand_checkpoint(
+        graph,
+        output_path=tmp_path / "graph.json",
+        embedding_path=None,
+        embedding_records=[],
+        stagehand_trace_path=tmp_path / "trace.json",
+    )
+
+    assert [item["attempt_id"] for item in captured[0]] == ["a1", "a2"]
+
+
 def test_stagehand_checkpoint_writes_graph_without_optional_artifacts(
     tmp_path, monkeypatch
 ):
@@ -1326,12 +1369,8 @@ async def test_run_stagehand_exploration_bootstraps_resume_without_spending_new_
     assert isinstance(calls[3][1], dict), calls
     controller_kwargs = calls[3][1]
     assert controller_kwargs["historical_steps"] == 4
-    assert controller_kwargs["replay_metric_baseline"] == {
-        "replay_attempt_count": 0,
-        "replay_success_count": 0,
-        "replay_failure_count": 0,
-        "replay_mismatch_count": 0,
-    }
+    assert controller_kwargs["replay_metric_baseline"]["replay_attempt_count"] == 1
+    assert controller_kwargs["replay_metric_baseline"]["replay_success_count"] == 1
 
 
 @pytest.mark.anyio

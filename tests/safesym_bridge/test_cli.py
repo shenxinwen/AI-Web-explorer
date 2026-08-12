@@ -1148,6 +1148,42 @@ def test_main_web_kobe_stagehand_explore_loads_resume_and_resolves_retry(
     }
 
 
+def test_main_web_kobe_stagehand_explore_copies_baseline_to_different_output(
+    monkeypatch, tmp_path
+):
+    input_path = tmp_path / "input" / "graph.json"
+    output_path = tmp_path / "output" / "graph.json"
+    input_path.parent.mkdir()
+    _write_resume_graph(input_path)
+    seen = []
+
+    async def fake_run(output, **kwargs):
+        seen.append(output)
+        assert output.exists()
+        assert json.loads(output.read_text(encoding="utf-8"))["meta"]["app"] == "demo"
+        return output
+
+    monkeypatch.setattr(cli, "run_stagehand_exploration", fake_run, raising=False)
+
+    assert (
+        main(
+            [
+                "web-kobe-stagehand-explore",
+                "--url",
+                "https://fixture.test/shop",
+                "--app-name",
+                "demo",
+                "--output",
+                str(output_path),
+                "--resume-graph",
+                str(input_path),
+            ]
+        )
+        == 0
+    )
+    assert seen == [output_path]
+
+
 @pytest.mark.parametrize(
     "extra_args, expected_error",
     [

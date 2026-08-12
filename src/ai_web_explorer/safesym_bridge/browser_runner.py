@@ -678,7 +678,24 @@ async def run_stagehand_exploration(
                     resume_graph,
                     policy=resume_policy or ResumePolicy(),
                 )
+                bootstrap_metrics = {
+                    "replay_attempt_count": int(
+                        (replay_metric_baseline or {}).get("replay_attempt_count", 0)
+                    ),
+                    "replay_success_count": int(
+                        (replay_metric_baseline or {}).get("replay_success_count", 0)
+                    ),
+                    "replay_failure_count": int(
+                        (replay_metric_baseline or {}).get("replay_failure_count", 0)
+                    ),
+                    "replay_mismatch_count": int(
+                        (replay_metric_baseline or {}).get("replay_mismatch_count", 0)
+                    ),
+                    "last_replay_reason": None,
+                    "blocked_replay_node_ids": [],
+                }
                 if resume_target is None:
+                    resume_graph.meta.update(bootstrap_metrics)
                     resume_graph.meta["exploration_summary"] = {
                         "requested_steps": max(steps, 0),
                         "steps_completed": 0,
@@ -695,14 +712,26 @@ async def run_stagehand_exploration(
                         explorer.prefer_resume_action(key)
                         break
                 resume_replay_runner = FrontierReplayRunner(explorer)
+                bootstrap_metrics["replay_attempt_count"] += 1
                 replay_result = await resume_replay_runner.replay(
                     resume_target,
                     start_url=start_url,
                 )
+                bootstrap_metrics["last_replay_reason"] = replay_result.reason
                 if not replay_result.success:
+                    bootstrap_metrics["replay_failure_count"] += 1
+                    if replay_result.reason in {
+                        "entry_state_mismatch",
+                        "target_state_mismatch",
+                    }:
+                        bootstrap_metrics["replay_mismatch_count"] += 1
+                    bootstrap_metrics["blocked_replay_node_ids"] = [
+                        resume_target.node_id
+                    ]
                     failed_graph = explorer.manager.to_graph(
                         start_node_id=explorer.start_node_id,
                     )
+                    failed_graph.meta.update(bootstrap_metrics)
                     failed_graph.meta["exploration_summary"] = {
                         "requested_steps": max(steps, 0),
                         "steps_completed": 0,
@@ -712,6 +741,8 @@ async def run_stagehand_exploration(
                     }
                     checkpoint(failed_graph)
                     return output_path
+                bootstrap_metrics["replay_success_count"] += 1
+                replay_metric_baseline = bootstrap_metrics
 
             controller_kwargs = {
                 "max_consecutive_unproductive_steps": None,

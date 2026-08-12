@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 
 from ai_web_explorer.grounded_web.capability_graph import ExecutionTrace, PageFrame
@@ -210,6 +212,37 @@ async def test_controller_uses_historical_step_and_replay_metric_baselines():
     assert result.graph.meta["replay_success_count"] == 2
     assert result.graph.meta["replay_failure_count"] == 1
     assert result.graph.meta["replay_mismatch_count"] == 1
+
+
+@pytest.mark.anyio
+async def test_controller_adds_new_replay_to_historical_metrics_without_inheriting_blocked_state():
+    graph = replace(_frontier_graph(), total_steps_completed=7)
+    graph.meta["blocked_replay_node_ids"] = ["stale-frontier"]
+    explorer = ReplayFakeExplorer(
+        [graph, _graph(completed=8)],
+        ReplayResult(True, "frontier", None, "replay_succeeded", 1),
+    )
+    controller = WebKobeExplorationController(
+        explorer,
+        frontier_replay_runner=explorer,
+        start_url="https://fixture.test/shop",
+        historical_steps=7,
+        replay_metric_baseline={
+            "replay_attempt_count": 4,
+            "replay_success_count": 2,
+            "replay_failure_count": 1,
+            "replay_mismatch_count": 1,
+        },
+    )
+
+    result = await controller.run(max_steps=1)
+
+    assert result.summary.steps_completed == 1
+    assert result.graph.meta["replay_attempt_count"] == 5
+    assert result.graph.meta["replay_success_count"] == 3
+    assert result.graph.meta["replay_failure_count"] == 1
+    assert result.graph.meta["replay_mismatch_count"] == 1
+    assert result.graph.meta["blocked_replay_node_ids"] == []
 
 
 @pytest.mark.anyio

@@ -751,7 +751,11 @@ def main(argv: list[str] | None = None) -> int:
                         resume_graph,
                         args.resume_retry_action,
                     ),
-                    max_attempts=args.resume_action_max_attempts,
+                    max_attempts=(
+                        args.resume_action_max_attempts
+                        if args.resume_retry_action
+                        else 2
+                    ),
                 )
             if args.clean_output_dir:
                 _clean_output_dir_for(
