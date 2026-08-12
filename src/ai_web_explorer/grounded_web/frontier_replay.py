@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, Iterable, TYPE_CHECKING
+from typing import Any, Callable, Iterable, TYPE_CHECKING
 
 from ai_web_explorer.grounded_web.graph import WebKobeEdge, WebKobeGraph
 
@@ -107,6 +107,7 @@ def select_frontier(
     *,
     blocked_node_ids: Iterable[str] = (),
     include_start: bool = False,
+    action_eligible: Callable[[str, str], bool] | None = None,
 ) -> FrontierTarget | None:
     """Select the nearest reachable node that still has an untried candidate.
 
@@ -154,7 +155,14 @@ def select_frontier(
             untried = tuple(
                 action_id
                 for action_id in candidates
-                if action_id not in tried_by_source.get(node_id, set())
+                if (
+                    action_id not in tried_by_source.get(node_id, set())
+                    or (action_eligible is not None and action_eligible(node_id, action_id))
+                )
+                and (
+                    action_eligible is None
+                    or action_eligible(node_id, action_id)
+                )
             )
             if untried:
                 return FrontierTarget(

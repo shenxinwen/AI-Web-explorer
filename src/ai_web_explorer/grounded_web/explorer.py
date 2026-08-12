@@ -55,6 +55,11 @@ from ai_web_explorer.grounded_web.visual_delta import (
     VisualDeltaRequest,
     summarize_visual_delta,
 )
+from ai_web_explorer.grounded_web.resume import (
+    ActionAttemptKey,
+    ResumePolicy,
+    is_action_eligible,
+)
 
 
 OBSERVATION_WAIT_TIMEOUT_MS = 1200
@@ -232,6 +237,7 @@ class WebKobeExplorer:
         enable_exploration_memory: bool = False,
         max_candidates: int = 5,
         attempt_checkpoint: Callable[[WebKobeGraph], None] | None = None,
+        resume_policy: ResumePolicy | None = None,
     ):
         if max_candidates < 1:
             raise ValueError("max_candidates must be at least 1.")
@@ -247,6 +253,8 @@ class WebKobeExplorer:
         self.state_embedding_records = list(state_embedding_records or [])
         self.enable_exploration_memory = enable_exploration_memory
         self.attempt_checkpoint = attempt_checkpoint
+        self.resume_policy = resume_policy
+        self._preferred_resume_action_key: ActionAttemptKey | None = None
         self.manager = WebKobeGraphManager(app=adapter.app_name)
         self._start_node_id: str | None = None
         self._current_node_id: str | None = None
@@ -267,6 +275,9 @@ class WebKobeExplorer:
         self._visual_affordance_observed_node_ids = {
             node.node_id for node in graph.nodes if node.business_affordances
         }
+
+    def prefer_resume_action(self, key: ActionAttemptKey) -> None:
+        self._preferred_resume_action_key = key
 
     async def explore_one_step(self) -> WebKobeGraph:
         before = await self.adapter.observe_state()
@@ -1037,8 +1048,22 @@ class WebKobeExplorer:
             reverse=True,
         )
         for affordance in ranked:
+            action_id = affordance.action_name
+            preferred = self._preferred_resume_action_key
+            if preferred is not None and preferred == ActionAttemptKey(
+                exploration_context.current_node_id, action_id
+            ):
+                self._preferred_resume_action_key = None
+                return _business_action_from_affordance(affordance)
+            if self.resume_policy is not None and not is_action_eligible(
+                self.manager.to_graph(start_node_id=self._start_node_id),
+                source_node_id=exploration_context.current_node_id,
+                action_id=action_id,
+                policy=self.resume_policy,
+            ):
+                continue
             if semantically_matches_action(
-                affordance.action_name,
+                action_id,
                 exploration_context.avoid_action_ids,
                 embedding_provider=self.action_embedding_provider,
             ):
