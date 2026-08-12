@@ -23,6 +23,12 @@ from ai_web_explorer.grounded_web.business_profile import (
     PlanningTransition,
     ecommerce_checkout_profile,
 )
+from ai_web_explorer.grounded_web.location_exploration import (
+    ExplorationLimits,
+    LocationExplorationCoordinator,
+    LocationExplorationMemory,
+)
+from ai_web_explorer.grounded_web.resume import ResumePolicy
 from ai_web_explorer.grounded_web.semantic_assistor import (
     DeterministicSemanticAssistor,
 )
@@ -1550,6 +1556,47 @@ def test_business_affordance_selection_does_not_downrank_action_completed_elsewh
 
     assert selected is not None
     assert selected.semantic_id == "add_item_to_cart"
+
+
+def test_location_memory_retryable_candidate_ignores_legacy_resume_policy():
+    memory = LocationExplorationMemory(
+        limits=ExplorationLimits(max_action_attempts_per_candidate=2)
+    )
+    affordance = BusinessAffordance(
+        action_name="retry_sort",
+        label="Retry sort",
+        relevance_hint="core",
+    )
+    memory.merge_scan("shopping", [affordance], kind="initial")
+    memory.record_attempt("shopping", "retry_sort", observable_change=False)
+    coordinator = LocationExplorationCoordinator(memory=memory)
+    explorer = WebKobeExplorer(
+        adapter=FakeAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        location_exploration_coordinator=coordinator,
+        resume_policy=ResumePolicy(),
+    )
+    explorer._start_node_id = "shopping"
+    explorer.manager.identify_or_add_node(_selection_node("shopping"))
+    explorer.manager.add_edge(
+        replace(
+            _selection_edge("shopping", "shopping", "retry_sort"),
+            status="failed_execution",
+        )
+    )
+
+    selected = explorer._select_business_affordance_action(
+        exploration_context=ExplorationContext(
+            current_node_id="shopping",
+            reference_node_id="shopping",
+            is_revisit=False,
+            tried_action_ids=(),
+            avoid_action_ids=(),
+        )
+    )
+
+    assert selected is not None
+    assert selected.semantic_id == "retry_sort"
 
 
 def test_business_action_snapshots_supporting_facts_without_expected_effect_text():

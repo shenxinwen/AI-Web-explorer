@@ -918,11 +918,31 @@ async def run_stagehand_exploration(
                 replay_metric_baseline = bootstrap_metrics
 
             controller_kwargs = {
-                "max_consecutive_unproductive_steps": None,
+                "max_consecutive_unproductive_steps": (
+                    limits.max_consecutive_no_progress
+                    if location_scoped and limits is not None
+                    else None
+                ),
                 "step_checkpoint": checkpoint,
             }
             if location_scoped and limits is not None:
                 controller_kwargs["limits"] = limits
+                if resume_graph is not None:
+                    controller_kwargs["runtime_budget_state"] = {
+                        key: resume_graph.meta.get(key)
+                        for key in (
+                            "formal_action_attempts",
+                            "consecutive_no_progress",
+                            "semantic_progress_count",
+                            "replay_attempt_count",
+                            "replay_success_count",
+                            "replay_failure_count",
+                            "replay_mismatch_count",
+                            "frontier_replay_attempts",
+                            "blocked_replay_node_ids",
+                        )
+                        if key in resume_graph.meta
+                    }
             if frontier_replay or resume_graph is not None:
                 controller_kwargs.update(
                     {

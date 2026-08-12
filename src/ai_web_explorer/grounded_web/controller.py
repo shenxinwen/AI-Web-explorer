@@ -18,6 +18,73 @@ SUCCESS_EDGE_STATUSES = frozenset(
 )
 
 StepCheckpoint = Callable[[WebKobeGraph], None]
+RUNTIME_BUDGET_META_KEY = "exploration_runtime_state"
+
+
+@dataclass
+class ExplorationRuntimeState:
+    formal_action_attempts: int = 0
+    consecutive_no_progress: int = 0
+    semantic_progress_count: int = 0
+    replay_attempt_count: int = 0
+    replay_success_count: int = 0
+    replay_failure_count: int = 0
+    replay_mismatch_count: int = 0
+    frontier_replay_attempts: dict[str, int] | None = None
+    blocked_replay_node_ids: list[str] | None = None
+
+    @classmethod
+    def from_graph(cls, graph: WebKobeGraph | None) -> "ExplorationRuntimeState":
+        if graph is None:
+            return cls(frontier_replay_attempts={}, blocked_replay_node_ids=[])
+        payload = graph.meta.get(RUNTIME_BUDGET_META_KEY)
+        if not isinstance(payload, dict):
+            payload = graph.meta
+        return cls(
+            formal_action_attempts=int(payload.get("formal_action_attempts", 0)),
+            consecutive_no_progress=int(
+                payload.get(
+                    "consecutive_no_progress",
+                    payload.get("consecutive_unproductive_steps", 0),
+                )
+            ),
+            semantic_progress_count=int(payload.get("semantic_progress_count", 0)),
+            replay_attempt_count=int(payload.get("replay_attempt_count", 0)),
+            replay_success_count=int(payload.get("replay_success_count", 0)),
+            replay_failure_count=int(payload.get("replay_failure_count", 0)),
+            replay_mismatch_count=int(payload.get("replay_mismatch_count", 0)),
+            frontier_replay_attempts={
+                str(key): int(value)
+                for key, value in (
+                    payload.get("frontier_replay_attempts", {})
+                    if isinstance(payload.get("frontier_replay_attempts", {}), dict)
+                    else {}
+                ).items()
+            },
+            blocked_replay_node_ids=[
+                str(item)
+                for item in (
+                    payload.get("blocked_replay_node_ids", [])
+                    if isinstance(payload.get("blocked_replay_node_ids", []), list)
+                    else []
+                )
+            ],
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "formal_action_attempts": self.formal_action_attempts,
+            "consecutive_no_progress": self.consecutive_no_progress,
+            "semantic_progress_count": self.semantic_progress_count,
+            "replay_attempt_count": self.replay_attempt_count,
+            "replay_success_count": self.replay_success_count,
+            "replay_failure_count": self.replay_failure_count,
+            "replay_mismatch_count": self.replay_mismatch_count,
+            "frontier_replay_attempts": dict(
+                sorted((self.frontier_replay_attempts or {}).items())
+            ),
+            "blocked_replay_node_ids": sorted(self.blocked_replay_node_ids or []),
+        }
 
 
 class StepExplorer(Protocol):
@@ -104,6 +171,7 @@ class WebKobeExplorationController:
         replay_metric_baseline: Mapping[str, int] | None = None,
         historical_steps: int = 0,
         limits: ExplorationLimits | None = None,
+        runtime_budget_state: Mapping[str, Any] | None = None,
     ):
         self.explorer = explorer
         self.terminal_condition = terminal_condition
@@ -119,6 +187,26 @@ class WebKobeExplorationController:
         self.historical_steps = historical_steps
         self.limits = limits or ExplorationLimits()
         self._limits_explicit = limits is not None
+        self.runtime_budget_state = dict(runtime_budget_state or {})
+
+    def _initial_graph(self) -> WebKobeGraph | None:
+        manager = getattr(self.explorer, "manager", None)
+        to_graph = getattr(manager, "to_graph", None)
+        if to_graph is None:
+            return None
+        try:
+            return to_graph()
+        except (AttributeError, TypeError):
+            return None
+
+    def _write_runtime_state(
+        self,
+        graph: WebKobeGraph,
+        state: ExplorationRuntimeState,
+    ) -> None:
+        payload = state.to_dict()
+        graph.meta[RUNTIME_BUDGET_META_KEY] = payload
+        graph.meta.update(payload)
 
     async def run(self, *, max_steps: int | None = None) -> WebKobeExplorationResult:
         if max_steps is None:
@@ -128,24 +216,81 @@ class WebKobeExplorationController:
                 else 1
             )
         requested_steps = max(max_steps, 0)
-        graph: WebKobeGraph | None = None
+        graph: WebKobeGraph | None = self._initial_graph()
+        state = ExplorationRuntimeState.from_graph(graph)
+        state_payload = self.runtime_budget_state
+        if state_payload:
+            state = ExplorationRuntimeState.from_graph(
+                WebKobeGraph(
+                    app="",
+                    start_node_id="",
+                    total_steps_completed=0,
+                    meta=state_payload,
+                )
+            )
         baseline_completed = 0
         previous_completed = 0
         stop_reason = "max_steps"
-        consecutive_unproductive_steps = 0
-        blocked_replay_node_ids: set[str] = set()
-        frontier_replay_attempts: dict[str, int] = {}
-        semantic_progress_count = 0
+        consecutive_unproductive_steps = state.consecutive_no_progress
+        blocked_replay_node_ids: set[str] = set(state.blocked_replay_node_ids or [])
+        frontier_replay_attempts: dict[str, int] = dict(
+            state.frontier_replay_attempts or {}
+        )
+        semantic_progress_count = state.semantic_progress_count
         replay_metrics = {
-            "replay_attempt_count": int(self.replay_metric_baseline.get("replay_attempt_count", 0)),
-            "replay_success_count": int(self.replay_metric_baseline.get("replay_success_count", 0)),
-            "replay_failure_count": int(self.replay_metric_baseline.get("replay_failure_count", 0)),
-            "replay_mismatch_count": int(self.replay_metric_baseline.get("replay_mismatch_count", 0)),
+            "replay_attempt_count": max(
+                state.replay_attempt_count,
+                int(self.replay_metric_baseline.get("replay_attempt_count", 0)),
+            ),
+            "replay_success_count": max(
+                state.replay_success_count,
+                int(self.replay_metric_baseline.get("replay_success_count", 0)),
+            ),
+            "replay_failure_count": max(
+                state.replay_failure_count,
+                int(self.replay_metric_baseline.get("replay_failure_count", 0)),
+            ),
+            "replay_mismatch_count": max(
+                state.replay_mismatch_count,
+                int(self.replay_metric_baseline.get("replay_mismatch_count", 0)),
+            ),
             "last_replay_reason": None,
         }
         replay_enabled = (
             self.frontier_replay_runner is not None and self.start_url is not None
         )
+
+        available_formal_attempts = requested_steps
+        if self._limits_explicit:
+            available_formal_attempts = min(
+                available_formal_attempts,
+                max(self.limits.max_exploration_steps - state.formal_action_attempts, 0),
+            )
+
+        if self._limits_explicit and available_formal_attempts == 0:
+            if graph is None:
+                graph = WebKobeGraph(
+                    app="",
+                    start_node_id="",
+                    total_steps_completed=state.formal_action_attempts,
+                )
+            state.replay_attempt_count = int(replay_metrics["replay_attempt_count"])
+            self._write_runtime_state(graph, state)
+            return WebKobeExplorationResult(
+                graph=graph,
+                summary=_summary(
+                    graph,
+                    requested_steps=requested_steps,
+                    baseline_completed=graph.total_steps_completed,
+                    stop_reason="max_exploration_steps_reached",
+                    consecutive_unproductive_steps=consecutive_unproductive_steps,
+                    max_consecutive_unproductive_steps=self.max_consecutive_unproductive_steps,
+                    historical_steps=self.historical_steps,
+                    semantic_progress_count=semantic_progress_count,
+                    replay_attempt_count=int(replay_metrics["replay_attempt_count"]),
+                    frontier_replay_attempts=dict(sorted(frontier_replay_attempts.items())),
+                ),
+            )
 
         def apply_replay_metrics(target_graph: WebKobeGraph) -> WebKobeGraph:
             if not replay_enabled:
@@ -160,8 +305,13 @@ class WebKobeExplorationController:
                 )
             return target_graph
 
-        for index in range(requested_steps):
+        for index in range(available_formal_attempts):
             graph = await self.explorer.explore_one_step()
+            state.formal_action_attempts = max(
+                state.formal_action_attempts,
+                int(graph.meta.get("formal_action_attempts", 0)),
+                int(graph.total_steps_completed),
+            )
             if index == 0 and self._limits_explicit:
                 persisted_frontier_attempts = graph.meta.get(
                     "frontier_replay_attempts", {}
@@ -249,8 +399,20 @@ class WebKobeExplorationController:
                     apply_replay_metrics(graph)
                     continue
                 replay_metrics["replay_success_count"] += 1
+                if (
+                    self._limits_explicit
+                    and state.formal_action_attempts
+                    >= self.limits.max_exploration_steps
+                ):
+                    stop_reason = "max_exploration_steps_reached"
+                    break
                 next_graph = await self.explorer.explore_one_step()
                 graph = apply_replay_metrics(next_graph)
+                state.formal_action_attempts = max(
+                    state.formal_action_attempts,
+                    int(graph.meta.get("formal_action_attempts", 0)),
+                    int(graph.total_steps_completed),
+                )
                 if (
                     graph.total_steps_completed == previous_completed
                     and graph.meta.get("last_step_kind") == "current_state_exhausted"
@@ -280,6 +442,15 @@ class WebKobeExplorationController:
                 self.max_consecutive_unproductive_steps
             )
             apply_replay_metrics(graph)
+            state.consecutive_no_progress = consecutive_unproductive_steps
+            state.semantic_progress_count = semantic_progress_count
+            state.replay_attempt_count = int(replay_metrics["replay_attempt_count"])
+            state.replay_success_count = int(replay_metrics["replay_success_count"])
+            state.replay_failure_count = int(replay_metrics["replay_failure_count"])
+            state.replay_mismatch_count = int(replay_metrics["replay_mismatch_count"])
+            state.frontier_replay_attempts = dict(frontier_replay_attempts)
+            state.blocked_replay_node_ids = sorted(blocked_replay_node_ids)
+            self._write_runtime_state(graph, state)
             if self.step_checkpoint is not None:
                 self.step_checkpoint(graph)
             if (
@@ -307,6 +478,15 @@ class WebKobeExplorationController:
                 total_steps_completed=baseline_completed,
             )
         apply_replay_metrics(graph)
+        state.consecutive_no_progress = consecutive_unproductive_steps
+        state.semantic_progress_count = semantic_progress_count
+        state.replay_attempt_count = int(replay_metrics["replay_attempt_count"])
+        state.replay_success_count = int(replay_metrics["replay_success_count"])
+        state.replay_failure_count = int(replay_metrics["replay_failure_count"])
+        state.replay_mismatch_count = int(replay_metrics["replay_mismatch_count"])
+        state.frontier_replay_attempts = dict(frontier_replay_attempts)
+        state.blocked_replay_node_ids = sorted(blocked_replay_node_ids)
+        self._write_runtime_state(graph, state)
 
         return WebKobeExplorationResult(
             graph=graph,

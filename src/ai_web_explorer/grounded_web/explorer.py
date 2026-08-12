@@ -466,6 +466,16 @@ class WebKobeExplorer:
             self.manager.meta["last_step_graph_changed"] = False
             return self.manager.to_graph(start_node_id=self._start_node_id)
 
+        if self.location_scoped_exploration:
+            formal_attempts = int(self.manager.meta.get("formal_action_attempts", 0))
+            max_attempts = self.location_exploration_coordinator.memory.limits.max_exploration_steps
+            if formal_attempts >= max_attempts:
+                self.manager.meta["last_step_kind"] = "formal_action_budget_exhausted"
+                self.manager.meta["last_step_status"] = "unproductive"
+                self.manager.meta["last_step_graph_changed"] = False
+                self.manager.meta["last_step_semantic_progress"] = False
+                return self.manager.to_graph(start_node_id=self._start_node_id)
+
         attempt_id = self._begin_action_attempt(
             source_id=source_id,
             action=selected,
@@ -835,6 +845,10 @@ class WebKobeExplorer:
 
     def _begin_action_attempt(self, *, source_id: str, action: BrowserAction) -> str:
         attempt_id = uuid.uuid4().hex
+        if self.location_scoped_exploration:
+            self.manager.meta["formal_action_attempts"] = int(
+                self.manager.meta.get("formal_action_attempts", 0)
+            ) + 1
         self.manager.meta["inflight_action"] = {
             "attempt_id": attempt_id,
             "source_node_id": source_id,
@@ -946,7 +960,13 @@ class WebKobeExplorer:
     def mark_replay_edge_validation(self, edge_id: str, status: str) -> None:
         self.manager.update_edge_replay_validation(edge_id, status)
 
-    async def validate_current_node(self, expected_node_id: str) -> bool:
+    async def validate_current_node(
+        self,
+        expected_node_id: str,
+        *,
+        expected_semantic_location: str | None = None,
+        expected_business_facts: tuple[str, ...] = (),
+    ) -> bool:
         """Check the observed surface against an existing graph node."""
         try:
             expected = self.manager.node_for_id(expected_node_id)
@@ -976,6 +996,20 @@ class WebKobeExplorer:
                 if item.get("semantic_id") or item.get("canonical_action_name")
             }
             if expected_actions and expected_actions != actual_actions:
+                return False
+        if expected_semantic_location:
+            observed_location = normalize_semantic_id(
+                draft.page_frame.page_type or snapshot.page_id
+            )
+            if observed_location != normalize_semantic_id(expected_semantic_location):
+                return False
+        for fact_id in expected_business_facts:
+            value = snapshot.signature.get(fact_id)
+            if value is not True and not (
+                isinstance(value, (int, float))
+                and not isinstance(value, bool)
+                and value > 0
+            ):
                 return False
         self._set_current_node(expected_node_id)
         return True
@@ -1386,13 +1420,6 @@ class WebKobeExplorer:
                 ):
                     self._preferred_resume_action_key = None
                     return _business_action_from_affordance(affordance)
-                if self.resume_policy is not None and not is_action_eligible(
-                    self.manager.to_graph(start_node_id=self._start_node_id),
-                    source_node_id=exploration_context.current_node_id,
-                    action_id=affordance.action_name,
-                    policy=self.resume_policy,
-                ):
-                    return None
                 return _business_action_from_affordance(affordance)
 
         if not node.business_affordances:

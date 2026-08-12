@@ -833,3 +833,72 @@ async def test_replay_blocks_each_frontier_after_two_failures_and_stops_at_four(
         "frontier_b": 2,
     }
     assert result.summary.stop_reason == "total_replay_limit_reached"
+
+
+@pytest.mark.anyio
+async def test_resume_formal_attempt_budget_allows_only_remaining_attempts():
+    explorer = FakeExplorer(
+        [
+            _graph(
+                completed=19,
+                meta={
+                    "formal_action_attempts": 19,
+                    "last_step_semantic_progress": True,
+                },
+            ),
+            _graph(
+                completed=21,
+                meta={
+                    "formal_action_attempts": 21,
+                    "last_step_semantic_progress": True,
+                },
+            ),
+        ]
+    )
+    controller = WebKobeExplorationController(
+        explorer,
+        limits=ExplorationLimits(max_exploration_steps=20),
+            runtime_budget_state={"formal_action_attempts": 19},
+    )
+
+    result = await controller.run()
+
+    assert explorer.calls == 1
+    assert result.summary.steps_completed == 1
+
+
+@pytest.mark.anyio
+async def test_resume_no_progress_budget_allows_only_remaining_attempts():
+    explorer = FakeExplorer(
+        [
+            _graph(
+                completed=20,
+                meta={
+                    "formal_action_attempts": 2,
+                    "consecutive_unproductive_steps": 2,
+                    "last_step_semantic_progress": False,
+                },
+            ),
+            _graph(
+                completed=21,
+                meta={
+                    "formal_action_attempts": 3,
+                    "consecutive_unproductive_steps": 3,
+                    "last_step_semantic_progress": False,
+                },
+            ),
+        ]
+    )
+    controller = WebKobeExplorationController(
+        explorer,
+        limits=ExplorationLimits(max_consecutive_no_progress=3),
+        runtime_budget_state={
+            "formal_action_attempts": 2,
+            "consecutive_no_progress": 2,
+        },
+    )
+
+    result = await controller.run()
+
+    assert explorer.calls == 1
+    assert result.summary.stop_reason == "consecutive_no_progress_limit_reached"

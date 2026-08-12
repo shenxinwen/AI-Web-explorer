@@ -39,6 +39,8 @@ class FrontierTarget:
     node_id: str
     path: tuple[ReplayStep, ...]
     untried_action_ids: tuple[str, ...]
+    semantic_location: str | None = None
+    required_business_facts: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -79,7 +81,6 @@ class FrontierReplayRunner:
                     completed_steps,
                 )
             if not await self.explorer.validate_current_node(step.target_node_id):
-                self._mark_edge(step.edge_id, "unstable")
                 return ReplayResult(
                     False,
                     None,
@@ -87,8 +88,21 @@ class FrontierReplayRunner:
                     "target_state_mismatch",
                     completed_steps,
                 )
-            self._mark_edge(step.edge_id, "verified")
             completed_steps += 1
+        if not await self.explorer.validate_current_node(
+            target.node_id,
+            expected_semantic_location=getattr(target, "semantic_location", None),
+            expected_business_facts=getattr(target, "required_business_facts", ()),
+        ):
+            return ReplayResult(
+                False,
+                None,
+                None,
+                "target_business_facts_mismatch"
+                if getattr(target, "required_business_facts", ())
+                else "target_state_mismatch",
+                completed_steps,
+            )
         return ReplayResult(
             True,
             target.node_id,
@@ -96,15 +110,6 @@ class FrontierReplayRunner:
             "replay_succeeded",
             completed_steps,
         )
-
-    def _mark_edge(self, edge_id: str, status: str) -> None:
-        mark = getattr(self.explorer, "mark_replay_edge_validation", None)
-        if mark is not None:
-            try:
-                mark(edge_id, status)
-            except KeyError:
-                pass
-
 
 def select_frontier(
     graph: WebKobeGraph,
@@ -177,6 +182,10 @@ def select_frontier(
                     node_id=node_id,
                     path=_path_to(node_id, parent),
                     untried_action_ids=untried,
+                    semantic_location=_node_semantic_location(node),
+                    required_business_facts=_required_facts_for_candidates(
+                        node, untried
+                    ),
                 )
 
         for edge in adjacency.get(node_id, []):
@@ -225,7 +234,15 @@ def reachable_frontier_for_node(
                 and action_eligible(node_id, action.action_name)
             )
             if candidates:
-                return FrontierTarget(node_id, _path_to(node_id, parent), candidates)
+                return FrontierTarget(
+                    node_id,
+                    _path_to(node_id, parent),
+                    candidates,
+                    semantic_location=_node_semantic_location(target_node),
+                    required_business_facts=_required_facts_for_candidates(
+                        target_node, candidates
+                    ),
+                )
             return None
         for edge in adjacency.get(current, []):
             if edge.target_node_id not in parent:
@@ -263,6 +280,34 @@ def _candidate_action_ids(node) -> tuple[str, ...]:
             if affordance.action_name
         )
     )
+
+
+def _node_semantic_location(node) -> str | None:
+    for value in (
+        getattr(node, "semantic_location_hint", None),
+        getattr(node, "node_label", None),
+        getattr(getattr(node, "page_frame", None), "page_type", None),
+    ):
+        normalized = normalize_semantic_id(value) if value else ""
+        if normalized:
+            return normalized
+    return None
+
+
+def _required_facts_for_candidates(
+    node,
+    action_ids: Iterable[str],
+) -> tuple[str, ...]:
+    wanted = set(action_ids)
+    facts: set[str] = set()
+    for affordance in getattr(node, "business_affordances", ()):
+        if affordance.action_name in wanted:
+            facts.update(
+                normalize_semantic_id(fact)
+                for fact in affordance.supporting_facts
+                if normalize_semantic_id(fact)
+            )
+    return tuple(sorted(facts))
 
 
 def _location_memory(graph: WebKobeGraph) -> LocationExplorationMemory | None:

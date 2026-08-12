@@ -1,5 +1,4 @@
 import pytest
-import json
 
 from ai_web_explorer.grounded_web.capability_graph import ExecutionTrace, PageFrame
 from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
@@ -17,11 +16,6 @@ from ai_web_explorer.grounded_web.graph import (
 )
 from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.grounded_web.semantic_assistor import DeterministicSemanticAssistor
-from ai_web_explorer.safesym_bridge.surface_pddl import compile_surface_domain
-from ai_web_explorer.safesym_bridge.trace_pddl import compile_trace_domain
-from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
-    load_web_kobe_graph_json,
-)
 
 
 @pytest.fixture
@@ -305,7 +299,7 @@ async def test_frontier_replay_resets_executes_and_validates_without_graph_edges
             "path": (_replay_step("start", "target", "open_target"),),
         },
     )()
-    initial_edge_count = len(explorer.manager.to_graph().edges)
+    before_graph = explorer.manager.to_graph().to_dict()
 
     result = await FrontierReplayRunner(explorer).replay(
         target,
@@ -317,7 +311,58 @@ async def test_frontier_replay_resets_executes_and_validates_without_graph_edges
     assert result.completed_steps == 1
     assert adapter.reset_calls == ["https://fixture.test/shop"]
     assert adapter.executed == ["open_target"]
-    assert len(explorer.manager.to_graph().edges) == initial_edge_count
+    assert explorer.manager.to_graph().to_dict() == before_graph
+
+@pytest.mark.anyio
+async def test_frontier_replay_does_not_mutate_edge_metadata_on_success_or_failure():
+    adapter = _ReplayAdapter(
+        [
+            StateSnapshot("start", "https://fixture.test/shop", "start", {"surface": "start"}),
+            StateSnapshot("target", "https://fixture.test/shop", "target", {"surface": "target"}),
+        ]
+    )
+    explorer = _replay_explorer(adapter)
+    target = type(
+        "Target",
+        (),
+        {"node_id": "target", "path": (_replay_step("start", "target", "open_target"),)},
+    )()
+    before = explorer.manager.to_graph().to_dict()
+
+    result = await FrontierReplayRunner(explorer).replay(
+        target,
+        start_url="https://fixture.test/shop",
+    )
+
+    assert result.success is True
+    assert explorer.manager.to_graph().to_dict() == before
+
+
+@pytest.mark.anyio
+async def test_frontier_replay_rejects_missing_required_business_fact():
+    adapter = _ReplayAdapter(
+        [StateSnapshot("start", "https://fixture.test/shop", "start", {"surface": "start"})]
+    )
+    explorer = _replay_explorer(adapter)
+    target = type(
+        "Target",
+        (),
+        {
+            "node_id": "start",
+            "path": (),
+            "semantic_location": "shopping",
+            "required_business_facts": ("cart_has_items",),
+        },
+    )()
+
+    result = await FrontierReplayRunner(explorer).replay(
+        target,
+        start_url="https://fixture.test/shop",
+    )
+
+    assert result.success is False
+    assert result.reason == "target_business_facts_mismatch"
+    assert adapter.executed == []
 
 
 @pytest.mark.anyio
@@ -402,8 +447,7 @@ async def test_frontier_replay_stops_on_action_failure_without_observation():
 
 
 @pytest.mark.anyio
-async def test_replay_mismatch_marks_existing_edge_unstable_across_graph_roundtrip(
-    tmp_path,
+async def test_replay_mismatch_does_not_mutate_existing_edge_across_graph_roundtrip(
 ):
     adapter = _ReplayAdapter(
         [
@@ -421,6 +465,7 @@ async def test_replay_mismatch_marks_existing_edge_unstable_across_graph_roundtr
         },
     )()
     explorer.manager.add_edge(target.path[0].edge)
+    before_graph = explorer.manager.to_graph().to_dict()
 
     result = await FrontierReplayRunner(explorer).replay(
         target,
@@ -428,20 +473,4 @@ async def test_replay_mismatch_marks_existing_edge_unstable_across_graph_roundtr
     )
 
     assert result.reason == "target_state_mismatch"
-    current_edge = explorer.manager.to_graph().edges[0]
-    assert current_edge.execution_trace.metadata["replay_validation_status"] == (
-        "unstable"
-    )
-
-    graph_path = tmp_path / "graph.json"
-    graph_path.write_text(
-        json.dumps(explorer.manager.to_graph().to_dict()),
-        encoding="utf-8",
-    )
-    restored = load_web_kobe_graph_json(graph_path)
-    restored_edge = restored.edges[0]
-    assert restored_edge.execution_trace.metadata["replay_validation_status"] == (
-        "unstable"
-    )
-    assert "open_target" not in compile_surface_domain(restored).domain
-    assert "open_target" in compile_trace_domain(restored).domain
+    assert explorer.manager.to_graph().to_dict() == before_graph
