@@ -222,9 +222,10 @@ def _write_stagehand_checkpoint(
     if embedding_path is not None:
         write_state_embedding_records(embedding_path, embedding_records)
     if stagehand_trace_path is not None:
+        trace_edges = graph.execution_events or graph.edges
         traces = [
             edge.execution_trace.metadata
-            for edge in graph.edges
+            for edge in trace_edges
             if edge.execution_trace.metadata.get("action_source") == "stagehand"
         ]
         _write_text_atomically(
@@ -626,6 +627,8 @@ async def run_stagehand_exploration(
                     embedding_records=explorer.state_embedding_records,
                     stagehand_trace_path=stagehand_trace_path,
                 )
+
+            explorer.attempt_checkpoint = checkpoint
 
             controller_kwargs = {
                 "max_consecutive_unproductive_steps": None,

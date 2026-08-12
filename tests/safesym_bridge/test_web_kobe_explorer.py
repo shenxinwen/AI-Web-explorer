@@ -147,6 +147,7 @@ def _business_explorer(
     state_embedding_records=None,
     enable_exploration_memory: bool = False,
     goal: str = "Explore the web task.",
+    attempt_checkpoint=None,
 ):
     if not hasattr(adapter, "capture_screenshot"):
         captured_labels = []
@@ -168,6 +169,7 @@ def _business_explorer(
         state_embedding_provider=state_embedding_provider,
         state_embedding_records=state_embedding_records,
         enable_exploration_memory=enable_exploration_memory,
+        attempt_checkpoint=attempt_checkpoint,
     )
 
 
@@ -769,6 +771,63 @@ class StagehandThinkingFailureVisualChangeAdapter(ScreenshotAdapter):
         self.executed.append(action)
         self.last_execution_error = "Thinking mode does not support this tool_choice"
         return False
+
+
+class AssertingExecuteAdapter(FakeAdapter):
+    def __init__(self, before_execute):
+        super().__init__()
+        self.before_execute = before_execute
+
+    async def execute(self, action: BrowserAction):
+        self.before_execute()
+        self.executed.append(action)
+        return True
+
+
+@pytest.mark.anyio
+async def test_explorer_checkpoints_inflight_before_adapter_execution():
+    snapshots = []
+    adapter = AssertingExecuteAdapter(
+        before_execute=lambda: snapshots.append("adapter_execute")
+    )
+    explorer = _business_explorer(
+        adapter,
+        attempt_checkpoint=lambda graph: snapshots.append(graph.to_dict()),
+    )
+
+    graph = await explorer.explore_one_step()
+
+    inflight = snapshots[0]["meta"]["inflight_action"]
+    assert inflight["source_node_id"] == graph.edges[0].source_node_id
+    assert inflight["action_id"] == graph.edges[0].action.semantic_id
+    assert inflight["attempt_id"]
+    assert snapshots[1] == "adapter_execute"
+    assert "inflight_action" not in graph.meta
+    assert graph.execution_events[-1].execution_trace.metadata["attempt_id"] == (
+        inflight["attempt_id"]
+    )
+
+
+class RaisingExecuteAdapter(FakeAdapter):
+    async def execute(self, action: BrowserAction):
+        self.executed.append(action)
+        raise RuntimeError("execute interrupted")
+
+
+@pytest.mark.anyio
+async def test_execute_exception_leaves_durable_inflight_without_event():
+    snapshots = []
+    explorer = _business_explorer(
+        RaisingExecuteAdapter(),
+        attempt_checkpoint=lambda graph: snapshots.append(graph.to_dict()),
+    )
+
+    with pytest.raises(RuntimeError, match="execute interrupted"):
+        await explorer.explore_one_step()
+
+    assert len(snapshots) == 1
+    assert explorer.manager.to_graph().execution_events == []
+    assert "inflight_action" in explorer.manager.meta
 
 
 class StagehandThinkingFailureUrlChangeAdapter(

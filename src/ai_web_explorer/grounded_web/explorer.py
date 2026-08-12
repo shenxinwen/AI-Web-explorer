@@ -3,8 +3,9 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import uuid
 from dataclasses import replace
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import urlsplit
 
 from ai_web_explorer.grounded_web.automation_backend import AutomationBackend
@@ -230,6 +231,7 @@ class WebKobeExplorer:
         state_embedding_records: list[StateEmbeddingRecord] | None = None,
         enable_exploration_memory: bool = False,
         max_candidates: int = 5,
+        attempt_checkpoint: Callable[[WebKobeGraph], None] | None = None,
     ):
         if max_candidates < 1:
             raise ValueError("max_candidates must be at least 1.")
@@ -244,6 +246,7 @@ class WebKobeExplorer:
         self.action_embedding_provider = action_embedding_provider
         self.state_embedding_records = list(state_embedding_records or [])
         self.enable_exploration_memory = enable_exploration_memory
+        self.attempt_checkpoint = attempt_checkpoint
         self.manager = WebKobeGraphManager(app=adapter.app_name)
         self._start_node_id: str | None = None
         self._current_node_id: str | None = None
@@ -331,6 +334,10 @@ class WebKobeExplorer:
             self.manager.meta["last_step_graph_changed"] = False
             return self.manager.to_graph(start_node_id=self._start_node_id)
 
+        attempt_id = self._begin_action_attempt(
+            source_id=source_id,
+            action=selected,
+        )
         execution_success = await self.adapter.execute(selected)
         execution_error = getattr(self.adapter, "last_execution_error", None)
         observation_allowed = execution_success or _is_ignorable_stagehand_tool_choice_error(
@@ -378,6 +385,7 @@ class WebKobeExplorer:
             getattr(self.adapter, "last_execution_metadata", {}) or {}
         )
         execution_metadata["backend_reported_success"] = execution_success
+        execution_metadata["attempt_id"] = attempt_id
         if source_match is not None:
             execution_metadata["source_state_match"] = {
                 "status": source_match.status,
@@ -544,6 +552,7 @@ class WebKobeExplorer:
         }
         edge_was_new = _edge_novelty_key(edge) not in known_edge_keys
         self.manager.add_edge(edge)
+        self.manager.meta.pop("inflight_action", None)
         graph_changed = node_was_new or edge_was_new
         self.manager.meta["last_step_kind"] = "business_edge"
         self.manager.meta["last_step_graph_changed"] = graph_changed
@@ -559,6 +568,17 @@ class WebKobeExplorer:
         elif self._current_node_id is None:
             self._set_current_node(source_id)
         return self.manager.to_graph(start_node_id=self._start_node_id)
+
+    def _begin_action_attempt(self, *, source_id: str, action: BrowserAction) -> str:
+        attempt_id = uuid.uuid4().hex
+        self.manager.meta["inflight_action"] = {
+            "attempt_id": attempt_id,
+            "source_node_id": source_id,
+            "action_id": action.canonical_action_name or action.semantic_id,
+        }
+        if self.attempt_checkpoint is not None:
+            self.attempt_checkpoint(self.manager.to_graph(self._start_node_id))
+        return attempt_id
 
     def _match_existing_target_node(
         self,
