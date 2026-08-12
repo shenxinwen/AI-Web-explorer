@@ -41,6 +41,11 @@ from ai_web_explorer.safesym_bridge.web_kobe_safesym_smoke import (
     write_web_kobe_safesym_smoke,
 )
 from ai_web_explorer.grounded_web.stagehand_prompt import BenchmarkTaskContext
+from ai_web_explorer.grounded_web.resume import (
+    ResumePolicy,
+    resolve_retry_keys,
+    validate_resume_graph,
+)
 
 
 def _positive_int(value: str) -> int:
@@ -493,6 +498,24 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Opt in to reset-and-replay of reachable under-explored frontiers.",
     )
+    stagehand_explore_parser.add_argument(
+        "--resume-graph",
+        type=Path,
+        default=None,
+        help="Resume from a previously checkpointed graph JSON.",
+    )
+    stagehand_explore_parser.add_argument(
+        "--resume-retry-action",
+        action="append",
+        default=[],
+        help="Explicitly authorize retrying a failed or inflight action ID.",
+    )
+    stagehand_explore_parser.add_argument(
+        "--resume-action-max-attempts",
+        type=_positive_int,
+        default=2,
+        help="Maximum attempts for explicitly authorized resume actions.",
+    )
     stagehand_explore_parser.add_argument("--headed", action="store_true")
     args = parser.parse_args(argv)
 
@@ -708,6 +731,28 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
         elif args.mode == "web-kobe-stagehand-explore":
+            resume_graph = None
+            resume_policy = None
+            if args.resume_retry_action and args.resume_graph is None:
+                raise ValueError("resume retry action requires --resume-graph")
+            if args.resume_graph is not None and args.clean_output_dir:
+                raise ValueError(
+                    "--clean-output-dir cannot be combined with --resume-graph"
+                )
+            if args.resume_retry_action and args.resume_action_max_attempts < 2:
+                raise ValueError(
+                    "resume action max attempts must be at least 2"
+                )
+            if args.resume_graph is not None:
+                resume_graph = load_web_kobe_graph_json(args.resume_graph)
+                validate_resume_graph(resume_graph, app_name=args.app_name)
+                resume_policy = ResumePolicy(
+                    retry_keys=resolve_retry_keys(
+                        resume_graph,
+                        args.resume_retry_action,
+                    ),
+                    max_attempts=args.resume_action_max_attempts,
+                )
             if args.clean_output_dir:
                 _clean_output_dir_for(
                     [
@@ -717,6 +762,11 @@ def main(argv: list[str] | None = None) -> int:
                         args.embedding_path,
                     ]
                 )
+            if (
+                resume_graph is not None
+                and args.output.resolve() != args.resume_graph.resolve()
+            ):
+                write_web_kobe_graph(resume_graph, args.output)
             output_path = asyncio.run(
                 run_stagehand_exploration(
                     args.output,
@@ -737,7 +787,9 @@ def main(argv: list[str] | None = None) -> int:
                     visual_delta_model=args.visual_delta_model,
                     stagehand_execution_mode=args.stagehand_execution_mode,
                     max_candidates=args.max_candidates,
-                    frontier_replay=args.frontier_replay,
+                    frontier_replay=args.frontier_replay or resume_graph is not None,
+                    resume_graph=resume_graph,
+                    resume_policy=resume_policy,
                 )
             )
         else:

@@ -10,6 +10,7 @@ from ai_web_explorer.grounded_web.capability_graph import (
 )
 from ai_web_explorer.grounded_web.graph import (
     BrowserAction,
+    BusinessAffordance,
     WebKobeEdge,
     WebKobeGraph,
     WebKobeNode,
@@ -17,6 +18,51 @@ from ai_web_explorer.grounded_web.graph import (
 from ai_web_explorer.grounded_web.business_profile import PlanningDelta
 from ai_web_explorer.safesym_bridge import cli
 from ai_web_explorer.safesym_bridge.cli import main
+
+
+def _write_resume_graph(path: Path, *, app: str = "demo", failed: bool = True) -> None:
+    node = WebKobeNode(
+        node_id="start",
+        page_description="start",
+        page_frame=PageFrame(
+            page_id="start",
+            page_type="start",
+            url="https://fixture.test/",
+            url_pattern="https://fixture.test/",
+            title="Start",
+        ),
+        state_schema={},
+        last_state_snapshot={},
+        business_affordances=[BusinessAffordance("retry_me" if failed else "new_action")],
+    )
+    edges = []
+    if failed:
+        edges.append(
+            WebKobeEdge(
+                source_node_id="start",
+                target_node_id="start",
+                instruction="retry",
+                action=BrowserAction("click", "#retry", "retry_me"),
+                capability=None,
+                target_observation="start",
+                observed_delta=[],
+                schema_delta={},
+                execution_trace=ExecutionTrace(
+                    "click", "#retry", "retry_me", {}, "start", "start", False,
+                    error="failed",
+                ),
+                status="failed_execution",
+            )
+        )
+    graph = WebKobeGraph(
+        app=app,
+        start_node_id="start",
+        total_steps_completed=3,
+        nodes=[node],
+        edges=edges,
+        meta={"replay_attempt_count": 2},
+    )
+    path.write_text(json.dumps(graph.to_dict()), encoding="utf-8")
 
 
 def test_main_without_subcommand_prints_help():
@@ -870,6 +916,8 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
         stagehand_execution_mode="business_milestone",
         max_candidates=5,
         frontier_replay=False,
+        resume_graph=None,
+        resume_policy=None,
     ):
         calls.append(
             (
@@ -1028,6 +1076,190 @@ def test_main_web_kobe_stagehand_explore_accepts_frontier_replay(monkeypatch, tm
     assert calls[0]["use_openai_visual_delta"] is True
     assert calls[0]["screenshot_dir"] == tmp_path / "screenshots"
     assert calls[0]["stagehand_execution_mode"] == "observed_action"
+
+
+def test_main_web_kobe_stagehand_explore_passes_explicit_resume_defaults(
+    monkeypatch, tmp_path
+):
+    calls = []
+
+    async def fake_run(*args, **kwargs):
+        calls.append(kwargs)
+        output_path = args[0]
+        output_path.write_text("{}", encoding="utf-8")
+        return output_path
+
+    monkeypatch.setattr(cli, "run_stagehand_exploration", fake_run, raising=False)
+
+    assert (
+        main(
+            [
+                "web-kobe-stagehand-explore",
+                "--url",
+                "https://fixture.test/shop",
+                "--output",
+                str(tmp_path / "graph.json"),
+            ]
+        )
+        == 0
+    )
+    assert calls[0]["resume_graph"] is None
+    assert calls[0]["resume_policy"] is None
+
+
+def test_main_web_kobe_stagehand_explore_loads_resume_and_resolves_retry(
+    monkeypatch, tmp_path
+):
+    graph_path = tmp_path / "graph.json"
+    _write_resume_graph(graph_path)
+    calls = []
+
+    async def fake_run(*args, **kwargs):
+        calls.append(kwargs)
+        return args[0]
+
+    monkeypatch.setattr(cli, "run_stagehand_exploration", fake_run, raising=False)
+
+    assert (
+        main(
+            [
+                "web-kobe-stagehand-explore",
+                "--url",
+                "https://fixture.test/shop",
+                "--app-name",
+                "demo",
+                "--output",
+                str(graph_path),
+                "--resume-graph",
+                str(graph_path),
+                "--resume-retry-action",
+                "retry_me",
+                "--resume-action-max-attempts",
+                "3",
+            ]
+        )
+        == 0
+    )
+    assert calls[0]["resume_graph"].app == "demo"
+    assert calls[0]["frontier_replay"] is True
+    assert calls[0]["resume_policy"].max_attempts == 3
+    assert {(key.source_node_id, key.action_id) for key in calls[0]["resume_policy"].retry_keys} == {
+        ("start", "retry_me")
+    }
+
+
+@pytest.mark.parametrize(
+    "extra_args, expected_error",
+    [
+        (["--resume-retry-action", "retry_me"], "resume retry action requires --resume-graph"),
+        (
+            ["--resume-graph", "graph.json", "--resume-retry-action", "retry_me", "--resume-action-max-attempts", "1"],
+            "resume action max attempts must be at least 2",
+        ),
+    ],
+)
+def test_main_web_kobe_stagehand_explore_rejects_resume_argument_conflicts(
+    monkeypatch, tmp_path, extra_args, expected_error, capsys
+):
+    monkeypatch.setattr(
+        cli,
+        "run_stagehand_exploration",
+        lambda *args, **kwargs: pytest.fail("runner should not be called"),
+        raising=False,
+    )
+    args = [
+        "web-kobe-stagehand-explore",
+        "--url",
+        "https://fixture.test/shop",
+        "--output",
+        str(tmp_path / "graph.json"),
+    ]
+    for arg in extra_args:
+        args.append(str(tmp_path / "graph.json") if arg == "graph.json" else arg)
+    assert main(args) == 1
+    assert expected_error in capsys.readouterr().out
+
+
+def test_main_web_kobe_stagehand_explore_rejects_clean_with_resume_before_deleting(
+    monkeypatch, tmp_path
+):
+    graph_path = tmp_path / "graph.json"
+    _write_resume_graph(graph_path)
+    stale_path = tmp_path / "stale.txt"
+    stale_path.write_text("keep", encoding="utf-8")
+    monkeypatch.setattr(
+        cli,
+        "run_stagehand_exploration",
+        lambda *args, **kwargs: pytest.fail("runner should not be called"),
+        raising=False,
+    )
+
+    assert (
+        main(
+            [
+                "web-kobe-stagehand-explore",
+                "--url",
+                "https://fixture.test/shop",
+                "--app-name",
+                "demo",
+                "--output",
+                str(graph_path),
+                "--resume-graph",
+                str(graph_path),
+                "--clean-output-dir",
+            ]
+        )
+        == 1
+    )
+    assert stale_path.exists()
+
+
+@pytest.mark.parametrize(
+    "mutation, expected_error, retry_action",
+    [
+        (lambda data: data["meta"].update({"app": "other"}), "resume_app_mismatch", None),
+        (
+            lambda data: data["meta"].update({"start_node_id": "missing"}),
+            "resume_start_node_missing",
+            None,
+        ),
+        (
+            lambda data: data["edges"][0].update({"target_node_id": "missing"}),
+            "resume_dangling_edge",
+            None,
+        ),
+        (lambda data: None, "unknown_resume_retry_action", "unknown"),
+    ],
+)
+def test_main_web_kobe_stagehand_explore_validates_resume_before_runner(
+    monkeypatch, tmp_path, mutation, expected_error, retry_action, capsys
+):
+    graph_path = tmp_path / "graph.json"
+    _write_resume_graph(graph_path)
+    data = json.loads(graph_path.read_text(encoding="utf-8"))
+    mutation(data)
+    graph_path.write_text(json.dumps(data), encoding="utf-8")
+    monkeypatch.setattr(
+        cli,
+        "run_stagehand_exploration",
+        lambda *args, **kwargs: pytest.fail("runner should not be called"),
+        raising=False,
+    )
+    args = [
+        "web-kobe-stagehand-explore",
+        "--url",
+        "https://fixture.test/shop",
+        "--app-name",
+        "demo",
+        "--output",
+        str(graph_path),
+        "--resume-graph",
+        str(graph_path),
+    ]
+    if retry_action:
+        args.extend(["--resume-retry-action", retry_action])
+    assert main(args) == 1
+    assert expected_error in capsys.readouterr().out
 
 
 def test_main_web_kobe_stagehand_explore_cleans_latest_output_dir(
