@@ -165,3 +165,32 @@ def test_problem_requires_a_goal_and_rejects_unknown_goals():
         compile_minimal_semantic_problem(graph, goal_location="missing")
     with pytest.raises(ValueError, match="unknown_goal_fact"):
         compile_minimal_semantic_problem(graph, goal_facts=["missing_fact"])
+
+
+def test_shortest_checkout_plan_uses_add_then_open_checkout():
+    graph = _practice_shopping_semantic_graph()
+    initial = {"at_shopping"}
+    queue = [(initial, [])]
+    seen = {frozenset(initial)}
+    plan = None
+    while queue:
+        state, actions = queue.pop(0)
+        if "at_checkout" in state:
+            plan = actions
+            break
+        for action in graph.actions:
+            if f"at_{action.source_location}" not in state:
+                continue
+            if not set(action.required_facts).issubset(state):
+                continue
+            next_state = set(state)
+            if action.source_location != action.target_location:
+                next_state.discard(f"at_{action.source_location}")
+            next_state.add(f"at_{action.target_location}")
+            next_state.update(action.added_facts)
+            next_state.difference_update(action.removed_facts)
+            key = frozenset(next_state)
+            if key not in seen:
+                seen.add(key)
+                queue.append((next_state, actions + [action.action_name]))
+    assert plan == ["add_to_cart_from_shopping", "open_checkout"]

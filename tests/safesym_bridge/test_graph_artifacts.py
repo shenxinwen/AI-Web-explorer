@@ -19,6 +19,7 @@ from ai_web_explorer.grounded_web.graph import (
     WebKobeNode,
     ReferenceObservation,
 )
+from ai_web_explorer.grounded_web.semantic_model import SemanticObservation
 from ai_web_explorer.safesym_bridge.graph_artifacts import (
     build_graph_artifact_payload,
 )
@@ -151,6 +152,14 @@ def _verbose_graph_fixture() -> WebKobeGraph:
             post_facts=["search_input_visible", "search_results_visible"],
             evidence=["structured search signature"],
         ),
+        semantic_observation=SemanticObservation(
+            action_role="presentation_capability",
+            source_location="shopping",
+            target_location="shopping",
+            completion_facts=["products_sorted"],
+            evidence=["Products visibly changed order."],
+            confidence=0.9,
+        ),
         visit_count=1,
         status="succeeded_with_observed_change",
         evidence=[evidence],
@@ -225,3 +234,10 @@ def test_compact_payload_omits_empty_values_and_resolves_every_reference():
     for edge in payload.compact_graph["edges"]:
         if "evidence_ref" in edge:
             assert edge["evidence_ref"] in payload.evidence_sidecar["edges"]
+
+
+def test_compact_payload_preserves_semantic_observation_for_projection():
+    payload = build_graph_artifact_payload(_verbose_graph_fixture())
+    edge = payload.compact_graph["edges"][0]
+    assert edge["semantic_observation"]["source_location"] == "shopping"
+    assert edge["semantic_observation"]["completion_facts"] == ["products_sorted"]

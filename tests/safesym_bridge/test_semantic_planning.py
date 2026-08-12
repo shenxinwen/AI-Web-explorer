@@ -252,3 +252,93 @@ def test_conflicting_start_locations_are_reported_without_choosing_one():
         item.get("reason") == "conflicting_start_location"
         for item in report.excluded_edges
     )
+
+
+def test_practice_shopping_acceptance_path_excludes_optional_capabilities():
+    sort_edge = _edge(
+        action_name="sort_products",
+        role="presentation_capability",
+        completion_facts=["products_sorted"],
+    )
+    filter_edge = _edge(
+        action_name="filter_products",
+        role="presentation_capability",
+        completion_facts=["products_filtered"],
+    )
+    add_edge = _edge(
+        action_name="add_to_cart_from_shopping",
+        role="state_mutation",
+        planning_delta=PlanningDelta(verified_added_facts=["cart_has_items"]),
+    )
+    checkout_edge = _edge(
+        source="after_add",
+        action_name="open_checkout",
+        role="guarded_navigation",
+        target="checkout",
+        target_location="checkout",
+        candidate_required_facts=["cart_has_items"],
+        source_active_facts=["cart_has_items"],
+        source_profile_fact_ids=["cart_has_items"],
+    )
+    graph = WebKobeGraph(
+        app="practice",
+        start_node_id="start",
+        total_steps_completed=4,
+        nodes=[
+            _node("start"),
+            _node("after_sort"),
+            _node("after_filter"),
+            _node("after_add", active_facts=["cart_has_items"], profile_fact_ids=["cart_has_items"]),
+            _node("checkout"),
+        ],
+        edges=[
+            sort_edge,
+            filter_edge,
+            add_edge,
+            checkout_edge,
+        ],
+    )
+    semantic, _ = build_semantic_planning_graph(graph)
+    assert semantic.locations == ["checkout", "shopping"]
+    assert {action.action_name for action in semantic.actions} == {
+        "add_to_cart_from_shopping",
+        "filter_products",
+        "open_checkout",
+        "sort_products",
+    }
+    checkout = next(
+        action for action in semantic.actions if action.action_name == "open_checkout"
+    )
+    assert checkout.required_facts == ["cart_has_items"]
+    assert "products_sorted" not in checkout.required_facts
+    assert "products_filtered" not in checkout.required_facts
+
+
+def test_document_fixture_projects_without_commerce_specific_rules():
+    search = _edge(
+        action_name="search_documents",
+        role="presentation_capability",
+        source_location="document_list",
+        target_location="document_list",
+        completion_facts=["documents_found"],
+    )
+    select = _edge(
+        source="after_search",
+        action_name="select_document",
+        role="navigation",
+        source_location="document_list",
+        target_location="document_workspace",
+        planning_delta=PlanningDelta(verified_added_facts=["document_selected"]),
+    )
+    graph = WebKobeGraph(
+        app="documents",
+        start_node_id="start",
+        total_steps_completed=2,
+        nodes=[_node("start"), _node("after_search"), _node("workspace")],
+        edges=[search, select],
+    )
+    semantic, _ = build_semantic_planning_graph(graph)
+    assert "document_list" in semantic.locations
+    assert "document_workspace" in semantic.locations
+    assert "documents_found" in semantic.capability_facts
+    assert "document_selected" in semantic.business_facts

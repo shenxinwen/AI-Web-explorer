@@ -42,6 +42,24 @@ VLM affordance 只是“可能可执行”的候选假设，不是已验证能�
 观察成功转换、no-op 或失败的证据。候选能力可以被 planning group 聚合，但只有
 动作后观察成功的边才能验证转换。
 
+### Minimal Semantic PDDL 主路径
+
+当前语义验收路径保持开放式探索，不把 PDDL goal 或 SafeSym plan 反向传入候选生成和动作排序：
+
+```text
+open exploration
+  -> Raw Graph / checkpoint / resume / frontier replay
+  -> 每条成功 raw edge 的 coarse semantic observation
+  -> 通用 role-based semantic rules
+  -> SemanticPlanningGraph
+  -> Minimal Semantic PDDL
+  -> SafeSym
+```
+
+`SemanticPlanningGraph` 将规划状态分成一个当前业务位置、普通能力完成标志和必要业务事实。位置变化由 active business surface 的观察决定；排序、筛选、搜索等同位置能力只添加完成标志，不制造组合位置，也不自动成为其他动作的前提。业务前提只来自已验证 profile/structured verifier 边界；`supporting_facts` 和全量 active facts 只保留为证据，不能投影成 Minimal Semantic PDDL 前提。
+
+现有 Location PDDL V1 仍是兼容和降级层。当语义观察缺失、起始位置冲突或没有可用语义动作时，CLI 保留 location-only domain，并在 `semantic_projection_report.json` 标记降级原因。旧的 planning projector 不是当前语义验收主路径。
+
 Stagehand、Playwright、VLM/LLM、embedding 都是工具或证据来源。Web-KOBE 自己必须拥有图结构、状态记忆、PDDL 语义和探索控制权。
 
 当前实验必须明确区分三套模型配置：

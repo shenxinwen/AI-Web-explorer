@@ -155,6 +155,8 @@ def _compact_edge(edge: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]
     for key in ("planning_delta", "planning_transition"):
         if edge.get(key) is not None:
             compact[key] = edge[key]
+    if edge.get("semantic_observation") is not None:
+        compact["semantic_observation"] = edge["semantic_observation"]
     compact = _without_empty_optional_values(compact)
 
     action = edge.get("action", {})
