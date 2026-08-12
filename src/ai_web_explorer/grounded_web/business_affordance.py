@@ -59,6 +59,15 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
             "not sufficient to merge different functions. If the page is "
             "mainly focused on one object, form, dialog, detail view, or "
             "workflow, use single_surface and do not force multiple regions. "
+            "Optimize for breadth of functional coverage, not interaction "
+            "count. Choose at most one representative action per functional "
+            "family. Prioritize actions likely to reveal a new surface, "
+            "object, dialog, page, or workflow stage as core. Classify major "
+            "same-surface functions as supporting. Classify local refinement "
+            "actions as low_value when broader functions are available. "
+            "Order core actions before supporting actions, and supporting "
+            "actions before low_value actions. Avoid ambiguous umbrella "
+            "actions: every action must name one concrete visible target. "
             "An action must be directly executable, have a clear business "
             "meaning, and have a visible target. For each action, list only "
             "short, stable snake_case observation fact IDs that support why it "
@@ -87,6 +96,8 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
                             "intent": "snake_case business action name",
                             "label": "visible action label or description",
                             "target": "visible action target",
+                            "relevance_hint": "core | supporting | low_value",
+                            "confidence": "number from 0.0 to 1.0",
                             "supporting_facts": [
                                 "short_stable_snake_case_fact_id"
                             ],

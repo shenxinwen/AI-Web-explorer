@@ -94,7 +94,9 @@ def test_summarize_visual_affordances_maps_provider_json():
     "external_goal",
     ["Reach checkout immediately", "Delete the selected document"],
 )
-def test_visual_affordance_prompt_ignores_external_task_goal(external_goal):
+def test_visual_affordance_prompt_prioritizes_breadth_without_external_task_goal(
+    external_goal,
+):
     request = VisualAffordanceRequest(
         goal=external_goal,
         current_screenshot_path="current.png",
@@ -103,19 +105,23 @@ def test_visual_affordance_prompt_ignores_external_task_goal(external_goal):
 
     def provider(prompt, *, current_screenshot_path):
         payload = json.loads(prompt)
-        assert "functional regions" in prompt
-        assert "representative business actions" in prompt
-        assert "supporting_facts" in prompt
-        assert "expected_effect" not in prompt
+        instruction = payload["instruction"]
+        action_schema = payload["output_schema"]["regions"][0]["actions"][0]
+
+        assert "breadth of functional coverage" in instruction
+        assert "one representative action per functional family" in instruction
+        assert "new surface, object, dialog, page, or workflow stage" in instruction
+        assert "local refinement" in instruction
+        assert "concrete visible target" in instruction
+        assert action_schema["relevance_hint"] == "core | supporting | low_value"
+        assert action_schema["confidence"] == "number from 0.0 to 1.0"
+
         assert "profile" not in payload
         assert "current_planning_facts" not in payload
         assert request.goal not in prompt
-        assert "profile" not in prompt.lower()
         assert "pddl" not in prompt.lower()
         assert "graph" not in prompt.lower()
         assert "web-kobe" not in prompt.lower()
-        assert "relevance_hint" not in prompt
-        assert "confidence" not in prompt
         assert "checkout" not in prompt.lower()
         assert "cart_has_items" not in prompt
         return '{"page_mode":"uncertain","regions":[]}'
