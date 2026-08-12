@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Protocol
+from typing import Any, Callable, Mapping, Protocol
 
 from ai_web_explorer.grounded_web.frontier_replay import select_frontier
 from ai_web_explorer.grounded_web.graph import WebKobeGraph
@@ -37,6 +37,8 @@ class WebKobeExplorationSummary:
     failed_edge_count: int
     consecutive_unproductive_steps: int = 0
     max_consecutive_unproductive_steps: int | None = 3
+    historical_steps: int = 0
+    total_steps_completed: int = 0
 
 
 @dataclass(frozen=True)
@@ -57,6 +59,7 @@ def _summary(
     stop_reason: str,
     consecutive_unproductive_steps: int = 0,
     max_consecutive_unproductive_steps: int | None = 3,
+    historical_steps: int = 0,
 ) -> WebKobeExplorationSummary:
     return WebKobeExplorationSummary(
         requested_steps=requested_steps,
@@ -67,6 +70,8 @@ def _summary(
         failed_edge_count=_failed_edge_count(graph),
         consecutive_unproductive_steps=consecutive_unproductive_steps,
         max_consecutive_unproductive_steps=max_consecutive_unproductive_steps,
+        historical_steps=historical_steps,
+        total_steps_completed=graph.total_steps_completed,
     )
 
 
@@ -84,6 +89,8 @@ class WebKobeExplorationController:
         step_checkpoint: StepCheckpoint | None = None,
         frontier_replay_runner: FrontierReplayRunner | None = None,
         start_url: str | None = None,
+        replay_metric_baseline: Mapping[str, int] | None = None,
+        historical_steps: int = 0,
     ):
         self.explorer = explorer
         self.terminal_condition = terminal_condition
@@ -95,6 +102,8 @@ class WebKobeExplorationController:
         self.step_checkpoint = step_checkpoint
         self.frontier_replay_runner = frontier_replay_runner
         self.start_url = start_url
+        self.replay_metric_baseline = dict(replay_metric_baseline or {})
+        self.historical_steps = historical_steps
 
     async def run(self, *, max_steps: int = 1) -> WebKobeExplorationResult:
         requested_steps = max(max_steps, 0)
@@ -105,10 +114,10 @@ class WebKobeExplorationController:
         consecutive_unproductive_steps = 0
         blocked_replay_node_ids: set[str] = set()
         replay_metrics = {
-            "replay_attempt_count": 0,
-            "replay_success_count": 0,
-            "replay_failure_count": 0,
-            "replay_mismatch_count": 0,
+            "replay_attempt_count": int(self.replay_metric_baseline.get("replay_attempt_count", 0)),
+            "replay_success_count": int(self.replay_metric_baseline.get("replay_success_count", 0)),
+            "replay_failure_count": int(self.replay_metric_baseline.get("replay_failure_count", 0)),
+            "replay_mismatch_count": int(self.replay_metric_baseline.get("replay_mismatch_count", 0)),
             "last_replay_reason": None,
         }
         replay_enabled = (
@@ -127,7 +136,10 @@ class WebKobeExplorationController:
         for index in range(requested_steps):
             graph = await self.explorer.explore_one_step()
             apply_replay_metrics(graph)
-            if index == 0:
+            if index == 0 and self.historical_steps:
+                baseline_completed = self.historical_steps
+                previous_completed = self.historical_steps
+            elif index == 0:
                 baseline_completed = max(graph.total_steps_completed - 1, 0)
                 previous_completed = baseline_completed
 
@@ -230,5 +242,6 @@ class WebKobeExplorationController:
                 max_consecutive_unproductive_steps=(
                     self.max_consecutive_unproductive_steps
                 ),
+                historical_steps=self.historical_steps,
             ),
         )

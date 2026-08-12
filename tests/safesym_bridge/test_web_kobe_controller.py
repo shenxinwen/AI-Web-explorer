@@ -186,6 +186,33 @@ async def test_controller_runs_until_max_steps():
 
 
 @pytest.mark.anyio
+async def test_controller_uses_historical_step_and_replay_metric_baselines():
+    explorer = FakeExplorer([_graph(completed=8)])
+    controller = WebKobeExplorationController(
+        explorer,
+        frontier_replay_runner=object(),
+        start_url="https://fixture.test/shop",
+        historical_steps=7,
+        replay_metric_baseline={
+            "replay_attempt_count": 4,
+            "replay_success_count": 2,
+            "replay_failure_count": 1,
+            "replay_mismatch_count": 1,
+        },
+    )
+
+    result = await controller.run(max_steps=1)
+
+    assert result.summary.historical_steps == 7
+    assert result.summary.steps_completed == 1
+    assert result.summary.total_steps_completed == 8
+    assert result.graph.meta["replay_attempt_count"] == 4
+    assert result.graph.meta["replay_success_count"] == 2
+    assert result.graph.meta["replay_failure_count"] == 1
+    assert result.graph.meta["replay_mismatch_count"] == 1
+
+
+@pytest.mark.anyio
 async def test_controller_treats_explorer_success_status_as_success():
     explorer = FakeExplorer(
         [

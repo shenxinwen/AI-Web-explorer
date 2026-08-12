@@ -5,6 +5,7 @@ import socket
 import tempfile
 import time
 import urllib.request
+from dataclasses import replace
 from pathlib import Path
 from typing import Iterable
 
@@ -27,6 +28,12 @@ from ai_web_explorer.grounded_web.experiment_plan import (
 )
 from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
 from ai_web_explorer.grounded_web.frontier_replay import FrontierReplayRunner
+from ai_web_explorer.grounded_web.resume import (
+    ActionAttemptKey,
+    ResumePolicy,
+    select_resume_frontier,
+    validate_resume_graph,
+)
 from ai_web_explorer.grounded_web.playwright_backend import (
     WebKobePlaywrightAdapter,
 )
@@ -546,6 +553,8 @@ async def run_stagehand_exploration(
     stagehand_execution_mode: str = "observed_action",
     max_candidates: int = 5,
     frontier_replay: bool = False,
+    resume_graph: WebKobeGraph | None = None,
+    resume_policy: ResumePolicy | None = None,
 ) -> Path:
     from playwright.async_api import async_playwright
 
@@ -573,6 +582,24 @@ async def run_stagehand_exploration(
         site_purpose=site_purpose,
     )
     resolved_business_profile = _resolve_business_profile(business_profile)
+    if resume_policy is not None and resume_graph is None:
+        raise ValueError("resume_policy_requires_resume_graph")
+    if resume_graph is not None:
+        validate_resume_graph(resume_graph, app_name=app_name)
+        resume_policy = resume_policy or ResumePolicy()
+        resume_graph = replace(
+            resume_graph,
+            meta={
+                key: value
+                for key, value in resume_graph.meta.items()
+                if key
+                not in {
+                    "blocked_replay_node_ids",
+                    "consecutive_unproductive_steps",
+                    "max_consecutive_unproductive_steps",
+                }
+            },
+        )
     cdp_port = _pick_free_port() if provider is None else None
     launch_args = (
         [f"--remote-debugging-port={cdp_port}"] if cdp_port is not None else None
@@ -618,6 +645,7 @@ async def run_stagehand_exploration(
                 action_embedding_provider=resolved_embedding_provider,
                 state_embedding_records=embedding_records,
                 max_candidates=max_candidates,
+                resume_policy=resume_policy,
             )
             def checkpoint(graph: WebKobeGraph) -> None:
                 _write_stagehand_checkpoint(
@@ -630,24 +658,94 @@ async def run_stagehand_exploration(
 
             explorer.attempt_checkpoint = checkpoint
 
+            historical_steps = resume_graph.total_steps_completed if resume_graph else 0
+            replay_metric_baseline = (
+                {
+                    key: int(resume_graph.meta.get(key, 0))
+                    for key in (
+                        "replay_attempt_count",
+                        "replay_success_count",
+                        "replay_failure_count",
+                        "replay_mismatch_count",
+                    )
+                }
+                if resume_graph is not None
+                else None
+            )
+            if resume_graph is not None:
+                explorer.restore_graph(resume_graph)
+                resume_target = select_resume_frontier(
+                    resume_graph,
+                    policy=resume_policy or ResumePolicy(),
+                )
+                if resume_target is None:
+                    resume_graph.meta["exploration_summary"] = {
+                        "requested_steps": max(steps, 0),
+                        "steps_completed": 0,
+                        "stop_reason": "resume_frontier_exhausted",
+                        "historical_steps": historical_steps,
+                        "total_steps_completed": historical_steps,
+                    }
+                    checkpoint(resume_graph)
+                    return output_path
+                policy = resume_policy or ResumePolicy()
+                for action_id in resume_target.untried_action_ids:
+                    key = ActionAttemptKey(resume_target.node_id, action_id)
+                    if key in policy.retry_keys:
+                        explorer.prefer_resume_action(key)
+                        break
+                resume_replay_runner = FrontierReplayRunner(explorer)
+                replay_result = await resume_replay_runner.replay(
+                    resume_target,
+                    start_url=start_url,
+                )
+                if not replay_result.success:
+                    failed_graph = explorer.manager.to_graph(
+                        start_node_id=explorer.start_node_id,
+                    )
+                    failed_graph.meta["exploration_summary"] = {
+                        "requested_steps": max(steps, 0),
+                        "steps_completed": 0,
+                        "stop_reason": "resume_replay_failed",
+                        "historical_steps": historical_steps,
+                        "total_steps_completed": historical_steps,
+                    }
+                    checkpoint(failed_graph)
+                    return output_path
+
             controller_kwargs = {
                 "max_consecutive_unproductive_steps": None,
                 "step_checkpoint": checkpoint,
             }
-            if frontier_replay:
+            if frontier_replay or resume_graph is not None:
                 controller_kwargs.update(
                     {
                         "frontier_replay_runner": FrontierReplayRunner(explorer),
                         "start_url": start_url,
                     }
                 )
+            if resume_graph is not None:
+                controller_kwargs.update(
+                    {
+                        "replay_metric_baseline": replay_metric_baseline,
+                        "historical_steps": historical_steps,
+                    }
+                )
             controller = WebKobeExplorationController(explorer, **controller_kwargs)
             result = await controller.run(max_steps=max(steps, 1))
-            result.graph.meta["exploration_summary"] = {
+            exploration_summary = {
                 "requested_steps": result.summary.requested_steps,
                 "steps_completed": result.summary.steps_completed,
                 "stop_reason": result.summary.stop_reason,
             }
+            if resume_graph is not None:
+                exploration_summary.update(
+                    {
+                        "historical_steps": result.summary.historical_steps,
+                        "total_steps_completed": result.summary.total_steps_completed,
+                    }
+                )
+            result.graph.meta["exploration_summary"] = exploration_summary
             checkpoint(result.graph)
             return output_path
         finally:
