@@ -104,9 +104,29 @@ class WebKobeExplorationController:
         stop_reason = "max_steps"
         consecutive_unproductive_steps = 0
         blocked_replay_node_ids: set[str] = set()
+        replay_metrics = {
+            "replay_attempt_count": 0,
+            "replay_success_count": 0,
+            "replay_failure_count": 0,
+            "replay_mismatch_count": 0,
+            "last_replay_reason": None,
+        }
+        replay_enabled = (
+            self.frontier_replay_runner is not None and self.start_url is not None
+        )
+
+        def apply_replay_metrics(target_graph: WebKobeGraph) -> WebKobeGraph:
+            if not replay_enabled:
+                return target_graph
+            target_graph.meta.update(replay_metrics)
+            target_graph.meta["blocked_replay_node_ids"] = sorted(
+                blocked_replay_node_ids
+            )
+            return target_graph
 
         for index in range(requested_steps):
             graph = await self.explorer.explore_one_step()
+            apply_replay_metrics(graph)
             if index == 0:
                 baseline_completed = max(graph.total_steps_completed - 1, 0)
                 previous_completed = baseline_completed
@@ -117,10 +137,6 @@ class WebKobeExplorationController:
                 and self.frontier_replay_runner is not None
                 and self.start_url is not None
             ):
-                graph.meta.setdefault("replay_attempt_count", 0)
-                graph.meta.setdefault("replay_success_count", 0)
-                graph.meta.setdefault("replay_failure_count", 0)
-                graph.meta.setdefault("blocked_replay_node_ids", [])
                 frontier = select_frontier(
                     graph,
                     blocked_node_ids=blocked_replay_node_ids,
@@ -128,37 +144,32 @@ class WebKobeExplorationController:
                 if frontier is None:
                     stop_reason = "frontier_replay_exhausted"
                     break
-                graph.meta["replay_attempt_count"] = int(
-                    graph.meta.get("replay_attempt_count", 0)
-                ) + 1
+                replay_metrics["replay_attempt_count"] += 1
+                apply_replay_metrics(graph)
                 replay_result = await self.frontier_replay_runner.replay(
                     frontier,
                     start_url=self.start_url,
                 )
-                graph.meta["last_replay_reason"] = replay_result.reason
+                replay_metrics["last_replay_reason"] = replay_result.reason
                 if not replay_result.success:
-                    graph.meta["replay_failure_count"] = int(
-                        graph.meta.get("replay_failure_count", 0)
-                    ) + 1
+                    replay_metrics["replay_failure_count"] += 1
+                    if replay_result.reason in {
+                        "entry_state_mismatch",
+                        "target_state_mismatch",
+                    }:
+                        replay_metrics["replay_mismatch_count"] += 1
                     blocked_replay_node_ids.add(frontier.node_id)
-                    graph.meta["blocked_replay_node_ids"] = sorted(
-                        blocked_replay_node_ids
-                    )
+                    apply_replay_metrics(graph)
                     continue
-                graph.meta["replay_success_count"] = int(
-                    graph.meta.get("replay_success_count", 0)
-                ) + 1
+                replay_metrics["replay_success_count"] += 1
                 next_graph = await self.explorer.explore_one_step()
-                for key in (
-                    "replay_attempt_count",
-                    "replay_success_count",
-                    "replay_failure_count",
-                    "last_replay_reason",
-                    "blocked_replay_node_ids",
+                graph = apply_replay_metrics(next_graph)
+                if (
+                    graph.total_steps_completed == previous_completed
+                    and graph.meta.get("last_step_kind") == "current_state_exhausted"
                 ):
-                    if key in graph.meta:
-                        next_graph.meta[key] = graph.meta[key]
-                graph = next_graph
+                    blocked_replay_node_ids.add(frontier.node_id)
+                    apply_replay_metrics(graph)
 
             if graph.total_steps_completed == previous_completed:
                 if stop_reason == "max_steps":
@@ -180,6 +191,7 @@ class WebKobeExplorationController:
             graph.meta["max_consecutive_unproductive_steps"] = (
                 self.max_consecutive_unproductive_steps
             )
+            apply_replay_metrics(graph)
             if self.step_checkpoint is not None:
                 self.step_checkpoint(graph)
             if (
@@ -199,6 +211,7 @@ class WebKobeExplorationController:
                 start_node_id="",
                 total_steps_completed=baseline_completed,
             )
+        apply_replay_metrics(graph)
 
         return WebKobeExplorationResult(
             graph=graph,
