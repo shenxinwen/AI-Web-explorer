@@ -2,6 +2,8 @@ import json
 import asyncio
 from dataclasses import replace
 
+import pytest
+
 from ai_web_explorer.grounded_web.graph import BusinessAffordance, WebKobeGraph
 from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
 from ai_web_explorer.grounded_web.semantic_assistor import DeterministicSemanticAssistor
@@ -9,8 +11,10 @@ from ai_web_explorer.grounded_web.business_profile import ecommerce_checkout_pro
 from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.grounded_web.frontier_replay import select_frontier
 from ai_web_explorer.grounded_web.location_exploration import (
+    CandidatePreflightResult,
     LOCATION_EXPLORATION_META_KEY,
     ExplorationLimits,
+    LocationExplorationCoordinator,
     LocationExplorationMemory,
 )
 from ai_web_explorer.safesym_bridge.browser_runner import write_web_kobe_graph
@@ -65,6 +69,119 @@ def test_second_no_change_attempt_closes_candidate():
     )
     assert second.status == "no_observable_change"
     assert memory.next_candidate("shopping") is None
+
+
+def test_candidate_preflight_accepts_exact_visible_canonical_target():
+    coordinator = LocationExplorationCoordinator()
+    affordance = BusinessAffordance(
+        action_name="add_to_cart",
+        target_hint="Add to cart",
+    )
+
+    result = coordinator.preflight_candidate(
+        affordance,
+        [
+            {
+                "canonical_action_name": "add_to_cart",
+                "action_label": "Add to cart",
+                "locator": "#add-to-cart",
+                "visible": True,
+                "enabled": True,
+            }
+        ],
+    )
+
+    assert isinstance(result, CandidatePreflightResult)
+    assert result.status == "available"
+    assert result.evidence
+
+
+@pytest.mark.parametrize(
+    "interactable",
+    [
+        {
+            "canonical_action_name": "add_to_cart",
+            "locator": "#add-to-cart",
+            "visible": True,
+            "enabled": False,
+        },
+        {
+            "canonical_action_name": "add_to_cart",
+            "known": True,
+            "present": False,
+        },
+    ],
+)
+def test_candidate_preflight_marks_explicitly_disabled_or_absent_target_stale(
+    interactable,
+):
+    coordinator = LocationExplorationCoordinator()
+    affordance = BusinessAffordance(action_name="add_to_cart")
+
+    result = coordinator.preflight_candidate(affordance, [interactable])
+
+    assert result.status == "stale"
+    assert result.evidence
+
+
+def test_candidate_preflight_keeps_ambiguous_or_missing_dom_metadata_unknown():
+    coordinator = LocationExplorationCoordinator()
+    affordance = BusinessAffordance(
+        action_name="add_to_cart",
+        target_hint="Add to cart",
+    )
+
+    ambiguous = coordinator.preflight_candidate(
+        affordance,
+        [
+            {
+                "action_label": "Add to cart",
+                "locator": "#first",
+                "visible": True,
+                "enabled": True,
+            },
+            {
+                "action_label": "Add to cart",
+                "locator": "#second",
+                "visible": True,
+                "enabled": True,
+            },
+        ],
+    )
+    missing_metadata = coordinator.preflight_candidate(
+        affordance,
+        [{"canonical_action_name": "add_to_cart", "locator": "#add-to-cart"}],
+    )
+
+    assert ambiguous.status == "unknown"
+    assert missing_metadata.status == "unknown"
+
+
+def test_stale_candidate_is_disabled_without_consuming_an_attempt():
+    memory = LocationExplorationMemory()
+    memory.merge_scan(
+        "shopping",
+        [BusinessAffordance(action_name="add_to_cart")],
+        kind="initial",
+    )
+    coordinator = LocationExplorationCoordinator(memory=memory)
+
+    selected, result = coordinator.select_candidate(
+        "shopping",
+        current_interactables=[
+            {
+                "canonical_action_name": "add_to_cart",
+                "known": True,
+                "present": False,
+            }
+        ],
+    )
+
+    record = memory.pool_for("shopping").candidates["add_to_cart"]
+    assert selected is None
+    assert result is not None and result.status == "stale"
+    assert record.status == "stale/disabled"
+    assert record.attempts == 0
 
 
 def test_targeted_scan_key_is_order_independent_and_runs_once():
@@ -129,6 +246,40 @@ class _ScopedAdapter:
     async def execute(self, action):
         self.executed.append(action)
         return True
+
+
+class _DisabledCandidateAdapter(_ScopedAdapter):
+    async def list_interactables(self, state):
+        return [
+            {
+                "canonical_action_name": "sort_products",
+                "known": True,
+                "present": False,
+            }
+        ]
+
+
+def test_stale_preflight_consumes_zero_formal_action_attempts():
+    memory = LocationExplorationMemory()
+    memory.merge_scan(
+        "shopping",
+        [BusinessAffordance(action_name="sort_products")],
+        kind="initial",
+    )
+    explorer = WebKobeExplorer(
+        adapter=_DisabledCandidateAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="scoped"),
+        location_exploration_coordinator=LocationExplorationCoordinator(memory=memory),
+        exploration_limits=ExplorationLimits(),
+    )
+
+    graph = asyncio.run(explorer.explore_one_step())
+
+    assert graph.meta["formal_action_attempts"] == 0
+    assert graph.meta["last_step_kind"] == "current_state_exhausted"
+    assert memory.pool_for("shopping").candidates["sort_products"].status == (
+        "stale/disabled"
+    )
 
 
 def test_scoped_explorer_inherits_pool_and_runs_one_targeted_scan():

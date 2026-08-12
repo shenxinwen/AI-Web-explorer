@@ -228,6 +228,18 @@ class OutcomeUpdate:
     step_kind: str
 
 
+@dataclass(frozen=True)
+class CandidatePreflightResult:
+    """Deterministic DOM preflight evidence for one remembered candidate."""
+
+    status: str
+    evidence: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.status not in {"available", "stale", "unknown"}:
+            raise ValueError(f"invalid candidate preflight status: {self.status}")
+
+
 class LocationExplorationCoordinator:
     """Coordinate location-level scans and candidate lifecycle bookkeeping."""
 
@@ -344,6 +356,69 @@ class LocationExplorationCoordinator:
                     pool.supplement_scan_complete = True
         return normalized_location, result, added
 
+    def preflight_candidate(
+        self,
+        affordance: BusinessAffordance,
+        current_interactables: Iterable[dict[str, Any]] | None,
+    ) -> CandidatePreflightResult:
+        """Classify a candidate using only exact DOM metadata.
+
+        Missing or ambiguous DOM evidence remains executable as ``unknown``;
+        only explicit absence, invisibility, or disabled state is stale.
+        """
+
+        candidate_id = normalize_semantic_id(affordance.action_name)
+        interactables = [
+            item for item in (current_interactables or ()) if isinstance(item, dict)
+        ]
+        id_matches = [
+            item for item in interactables if candidate_id in _interactable_ids(item)
+        ]
+        if id_matches:
+            return _preflight_records(id_matches, basis="canonical_id")
+
+        target = (
+            normalize_semantic_id(affordance.target_hint)
+            if affordance.target_hint
+            else ""
+        )
+        if target:
+            target_matches = [
+                item
+                for item in interactables
+                if target in _interactable_targets(item)
+            ]
+            if target_matches:
+                return _preflight_records(target_matches, basis="target")
+
+        return CandidatePreflightResult(
+            "unknown",
+            ("no exact canonical ID or target evidence",),
+        )
+
+    def select_candidate(
+        self,
+        location_id: str,
+        *,
+        current_interactables: Iterable[dict[str, Any]] | None = None,
+    ) -> tuple[BusinessAffordance | None, CandidatePreflightResult | None]:
+        """Select the next candidate and retire only conclusively stale ones."""
+
+        pool = self.memory.pool_for(location_id)
+        last_preflight: CandidatePreflightResult | None = None
+        while True:
+            candidate = self.memory.next_candidate(location_id)
+            if candidate is None:
+                return None, last_preflight
+            result = self.preflight_candidate(candidate, current_interactables)
+            if result.status != "stale":
+                return candidate, result
+            record = pool.candidates.get(normalize_semantic_id(candidate.action_name))
+            if record is None:
+                return None, result
+            record.status = "stale/disabled"
+            last_preflight = result
+
     def record_action_outcome(
         self,
         *,
@@ -418,6 +493,65 @@ class LocationExplorationCoordinator:
                 ),
             )
         ]
+
+
+def _interactable_ids(item: dict[str, Any]) -> set[str]:
+    values = {
+        normalize_semantic_id(item.get(key))
+        for key in ("canonical_action_name", "semantic_id", "action_name")
+        if item.get(key) is not None
+    }
+    return {value for value in values if value}
+
+
+def _interactable_targets(item: dict[str, Any]) -> set[str]:
+    values = {
+        normalize_semantic_id(item.get(key))
+        for key in ("target", "action_label", "description", "text")
+        if item.get(key) is not None
+    }
+    metadata = item.get("metadata")
+    if isinstance(metadata, dict):
+        values.update(
+            normalize_semantic_id(metadata.get(key))
+            for key in ("aria-label", "data-test", "id", "placeholder", "title")
+            if metadata.get(key) is not None
+        )
+    return {value for value in values if value}
+
+
+def _preflight_records(
+    records: list[dict[str, Any]],
+    *,
+    basis: str,
+) -> CandidatePreflightResult:
+    if len(records) != 1:
+        return CandidatePreflightResult(
+            "unknown",
+            (f"ambiguous exact {basis} evidence",),
+        )
+    item = records[0]
+    if (
+        item.get("disabled") is True
+        or item.get("enabled") is False
+        or str(item.get("aria_disabled", "")).lower() == "true"
+        or item.get("present") is False
+        or item.get("exists") is False
+        or item.get("visible") is False
+    ):
+        return CandidatePreflightResult(
+            "stale",
+            (f"exact {basis} target is explicitly absent or disabled",),
+        )
+    if item.get("visible") is True and item.get("enabled") is True:
+        return CandidatePreflightResult(
+            "available",
+            (f"exact {basis} target is visible and enabled",),
+        )
+    return CandidatePreflightResult(
+        "unknown",
+        (f"exact {basis} target lacks complete visibility metadata",),
+    )
 
 
 class LocationExplorationMemory:

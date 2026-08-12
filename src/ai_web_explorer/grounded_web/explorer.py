@@ -459,8 +459,11 @@ class WebKobeExplorer:
 
         selected = self._select_action(
             exploration_context=exploration_context,
+            current_interactables=before_interactables,
         )
         if selected is None:
+            if self.location_scoped_exploration:
+                self.manager.meta.setdefault("formal_action_attempts", 0)
             self.manager.meta["last_step_kind"] = "current_state_exhausted"
             self.manager.meta["last_step_status"] = "unproductive"
             self.manager.meta["last_step_graph_changed"] = False
@@ -1383,15 +1386,18 @@ class WebKobeExplorer:
         self,
         *,
         exploration_context: ExplorationContext,
+        current_interactables: list[dict[str, Any]] | None = None,
     ) -> BrowserAction | None:
         return self._select_business_affordance_action(
             exploration_context=exploration_context,
+            current_interactables=current_interactables,
         )
 
     def _select_business_affordance_action(
         self,
         *,
         exploration_context: ExplorationContext,
+        current_interactables: list[dict[str, Any]] | None = None,
     ) -> BrowserAction | None:
         node = self.manager.node_for_id(exploration_context.current_node_id)
 
@@ -1400,9 +1406,13 @@ class WebKobeExplorer:
         if self.location_scoped_exploration and location_id and not unresolved:
             pool = self.location_exploration_coordinator.memory.pool_for(location_id)
             if pool.candidates:
-                memory_candidate = self.location_exploration_coordinator.memory.next_candidate(
-                    location_id
+                memory_candidate, _preflight = (
+                    self.location_exploration_coordinator.select_candidate(
+                        location_id,
+                        current_interactables=current_interactables,
+                    )
                 )
+                self.location_exploration_coordinator.sync_graph_meta(self.manager)
                 if memory_candidate is None:
                     return None
                 candidate_by_id = {

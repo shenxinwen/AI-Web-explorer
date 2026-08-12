@@ -74,7 +74,13 @@ class _FeasibilityFixtureAdapter:
         )
 
     async def list_interactables(self, state: StateSnapshot) -> list[dict[str, object]]:
-        return []
+        return [
+            {
+                "canonical_action_name": "stale_candidate",
+                "known": True,
+                "present": False,
+            }
+        ]
 
     async def capture_screenshot(self, label: str) -> str:
         return f"{label}.png"
@@ -103,11 +109,15 @@ class _FeasibilityFixtureAdapter:
         return True
 
 
-def _affordance(action_id: str) -> BusinessAffordance:
+def _affordance(
+    action_id: str,
+    *,
+    relevance_hint: str = "core",
+) -> BusinessAffordance:
     return BusinessAffordance(
         action_name=action_id,
         label=action_id.replace("_", " "),
-        relevance_hint="core",
+        relevance_hint=relevance_hint,
         confidence=0.9,
     )
 
@@ -117,6 +127,7 @@ def _fixture_memory() -> LocationExplorationMemory:
     memory.merge_scan(
         "shopping",
         [
+            _affordance("stale_candidate"),
             _affordance("sort_products"),
             _affordance("filter_products"),
             _affordance("add_to_cart"),
@@ -133,6 +144,11 @@ def _fixture_memory() -> LocationExplorationMemory:
         kind="initial",
     )
     memory.merge_scan("confirmation", [], kind="initial")
+    memory.merge_scan(
+        "confirmation",
+        [_affordance("no_change_probe", relevance_hint="low_value")],
+        kind="supplement",
+    )
     memory.pool_for("confirmation").supplement_scan_complete = True
     for location_id in ("shopping", "checkout", "confirmation"):
         memory.pool_for(location_id).initial_scan_complete = False
@@ -205,6 +221,25 @@ def _fixture_provider(scan_calls: list[tuple[str, str]]):
 def _visual_delta_provider(prompt: str, **kwargs) -> str:
     payload = json.loads(prompt)
     action_id = payload["action"]["canonical_action_name"]
+    if action_id == "no_change_probe":
+        return json.dumps(
+            {
+                "candidate_added_facts": [],
+                "candidate_removed_facts": [],
+                "visual_change_kind": "unknown",
+                "action_role": "state_mutation",
+                "source_location": payload["location_context"]["source_location_hint"],
+                "target_location": payload["location_context"]["source_location_hint"],
+                "completion_facts": [],
+                "candidate_required_facts": [],
+                "preserved_facts": [],
+                "semantic_evidence": [],
+                "semantic_confidence": 0.9,
+                "observable_change": False,
+                "business_facts_added": [],
+                "business_facts_removed": [],
+            }
+        )
     presentation = action_id in {"sort_products", "filter_products"}
     navigation = action_id == "open_checkout"
     commit = action_id == "place_order"
@@ -305,6 +340,8 @@ async def test_location_scoped_pipeline_reaches_confirmation_without_ordinary_de
         "complete_checkout_information",
         "complete_payment_information",
         "place_order",
+        "no_change_probe",
+        "no_change_probe",
     ]
     semantic, report = build_semantic_planning_graph(graph)
     domain = compile_minimal_semantic_domain(semantic).domain
@@ -321,7 +358,8 @@ async def test_location_scoped_pipeline_reaches_confirmation_without_ordinary_de
     assert "products_sorted" not in preconditions
     assert "(at_confirmation)" in problem
     assert "(order_submitted)" in problem
-    assert report.excluded_edges == []
+    assert len(report.excluded_edges) == 1
+    assert report.excluded_edges[0]["reason"] == "non_projectable_status"
     assert scan_calls == [
         ("initial", "shopping"),
         ("targeted", "shopping"),
@@ -333,12 +371,21 @@ async def test_location_scoped_pipeline_reaches_confirmation_without_ordinary_de
     assert all(
         record.attempts == 1
         for pool in memory.locations.values()
-        for record in pool.candidates.values()
+        for action_id, record in pool.candidates.items()
+        if action_id not in {"stale_candidate", "no_change_probe"}
     )
-    assert len(graph.edges) == 7
+    assert memory.pool_for("shopping").candidates["stale_candidate"].attempts == 0
+    assert memory.pool_for("shopping").candidates["stale_candidate"].status == (
+        "stale/disabled"
+    )
+    no_change = memory.pool_for("confirmation").candidates["no_change_probe"]
+    assert no_change.attempts == 2
+    assert no_change.status == "no_observable_change"
+    assert graph.meta["formal_action_attempts"] == 9
+    assert len(graph.edges) == 8
     assert len(graph.nodes) >= 3
 
-    before_counts = (len(graph.nodes), len(graph.edges))
+    before_graph = graph.to_dict()
     replay = FrontierReplayRunner(explorer)
     replay_result = await replay.replay(
         FrontierTarget(
@@ -349,4 +396,4 @@ async def test_location_scoped_pipeline_reaches_confirmation_without_ordinary_de
         start_url="https://fixture.test/shopping",
     )
     assert replay_result.success is True
-    assert (len(graph.nodes), len(graph.edges)) == before_counts
+    assert graph.to_dict() == before_graph
