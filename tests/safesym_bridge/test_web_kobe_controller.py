@@ -389,6 +389,69 @@ async def test_controller_moves_to_another_frontier_after_replay_has_no_progress
 
 
 @pytest.mark.anyio
+async def test_controller_preserves_replay_metrics_through_followup_steps_and_checkpoint():
+    graph = _frontier_graph()
+    graph.nodes.append(
+        WebKobeNode(
+            node_id="other",
+            page_description="other",
+            page_frame=PageFrame(
+                page_id="other",
+                page_type="other",
+                url="https://fixture.test/shop",
+                url_pattern="https://fixture.test/shop",
+                title="other",
+            ),
+            state_schema={},
+            last_state_snapshot={},
+            business_affordances=[BusinessAffordance("inspect_other")],
+        )
+    )
+    graph.edges.append(
+        WebKobeEdge(
+            source_node_id="start",
+            target_node_id="other",
+            instruction="open other",
+            action=BrowserAction("click", "#other", "open_other"),
+            capability=None,
+            target_observation="other",
+            observed_delta=[],
+            schema_delta={},
+            execution_trace=ExecutionTrace(
+                "click", "#other", "open_other", {}, "start", "other", True
+            ),
+            status="succeeded_with_navigation",
+        )
+    )
+    explorer = ReplayFakeExplorer(
+        [graph, _graph(completed=1), _graph(completed=2), _graph(completed=3)],
+        ReplayResult(True, "other", None, "replay_succeeded", 1),
+        replay_targets=[
+            ReplayResult(False, None, "start__open_frontier__frontier", "target_state_mismatch", 0),
+            ReplayResult(True, "other", None, "replay_succeeded", 1),
+        ],
+    )
+    checkpoints = []
+    controller = WebKobeExplorationController(
+        explorer,
+        frontier_replay_runner=explorer,
+        start_url="https://fixture.test/shop",
+        step_checkpoint=lambda current: checkpoints.append(current.to_dict()),
+    )
+
+    result = await controller.run(max_steps=3)
+
+    assert result.graph.meta["replay_attempt_count"] == 2
+    assert result.graph.meta["replay_success_count"] == 1
+    assert result.graph.meta["replay_failure_count"] == 1
+    assert result.graph.meta["replay_mismatch_count"] == 1
+    assert result.graph.meta["blocked_replay_node_ids"] == ["frontier"]
+    assert len(checkpoints) == 3
+    assert checkpoints[-1]["meta"]["replay_success_count"] == 1
+    assert checkpoints[-1]["meta"]["replay_mismatch_count"] == 1
+
+
+@pytest.mark.anyio
 async def test_controller_continues_after_single_failed_action():
     explorer = FakeExplorer(
         [
