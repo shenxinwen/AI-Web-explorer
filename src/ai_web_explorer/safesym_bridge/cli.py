@@ -49,6 +49,10 @@ from ai_web_explorer.safesym_bridge.web_kobe_safesym_smoke import (
     write_web_kobe_safesym_smoke,
 )
 from ai_web_explorer.grounded_web.stagehand_prompt import BenchmarkTaskContext
+from ai_web_explorer.grounded_web.exploration_semantics import (
+    resolve_semantic_experiment_profile,
+    validate_final_order_authorization,
+)
 from ai_web_explorer.grounded_web.location_exploration import ExplorationLimits
 from ai_web_explorer.grounded_web.resume import (
     ResumePolicy,
@@ -863,6 +867,14 @@ def main(argv: list[str] | None = None) -> int:
             if args.steps is not None and args.max_exploration_steps is not None:
                 raise ValueError("--steps cannot be combined with --max-exploration-steps")
             profile_selected = args.semantic_experiment_profile is not None
+            resolved_semantic_profile = resolve_semantic_experiment_profile(
+                args.semantic_experiment_profile
+            )
+            validate_final_order_authorization(
+                start_url=args.url,
+                profile=resolved_semantic_profile,
+                allowed=args.allow_test_site_final_order,
+            )
             budget_selected = any(
                 value is not None
                 for value in (

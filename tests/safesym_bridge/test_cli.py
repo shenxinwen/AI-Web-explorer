@@ -1270,7 +1270,7 @@ def test_main_stagehand_explore_accepts_location_feasibility_parameters(
             [
                 "web-kobe-stagehand-explore",
                 "--url",
-                "https://fixture.test/shop",
+                "https://practiceautomatedtesting.com/shopping",
                 "--output",
                 str(tmp_path / "graph.json"),
                 "--semantic-experiment-profile",
@@ -1337,6 +1337,60 @@ def test_main_stagehand_explore_rejects_steps_and_max_exploration_steps(
         == 1
     )
     assert "cannot be combined" in capsys.readouterr().out
+
+
+def test_main_stagehand_explore_rejects_final_order_for_wrong_url(
+    monkeypatch, tmp_path, capsys
+):
+    monkeypatch.setattr(
+        cli,
+        "run_stagehand_exploration",
+        lambda *args, **kwargs: pytest.fail("runner should not be called"),
+        raising=False,
+    )
+
+    assert (
+        main(
+            [
+                "web-kobe-stagehand-explore",
+                "--url",
+                "https://fixture.test/shop",
+                "--output",
+                str(tmp_path / "graph.json"),
+                "--semantic-experiment-profile",
+                "practice_shopping_feasibility",
+                "--allow-test-site-final-order",
+            ]
+        )
+        == 1
+    )
+    assert "controlled test URL" in capsys.readouterr().out
+
+
+def test_main_stagehand_explore_rejects_final_order_without_profile(
+    monkeypatch, tmp_path, capsys
+):
+    monkeypatch.setattr(
+        cli,
+        "run_stagehand_exploration",
+        lambda *args, **kwargs: pytest.fail("runner should not be called"),
+        raising=False,
+    )
+
+    assert (
+        main(
+            [
+                "web-kobe-stagehand-explore",
+                "--url",
+                "https://practiceautomatedtesting.com/shopping",
+                "--output",
+                str(tmp_path / "graph.json"),
+                "--allow-test-site-final-order",
+            ]
+        )
+        == 1
+    )
+    assert "semantic experiment profile" in capsys.readouterr().out
 
 
 def test_main_web_kobe_stagehand_explore_passes_explicit_resume_defaults(

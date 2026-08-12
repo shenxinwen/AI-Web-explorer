@@ -1,3 +1,5 @@
+import ai_web_explorer.grounded_web.exploration_semantics as exploration_semantics
+
 from ai_web_explorer.grounded_web.exploration_semantics import (
     generate_checkout_test_data,
     practice_shopping_feasibility_profile,
@@ -48,3 +50,41 @@ def test_generated_checkout_data_is_deterministic_and_fictional():
     assert first.email.endswith("@example.test")
     assert first.card_number == "4111111111111111"
     assert first.to_benchmark_context().test_credentials == {}
+    assert "final confirmation is allowed" not in " ".join(
+        first.to_benchmark_context().notes
+    ).lower()
+
+
+def test_final_order_authorization_requires_profile_flag_and_exact_controlled_url():
+    profile = practice_shopping_feasibility_profile()
+    validate_final_order_authorization = getattr(
+        exploration_semantics, "validate_final_order_authorization", None
+    )
+    assert callable(validate_final_order_authorization)
+
+    assert validate_final_order_authorization(
+        start_url="https://practiceautomatedtesting.com/shopping",
+        profile=profile,
+        allowed=True,
+    ) is True
+    assert validate_final_order_authorization(
+        start_url="https://practiceautomatedtesting.com/shopping",
+        profile=profile,
+        allowed=False,
+    ) is False
+
+    for start_url, selected_profile in (
+        ("https://practiceautomatedtesting.com/", profile),
+        ("https://practiceautomatedtesting.com/shopping?redirect=order", profile),
+        ("https://evil.practiceautomatedtesting.com/shopping", profile),
+        ("https://practiceautomatedtesting.com/shopping", None),
+    ):
+        try:
+            validate_final_order_authorization(
+                start_url=start_url,
+                profile=selected_profile,
+                allowed=True,
+            )
+        except ValueError:
+            continue
+        raise AssertionError("invalid final-order authorization was accepted")

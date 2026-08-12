@@ -36,6 +36,9 @@ from ai_web_explorer.grounded_web.exploration_index import (
     build_exploration_context,
     semantically_matches_action,
 )
+from ai_web_explorer.grounded_web.exploration_semantics import (
+    SemanticExperimentProfile,
+)
 from ai_web_explorer.grounded_web.location_exploration import (
     LOCATION_EXPLORATION_META_KEY,
     ExplorationLimits,
@@ -45,6 +48,9 @@ from ai_web_explorer.grounded_web.location_exploration import (
 )
 from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.grounded_web.planning_fact_verifier import verify_planning_delta
+from ai_web_explorer.grounded_web.planning_fact_verifier import (
+    verify_experiment_planning_delta,
+)
 from ai_web_explorer.grounded_web.semantic_assistor import SemanticAssistor
 from ai_web_explorer.grounded_web.semantic_model import normalize_semantic_id
 from ai_web_explorer.grounded_web.typed_delta import (
@@ -273,6 +279,7 @@ class WebKobeExplorer:
         location_exploration_coordinator: LocationExplorationCoordinator | None = None,
         exploration_limits: ExplorationLimits | None = None,
         semantic_profile_context: dict[str, Any] | None = None,
+        semantic_experiment_profile: SemanticExperimentProfile | None = None,
     ):
         if max_candidates < 1:
             raise ValueError("max_candidates must be at least 1.")
@@ -280,6 +287,7 @@ class WebKobeExplorer:
         self.semantic_assistor = semantic_assistor
         self.goal = goal
         self.business_profile = business_profile
+        self.semantic_experiment_profile = semantic_experiment_profile
         self.max_candidates = max_candidates
         self.capture_screenshots = capture_screenshots
         self.visual_delta_provider = visual_delta_provider
@@ -289,11 +297,19 @@ class WebKobeExplorer:
         self.enable_exploration_memory = enable_exploration_memory
         self.attempt_checkpoint = attempt_checkpoint
         self.resume_policy = resume_policy
+        if (
+            self.semantic_experiment_profile is not None
+            and semantic_profile_context is None
+        ):
+            semantic_profile_context = (
+                self.semantic_experiment_profile.to_prompt_context()
+            )
+        self.semantic_profile_context = semantic_profile_context
         self.location_exploration_coordinator = (
             location_exploration_coordinator
             or LocationExplorationCoordinator(
                 limits=exploration_limits,
-                semantic_profile_context=semantic_profile_context,
+                semantic_profile_context=self.semantic_profile_context,
             )
         )
         self.location_scoped_exploration = bool(
@@ -524,6 +540,7 @@ class WebKobeExplorer:
             else None
         )
         visual_delta_facts = ([], [])
+        visual_delta_evidence: list[str] = []
         visual_change_kind = "unknown"
         semantic_observation = None
         visual_observable_change = False
@@ -566,6 +583,7 @@ class WebKobeExplorer:
                 list(visual_result.planning_delta.candidate_added_facts),
                 list(visual_result.planning_delta.candidate_removed_facts),
             )
+            visual_delta_evidence = list(visual_result.planning_delta.evidence)
             visual_change_kind = visual_result.visual_change_kind
             semantic_observation = visual_result.semantic_observation
             visual_observable_change = visual_result.observable_change
@@ -576,12 +594,6 @@ class WebKobeExplorer:
 
         planning_delta = structured_planning_delta
         planning_transition = None
-        if self.business_profile is not None:
-            planning_transition = self.manager.build_planning_transition(
-                source_id,
-                planning_delta=planning_delta,
-                profile=self.business_profile,
-            )
         visual_fact_change = bool(visual_delta_facts[0] or visual_delta_facts[1])
         path_changed = _url_path(before.url) != _url_path(after.url)
         signature_changed = before.signature != after.signature
@@ -598,6 +610,21 @@ class WebKobeExplorer:
             or visual_kind_change
             or visual_observable_change
         )
+        if self.semantic_experiment_profile is not None:
+            planning_delta = verify_experiment_planning_delta(
+                profile=self.semantic_experiment_profile,
+                observable_change=state_changed,
+                candidate_added_facts=visual_delta_facts[0],
+                candidate_removed_facts=visual_delta_facts[1],
+                evidence=visual_delta_evidence,
+                structured_delta=structured_planning_delta or PlanningDelta(),
+            )
+        if self.business_profile is not None:
+            planning_transition = self.manager.build_planning_transition(
+                source_id,
+                planning_delta=planning_delta,
+                profile=self.business_profile,
+            )
 
         target_node = _node_from_draft(after_draft)
         target_node = replace(

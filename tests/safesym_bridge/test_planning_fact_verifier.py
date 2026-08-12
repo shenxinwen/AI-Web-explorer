@@ -97,3 +97,25 @@ def test_action_change_without_fact_evidence_does_not_promote_business_fact():
     )
 
     assert result.verified_added_facts == []
+
+
+def test_experiment_verifier_rejects_invented_and_unevidenced_business_facts():
+    result = verify_experiment_planning_delta(
+        profile=practice_shopping_feasibility_profile(),
+        observable_change=True,
+        candidate_added_facts=[
+            "checkout_info_complete",
+            "invented_fact",
+            "payment_info_complete",
+        ],
+        candidate_removed_facts=[],
+        evidence=["Checkout fields visibly became complete."],
+        structured_delta=PlanningDelta(),
+    )
+
+    assert result.verified_added_facts == [
+        "checkout_info_complete",
+        "payment_info_complete",
+    ]
+    assert "invented_fact" not in result.candidate_added_facts
+    assert "invented_fact" not in result.profile_fact_ids

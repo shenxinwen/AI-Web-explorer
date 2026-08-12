@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import asdict, dataclass
 from typing import Any, Mapping
+from urllib.parse import urlsplit
 
 from ai_web_explorer.grounded_web.business_profile import (
     BusinessFlowProfile,
@@ -98,7 +99,7 @@ class GeneratedCheckoutData:
         return BenchmarkTaskContext(
             site_label="PracticeAutomatedTesting controlled test site",
             checkout_data=asdict(self),
-            notes=("Use fictional data only; final test order is allowed.",),
+            notes=("Use fictional data only.",),
         )
 
 
@@ -200,6 +201,50 @@ def resolve_semantic_experiment_profile(
     raise ValueError(f"unknown semantic experiment profile: {name}")
 
 
+def validate_final_order_authorization(
+    *,
+    start_url: str,
+    profile: SemanticExperimentProfile | str | None,
+    allowed: bool,
+) -> bool:
+    """Validate the only supported final-order authorization boundary.
+
+    Generated benchmark data is intentionally independent from this check. A
+    caller can use it for form filling without receiving permission to submit.
+    """
+
+    if not allowed:
+        return False
+    profile_id = (
+        profile.profile_id
+        if isinstance(profile, SemanticExperimentProfile)
+        else str(profile or "").strip()
+    )
+    if profile_id != "practice_shopping_feasibility":
+        raise ValueError(
+            "final order authorization requires the "
+            "practice_shopping_feasibility semantic experiment profile"
+        )
+    parsed = urlsplit(str(start_url).strip())
+    try:
+        port = parsed.port
+    except ValueError as error:
+        raise ValueError("final order authorization requires the controlled test URL") from error
+    if (
+        parsed.scheme.lower() != "https"
+        or parsed.hostname is None
+        or parsed.hostname.lower() != "practiceautomatedtesting.com"
+        or port not in {None, 443}
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path != "/shopping"
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError("final order authorization requires the controlled test URL")
+    return True
+
+
 def generate_checkout_test_data(seed: str) -> GeneratedCheckoutData:
     """Generate deterministic fictional checkout data from ``seed``."""
 
@@ -227,4 +272,5 @@ __all__ = [
     "generate_checkout_test_data",
     "practice_shopping_feasibility_profile",
     "resolve_semantic_experiment_profile",
+    "validate_final_order_authorization",
 ]

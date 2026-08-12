@@ -50,6 +50,15 @@ class _FeasibilityFixtureAdapter:
 
     async def observe_state(self) -> StateSnapshot:
         signature = dict(self._facts)
+        signature = {
+            key: value
+            for key, value in signature.items()
+            if key not in {
+                "checkout_info_complete",
+                "payment_info_complete",
+                "order_submitted",
+            }
+        }
         signature.update(
             {
                 "cart_count": 1 if self._facts["cart_has_items"] else 0,
@@ -266,6 +275,7 @@ async def test_location_scoped_pipeline_reaches_confirmation_without_ordinary_de
         visual_delta_provider=fixture_provider,
         exploration_limits=ExplorationLimits(),
         semantic_profile_context=profile.to_prompt_context(),
+        semantic_experiment_profile=profile,
         location_exploration_coordinator=None,
     )
     explorer.location_exploration_coordinator.memory = _fixture_memory()

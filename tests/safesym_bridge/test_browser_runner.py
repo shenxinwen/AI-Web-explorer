@@ -1238,7 +1238,7 @@ async def test_run_stagehand_exploration_wires_location_feasibility_profile(
 
     await browser_runner.run_stagehand_exploration(
         output_path,
-        start_url="https://fixture.test/shop",
+        start_url="https://practiceautomatedtesting.com/shopping",
         app_name="demo",
         provider=object(),
         max_candidates=8,
@@ -1269,6 +1269,28 @@ async def test_run_stagehand_exploration_wires_location_feasibility_profile(
         "frontier_replay_attempts": {},
         "limits": limits.to_dict(),
     }
+
+
+@pytest.mark.anyio
+async def test_run_stagehand_exploration_rejects_final_order_for_wrong_url(
+    monkeypatch, tmp_path
+):
+    import playwright.async_api as playwright_async_api
+
+    monkeypatch.setattr(
+        playwright_async_api,
+        "async_playwright",
+        lambda: pytest.fail("browser must not launch before authorization"),
+    )
+
+    with pytest.raises(ValueError, match="controlled test URL"):
+        await browser_runner.run_stagehand_exploration(
+            tmp_path / "graph.json",
+            start_url="https://fixture.test/shop",
+            provider=object(),
+            semantic_experiment_profile="practice_shopping_feasibility",
+            allow_test_site_final_order=True,
+        )
 
 
 @pytest.mark.anyio

@@ -23,10 +23,10 @@ from ai_web_explorer.grounded_web.business_profile import (
     ecommerce_checkout_profile,
 )
 from ai_web_explorer.grounded_web.exploration_semantics import (
-    GeneratedCheckoutData,
     SemanticExperimentProfile,
     generate_checkout_test_data,
     resolve_semantic_experiment_profile,
+    validate_final_order_authorization,
 )
 from ai_web_explorer.grounded_web.experiment_plan import (
     ExperimentPlan,
@@ -579,6 +579,11 @@ async def run_stagehand_exploration(
         if isinstance(semantic_experiment_profile, str)
         else semantic_experiment_profile
     )
+    final_order_allowed = validate_final_order_authorization(
+        start_url=start_url,
+        profile=resolved_semantic_profile,
+        allowed=allow_test_site_final_order,
+    )
     if resume_graph is not None and limits is None:
         persisted_memory = resume_graph.meta.get(LOCATION_EXPLORATION_META_KEY)
         if isinstance(persisted_memory, dict):
@@ -621,7 +626,7 @@ async def run_stagehand_exploration(
     stagehand_goal = build_generic_stagehand_exploration_goal(
         site_purpose=site_purpose,
         benchmark_context=benchmark_context,
-        allow_final_order=allow_test_site_final_order,
+        allow_final_order=final_order_allowed,
     )
     resolved_business_profile = _resolve_business_profile(business_profile)
     if resolved_business_profile is None and resolved_semantic_profile is not None:
@@ -694,6 +699,7 @@ async def run_stagehand_exploration(
                 resume_policy=resume_policy,
                 exploration_limits=limits,
                 semantic_profile_context=semantic_profile_context,
+                semantic_experiment_profile=resolved_semantic_profile,
             )
             def checkpoint(graph: WebKobeGraph) -> None:
                 if location_scoped and limits is not None:
