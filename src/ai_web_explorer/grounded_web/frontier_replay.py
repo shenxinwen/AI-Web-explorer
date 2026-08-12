@@ -66,21 +66,24 @@ class FrontierReplayRunner:
         completed_steps = 0
         for step in target.path:
             if not await self.explorer.execute_replay_action(step.edge.action):
+                self._mark_edge(step.edge_id, "unstable")
                 return ReplayResult(
                     False,
-                    start_node_id if completed_steps == 0 else step.source_node_id,
+                    None,
                     step.edge_id,
                     "replay_action_failed",
                     completed_steps,
                 )
             if not await self.explorer.validate_current_node(step.target_node_id):
+                self._mark_edge(step.edge_id, "unstable")
                 return ReplayResult(
                     False,
-                    step.source_node_id,
+                    None,
                     step.edge_id,
                     "target_state_mismatch",
                     completed_steps,
                 )
+            self._mark_edge(step.edge_id, "verified")
             completed_steps += 1
         return ReplayResult(
             True,
@@ -89,6 +92,14 @@ class FrontierReplayRunner:
             "replay_succeeded",
             completed_steps,
         )
+
+    def _mark_edge(self, edge_id: str, status: str) -> None:
+        mark = getattr(self.explorer, "mark_replay_edge_validation", None)
+        if mark is not None:
+            try:
+                mark(edge_id, status)
+            except KeyError:
+                pass
 
 
 def select_frontier(

@@ -126,6 +126,13 @@ def _compact_execution_trace(trace: dict[str, Any]) -> dict[str, Any]:
     }
     if trace.get("error"):
         compact["error"] = trace["error"]
+    replay_validation_status = (trace.get("metadata") or {}).get(
+        "replay_validation_status"
+    )
+    if replay_validation_status is not None:
+        compact["metadata"] = {
+            "replay_validation_status": replay_validation_status,
+        }
     return _without_empty_optional_values(compact)
 
 

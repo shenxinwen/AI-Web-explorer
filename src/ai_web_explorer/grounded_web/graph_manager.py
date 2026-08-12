@@ -197,6 +197,24 @@ class WebKobeGraphManager:
             )
         self.total_steps_completed += 1
 
+    def update_edge_replay_validation(
+        self,
+        edge_id: str,
+        status: str,
+    ) -> None:
+        if status not in {"unknown", "verified", "unstable"}:
+            raise ValueError(f"invalid_replay_validation_status: {status}")
+        edge = self._edges[edge_id]
+        metadata = dict(edge.execution_trace.metadata)
+        current_status = metadata.get("replay_validation_status", "unknown")
+        if current_status == "unstable" and status == "verified":
+            return
+        metadata["replay_validation_status"] = status
+        self._edges[edge_id] = replace(
+            edge,
+            execution_trace=replace(edge.execution_trace, metadata=metadata),
+        )
+
     def node_for_id(self, node_id: str) -> WebKobeNode:
         return self._nodes[node_id]
 

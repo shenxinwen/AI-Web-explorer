@@ -643,7 +643,13 @@ class WebKobeExplorer:
 
     async def execute_replay_action(self, action: BrowserAction) -> bool:
         """Execute one stored action without recording a new exploration edge."""
+        replay_execute = getattr(self.adapter, "execute_replay_action", None)
+        if replay_execute is not None:
+            return await replay_execute(action)
         return await self.adapter.execute(action)
+
+    def mark_replay_edge_validation(self, edge_id: str, status: str) -> None:
+        self.manager.update_edge_replay_validation(edge_id, status)
 
     async def validate_current_node(self, expected_node_id: str) -> bool:
         """Check the observed surface against an existing graph node."""

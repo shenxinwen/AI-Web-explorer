@@ -80,6 +80,11 @@ def _projectable_reason(edge: WebKobeEdge, known_node_ids: set[str]) -> str | No
         return "missing_surface_reference"
     if not edge.execution_trace.success or edge.status not in PROJECTABLE_EDGE_STATUSES:
         return "unverified_transition"
+    if (
+        edge.execution_trace.metadata.get("replay_validation_status")
+        == "unstable"
+    ):
+        return "unstable_replay_validation"
     if not _action_identity(edge):
         return "invalid_action_identity"
     return None
