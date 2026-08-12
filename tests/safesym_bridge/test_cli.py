@@ -1150,3 +1150,113 @@ def test_main_web_kobe_phase_a_surface_projection_writes_problem(tmp_path):
     assert "(executed transition_filter_on_shopping)" in domain
     assert "(:domain web_kobe_surface)" in problem
     assert "checkpoint" not in domain
+
+
+def _write_surface_graph(path: Path, *, include_isolated: bool = False) -> None:
+    nodes = [
+        WebKobeNode(
+            node_id="start",
+            page_description="start",
+            page_frame=PageFrame(
+                page_id="start",
+                page_type="listing",
+                url="https://fixture.test/",
+                url_pattern="https://fixture.test/",
+                title="start",
+            ),
+            state_schema={},
+            last_state_snapshot={},
+            node_label="start",
+        )
+    ]
+    if include_isolated:
+        nodes.append(
+            WebKobeNode(
+                node_id="isolated",
+                page_description="isolated",
+                page_frame=PageFrame(
+                    page_id="isolated",
+                    page_type="listing",
+                    url="https://fixture.test/isolated",
+                    url_pattern="https://fixture.test/isolated",
+                    title="isolated",
+                ),
+                state_schema={},
+                last_state_snapshot={},
+                node_label="isolated",
+            )
+        )
+    path.write_text(
+        json.dumps(
+            WebKobeGraph(
+                app="fixture",
+                start_node_id="start",
+                total_steps_completed=0,
+                nodes=nodes,
+                edges=[],
+            ).to_dict()
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_main_web_kobe_phase_a_without_problem_query_removes_stale_problem(
+    tmp_path,
+):
+    graph_path = tmp_path / "graph.json"
+    output_dir = tmp_path / "surface"
+    _write_surface_graph(graph_path)
+    output_dir.mkdir()
+    (output_dir / "problem.pddl").write_text("stale", encoding="utf-8")
+    marker = output_dir / "unrelated.txt"
+    marker.write_text("keep", encoding="utf-8")
+
+    assert (
+        main(
+            [
+                "web-kobe-phase-a",
+                "--graph",
+                str(graph_path),
+                "--output",
+                str(output_dir),
+                "--projection",
+                "surface",
+            ]
+        )
+        == 0
+    )
+    assert not (output_dir / "problem.pddl").exists()
+    assert marker.read_text(encoding="utf-8") == "keep"
+
+
+@pytest.mark.parametrize("goal_node", ["missing", "isolated"])
+def test_main_web_kobe_phase_a_failed_problem_query_removes_stale_problem(
+    tmp_path,
+    goal_node,
+):
+    graph_path = tmp_path / "graph.json"
+    output_dir = tmp_path / "surface"
+    _write_surface_graph(graph_path, include_isolated=True)
+    output_dir.mkdir()
+    (output_dir / "problem.pddl").write_text("stale", encoding="utf-8")
+    marker = output_dir / "unrelated.txt"
+    marker.write_text("keep", encoding="utf-8")
+
+    assert (
+        main(
+            [
+                "web-kobe-phase-a",
+                "--graph",
+                str(graph_path),
+                "--output",
+                str(output_dir),
+                "--projection",
+                "surface",
+                "--goal-node",
+                goal_node,
+            ]
+        )
+        == 1
+    )
+    assert not (output_dir / "problem.pddl").exists()
+    assert marker.read_text(encoding="utf-8") == "keep"
