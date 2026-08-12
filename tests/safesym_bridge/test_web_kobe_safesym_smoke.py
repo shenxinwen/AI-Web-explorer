@@ -1,6 +1,10 @@
 import json
+import os
 import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 from ai_web_explorer.grounded_web.capability_graph import ExecutionTrace, PageFrame
 from ai_web_explorer.grounded_web.graph import (
@@ -14,6 +18,8 @@ from ai_web_explorer.safesym_bridge.surface_pddl import (
     compile_surface_problem,
 )
 from ai_web_explorer.safesym_bridge.web_kobe_safesym_smoke import (
+    _env_for_safesym,
+    _parse_command,
     analyze_web_kobe_safesym_smoke,
     write_web_kobe_safesym_smoke,
 )
@@ -205,6 +211,60 @@ def test_surface_pddl_safe_sym_smoke_handles_sibling_and_deep_edges(tmp_path):
     assert report.safety_injection_ready is True
     assert report.base_plan_ready is True
     assert report.safe_plan_ready is True
+
+
+def test_real_safesym_parser_accepts_surface_pddl(tmp_path):
+    safesym_root = Path(
+        os.environ.get("SAFESYM_ROOT", r"C:\Users\moon\Desktop\Projects\SafeSym")
+    )
+    if not safesym_root.exists():
+        pytest.skip("SafeSym checkout is unavailable")
+
+    graph = WebKobeGraph(
+        app="fixture",
+        start_node_id="start",
+        total_steps_completed=0,
+        nodes=[
+            WebKobeNode(
+                node_id="start",
+                page_description="start",
+                page_frame=PageFrame(
+                    page_id="start",
+                    page_type="start",
+                    url="https://fixture.test/",
+                    url_pattern="https://fixture.test/",
+                    title="start",
+                ),
+                state_schema={},
+                last_state_snapshot={},
+                node_label="start",
+            )
+        ],
+        edges=[],
+    )
+    task_dir = tmp_path / "surface_task"
+    task_dir.mkdir()
+    (task_dir / "domain.pddl").write_text(
+        compile_surface_domain(graph, domain_name="Real Surface").domain,
+        encoding="utf-8",
+    )
+    (task_dir / "problem.pddl").write_text(
+        compile_surface_problem(
+            graph,
+            goal_node_id="start",
+            domain_name="Real Surface",
+        ).problem,
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        _parse_command(sys.executable, task_dir),
+        cwd=str(task_dir),
+        env=_env_for_safesym(safesym_root),
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_write_web_kobe_safesym_smoke_writes_report(tmp_path):

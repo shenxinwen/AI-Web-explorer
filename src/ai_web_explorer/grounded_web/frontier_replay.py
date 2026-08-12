@@ -106,8 +106,14 @@ def select_frontier(
     graph: WebKobeGraph,
     *,
     blocked_node_ids: Iterable[str] = (),
+    include_start: bool = False,
 ) -> FrontierTarget | None:
-    """Select the nearest reachable node that still has an untried candidate."""
+    """Select the nearest reachable node that still has an untried candidate.
+
+    The entry node is excluded by default because it is the reset state, not a
+    replay frontier.  ``include_start`` is an explicit escape hatch for callers
+    that intentionally want to replay an entry-state candidate.
+    """
 
     blocked = set(blocked_node_ids)
     nodes_by_id = {node.node_id: node for node in graph.nodes}
@@ -130,11 +136,18 @@ def select_frontier(
             _edge_action_id(edge)
         )
 
-    queue = deque([(graph.start_node_id, tuple(), frozenset({graph.start_node_id}))])
+    queue = deque([graph.start_node_id])
+    parent: dict[str, tuple[str, WebKobeEdge] | None] = {
+        graph.start_node_id: None
+    }
     while queue:
-        node_id, path, visited = queue.popleft()
+        node_id = queue.popleft()
         node = nodes_by_id.get(node_id)
-        if node is not None and node_id not in blocked:
+        if (
+            node is not None
+            and (include_start or node_id != graph.start_node_id)
+            and node_id not in blocked
+        ):
             candidates = _candidate_action_ids(node)
             untried = tuple(
                 action_id
@@ -144,27 +157,37 @@ def select_frontier(
             if untried:
                 return FrontierTarget(
                     node_id=node_id,
-                    path=path,
+                    path=_path_to(node_id, parent),
                     untried_action_ids=untried,
                 )
 
         for edge in adjacency.get(node_id, []):
-            if edge.target_node_id in visited:
+            if edge.target_node_id in parent:
                 continue
-            step = ReplayStep(
+            parent[edge.target_node_id] = (node_id, edge)
+            queue.append(edge.target_node_id)
+    return None
+
+
+def _path_to(
+    node_id: str,
+    parent: dict[str, tuple[str, WebKobeEdge] | None],
+) -> tuple[ReplayStep, ...]:
+    steps: list[ReplayStep] = []
+    current = node_id
+    while parent[current] is not None:
+        source_node_id, edge = parent[current]
+        steps.append(
+            ReplayStep(
                 edge_id=edge.edge_id,
-                source_node_id=edge.source_node_id,
-                target_node_id=edge.target_node_id,
+                source_node_id=source_node_id,
+                target_node_id=current,
                 edge=edge,
             )
-            queue.append(
-                (
-                    edge.target_node_id,
-                    path + (step,),
-                    visited | {edge.target_node_id},
-                )
-            )
-    return None
+        )
+        current = source_node_id
+    steps.reverse()
+    return tuple(steps)
 
 
 def _candidate_action_ids(node) -> tuple[str, ...]:

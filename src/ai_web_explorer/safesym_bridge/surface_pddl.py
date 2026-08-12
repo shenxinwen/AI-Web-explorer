@@ -253,6 +253,7 @@ def compile_surface_problem(
     *,
     goal_node_id: str,
     problem_name: str = "web_kobe_surface_problem",
+    domain_name: str = "web_kobe_surface",
 ) -> SurfaceProblemProjection:
     surfaces = _surface_names(graph)
     start_node_id = graph.start_node_id
@@ -271,12 +272,17 @@ def compile_surface_problem(
         fallback_prefix="problem",
         stable_id=problem_name,
     )
+    normalized_domain_name = _slug(
+        domain_name,
+        fallback_prefix="domain",
+        stable_id=domain_name,
+    )
     start_surface = surfaces[start_node_id]
     goal_surface = surfaces[goal_node_id]
     problem = "\n".join(
         [
             f"(define (problem {normalized_problem_name})",
-            "  (:domain web_kobe_surface)",
+            f"  (:domain {normalized_domain_name})",
             f"  (:init (at {start_surface}))",
             f"  (:goal (at {goal_surface}))",
             ")",

@@ -139,6 +139,48 @@ def test_select_frontier_returns_none_when_all_candidates_are_exhausted():
     assert select_frontier(graph) is None
 
 
+def test_select_frontier_does_not_select_start_by_default():
+    graph = WebKobeGraph(
+        app="fixture",
+        start_node_id="start",
+        total_steps_completed=0,
+        nodes=[_node("start", "start_action")],
+        edges=[],
+    )
+
+    assert select_frontier(graph) is None
+    assert select_frontier(graph, include_start=True).node_id == "start"
+
+
+def test_select_frontier_uses_one_global_bfs_parent_per_node_in_cycles():
+    graph = WebKobeGraph(
+        app="fixture",
+        start_node_id="start",
+        total_steps_completed=3,
+        nodes=[
+            _node("start"),
+            _node("left"),
+            _node("right"),
+            _node("deep", "continue_deep"),
+        ],
+        edges=[
+            _edge("start", "left", "open_left"),
+            _edge("start", "right", "open_right"),
+            _edge("left", "right", "cycle_to_right"),
+            _edge("right", "deep", "open_deep"),
+        ],
+    )
+
+    target = select_frontier(graph)
+
+    assert target is not None
+    assert target.node_id == "deep"
+    assert [step.edge_id for step in target.path] == [
+        "start__open_right__right",
+        "right__open_deep__deep",
+    ]
+
+
 class _ReplayAdapter:
     app_name = "fixture"
 

@@ -108,3 +108,13 @@ def test_surface_problem_uses_graph_start_and_reachable_goal():
     assert "(:domain web_kobe_surface)" in result.problem
     assert "(:init (at shopping))" in result.problem
     assert "(:goal (at product_detail))" in result.problem
+
+
+def test_surface_problem_uses_custom_domain_name():
+    result = compile_surface_problem(
+        surface_graph_fixture(),
+        goal_node_id="product",
+        domain_name="Custom Surface Domain",
+    )
+
+    assert "(:domain custom_surface_domain)" in result.problem
