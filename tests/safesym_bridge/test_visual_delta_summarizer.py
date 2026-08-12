@@ -1,3 +1,5 @@
+import json
+
 from ai_web_explorer.grounded_web.business_profile import ecommerce_checkout_profile
 from ai_web_explorer.grounded_web.graph import BrowserAction
 from ai_web_explorer.grounded_web.visual_delta import (
@@ -43,6 +45,49 @@ def test_summarize_visual_delta_maps_provider_json_to_candidate_planning_delta()
     assert result.planning_delta.verified_added_facts == []
     assert result.trace.status == "summarized"
     assert "visual_change_summary" not in result.trace.to_dict()
+
+
+def test_visual_delta_reports_observable_change_from_structured_signatures():
+    request = VisualDeltaRequest(
+        goal="Observe the page.",
+        action=BrowserAction("click", "button.sort", "sort_products"),
+        before_screenshot_path="before.png",
+        after_screenshot_path="after.png",
+        before_signature={"url_path": "/products", "count": 2},
+        after_signature={"url_path": "/products", "count": 3},
+    )
+
+    result = summarize_visual_delta(
+        request,
+        provider=lambda *_args, **_kwargs: '{"observable_change":false}',
+    )
+
+    assert result.observable_change is True
+
+
+def test_visual_delta_allows_experiment_profile_context_and_business_fact_fields():
+    request = VisualDeltaRequest(
+        goal="Observe the page.",
+        action=BrowserAction("click", "button.add", "add_to_cart"),
+        before_screenshot_path="before.png",
+        after_screenshot_path="after.png",
+        semantic_profile_context={"business_facts": {"cart_has_items": []}},
+    )
+    prompts = []
+
+    def provider(prompt, *, before_screenshot_path, after_screenshot_path):
+        prompts.append(prompt)
+        return (
+            '{"observable_change":true,"business_facts_added":'
+            '["cart_has_items"],"business_facts_removed":[]}'
+        )
+
+    result = summarize_visual_delta(request, provider=provider)
+
+    payload = json.loads(prompts[0])
+    assert payload["semantic_profile_context"] == request.semantic_profile_context
+    assert result.observable_change is True
+    assert result.planning_delta.candidate_added_facts == ["cart_has_items"]
 
 
 def test_visual_delta_extracts_location_role_and_completion_fact():

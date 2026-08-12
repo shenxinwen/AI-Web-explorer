@@ -44,6 +44,7 @@ from ai_web_explorer.grounded_web.openai_visual_delta import (
     create_openai_visual_delta_provider_from_env,
 )
 from ai_web_explorer.grounded_web.planning_fact_verifier import (
+    verify_experiment_planning_delta,
     verify_planning_delta,
 )
 from ai_web_explorer.grounded_web.playwright_backend import WebKobePlaywrightAdapter
@@ -83,4 +84,5 @@ __all__ = [
     "summarize_visual_affordances",
     "summarize_visual_delta",
     "verify_planning_delta",
+    "verify_experiment_planning_delta",
 ]

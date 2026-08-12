@@ -8,6 +8,9 @@ from ai_web_explorer.grounded_web.business_affordance import (
     VisualAffordanceRequest,
     summarize_visual_affordances,
 )
+from ai_web_explorer.grounded_web.exploration_semantics import (
+    practice_shopping_feasibility_profile,
+)
 
 
 def test_exploration_and_prompts_do_not_consume_trace_planning_inputs():
@@ -239,6 +242,70 @@ def test_summarize_visual_affordances_enforces_max_actions_upper_bound():
         "first_action",
         "second_action",
     ]
+
+
+def _targeted_request():
+    return VisualAffordanceRequest(
+        goal="Explore useful website functionality.",
+        current_screenshot_path="after.png",
+        max_actions=8,
+        scan_kind="targeted",
+        semantic_location="shopping",
+        existing_action_ids=["open_empty_cart", "add_to_cart"],
+        completed_action_ids=["add_to_cart"],
+        added_business_facts=["cart_has_items"],
+        removed_business_facts=[],
+        semantic_profile_context=practice_shopping_feasibility_profile().to_prompt_context(),
+    )
+
+
+def test_targeted_scan_requests_only_business_delta_changes():
+    request = _targeted_request()
+
+    def provider(prompt, *, current_screenshot_path):
+        payload = json.loads(prompt)
+        assert payload["scan_kind"] == "targeted"
+        assert payload["business_delta"]["added"] == ["cart_has_items"]
+        assert "SafeSym" not in payload["instruction"]
+        return '{"location_id":"shopping","newly_enabled":[]}'
+
+    result = summarize_visual_affordances(request, provider=provider)
+
+    assert result.location_id == "shopping"
+    assert result.business_affordances == []
+
+
+def test_targeted_scan_parses_semantic_replacement():
+    result = summarize_visual_affordances(
+        _targeted_request(),
+        provider=lambda *_args, **_kwargs: json.dumps(
+            {
+                "location_id": "shopping",
+                "newly_enabled": [
+                    {
+                        "intent": "open_checkout",
+                        "label": "Cart",
+                        "target": "cart button",
+                        "confidence": 0.9,
+                        "supporting_facts": ["cart_has_items"],
+                    }
+                ],
+                "semantically_changed": [
+                    {
+                        "old_action": "open_empty_cart",
+                        "new_action": "open_checkout",
+                    }
+                ],
+                "disabled": ["open_empty_cart"],
+            }
+        ),
+    )
+
+    assert [item.action_name for item in result.business_affordances] == [
+        "open_checkout"
+    ]
+    assert result.replacements == [("open_empty_cart", "open_checkout")]
+    assert result.disabled_action_ids == ["open_empty_cart"]
 
 
 def test_summarize_visual_affordances_rejects_non_object_response():
