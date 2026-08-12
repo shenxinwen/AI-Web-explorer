@@ -278,14 +278,20 @@ def test_execution_events_preserve_failed_then_successful_retry():
     ]
 
 
-def _semantic_observation(location: str, *, role: str = "presentation_capability"):
+def _semantic_observation(
+    location: str,
+    *,
+    role: str = "presentation_capability",
+    confidence: float | None = 0.9,
+    evidence: list[str] | None = None,
+):
     return SemanticObservation(
         action_role=role,
         source_location=location,
         target_location=location,
         completion_facts=["products_sorted"],
-        evidence=[f"Observed {location}"],
-        confidence=0.9,
+        evidence=list(evidence or [f"Observed {location}"]),
+        confidence=confidence,
     )
 
 
@@ -315,6 +321,72 @@ def test_identical_semantic_observation_retries_do_not_conflict():
     canonical = manager.to_graph().edges[0]
     assert canonical.semantic_observation == observation
     assert "semantic_observation_conflict" not in canonical.execution_trace.metadata
+
+
+def test_same_planner_semantics_merge_confidence_conservatively():
+    manager = WebKobeGraphManager(app="example")
+    manager.identify_or_add_node(_node("page", {}))
+    edge = _trace_edge("sort_products", success=True, status="succeeded")
+    manager.add_edge(
+        replace(edge, semantic_observation=_semantic_observation("product_list", confidence=0.90))
+    )
+    manager.add_edge(
+        replace(edge, semantic_observation=_semantic_observation("product_list", confidence=0.91))
+    )
+    canonical = manager.to_graph().edges[0]
+    assert canonical.semantic_observation is not None
+    assert canonical.semantic_observation.confidence == 0.9
+    assert "semantic_observation_conflict" not in canonical.execution_trace.metadata
+
+
+def test_same_semantics_different_evidence_merge_to_byte_stable_union():
+    edge = _trace_edge("sort_products", success=True, status="succeeded")
+    observations = [
+        _semantic_observation(
+            "product_list", confidence=0.91, evidence=["B evidence", "A evidence"]
+        ),
+        _semantic_observation(
+            "product_list", confidence=0.90, evidence=["C evidence", "A evidence"]
+        ),
+    ]
+
+    def canonical(ordered):
+        manager = WebKobeGraphManager(app="example")
+        manager.identify_or_add_node(_node("page", {}))
+        for observation in ordered:
+            manager.add_edge(replace(edge, semantic_observation=observation))
+        return manager.to_graph().edges[0].to_dict()
+
+    forward = canonical(observations)
+    reverse = canonical(list(reversed(observations)))
+    assert forward == reverse
+    assert forward["semantic_observation"]["evidence"] == [
+        "A evidence",
+        "B evidence",
+        "C evidence",
+    ]
+    assert forward["semantic_observation"]["confidence"] == 0.9
+
+
+def test_three_same_semantics_confidence_evidence_permutations_are_byte_stable():
+    import itertools
+
+    edge = _trace_edge("sort_products", success=True, status="succeeded")
+    observations = [
+        _semantic_observation("product_list", confidence=0.93, evidence=["z"]),
+        _semantic_observation("product_list", confidence=0.91, evidence=["x"]),
+        _semantic_observation("product_list", confidence=0.92, evidence=["y"]),
+    ]
+    outputs = []
+    for ordered in itertools.permutations(observations):
+        manager = WebKobeGraphManager(app="example")
+        manager.identify_or_add_node(_node("page", {}))
+        for observation in ordered:
+            manager.add_edge(replace(edge, semantic_observation=observation))
+        outputs.append(manager.to_graph().edges[0].to_dict())
+    assert all(output == outputs[0] for output in outputs)
+    assert outputs[0]["semantic_observation"]["confidence"] == 0.91
+    assert outputs[0]["semantic_observation"]["evidence"] == ["x", "y", "z"]
 
 
 def test_repeated_edge_semantic_conflict_uses_sorted_auditable_value():

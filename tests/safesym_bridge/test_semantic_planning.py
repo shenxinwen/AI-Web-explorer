@@ -16,9 +16,6 @@ from ai_web_explorer.grounded_web.semantic_planning import (
 )
 from ai_web_explorer.safesym_bridge.minimal_semantic_pddl import (
     compile_minimal_semantic_domain,
-)
-from ai_web_explorer.safesym_bridge.minimal_semantic_pddl import (
-    compile_minimal_semantic_domain,
     compile_minimal_semantic_problem,
 )
 

@@ -197,7 +197,6 @@ def _semantic_content_dict(observation: SemanticObservation) -> dict[str, Any]:
             "completion_facts",
             "candidate_required_facts",
             "preserved_facts",
-            "confidence",
         )
     }
 
@@ -227,6 +226,53 @@ def _canonical_observation_dict(observation: SemanticObservation) -> dict[str, A
     }
 
 
+def _semantic_identity_dict(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: item.get(key)
+        for key in (
+            "action_role",
+            "source_location",
+            "target_location",
+            "completion_facts",
+            "candidate_required_facts",
+            "preserved_facts",
+        )
+    }
+
+
+def _semantic_identity_fingerprint(item: dict[str, Any]) -> str:
+    return json.dumps(
+        _semantic_identity_dict(item),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+
+
+def _merged_confidence(values: list[Any]) -> float | None:
+    numeric = [
+        float(value)
+        for value in values
+        if isinstance(value, (int, float)) and not isinstance(value, bool)
+    ]
+    if numeric:
+        return min(numeric)
+    return None
+
+
+def _merge_canonical_candidate(
+    existing: dict[str, Any], incoming: dict[str, Any]
+) -> dict[str, Any]:
+    merged = dict(existing)
+    merged["evidence"] = sorted(
+        set(existing.get("evidence", [])) | set(incoming.get("evidence", []))
+    )
+    merged["confidence"] = _merged_confidence(
+        [existing.get("confidence"), incoming.get("confidence")]
+    )
+    return merged
+
+
 def _semantic_content_fingerprint(observation: SemanticObservation) -> str:
     return json.dumps(
         _semantic_content_dict(observation),
@@ -244,11 +290,81 @@ def _conflict_candidates(
     existing = metadata.get("semantic_observation_conflict") or {}
     for item in existing.get("candidates", []):
         if isinstance(item, dict):
-            candidates[json.dumps(item, sort_keys=True, separators=(",", ":"), ensure_ascii=False)] = item
+            canonical = _canonical_candidate_dict(item)
+            key = _semantic_identity_fingerprint(canonical)
+            candidates[key] = (
+                _merge_canonical_candidate(candidates[key], canonical)
+                if key in candidates
+                else canonical
+            )
     for observation in observations:
-        item = _canonical_observation_dict(observation)
-        candidates[json.dumps(item, sort_keys=True, separators=(",", ":"), ensure_ascii=False)] = item
+        canonical = _canonical_observation_dict(observation)
+        key = _semantic_identity_fingerprint(canonical)
+        candidates[key] = (
+            _merge_canonical_candidate(candidates[key], canonical)
+            if key in candidates
+            else canonical
+        )
     return [candidates[key] for key in sorted(candidates)]
+
+
+def _canonical_candidate_dict(item: dict[str, Any]) -> dict[str, Any]:
+    def facts(key: str) -> list[str]:
+        return sorted(
+            {
+                _normalized_location_hint(value)
+                for value in item.get(key, [])
+                if _normalized_location_hint(value)
+            }
+        )
+
+    return {
+        "action_role": normalize_semantic_id(item.get("action_role", "")),
+        "source_location": normalize_semantic_id(item.get("source_location", "")),
+        "target_location": normalize_semantic_id(item.get("target_location", "")),
+        "completion_facts": facts("completion_facts"),
+        "candidate_required_facts": facts("candidate_required_facts"),
+        "preserved_facts": facts("preserved_facts"),
+        "evidence": sorted(
+            {str(value).strip() for value in item.get("evidence", []) if str(value).strip()}
+        ),
+        "confidence": item.get("confidence"),
+    }
+
+
+def _merge_same_identity_observations(
+    existing: SemanticObservation, incoming: SemanticObservation
+) -> SemanticObservation:
+    canonical = _canonical_observation_dict(existing)
+    merged = _merge_canonical_candidate(
+        canonical, _canonical_observation_dict(incoming)
+    )
+    return SemanticObservation(
+        action_role=merged["action_role"],
+        source_location=merged["source_location"],
+        target_location=merged["target_location"],
+        completion_facts=merged["completion_facts"],
+        candidate_required_facts=merged["candidate_required_facts"],
+        preserved_facts=merged["preserved_facts"],
+        evidence=merged["evidence"],
+        confidence=merged["confidence"],
+    )
+
+
+def _canonicalize_observation(
+    observation: SemanticObservation,
+) -> SemanticObservation:
+    canonical = _canonical_observation_dict(observation)
+    return SemanticObservation(
+        action_role=canonical["action_role"],
+        source_location=canonical["source_location"],
+        target_location=canonical["target_location"],
+        completion_facts=canonical["completion_facts"],
+        candidate_required_facts=canonical["candidate_required_facts"],
+        preserved_facts=canonical["preserved_facts"],
+        evidence=canonical["evidence"],
+        confidence=canonical["confidence"],
+    )
 
 
 def _merge_semantic_observation(
@@ -268,13 +384,15 @@ def _merge_semantic_observation(
         }
         return None, metadata
     if existing is None:
-        return incoming, metadata
+        if incoming is None:
+            return None, metadata
+        return _canonicalize_observation(incoming), metadata
     if incoming is None:
-        return existing, metadata
+        return _canonicalize_observation(existing), metadata
     if _semantic_content_fingerprint(existing) == _semantic_content_fingerprint(
         incoming
     ):
-        return existing, metadata
+        return _merge_same_identity_observations(existing, incoming), metadata
     metadata = dict(metadata)
     metadata["semantic_observation_conflict"] = {
         "status": "unresolved",
