@@ -66,7 +66,6 @@ class FrontierReplayRunner:
         completed_steps = 0
         for step in target.path:
             if not await self.explorer.execute_replay_action(step.edge.action):
-                self._mark_edge(step.edge_id, "unstable")
                 return ReplayResult(
                     False,
                     None,
@@ -176,6 +175,50 @@ def select_frontier(
                 continue
             parent[edge.target_node_id] = (node_id, edge)
             queue.append(edge.target_node_id)
+    return None
+
+
+def reachable_frontier_for_node(
+    graph: WebKobeGraph,
+    node_id: str,
+    *,
+    action_eligible: Callable[[str, str], bool],
+) -> FrontierTarget | None:
+    target_node = next((node for node in graph.nodes if node.node_id == node_id), None)
+    if target_node is None:
+        return None
+    nodes_by_id = {node.node_id: node for node in graph.nodes}
+    adjacency: dict[str, list[WebKobeEdge]] = {}
+    for edge in graph.edges:
+        if (
+            edge.status not in REPLAYABLE_EDGE_STATUSES
+            or not edge.execution_trace.success
+            or edge.execution_trace.metadata.get("replay_validation_status") == "unstable"
+        ):
+            continue
+        if edge.source_node_id in nodes_by_id and edge.target_node_id in nodes_by_id:
+            adjacency.setdefault(edge.source_node_id, []).append(edge)
+    for edges in adjacency.values():
+        edges.sort(key=lambda edge: edge.edge_id)
+    parent: dict[str, tuple[str, WebKobeEdge] | None] = {graph.start_node_id: None}
+    queue = deque([graph.start_node_id])
+    while queue:
+        current = queue.popleft()
+        if current == node_id:
+            tried = {_edge_action_id(edge) for edge in graph.edges if edge.source_node_id == node_id}
+            candidates = tuple(
+                action.action_name
+                for action in target_node.business_affordances
+                if action.action_name not in tried
+                and action_eligible(node_id, action.action_name)
+            )
+            if candidates:
+                return FrontierTarget(node_id, _path_to(node_id, parent), candidates)
+            return None
+        for edge in adjacency.get(current, []):
+            if edge.target_node_id not in parent:
+                parent[edge.target_node_id] = (current, edge)
+                queue.append(edge.target_node_id)
     return None
 
 

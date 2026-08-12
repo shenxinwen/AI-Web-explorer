@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 
 from ai_web_explorer.grounded_web.capability_graph import ExecutionTrace, PageFrame
@@ -10,7 +12,9 @@ from ai_web_explorer.grounded_web.graph import (
 from ai_web_explorer.grounded_web.resume import (
     ActionAttemptKey,
     ResumePolicy,
+    derive_resume_cursor,
     is_action_eligible,
+    select_resume_frontier,
 )
 
 
@@ -92,3 +96,20 @@ def test_resume_action_eligibility(events, inflight, authorized, expected):
         )
         is expected
     )
+
+
+def test_resume_cursor_prefers_explicit_meta_and_selects_reachable_cursor():
+    start = _graph_with_events([])
+    target = WebKobeNode(
+        node_id="target",
+        page_description="target",
+        page_frame=start.nodes[0].page_frame,
+        state_schema={},
+        last_state_snapshot={},
+        business_affordances=[],
+    )
+    start.nodes[0] = replace(start.nodes[0], business_affordances=[])
+    start.nodes.append(target)
+    start.meta["resume_cursor_node_id"] = "target"
+    assert derive_resume_cursor(start) == "target"
+    assert select_resume_frontier(start, policy=ResumePolicy()) is None

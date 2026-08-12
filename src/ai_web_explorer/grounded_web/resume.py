@@ -96,3 +96,54 @@ def validate_resume_graph(graph: WebKobeGraph, *, app_name: str) -> None:
         for edge in graph.edges
     ):
         raise ValueError("resume_dangling_edge")
+
+
+def derive_resume_cursor(graph: WebKobeGraph) -> str:
+    explicit = graph.meta.get("resume_cursor_node_id")
+    node_ids = {node.node_id for node in graph.nodes}
+    if explicit in node_ids:
+        return explicit
+    inflight = graph.meta.get("inflight_action") or {}
+    if inflight.get("source_node_id") in node_ids:
+        return inflight["source_node_id"]
+    events = _events(graph)
+    if events:
+        event = events[-1]
+        candidate = event.target_node_id if event.status != "failed_execution" else event.source_node_id
+        if candidate in node_ids:
+            return candidate
+    return graph.start_node_id
+
+
+def select_resume_frontier(
+    graph: WebKobeGraph,
+    *,
+    policy: ResumePolicy,
+    blocked_node_ids=(),
+):
+    from ai_web_explorer.grounded_web.frontier_replay import select_frontier, reachable_frontier_for_node
+
+    eligible = lambda node_id, action_id: is_action_eligible(
+        graph,
+        source_node_id=node_id,
+        action_id=action_id,
+        policy=policy,
+    )
+    cursor = derive_resume_cursor(graph)
+    if cursor not in set(blocked_node_ids):
+        target = reachable_frontier_for_node(graph, cursor, action_eligible=eligible)
+        if target is not None:
+            return target
+    target = select_frontier(
+        graph,
+        blocked_node_ids=blocked_node_ids,
+        action_eligible=eligible,
+    )
+    if target is not None:
+        return target
+    return select_frontier(
+        graph,
+        blocked_node_ids=blocked_node_ids,
+        include_start=True,
+        action_eligible=eligible,
+    )
