@@ -5,6 +5,7 @@ import pytest
 from ai_web_explorer.grounded_web.capability_graph import ExecutionTrace, PageFrame
 from ai_web_explorer.grounded_web.graph import (
     BrowserAction,
+    BusinessAffordance,
     WebKobeEdge,
     WebKobeGraph,
     WebKobeNode,
@@ -16,6 +17,40 @@ from ai_web_explorer.grounded_web.resume import (
     is_action_eligible,
     select_resume_frontier,
 )
+
+
+def _resume_node(node_id, actions=()):
+    return WebKobeNode(
+        node_id=node_id,
+        page_description=node_id,
+        page_frame=PageFrame(
+            page_id=node_id,
+            page_type=node_id,
+            url="https://fixture.test/",
+            url_pattern="https://fixture.test/",
+            title=node_id,
+        ),
+        state_schema={},
+        last_state_snapshot={},
+        business_affordances=[BusinessAffordance(action) for action in actions],
+    )
+
+
+def _resume_edge(source, target, action, *, status="succeeded_with_navigation", success=True):
+    return WebKobeEdge(
+        source_node_id=source,
+        target_node_id=target,
+        instruction=action,
+        action=BrowserAction("click", f"#{action}", action),
+        capability=None,
+        target_observation=target,
+        observed_delta=[],
+        schema_delta={},
+        execution_trace=ExecutionTrace(
+            "click", f"#{action}", action, {}, source, target, success
+        ),
+        status=status,
+    )
 
 
 def _graph_with_events(statuses, *, inflight=None):
@@ -113,3 +148,83 @@ def test_resume_cursor_prefers_explicit_meta_and_selects_reachable_cursor():
     start.meta["resume_cursor_node_id"] = "target"
     assert derive_resume_cursor(start) == "target"
     assert select_resume_frontier(start, policy=ResumePolicy()) is None
+
+
+def test_resume_cursor_prefers_authorized_failed_action_over_earlier_sibling_path():
+    nodes = [
+        _resume_node("start"),
+        _resume_node("retry_source", ["retry_me"]),
+        _resume_node("sibling", ["ordinary"]),
+    ]
+    path_to_retry = _resume_edge("start", "retry_source", "z_path")
+    path_to_sibling = _resume_edge("start", "sibling", "a_path")
+    failed_retry = _resume_edge(
+        "retry_source",
+        "retry_source",
+        "retry_me",
+        status="failed_execution",
+        success=False,
+    )
+    graph = WebKobeGraph(
+        app="fixture",
+        start_node_id="start",
+        total_steps_completed=3,
+        nodes=nodes,
+        edges=[path_to_retry, path_to_sibling, failed_retry],
+        execution_events=[path_to_retry, path_to_sibling, failed_retry],
+        meta={"resume_cursor_node_id": "retry_source"},
+    )
+    policy = ResumePolicy(
+        retry_keys=frozenset({ActionAttemptKey("retry_source", "retry_me")})
+    )
+
+    target = select_resume_frontier(graph, policy=policy)
+
+    assert target is not None
+    assert target.node_id == "retry_source"
+    assert target.untried_action_ids == ("retry_me",)
+
+
+def test_resume_prefers_most_recent_authorized_retry_source_before_normal_frontier():
+    nodes = [
+        _resume_node("start"),
+        _resume_node("cursor"),
+        _resume_node("older_retry", ["retry_old"]),
+        _resume_node("newer_retry", ["retry_new"]),
+        _resume_node("ordinary", ["ordinary"]),
+    ]
+    stable_edges = [
+        _resume_edge("start", "cursor", "cursor_path"),
+        _resume_edge("start", "ordinary", "ordinary_path"),
+        _resume_edge("start", "older_retry", "older_path"),
+        _resume_edge("start", "newer_retry", "newer_path"),
+    ]
+    failed_old = _resume_edge(
+        "older_retry", "older_retry", "retry_old", status="failed_execution", success=False
+    )
+    failed_new = _resume_edge(
+        "newer_retry", "newer_retry", "retry_new", status="failed_execution", success=False
+    )
+    graph = WebKobeGraph(
+        app="fixture",
+        start_node_id="start",
+        total_steps_completed=6,
+        nodes=nodes,
+        edges=stable_edges + [failed_old, failed_new],
+        execution_events=stable_edges + [failed_old, failed_new],
+        meta={"resume_cursor_node_id": "cursor"},
+    )
+    policy = ResumePolicy(
+        retry_keys=frozenset(
+            {
+                ActionAttemptKey("older_retry", "retry_old"),
+                ActionAttemptKey("newer_retry", "retry_new"),
+            }
+        )
+    )
+
+    target = select_resume_frontier(graph, policy=policy)
+
+    assert target is not None
+    assert target.node_id == "newer_retry"
+    assert target.untried_action_ids == ("retry_new",)

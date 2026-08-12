@@ -1249,6 +1249,7 @@ async def test_run_stagehand_exploration_bootstraps_resume_without_spending_new_
     monkeypatch,
 ):
     import playwright.async_api as playwright_async_api
+    from types import SimpleNamespace
 
     output_path = tmp_path / "graph.json"
     resume_graph = browser_runner.build_debug_web_kobe_graph()
@@ -1302,6 +1303,10 @@ async def test_run_stagehand_exploration_bootstraps_resume_without_spending_new_
             self.state_embedding_records = []
             self.restored = None
             self.preferred = None
+            self.start_node_id = "start"
+            self.manager = SimpleNamespace(
+                to_graph=lambda start_node_id=None: resume_graph
+            )
 
         def restore_graph(self, graph):
             self.restored = graph
@@ -1371,6 +1376,131 @@ async def test_run_stagehand_exploration_bootstraps_resume_without_spending_new_
     assert controller_kwargs["historical_steps"] == 4
     assert controller_kwargs["replay_metric_baseline"]["replay_attempt_count"] == 1
     assert controller_kwargs["replay_metric_baseline"]["replay_success_count"] == 1
+
+
+@pytest.mark.anyio
+async def test_resume_bootstrap_blocks_failed_target_and_replays_fallback_frontier(
+    tmp_path, monkeypatch
+):
+    import playwright.async_api as playwright_async_api
+    from types import SimpleNamespace
+    from ai_web_explorer.grounded_web.frontier_replay import ReplayResult
+
+    output_path = tmp_path / "graph.json"
+    resume_graph = browser_runner.build_debug_web_kobe_graph()
+    targets = [
+        SimpleNamespace(node_id="first", path=(), untried_action_ids=("first_action",)),
+        SimpleNamespace(node_id="second", path=(), untried_action_ids=("second_action",)),
+    ]
+    selected = []
+    replayed = []
+    captured_checkpoints = []
+
+    class FakePage:
+        async def goto(self, url):
+            pass
+
+    class FakeBrowser:
+        async def new_page(self):
+            return FakePage()
+
+        async def close(self):
+            pass
+
+    class FakeChromium:
+        async def launch(self, *, headless=True, args=None):
+            return FakeBrowser()
+
+    class FakePlaywright:
+        chromium = FakeChromium()
+
+    class FakeContext:
+        async def __aenter__(self):
+            return FakePlaywright()
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+    class FakeBaseAdapter:
+        def __init__(self, page, *, app_name, page_id=None, screenshot_dir=None):
+            self.app_name = app_name
+
+    class FakeStagehandBackend:
+        def __init__(self, *, base_backend, provider, goal, execution_mode, **kwargs):
+            pass
+
+    class FakeExplorer:
+        def __init__(self, **kwargs):
+            self.state_embedding_records = []
+            self.start_node_id = "start"
+            self.manager = SimpleNamespace(to_graph=lambda start_node_id=None: resume_graph)
+
+        def restore_graph(self, graph):
+            self.restored = graph
+
+        def prefer_resume_action(self, key):
+            raise AssertionError("failed target must not leave retry preference")
+
+    class FakeReplayRunner:
+        def __init__(self, explorer):
+            self.explorer = explorer
+
+        async def replay(self, target, *, start_url):
+            replayed.append(target.node_id)
+            if target.node_id == "first":
+                return ReplayResult(False, None, "first-edge", "replay_action_failed", 0)
+            return ReplayResult(True, "second", None, "replay_succeeded", 0)
+
+    class FakeController:
+        def __init__(self, explorer, **kwargs):
+            self.kwargs = kwargs
+
+        async def run(self, *, max_steps):
+            return WebKobeExplorationResult(
+                graph=resume_graph,
+                summary=WebKobeExplorationSummary(
+                    requested_steps=max_steps,
+                    steps_completed=1,
+                    stop_reason="max_steps",
+                    node_count=1,
+                    edge_count=0,
+                    failed_edge_count=0,
+                    historical_steps=0,
+                    total_steps_completed=1,
+                ),
+            )
+
+    def fake_select(graph, *, policy, blocked_node_ids=()):
+        selected.append(tuple(blocked_node_ids))
+        return targets[len(selected) - 1] if len(selected) <= len(targets) else None
+
+    monkeypatch.setattr(playwright_async_api, "async_playwright", lambda: FakeContext())
+    monkeypatch.setattr(browser_runner, "WebKobePlaywrightAdapter", FakeBaseAdapter)
+    monkeypatch.setattr(browser_runner, "StagehandAutomationBackend", FakeStagehandBackend)
+    monkeypatch.setattr(browser_runner, "WebKobeExplorer", FakeExplorer)
+    monkeypatch.setattr(browser_runner, "FrontierReplayRunner", FakeReplayRunner)
+    monkeypatch.setattr(browser_runner, "WebKobeExplorationController", FakeController)
+    monkeypatch.setattr(browser_runner, "select_resume_frontier", fake_select)
+    monkeypatch.setattr(
+        browser_runner,
+        "_write_stagehand_checkpoint",
+        lambda graph, **kwargs: captured_checkpoints.append(graph),
+    )
+
+    await browser_runner.run_stagehand_exploration(
+        output_path,
+        start_url="about:blank",
+        app_name="debug",
+        provider=object(),
+        steps=1,
+        resume_graph=resume_graph,
+        resume_policy=ResumePolicy(),
+    )
+
+    assert replayed == ["first", "second"]
+    assert selected == [(), ("first",)]
+    assert len(captured_checkpoints) == 1
+    assert captured_checkpoints[0].meta["blocked_replay_node_ids"] == ["first"]
 
 
 @pytest.mark.anyio

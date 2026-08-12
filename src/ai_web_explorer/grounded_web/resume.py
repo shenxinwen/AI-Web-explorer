@@ -129,21 +129,53 @@ def select_resume_frontier(
         action_id=action_id,
         policy=policy,
     )
+    blocked = set(blocked_node_ids)
     cursor = derive_resume_cursor(graph)
-    if cursor not in set(blocked_node_ids):
+    if cursor not in blocked:
         target = reachable_frontier_for_node(graph, cursor, action_eligible=eligible)
+        if target is not None:
+            return target
+    seen_retry_sources: set[str] = set()
+    inflight = graph.meta.get("inflight_action") or {}
+    inflight_key = ActionAttemptKey(
+        inflight.get("source_node_id", ""),
+        inflight.get("action_id", ""),
+    )
+    ordered_retry_keys: list[ActionAttemptKey] = []
+    if inflight_key in policy.retry_keys:
+        ordered_retry_keys.append(inflight_key)
+    for event in reversed(_events(graph)):
+        key = ActionAttemptKey(event.source_node_id, _action_id(event))
+        if key in policy.retry_keys and key not in ordered_retry_keys:
+            ordered_retry_keys.append(key)
+    for key in ordered_retry_keys:
+        if key.source_node_id in blocked or key.source_node_id in seen_retry_sources:
+            continue
+        seen_retry_sources.add(key.source_node_id)
+        if not is_action_eligible(
+            graph,
+            source_node_id=key.source_node_id,
+            action_id=key.action_id,
+            policy=policy,
+        ):
+            continue
+        target = reachable_frontier_for_node(
+            graph,
+            key.source_node_id,
+            action_eligible=eligible,
+        )
         if target is not None:
             return target
     target = select_frontier(
         graph,
-        blocked_node_ids=blocked_node_ids,
+        blocked_node_ids=blocked,
         action_eligible=eligible,
     )
     if target is not None:
         return target
     return select_frontier(
         graph,
-        blocked_node_ids=blocked_node_ids,
+        blocked_node_ids=blocked,
         include_start=True,
         action_eligible=eligible,
     )

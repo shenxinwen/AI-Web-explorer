@@ -578,6 +578,9 @@ class WebKobeExplorer:
             self._set_current_node(target_id)
         elif self._current_node_id is None:
             self._set_current_node(source_id)
+        self.manager.meta["resume_cursor_node_id"] = (
+            self._current_node_id or source_id
+        )
         return self.manager.to_graph(start_node_id=self._start_node_id)
 
     def _begin_action_attempt(self, *, source_id: str, action: BrowserAction) -> str:

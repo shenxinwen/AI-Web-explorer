@@ -209,7 +209,10 @@ def reachable_frontier_for_node(
             candidates = tuple(
                 action.action_name
                 for action in target_node.business_affordances
-                if action.action_name not in tried
+                if (
+                    action.action_name not in tried
+                    or action_eligible(node_id, action.action_name)
+                )
                 and action_eligible(node_id, action.action_name)
             )
             if candidates:

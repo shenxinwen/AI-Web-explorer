@@ -685,6 +685,7 @@ async def test_explore_one_step_records_backend_execution_error():
     edge = graph.edges[0]
     assert edge.status == "failed_execution"
     assert edge.execution_trace.error == "locator_not_visible"
+    assert graph.meta["resume_cursor_node_id"] == edge.source_node_id
 
 
 class ReportedFailureWithObservedChangeAdapter(FakeAdapter):
@@ -794,15 +795,18 @@ async def test_explorer_checkpoints_inflight_before_adapter_execution():
         adapter,
         attempt_checkpoint=lambda graph: snapshots.append(graph.to_dict()),
     )
+    explorer.manager.meta["resume_cursor_node_id"] = "old_cursor"
 
     graph = await explorer.explore_one_step()
 
     inflight = snapshots[0]["meta"]["inflight_action"]
+    assert snapshots[0]["meta"]["resume_cursor_node_id"] == "old_cursor"
     assert inflight["source_node_id"] == graph.edges[0].source_node_id
     assert inflight["action_id"] == graph.edges[0].action.semantic_id
     assert inflight["attempt_id"]
     assert snapshots[1] == "adapter_execute"
     assert "inflight_action" not in graph.meta
+    assert graph.meta["resume_cursor_node_id"] == graph.edges[0].target_node_id
     assert graph.execution_events[-1].execution_trace.metadata["attempt_id"] == (
         inflight["attempt_id"]
     )
@@ -2342,6 +2346,7 @@ async def test_explore_one_step_marks_success_without_delta_as_no_observed_chang
     assert edge.status == "no_observed_change"
     assert edge.execution_trace.success is True
     assert edge.observed_delta == []
+    assert graph.meta["resume_cursor_node_id"] == edge.source_node_id
 
 
 class NavigationOnlyAdapter:
@@ -2402,6 +2407,7 @@ async def test_explore_one_step_marks_navigation_without_schema_delta_as_success
     assert edge.schema_delta is None
     assert edge.observed_delta == []
     assert edge.status == "succeeded_with_navigation"
+    assert graph.meta["resume_cursor_node_id"] == edge.target_node_id
 
 
 @pytest.mark.anyio

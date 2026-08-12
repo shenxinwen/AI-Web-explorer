@@ -674,10 +674,6 @@ async def run_stagehand_exploration(
             )
             if resume_graph is not None:
                 explorer.restore_graph(resume_graph)
-                resume_target = select_resume_frontier(
-                    resume_graph,
-                    policy=resume_policy or ResumePolicy(),
-                )
                 bootstrap_metrics = {
                     "replay_attempt_count": int(
                         (replay_metric_baseline or {}).get("replay_attempt_count", 0)
@@ -694,54 +690,64 @@ async def run_stagehand_exploration(
                     "last_replay_reason": None,
                     "blocked_replay_node_ids": [],
                 }
-                if resume_target is None:
-                    resume_graph.meta.update(bootstrap_metrics)
-                    resume_graph.meta["exploration_summary"] = {
-                        "requested_steps": max(steps, 0),
-                        "steps_completed": 0,
-                        "stop_reason": "resume_frontier_exhausted",
-                        "historical_steps": historical_steps,
-                        "total_steps_completed": historical_steps,
-                    }
-                    checkpoint(resume_graph)
-                    return output_path
                 policy = resume_policy or ResumePolicy()
-                for action_id in resume_target.untried_action_ids:
-                    key = ActionAttemptKey(resume_target.node_id, action_id)
-                    if key in policy.retry_keys:
-                        explorer.prefer_resume_action(key)
-                        break
                 resume_replay_runner = FrontierReplayRunner(explorer)
-                bootstrap_metrics["replay_attempt_count"] += 1
-                replay_result = await resume_replay_runner.replay(
-                    resume_target,
-                    start_url=start_url,
-                )
-                bootstrap_metrics["last_replay_reason"] = replay_result.reason
-                if not replay_result.success:
-                    bootstrap_metrics["replay_failure_count"] += 1
-                    if replay_result.reason in {
-                        "entry_state_mismatch",
-                        "target_state_mismatch",
-                    }:
-                        bootstrap_metrics["replay_mismatch_count"] += 1
-                    bootstrap_metrics["blocked_replay_node_ids"] = [
-                        resume_target.node_id
-                    ]
-                    failed_graph = explorer.manager.to_graph(
+                blocked_resume_node_ids: set[str] = set()
+                replay_attempted = False
+                while True:
+                    current_graph = explorer.manager.to_graph(
                         start_node_id=explorer.start_node_id,
                     )
-                    failed_graph.meta.update(bootstrap_metrics)
-                    failed_graph.meta["exploration_summary"] = {
-                        "requested_steps": max(steps, 0),
-                        "steps_completed": 0,
-                        "stop_reason": "resume_replay_failed",
-                        "historical_steps": historical_steps,
-                        "total_steps_completed": historical_steps,
-                    }
-                    checkpoint(failed_graph)
-                    return output_path
-                bootstrap_metrics["replay_success_count"] += 1
+                    resume_target = select_resume_frontier(
+                        current_graph,
+                        policy=policy,
+                        blocked_node_ids=blocked_resume_node_ids,
+                    )
+                    if resume_target is None:
+                        stop_reason = (
+                            "resume_replay_failed"
+                            if replay_attempted
+                            else "resume_frontier_exhausted"
+                        )
+                        current_graph.meta.update(bootstrap_metrics)
+                        current_graph.meta["blocked_replay_node_ids"] = sorted(
+                            blocked_resume_node_ids
+                        )
+                        current_graph.meta["exploration_summary"] = {
+                            "requested_steps": max(steps, 0),
+                            "steps_completed": 0,
+                            "stop_reason": stop_reason,
+                            "historical_steps": historical_steps,
+                            "total_steps_completed": historical_steps,
+                        }
+                        checkpoint(current_graph)
+                        return output_path
+                    replay_attempted = True
+                    bootstrap_metrics["replay_attempt_count"] += 1
+                    replay_result = await resume_replay_runner.replay(
+                        resume_target,
+                        start_url=start_url,
+                    )
+                    bootstrap_metrics["last_replay_reason"] = replay_result.reason
+                    if not replay_result.success:
+                        bootstrap_metrics["replay_failure_count"] += 1
+                        if replay_result.reason in {
+                            "entry_state_mismatch",
+                            "target_state_mismatch",
+                        }:
+                            bootstrap_metrics["replay_mismatch_count"] += 1
+                        blocked_resume_node_ids.add(resume_target.node_id)
+                        continue
+                    bootstrap_metrics["replay_success_count"] += 1
+                    for action_id in resume_target.untried_action_ids:
+                        key = ActionAttemptKey(resume_target.node_id, action_id)
+                        if key in policy.retry_keys:
+                            explorer.prefer_resume_action(key)
+                            break
+                    bootstrap_metrics["blocked_replay_node_ids"] = sorted(
+                        blocked_resume_node_ids
+                    )
+                    break
                 replay_metric_baseline = bootstrap_metrics
 
             controller_kwargs = {
@@ -764,6 +770,13 @@ async def run_stagehand_exploration(
                 )
             controller = WebKobeExplorationController(explorer, **controller_kwargs)
             result = await controller.run(max_steps=max(steps, 1))
+            if resume_graph is not None:
+                blocked_after_controller = set(
+                    result.graph.meta.get("blocked_replay_node_ids", [])
+                )
+                result.graph.meta["blocked_replay_node_ids"] = sorted(
+                    blocked_after_controller | blocked_resume_node_ids
+                )
             exploration_summary = {
                 "requested_steps": result.summary.requested_steps,
                 "steps_completed": result.summary.steps_completed,
