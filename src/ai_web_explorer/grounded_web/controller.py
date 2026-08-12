@@ -140,8 +140,13 @@ class WebKobeExplorationController:
                 frontier = select_frontier(
                     graph,
                     blocked_node_ids=blocked_replay_node_ids,
-                    include_start=True,
                 )
+                if frontier is None:
+                    frontier = select_frontier(
+                        graph,
+                        blocked_node_ids=blocked_replay_node_ids,
+                        include_start=True,
+                    )
                 if frontier is None:
                     stop_reason = "frontier_replay_exhausted"
                     break

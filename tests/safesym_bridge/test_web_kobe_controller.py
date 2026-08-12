@@ -288,6 +288,31 @@ async def test_controller_replays_frontier_only_when_enabled_then_resumes_explor
 
 
 @pytest.mark.anyio
+async def test_controller_prefers_non_entry_frontier_before_entry_fallback():
+    explorer = ReplayFakeExplorer(
+        [
+            _frontier_graph(
+                start_actions=("inspect_start",),
+                frontier_actions=("inspect_frontier",),
+            ),
+            _graph(completed=1),
+        ],
+        ReplayResult(True, "frontier", None, "replay_succeeded", 1),
+    )
+    controller = WebKobeExplorationController(
+        explorer,
+        frontier_replay_runner=explorer,
+        start_url="https://fixture.test/shop",
+    )
+
+    result = await controller.run(max_steps=1)
+
+    assert explorer.replay_calls == [("frontier", "https://fixture.test/shop")]
+    assert explorer.replay_untried_action_ids == [("inspect_frontier",)]
+    assert result.summary.stop_reason == "max_steps"
+
+
+@pytest.mark.anyio
 async def test_controller_replays_entry_frontier_with_empty_path_then_explores():
     explorer = ReplayFakeExplorer(
         [

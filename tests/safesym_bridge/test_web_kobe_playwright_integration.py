@@ -318,6 +318,11 @@ async def test_frontier_replay_surface_pddl_local_fixture(tmp_path):
                 if edge.action.semantic_id in {"filter", "sort"}
             }
             assert len(sibling_sources) == 1
+            assert {
+                edge.action.semantic_id
+                for edge in result.graph.edges
+                if edge.action.semantic_id in {"filter", "sort"}
+            } == {"filter", "sort"}
 
             checkout_id = next(
                 node.node_id
