@@ -589,6 +589,7 @@ class WebKobeExplorer:
                     semantic_profile_context=(
                         self.location_exploration_coordinator.semantic_profile_context
                     ),
+                    semantic_experiment_profile=self.semantic_experiment_profile,
                 ),
                 provider=self.visual_delta_provider,
             )
