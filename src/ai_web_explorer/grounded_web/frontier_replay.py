@@ -122,6 +122,8 @@ def select_frontier(
         if (
             edge.status not in REPLAYABLE_EDGE_STATUSES
             or not edge.execution_trace.success
+            or edge.execution_trace.metadata.get("replay_validation_status")
+            == "unstable"
         ):
             continue
         if edge.source_node_id not in nodes_by_id or edge.target_node_id not in nodes_by_id:

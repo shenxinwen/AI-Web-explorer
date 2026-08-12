@@ -181,6 +181,43 @@ def test_select_frontier_uses_one_global_bfs_parent_per_node_in_cycles():
     ]
 
 
+def test_select_frontier_excludes_unstable_paths_but_uses_stable_detour():
+    unstable_edge = _edge("start", "bad", "open_bad")
+    unstable_edge.execution_trace.metadata["replay_validation_status"] = "unstable"
+    graph = WebKobeGraph(
+        app="fixture",
+        start_node_id="start",
+        total_steps_completed=3,
+        nodes=[
+            _node("start"),
+            _node("bad"),
+            _node("detour"),
+            _node("frontier", "inspect_frontier"),
+        ],
+        edges=[
+            unstable_edge,
+            _edge("bad", "frontier", "continue_bad"),
+        ],
+    )
+
+    assert select_frontier(graph) is None
+
+    graph.edges.extend(
+        [
+            _edge("start", "detour", "open_detour"),
+            _edge("detour", "frontier", "continue_detour"),
+        ]
+    )
+    target = select_frontier(graph)
+
+    assert target is not None
+    assert target.node_id == "frontier"
+    assert [step.edge_id for step in target.path] == [
+        "start__open_detour__detour",
+        "detour__continue_detour__frontier",
+    ]
+
+
 class _ReplayAdapter:
     app_name = "fixture"
 

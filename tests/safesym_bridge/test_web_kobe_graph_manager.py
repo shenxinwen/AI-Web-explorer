@@ -19,6 +19,7 @@ from ai_web_explorer.grounded_web.graph import (
 )
 from ai_web_explorer.grounded_web.graph_manager import WebKobeGraphManager
 from ai_web_explorer.safesym_bridge.trace_pddl import compile_trace_domain
+from ai_web_explorer.safesym_bridge.surface_pddl import compile_surface_domain
 from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
     load_web_kobe_graph_json,
 )
@@ -447,3 +448,57 @@ def test_propagate_planning_state_omits_already_active_added_facts():
     assert updated_edge.planning_transition.pre_facts == ["cart_has_items"]
     assert updated_edge.planning_transition.added_facts == []
     assert updated_edge.planning_transition.post_facts == ["cart_has_items"]
+
+
+def test_duplicate_edge_cannot_clear_unstable_replay_validation_after_roundtrip(
+    tmp_path,
+):
+    manager = WebKobeGraphManager(app="example")
+    manager.identify_or_add_node(_node("page", {}))
+    edge = _trace_edge("action_a", success=True, status="no_observed_change")
+    manager.add_edge(edge)
+    manager.update_edge_replay_validation(edge.edge_id, "unstable")
+
+    duplicate = replace(
+        edge,
+        execution_trace=replace(
+            edge.execution_trace,
+            metadata={"latest_observation": "new"},
+        ),
+    )
+    manager.add_edge(duplicate)
+
+    frozen = manager.to_graph(start_node_id="page")
+    merged_edge = frozen.edges[0]
+    assert merged_edge.execution_trace.metadata == {
+        "latest_observation": "new",
+        "replay_validation_status": "unstable",
+    }
+
+    graph_path = tmp_path / "graph.json"
+    graph_path.write_text(json.dumps(frozen.to_dict()), encoding="utf-8")
+    loaded = load_web_kobe_graph_json(graph_path)
+    assert "action_a" not in compile_surface_domain(loaded).domain
+    assert "action_a" in compile_trace_domain(loaded).domain
+
+
+def test_duplicate_edge_preserves_verified_replay_validation():
+    manager = WebKobeGraphManager(app="example")
+    manager.identify_or_add_node(_node("page", {}))
+    edge = _trace_edge("action_a", success=True, status="no_observed_change")
+    manager.add_edge(edge)
+    manager.update_edge_replay_validation(edge.edge_id, "verified")
+
+    duplicate = replace(
+        edge,
+        execution_trace=replace(
+            edge.execution_trace,
+            metadata={"latest_observation": "new"},
+        ),
+    )
+    manager.add_edge(duplicate)
+
+    assert manager.to_graph().edges[0].execution_trace.metadata == {
+        "latest_observation": "new",
+        "replay_validation_status": "verified",
+    }

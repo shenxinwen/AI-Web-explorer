@@ -17,6 +17,38 @@ from ai_web_explorer.grounded_web.business_profile import (
 )
 
 
+_REPLAY_VALIDATION_STATUS = "replay_validation_status"
+_REPLAY_VALIDATION_PRIORITY = {
+    "unknown": 0,
+    "verified": 1,
+    "unstable": 2,
+}
+
+
+def _merge_execution_trace_metadata(
+    existing: dict[str, Any],
+    incoming: dict[str, Any],
+) -> dict[str, Any]:
+    merged = dict(existing)
+    merged.update(incoming)
+    statuses = [
+        status
+        for status in (
+            existing.get(_REPLAY_VALIDATION_STATUS),
+            incoming.get(_REPLAY_VALIDATION_STATUS),
+        )
+        if status in _REPLAY_VALIDATION_PRIORITY
+    ]
+    if statuses:
+        merged[_REPLAY_VALIDATION_STATUS] = max(
+            statuses,
+            key=_REPLAY_VALIDATION_PRIORITY.__getitem__,
+        )
+    else:
+        merged.pop(_REPLAY_VALIDATION_STATUS, None)
+    return merged
+
+
 def _merge_schema(
     existing: dict[str, list[Any]],
     new_snapshot: dict[str, Any],
@@ -192,7 +224,13 @@ class WebKobeGraphManager:
                     if edge.visual_change_kind != "unknown"
                     else existing.visual_change_kind
                 ),
-                execution_trace=edge.execution_trace,
+                execution_trace=replace(
+                    edge.execution_trace,
+                    metadata=_merge_execution_trace_metadata(
+                        existing.execution_trace.metadata,
+                        edge.execution_trace.metadata,
+                    ),
+                ),
                 evidence=list(existing.evidence or edge.evidence),
             )
         self.total_steps_completed += 1
