@@ -1215,6 +1215,36 @@ def test_main_web_kobe_stagehand_explore_rejects_invalid_max_candidates(
     assert "must be at least 1" in capsys.readouterr().err
 
 
+def test_main_stagehand_explore_passes_viewport_dimensions(monkeypatch, tmp_path):
+    captured = {}
+
+    async def fake_run(output_path, **kwargs):
+        captured.update(kwargs)
+        output_path.write_text("{}", encoding="utf-8")
+        return output_path
+
+    monkeypatch.setattr(cli, "run_stagehand_exploration", fake_run, raising=False)
+
+    assert (
+        main(
+            [
+                "web-kobe-stagehand-explore",
+                "--url",
+                "https://fixture.test/shop",
+                "--output",
+                str(tmp_path / "graph.json"),
+                "--viewport-width",
+                "1920",
+                "--viewport-height",
+                "1080",
+            ]
+        )
+        == 0
+    )
+    assert captured["viewport_width"] == 1920
+    assert captured["viewport_height"] == 1080
+
+
 def test_main_web_kobe_stagehand_explore_accepts_frontier_replay(monkeypatch, tmp_path):
     calls = []
 

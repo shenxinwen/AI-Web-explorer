@@ -1023,9 +1023,21 @@ async def test_run_ecommerce_stagehand_step_wires_terminal_condition(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    "viewport_kwargs, expected_viewport",
+    [
+        ({}, {"width": 1440, "height": 1000}),
+        (
+            {"viewport_width": 1920, "viewport_height": 1080},
+            {"width": 1920, "height": 1080},
+        ),
+    ],
+)
 async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
     tmp_path,
     monkeypatch,
+    viewport_kwargs,
+    expected_viewport,
 ):
     import playwright.async_api as playwright_async_api
 
@@ -1040,7 +1052,8 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
             calls.append(("goto", url))
 
     class FakeBrowser:
-        async def new_page(self):
+        async def new_page(self, *, viewport=None):
+            calls.append(("new_page", viewport))
             return FakePage()
 
         async def close(self):
@@ -1130,11 +1143,13 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
         business_profile="ecommerce_checkout",
         max_candidates=2,
         visual_delta_provider=lambda prompt, **kwargs: '{"visible_change_summary":"changed","candidate_added_facts":[],"candidate_removed_facts":[],"evidence":[],"confidence":0.5}',
+        **viewport_kwargs,
     )
 
     assert result == output_path
     assert captured["limit"] is None
     assert captured["checkpoint"] is not None
+    assert ("new_page", expected_viewport) in calls
     assert ("goto", "https://shop.test/") in calls
     assert any(
         call[0] == "stagehand" and call[2] == "observed_action"
@@ -1167,7 +1182,7 @@ async def test_run_stagehand_exploration_wires_location_feasibility_profile(
             captured["url"] = url
 
     class FakeBrowser:
-        async def new_page(self):
+        async def new_page(self, **kwargs):
             return FakePage()
 
         async def close(self):
@@ -1294,7 +1309,7 @@ async def test_runner_preserves_cumulative_runtime_state(tmp_path, monkeypatch):
             pass
 
     class FakeBrowser:
-        async def new_page(self):
+        async def new_page(self, **kwargs):
             return FakePage()
 
         async def close(self):
@@ -1413,7 +1428,7 @@ async def test_runner_resume_uses_cumulative_runtime_state_for_zero_formal_actio
             pass
 
     class FakeBrowser:
-        async def new_page(self):
+        async def new_page(self, **kwargs):
             return FakePage()
 
         async def close(self):
@@ -1532,7 +1547,7 @@ async def test_run_stagehand_exploration_opt_in_wires_frontier_replay(
             pass
 
     class FakeBrowser:
-        async def new_page(self):
+        async def new_page(self, **kwargs):
             return FakePage()
 
         async def close(self):
@@ -1636,7 +1651,7 @@ async def test_run_stagehand_exploration_bootstraps_resume_without_spending_new_
             pass
 
     class FakeBrowser:
-        async def new_page(self):
+        async def new_page(self, **kwargs):
             return FakePage()
 
         async def close(self):
@@ -1767,7 +1782,7 @@ async def test_resume_bootstrap_blocks_failed_target_and_replays_fallback_fronti
             pass
 
     class FakeBrowser:
-        async def new_page(self):
+        async def new_page(self, **kwargs):
             return FakePage()
 
         async def close(self):
@@ -1899,7 +1914,7 @@ async def test_run_stagehand_exploration_preserves_checkpoint_when_step_raises(
             pass
 
     class FakeBrowser:
-        async def new_page(self):
+        async def new_page(self, **kwargs):
             return FakePage()
 
         async def close(self):

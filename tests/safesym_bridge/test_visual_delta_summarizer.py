@@ -68,6 +68,37 @@ def test_visual_delta_reports_observable_change_from_structured_signatures():
     assert result.observable_change is True
 
 
+def test_visual_delta_requires_strict_boolean_action_consistent_observable_change():
+    request = VisualDeltaRequest(
+        goal="Save the form.",
+        action=BrowserAction(
+            "click",
+            "button.save",
+            "save_form",
+            description="Click the save control.",
+        ),
+        before_screenshot_path="before.png",
+        after_screenshot_path="after.png",
+    )
+    prompts = []
+
+    result = summarize_visual_delta(
+        request,
+        provider=lambda prompt, **_kwargs: (
+            prompts.append(prompt) or '{"observable_change":"true"}'
+        ),
+    )
+
+    payload = json.loads(prompts[0])
+    assert payload["output_schema"]["observable_change"] is False
+    assert "strict JSON boolean" in payload["instruction"]
+    assert "visible change consistent with the executed action" in payload[
+        "instruction"
+    ]
+    assert "not a business fact" in payload["instruction"]
+    assert result.observable_change is False
+
+
 def test_visual_delta_allows_experiment_profile_context_and_business_fact_fields():
     request = VisualDeltaRequest(
         goal="Observe the page.",

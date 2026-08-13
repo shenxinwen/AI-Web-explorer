@@ -601,6 +601,8 @@ async def run_stagehand_exploration(
     semantic_experiment_profile: str | SemanticExperimentProfile | None = None,
     allow_test_site_final_order: bool = False,
     test_data_seed: str = "practice-v1",
+    viewport_width: int = 1440,
+    viewport_height: int = 1000,
     vlm_request_timeout_seconds: float | None = None,
     stagehand_action_timeout_seconds: float | None = None,
 ) -> Path:
@@ -694,7 +696,9 @@ async def run_stagehand_exploration(
         local_cdp_url = (
             _read_cdp_websocket_url(cdp_port) if cdp_port is not None else None
         )
-        page = await browser.new_page()
+        page = await browser.new_page(
+            viewport={"width": viewport_width, "height": viewport_height}
+        )
         try:
             await page.goto(start_url)
             resolved_provider = provider

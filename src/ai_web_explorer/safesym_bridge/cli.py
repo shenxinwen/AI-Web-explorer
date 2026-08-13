@@ -506,6 +506,12 @@ def main(argv: list[str] | None = None) -> int:
         "--stagehand-action-timeout-seconds", type=_positive_int, default=None
     )
     stagehand_explore_parser.add_argument(
+        "--viewport-width", type=_positive_int, default=1440
+    )
+    stagehand_explore_parser.add_argument(
+        "--viewport-height", type=_positive_int, default=1000
+    )
+    stagehand_explore_parser.add_argument(
         "--allow-test-site-final-order", action="store_true"
     )
     stagehand_explore_parser.add_argument(
@@ -986,6 +992,10 @@ def main(argv: list[str] | None = None) -> int:
                 "resume_graph": resume_graph,
                 "resume_policy": resume_policy,
             }
+            if args.viewport_width != 1440:
+                runner_kwargs["viewport_width"] = args.viewport_width
+            if args.viewport_height != 1000:
+                runner_kwargs["viewport_height"] = args.viewport_height
             if profile_selected or budget_selected:
                 runner_kwargs.update(
                     {
