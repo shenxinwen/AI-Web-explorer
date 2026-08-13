@@ -300,6 +300,64 @@ def _profile_delta_request():
     )
 
 
+def test_profile_prompt_requires_selected_completion_fact_id_list():
+    profile = practice_shopping_feasibility_profile()
+    request = VisualDeltaRequest(
+        goal="Filter products.",
+        action=BrowserAction("business_intent", None, "filter_products"),
+        before_screenshot_path="before.png",
+        after_screenshot_path="after.png",
+        source_location_hint="shopping",
+        allowed_location_ids=list(profile.allowed_locations),
+        semantic_profile_context=profile.to_prompt_context(),
+        semantic_experiment_profile=profile,
+    )
+    prompts = []
+
+    summarize_visual_delta(
+        request,
+        provider=lambda prompt, **_kwargs: (
+            prompts.append(prompt)
+            or '{"action_role":"presentation_capability",'
+            '"source_location":"shopping","target_location":"shopping",'
+            '"completion_facts":[]}'
+        ),
+    )
+
+    payload = json.loads(prompts[0])
+    assert payload["output_schema"]["completion_facts"] == [
+        "selected_completion_fact_id"
+    ]
+    assert "reference vocabulary" in payload["instruction"]
+    assert "must be a JSON array of strings" in payload["instruction"]
+
+
+def test_profile_completion_fact_vocabulary_object_is_not_promoted():
+    result = summarize_visual_delta(
+        _profile_delta_request(),
+        provider=lambda *_args, **_kwargs: json.dumps(
+            {
+                "action_role": "presentation_capability",
+                "source_location": "shopping",
+                "target_location": "shopping",
+                "completion_facts": {
+                    "products_sorted": [],
+                    "products_filtered": [],
+                    "products_found": [],
+                },
+                "candidate_added_facts": ["products_filtered"],
+            }
+        ),
+    )
+
+    assert result.semantic_observation is not None
+    assert result.semantic_observation.completion_facts == []
+    assert result.planning_delta.verified_added_facts == []
+    assert "completion_facts_must_be_list_of_fact_ids" in result.trace.metadata[
+        "semantic_observation_rejections"
+    ]
+
+
 def test_profile_observation_rejects_unknown_location_and_records_reason():
     result = summarize_visual_delta(
         _profile_delta_request(),

@@ -117,6 +117,11 @@ def _prompt_for_request(request: VisualDeltaRequest) -> str:
             "styling, source_location and target_location must remain that same "
             "anchor. Only an active business surface change may introduce a new "
             "target_location. Do not invent a new location on every step."
+            " semantic_profile_context.completion_facts is a reference vocabulary "
+            "with evidence descriptions, not a response template. The response "
+            "completion_facts must be a JSON array of strings containing zero or "
+            "more selected fact IDs from that vocabulary, and must be [] when no "
+            "approved completion fact is directly supported by the visible change."
         ),
         "action": action,
         "location_context": {
@@ -142,6 +147,22 @@ def _prompt_for_request(request: VisualDeltaRequest) -> str:
             "business_facts_added",
             "business_facts_removed",
         ],
+        "output_schema": {
+            "candidate_added_facts": ["visible_added_fact_id"],
+            "candidate_removed_facts": ["visible_removed_fact_id"],
+            "visual_change_kind": "none | presentation | state_indicator | surface | mixed | unknown",
+            "action_role": "one allowed action role",
+            "source_location": "one allowed location ID",
+            "target_location": "one allowed location ID",
+            "completion_facts": ["selected_completion_fact_id"],
+            "candidate_required_facts": ["selected_business_fact_id"],
+            "preserved_facts": ["selected_business_fact_id"],
+            "semantic_evidence": ["short visible evidence statement"],
+            "semantic_confidence": 0.0,
+            "observable_change": False,
+            "business_facts_added": ["selected_business_fact_id"],
+            "business_facts_removed": ["selected_business_fact_id"],
+        },
     }
     if request.semantic_profile_context is not None:
         payload["semantic_profile_context"] = request.semantic_profile_context
@@ -345,9 +366,14 @@ def summarize_visual_delta(
         generated_fact_ids=[],
         evidence=evidence,
     )
+    rejection_reasons: list[str] = []
+    if "completion_facts" in parsed and (
+        not isinstance(parsed["completion_facts"], list)
+        or not all(isinstance(item, str) for item in parsed["completion_facts"])
+    ):
+        rejection_reasons.append("completion_facts_must_be_list_of_fact_ids")
     raw_semantic_observation = semantic_observation_from_dict(parsed)
     semantic_observation = _semantic_observation(parsed, request)
-    rejection_reasons: list[str] = []
     if request.semantic_experiment_profile is not None:
         validation = validate_profile_semantic_observation(
             raw_semantic_observation,
