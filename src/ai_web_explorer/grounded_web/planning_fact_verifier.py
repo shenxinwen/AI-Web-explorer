@@ -9,6 +9,7 @@ from ai_web_explorer.grounded_web.business_profile import (
 from ai_web_explorer.grounded_web.exploration_semantics import (
     SemanticExperimentProfile,
 )
+from ai_web_explorer.grounded_web.semantic_model import normalize_semantic_id
 
 
 def _is_positive_number(value: Any) -> bool:
@@ -100,6 +101,7 @@ def verify_planning_delta(
 def verify_experiment_planning_delta(
     *,
     profile: SemanticExperimentProfile,
+    action_id: str | None = None,
     observable_change: bool,
     candidate_added_facts: list[str],
     candidate_removed_facts: list[str],
@@ -109,22 +111,57 @@ def verify_experiment_planning_delta(
     """Merge structured facts and conservatively verify profile-scoped VLM facts."""
 
     allowed = profile.business_fact_ids
-    verified_added = list(structured_delta.verified_added_facts)
-    verified_removed = list(structured_delta.verified_removed_facts)
-    candidate_added = list(structured_delta.candidate_added_facts)
-    candidate_removed = list(structured_delta.candidate_removed_facts)
+    contract = profile.action_contract_for(action_id) if action_id else None
+    contract_added = set(contract.added_facts) if contract is not None else allowed
+    contract_removed = (
+        set(contract.removed_facts) if contract is not None else allowed
+    )
+    candidate_added_facts = [
+        normalize_semantic_id(fact) for fact in candidate_added_facts
+    ]
+    candidate_removed_facts = [
+        normalize_semantic_id(fact) for fact in candidate_removed_facts
+    ]
+    structured_added = [
+        fact
+        for fact in structured_delta.candidate_added_facts
+        if fact in allowed and (contract is None or fact in contract_added)
+    ]
+    structured_removed = [
+        fact
+        for fact in structured_delta.candidate_removed_facts
+        if fact in allowed and (contract is None or fact in contract_removed)
+    ]
+    if contract is None:
+        verified_added = list(structured_delta.verified_added_facts)
+        verified_removed = list(structured_delta.verified_removed_facts)
+        candidate_added = list(structured_delta.candidate_added_facts)
+        candidate_removed = list(structured_delta.candidate_removed_facts)
+    else:
+        verified_added = [
+            fact
+            for fact in structured_delta.verified_added_facts
+            if fact in structured_added and fact in candidate_added_facts
+        ]
+        verified_removed = [
+            fact
+            for fact in structured_delta.verified_removed_facts
+            if fact in structured_removed and fact in candidate_removed_facts
+        ]
+        candidate_added = list(structured_added)
+        candidate_removed = list(structured_removed)
     evidence_items = list(structured_delta.evidence)
     evidence_items.extend(item for item in evidence if isinstance(item, str) and item.strip())
     has_evidence = any(item.strip() for item in evidence if isinstance(item, str))
 
     for fact_id in candidate_added_facts:
-        if fact_id not in allowed:
+        if fact_id not in allowed or fact_id not in contract_added:
             continue
         _add_unique(candidate_added, fact_id)
         if observable_change and has_evidence:
             _add_unique(verified_added, fact_id)
     for fact_id in candidate_removed_facts:
-        if fact_id not in allowed:
+        if fact_id not in allowed or fact_id not in contract_removed:
             continue
         _add_unique(candidate_removed, fact_id)
         if observable_change and has_evidence:

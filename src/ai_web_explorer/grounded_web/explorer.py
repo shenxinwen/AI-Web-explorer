@@ -413,8 +413,17 @@ class WebKobeExplorer:
             or LocationExplorationCoordinator(
                 limits=exploration_limits,
                 semantic_profile_context=self.semantic_profile_context,
+                action_contracts=(
+                    self.semantic_experiment_profile.action_contracts
+                    if self.semantic_experiment_profile is not None
+                    else None
+                ),
             )
         )
+        if self.semantic_experiment_profile is not None:
+            self.location_exploration_coordinator.action_contracts = dict(
+                self.semantic_experiment_profile.action_contracts
+            )
         self.location_scoped_exploration = bool(
             location_exploration_coordinator is not None
             or exploration_limits is not None
@@ -422,6 +431,10 @@ class WebKobeExplorer:
         )
         self._preferred_resume_action_key: ActionAttemptKey | None = None
         self.manager = WebKobeGraphManager(app=adapter.app_name)
+        if self.semantic_profile_context is not None:
+            self.manager.meta["semantic_profile_context"] = dict(
+                self.semantic_profile_context
+            )
         self._start_node_id: str | None = None
         self._current_node_id: str | None = None
         self._visit_stack: list[str] = []
@@ -443,9 +456,14 @@ class WebKobeExplorer:
                 semantic_profile_context=(
                     self.location_exploration_coordinator.semantic_profile_context
                 ),
+                action_contracts=self.location_exploration_coordinator.action_contracts,
             )
         else:
             self._seed_location_memory_from_graph(graph)
+        if self.semantic_profile_context is not None:
+            self.manager.meta["semantic_profile_context"] = dict(
+                self.semantic_profile_context
+            )
         self._start_node_id = graph.start_node_id
         self._current_node_id = None
         self._visit_stack = []
@@ -662,7 +680,12 @@ class WebKobeExplorer:
         visual_observable_change = False
         source_location_hint = None if anchor_unresolved else source_anchor
         allowed_location_ids = sorted(
-            {
+            set(
+                self.semantic_experiment_profile.allowed_locations
+                if self.semantic_experiment_profile is not None
+                else ()
+            )
+            | {
                 node.semantic_location_hint
                 for node in self.manager.to_graph().nodes
                 if node.semantic_location_hint
@@ -735,6 +758,7 @@ class WebKobeExplorer:
                 candidate_removed_facts=visual_delta_facts[1],
                 evidence=visual_delta_evidence,
                 structured_delta=structured_planning_delta or PlanningDelta(),
+                action_id=selected.canonical_action_name or selected.semantic_id,
             )
         if self.business_profile is not None:
             planning_transition = self.manager.build_planning_transition(
@@ -1710,6 +1734,7 @@ class WebKobeExplorer:
                     self.location_exploration_coordinator.select_candidate(
                         location_id,
                         current_interactables=current_interactables,
+                        active_business_facts=self._active_business_facts(node),
                     )
                 )
                 self.location_exploration_coordinator.sync_graph_meta(self.manager)
@@ -1742,6 +1767,15 @@ class WebKobeExplorer:
         )
         for affordance in ranked:
             action_id = affordance.action_name
+            contract = (
+                self.semantic_experiment_profile.action_contract_for(action_id)
+                if self.semantic_experiment_profile is not None
+                else None
+            )
+            if contract is not None and not set(contract.required_facts).issubset(
+                self._active_business_facts(node)
+            ):
+                continue
             preferred = self._preferred_resume_action_key
             if preferred is not None and preferred == ActionAttemptKey(
                 exploration_context.current_node_id, action_id
@@ -1769,3 +1803,15 @@ class WebKobeExplorer:
                 continue
             return _business_action_from_affordance(affordance)
         return None
+
+    def _active_business_facts(self, node: WebKobeNode) -> set[str]:
+        if node.planning_state is None:
+            return set()
+        active = {
+            normalize_semantic_id(fact)
+            for fact in node.planning_state.active_facts
+            if normalize_semantic_id(fact)
+        }
+        if self.semantic_experiment_profile is None:
+            return active
+        return active & set(self.semantic_experiment_profile.business_fact_ids)

@@ -8,7 +8,7 @@ this control state.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Mapping
 
 from ai_web_explorer.grounded_web.graph import BusinessAffordance, WebKobeGraph
 from ai_web_explorer.grounded_web.business_affordance import (
@@ -17,6 +17,7 @@ from ai_web_explorer.grounded_web.business_affordance import (
     summarize_visual_affordances,
 )
 from ai_web_explorer.grounded_web.semantic_model import normalize_semantic_id
+from ai_web_explorer.grounded_web.exploration_semantics import ActionContract
 
 
 LOCATION_EXPLORATION_META_KEY = "location_exploration_memory"
@@ -249,6 +250,7 @@ class LocationExplorationCoordinator:
         memory: LocationExplorationMemory | None = None,
         limits: ExplorationLimits | None = None,
         semantic_profile_context: dict[str, Any] | None = None,
+        action_contracts: Mapping[str, ActionContract] | None = None,
     ) -> None:
         if memory is None:
             memory = LocationExplorationMemory(limits=limits)
@@ -256,6 +258,7 @@ class LocationExplorationCoordinator:
             memory.limits = limits
         self.memory = memory
         self.semantic_profile_context = semantic_profile_context
+        self.action_contracts = dict(action_contracts or {})
 
     def ensure_candidates(
         self,
@@ -401,15 +404,33 @@ class LocationExplorationCoordinator:
         location_id: str,
         *,
         current_interactables: Iterable[dict[str, Any]] | None = None,
+        active_business_facts: Iterable[str] = (),
     ) -> tuple[BusinessAffordance | None, CandidatePreflightResult | None]:
         """Select the next candidate and retire only conclusively stale ones."""
 
         pool = self.memory.pool_for(location_id)
+        active_facts = {
+            normalize_semantic_id(fact)
+            for fact in active_business_facts
+            if normalize_semantic_id(fact)
+        }
+        gated_action_ids: set[str] = set()
         last_preflight: CandidatePreflightResult | None = None
         while True:
-            candidate = self.memory.next_candidate(location_id)
+            candidate = self.memory.next_candidate(
+                location_id,
+                excluded_action_ids=gated_action_ids,
+            )
             if candidate is None:
                 return None, last_preflight
+            contract = self.action_contracts.get(
+                normalize_semantic_id(candidate.action_name)
+            )
+            if contract is not None and not set(contract.required_facts).issubset(
+                active_facts
+            ):
+                gated_action_ids.add(normalize_semantic_id(candidate.action_name))
+                continue
             result = self.preflight_candidate(candidate, current_interactables)
             if result.status != "stale":
                 return candidate, result
@@ -647,14 +668,25 @@ class LocationExplorationMemory:
             )
         return tuple(added)
 
-    def next_candidate(self, location_id: str) -> BusinessAffordance | None:
+    def next_candidate(
+        self,
+        location_id: str,
+        *,
+        excluded_action_ids: Iterable[str] = (),
+    ) -> BusinessAffordance | None:
         pool = self.pool_for(location_id)
+        excluded = {
+            normalize_semantic_id(action_id)
+            for action_id in excluded_action_ids
+            if normalize_semantic_id(action_id)
+        }
         eligible = [
             record
             for record in pool.candidates.values()
             if record.status
             in {"pending", "retryable_no_change", "retryable_failure"}
             and record.attempts < self.limits.max_action_attempts_per_candidate
+            and record.action_id not in excluded
         ]
         if not eligible:
             return None

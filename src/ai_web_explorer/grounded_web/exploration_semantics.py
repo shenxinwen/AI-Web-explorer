@@ -8,7 +8,7 @@ compilation.
 from __future__ import annotations
 
 import hashlib
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from typing import Any, Mapping
 from urllib.parse import urlsplit
 
@@ -31,6 +31,63 @@ class FactEvidenceRule:
     fact_id: str
     descriptions: tuple[str, ...]
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "fact_id", normalize_semantic_id(self.fact_id))
+
+
+@dataclass(frozen=True)
+class ActionContract:
+    """Profile-scoped preconditions and observable business effects."""
+
+    required_facts: tuple[str, ...] = ()
+    added_facts: tuple[str, ...] = ()
+    removed_facts: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        for field_name in ("required_facts", "added_facts", "removed_facts"):
+            values = tuple(
+                dict.fromkeys(
+                    normalized
+                    for value in getattr(self, field_name)
+                    if (normalized := normalize_semantic_id(value))
+                )
+            )
+            object.__setattr__(self, field_name, values)
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, object]) -> "ActionContract":
+        def values(field_name: str) -> tuple[object, ...]:
+            raw = value.get(field_name, ())
+            if isinstance(raw, (list, tuple)):
+                return tuple(raw)
+            return (raw,) if isinstance(raw, str) else ()
+
+        return cls(
+            required_facts=values("required_facts"),
+            added_facts=values("added_facts"),
+            removed_facts=values("removed_facts"),
+        )
+
+    def restricted_to(self, allowed_facts: frozenset[str]) -> "ActionContract":
+        return ActionContract(
+            required_facts=tuple(
+                fact for fact in self.required_facts if fact in allowed_facts
+            ),
+            added_facts=tuple(
+                fact for fact in self.added_facts if fact in allowed_facts
+            ),
+            removed_facts=tuple(
+                fact for fact in self.removed_facts if fact in allowed_facts
+            ),
+        )
+
+    def to_dict(self) -> dict[str, list[str]]:
+        return {
+            "required_facts": list(self.required_facts),
+            "added_facts": list(self.added_facts),
+            "removed_facts": list(self.removed_facts),
+        }
+
 
 @dataclass(frozen=True)
 class SemanticExperimentProfile:
@@ -42,6 +99,28 @@ class SemanticExperimentProfile:
     business_facts: tuple[FactEvidenceRule, ...]
     action_role_examples: Mapping[str, str]
     canonical_action_examples: tuple[str, ...]
+    action_contracts: Mapping[str, ActionContract] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        allowed_facts = self.business_fact_ids
+        normalized_contracts: dict[str, ActionContract] = {}
+        for action_id, contract in self.action_contracts.items():
+            normalized_action_id = normalize_semantic_id(action_id)
+            if not normalized_action_id:
+                continue
+            if not isinstance(contract, ActionContract):
+                contract = ActionContract.from_dict(contract)
+            normalized_contracts[normalized_action_id] = contract.restricted_to(
+                allowed_facts
+            )
+        object.__setattr__(
+            self,
+            "action_contracts",
+            {
+                action_id: normalized_contracts[action_id]
+                for action_id in sorted(normalized_contracts)
+            },
+        )
 
     @property
     def completion_fact_ids(self) -> frozenset[str]:
@@ -50,6 +129,9 @@ class SemanticExperimentProfile:
     @property
     def business_fact_ids(self) -> frozenset[str]:
         return frozenset(rule.fact_id for rule in self.business_facts)
+
+    def action_contract_for(self, action_id: object) -> ActionContract | None:
+        return self.action_contracts.get(normalize_semantic_id(action_id))
 
     def to_prompt_context(self) -> dict[str, object]:
         return {
@@ -65,6 +147,10 @@ class SemanticExperimentProfile:
             },
             "action_role_examples": dict(self.action_role_examples),
             "canonical_action_examples": list(self.canonical_action_examples),
+            "action_contracts": {
+                action_id: self.action_contracts[action_id].to_dict()
+                for action_id in sorted(self.action_contracts)
+            },
         }
 
     def to_business_flow_profile(self) -> BusinessFlowProfile:
@@ -197,6 +283,24 @@ def practice_shopping_feasibility_profile() -> SemanticExperimentProfile:
             "complete_payment_information",
             "place_order",
         ),
+        action_contracts={
+            "add_to_cart": ActionContract(added_facts=("cart_has_items",)),
+            "view_cart": ActionContract(required_facts=("cart_has_items",)),
+            "complete_checkout_information": ActionContract(
+                added_facts=("checkout_info_complete",)
+            ),
+            "complete_payment_information": ActionContract(
+                added_facts=("payment_info_complete",)
+            ),
+            "place_order": ActionContract(
+                required_facts=(
+                    "cart_has_items",
+                    "checkout_info_complete",
+                    "payment_info_complete",
+                ),
+                added_facts=("order_submitted",),
+            ),
+        },
     )
 
 
@@ -210,6 +314,35 @@ def resolve_semantic_experiment_profile(
     if name == "practice_shopping_feasibility":
         return practice_shopping_feasibility_profile()
     raise ValueError(f"unknown semantic experiment profile: {name}")
+
+
+def action_contracts_from_prompt_context(
+    context: Mapping[str, object] | None,
+) -> dict[str, ActionContract]:
+    """Read normalized, business-fact-bounded contracts from graph context."""
+
+    if not isinstance(context, Mapping):
+        return {}
+    raw_contracts = context.get("action_contracts")
+    raw_business_facts = context.get("business_facts")
+    if not isinstance(raw_contracts, Mapping) or not isinstance(
+        raw_business_facts, Mapping
+    ):
+        return {}
+    allowed_facts = frozenset(
+        normalize_semantic_id(fact_id)
+        for fact_id in raw_business_facts
+        if normalize_semantic_id(fact_id)
+    )
+    contracts: dict[str, ActionContract] = {}
+    for action_id, raw_contract in raw_contracts.items():
+        normalized_action_id = normalize_semantic_id(action_id)
+        if not normalized_action_id or not isinstance(raw_contract, Mapping):
+            continue
+        contracts[normalized_action_id] = ActionContract.from_dict(
+            raw_contract
+        ).restricted_to(allowed_facts)
+    return {action_id: contracts[action_id] for action_id in sorted(contracts)}
 
 
 def validate_profile_semantic_observation(
@@ -363,6 +496,8 @@ def generate_checkout_test_data(seed: str) -> GeneratedCheckoutData:
 
 
 __all__ = [
+    "ActionContract",
+    "action_contracts_from_prompt_context",
     "FactEvidenceRule",
     "GeneratedCheckoutData",
     "SemanticExperimentProfile",

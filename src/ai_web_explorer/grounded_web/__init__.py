@@ -27,6 +27,7 @@ from ai_web_explorer.grounded_web.controller import (
 )
 from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
 from ai_web_explorer.grounded_web.exploration_semantics import (
+    ActionContract,
     FactEvidenceRule,
     GeneratedCheckoutData,
     SemanticExperimentProfile,
@@ -56,6 +57,7 @@ from ai_web_explorer.grounded_web.visual_delta import (
 
 __all__ = [
     "AutomationBackend",
+    "ActionContract",
     "BrowserAction",
     "BusinessAffordance",
     "BusinessFlowProfile",
