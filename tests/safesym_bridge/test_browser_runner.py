@@ -1806,7 +1806,13 @@ async def test_resume_bootstrap_blocks_failed_target_and_replays_fallback_fronti
         async def replay(self, target, *, start_url):
             replayed.append(target.node_id)
             if target.node_id == "first":
-                return ReplayResult(False, None, "first-edge", "replay_action_failed", 0)
+                return ReplayResult(
+                    False,
+                    None,
+                    "first-edge",
+                    "target_business_facts_mismatch",
+                    0,
+                )
             return ReplayResult(True, "second", None, "replay_succeeded", 0)
 
     class FakeController:
@@ -1859,6 +1865,13 @@ async def test_resume_bootstrap_blocks_failed_target_and_replays_fallback_fronti
     assert selected == [(), ("first",)]
     assert len(captured_checkpoints) == 1
     assert captured_checkpoints[0].meta["blocked_replay_node_ids"] == ["first"]
+    assert captured_checkpoints[0].meta["replay_mismatch_count"] == 1
+    assert (
+        captured_checkpoints[0].meta["exploration_runtime_state"][
+            "replay_mismatch_count"
+        ]
+        == 1
+    )
 
 
 @pytest.mark.anyio

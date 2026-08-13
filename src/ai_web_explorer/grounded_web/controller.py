@@ -3,7 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Protocol
 
-from ai_web_explorer.grounded_web.frontier_replay import select_frontier
+from ai_web_explorer.grounded_web.frontier_replay import (
+    is_replay_mismatch_reason,
+    select_frontier,
+)
 from ai_web_explorer.grounded_web.graph import WebKobeGraph
 from ai_web_explorer.grounded_web.location_exploration import ExplorationLimits
 
@@ -385,10 +388,7 @@ class WebKobeExplorationController:
                 replay_metrics["last_replay_reason"] = replay_result.reason
                 if not replay_result.success:
                     replay_metrics["replay_failure_count"] += 1
-                    if replay_result.reason in {
-                        "entry_state_mismatch",
-                        "target_state_mismatch",
-                    }:
+                    if is_replay_mismatch_reason(replay_result.reason):
                         replay_metrics["replay_mismatch_count"] += 1
                     if (
                         not self._limits_explicit

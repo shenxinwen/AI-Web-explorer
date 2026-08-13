@@ -25,6 +25,21 @@ REPLAYABLE_EDGE_STATUSES = frozenset(
     }
 )
 
+REPLAY_MISMATCH_REASONS = frozenset(
+    {
+        "entry_state_mismatch",
+        "target_state_mismatch",
+        "target_semantic_location_mismatch",
+        "target_semantic_location_not_allowed",
+        "target_business_facts_mismatch",
+        "target_business_facts_unknown",
+    }
+)
+
+
+def is_replay_mismatch_reason(reason: str) -> bool:
+    return reason in REPLAY_MISMATCH_REASONS
+
 
 @dataclass(frozen=True)
 class ReplayStep:

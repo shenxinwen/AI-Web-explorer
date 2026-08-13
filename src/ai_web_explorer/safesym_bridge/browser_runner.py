@@ -34,7 +34,10 @@ from ai_web_explorer.grounded_web.experiment_plan import (
     ecommerce_checkout_experiment_plan,
 )
 from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
-from ai_web_explorer.grounded_web.frontier_replay import FrontierReplayRunner
+from ai_web_explorer.grounded_web.frontier_replay import (
+    FrontierReplayRunner,
+    is_replay_mismatch_reason,
+)
 from ai_web_explorer.grounded_web.location_exploration import (
     LOCATION_EXPLORATION_META_KEY,
     ExplorationLimits,
@@ -941,10 +944,7 @@ async def run_stagehand_exploration(
                     bootstrap_metrics["last_replay_reason"] = replay_result.reason
                     if not replay_result.success:
                         bootstrap_metrics["replay_failure_count"] += 1
-                        if replay_result.reason in {
-                            "entry_state_mismatch",
-                            "target_state_mismatch",
-                        }:
+                        if is_replay_mismatch_reason(replay_result.reason):
                             bootstrap_metrics["replay_mismatch_count"] += 1
                         if (
                             not location_scoped
@@ -1038,6 +1038,16 @@ async def run_stagehand_exploration(
             result = await controller.run(max_steps=max(resolved_steps, 1))
             runtime_state = _runtime_state_from_graph(result.graph)
             if resume_graph is not None:
+                for key in (
+                    "replay_attempt_count",
+                    "replay_success_count",
+                    "replay_failure_count",
+                    "replay_mismatch_count",
+                ):
+                    runtime_state[key] = max(
+                        int(runtime_state.get(key, 0)),
+                        int(bootstrap_metrics[key]),
+                    )
                 blocked_after_controller = set(
                     runtime_state.get("blocked_replay_node_ids", [])
                 )

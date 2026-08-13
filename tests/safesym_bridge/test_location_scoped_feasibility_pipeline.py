@@ -170,6 +170,16 @@ def _fixture_provider(scan_calls: list[tuple[str, str]]):
         payload = json.loads(prompt)
         if "action" in payload:
             return _visual_delta_provider(prompt, **kwargs)
+        if "allowed_semantic_locations" in payload:
+            return json.dumps(
+                {
+                    "observed_semantic_location": payload.get(
+                        "expected_semantic_location", "shopping"
+                    )
+                    or "shopping",
+                    "verified_business_facts": {},
+                }
+            )
         scan_kind = payload.get("scan_kind", "initial")
         location = payload.get("semantic_location", "shopping")
         scan_calls.append((scan_kind, location))

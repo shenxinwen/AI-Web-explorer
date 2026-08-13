@@ -436,7 +436,7 @@ async def test_controller_blocks_failed_frontier_replay_and_stops_without_graph_
             False,
             "start",
             "start__open_frontier__frontier",
-            "target_state_mismatch",
+            "target_semantic_location_mismatch",
             0,
         ),
     )
@@ -453,7 +453,8 @@ async def test_controller_blocks_failed_frontier_replay_and_stops_without_graph_
     assert result.graph.meta["replay_attempt_count"] == 1
     assert result.graph.meta["replay_success_count"] == 0
     assert result.graph.meta["replay_failure_count"] == 1
-    assert result.graph.meta["last_replay_reason"] == "target_state_mismatch"
+    assert result.graph.meta["last_replay_reason"] == "target_semantic_location_mismatch"
+    assert result.graph.meta["replay_mismatch_count"] == 1
     assert result.graph.meta["blocked_replay_node_ids"] == ["frontier"]
 
 
