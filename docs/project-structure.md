@@ -6,25 +6,47 @@ change.
 
 ## Active Direction
 
-The repository is centered on the SafeSym-oriented Web-KOBE mainline:
+The repository is centered on SafeSym-oriented, location-scoped open exploration:
 
 ```text
-real browser operation
-  -> VLM candidate hypotheses and local action selection
-  -> Stagehand execution attempt
-  -> after-action observation and local verification
-  -> Raw Graph + evidence sidecar + checkpoint
-  -> offline planning abstraction and Planning Graph
-  -> Phase A PDDL projection
-  -> SafeSym smoke / safety validation
+browser observation + VLM initial scan
+  -> LocationExplorationMemory creates a location candidate pool
+  -> local selection of an unfinished (location, action)
+  -> Stagehand executes one action
+  -> DOM / signature / screenshot after-action observation
+  -> record a capability fact, business fact, or semantic-location transition
+  -> targeted scan after a business-fact change
+  -> initial scan after first reaching a new location
+  -> reset + stored-action replay when another frontier must be restored
+  -> checkpoint graph, location memory, and cumulative budgets
+  -> SemanticPlanningGraph
+  -> Minimal Semantic domain.pddl + problem.pddl
+  -> SafeSym parse / solve
 ```
 
-The active explorer is forward-only: it follows the current route until its
-candidate set is exhausted or the step budget/terminal condition is reached.
-That is not a claim of site-wide exploration completion. The VLM proposes
-hypotheses, Stagehand reports execution attempts, and after-action observation
-is the verification evidence. A candidate capability is not a verified
-transition until a successful observed edge supports it.
+Browser execution remains forward along the current path, but the controller no
+longer treats current-path exhaustion as the end of all exploration. It can select
+another recoverable frontier and replay stored actions to restore that breakpoint.
+Replay is restoration only: it must not modify graph content, candidate pools,
+planning facts, scan state, or candidate attempt counts.
+
+VLM output is a candidate hypothesis, Stagehand reports an execution attempt, and
+after-action observation supplies verification evidence. A successful action is
+deduplicated within its semantic location. Capability changes inherit the existing
+pool, business-fact changes trigger a targeted scan, and only meaningful business
+surface changes create a new location.
+
+The planner-facing acceptance path is now `SemanticPlanningGraph -> Minimal
+Semantic PDDL`, producing both `domain.pddl` and `problem.pddl`. Older Planning
+Graph / Phase A, Location PDDL, and other projectors remain as compatibility or
+historical paths rather than the current semantic acceptance standard.
+
+The framework is not completely free of hardcoding. The Practice Shopping
+profile, cart structured-fact shortcuts, CLI profile registration, and controlled
+final-order URL remain explicit domain/experiment configuration. The next
+generality improvement is moving mappings such as `cart_count -> cart_has_items`
+into configurable profiles. The PDDL compiler, candidate memory, replay, and
+controller do not branch on shopping-specific action or location names.
 
 The old upstream `explore` runtime and the old `WebObservedGraph` exploration
 stack are not active code paths.
@@ -80,6 +102,7 @@ Main modules:
 - `src/ai_web_explorer/grounded_web/state_summary.py`
 - `src/ai_web_explorer/grounded_web/semantic_assistor.py`
 - `src/ai_web_explorer/grounded_web/business_profile.py`
+- `src/ai_web_explorer/grounded_web/exploration_semantics.py`
 - `src/ai_web_explorer/grounded_web/business_affordance.py`
 - `src/ai_web_explorer/grounded_web/visual_delta.py`
 - `src/ai_web_explorer/grounded_web/openai_visual_delta.py`
@@ -100,14 +123,14 @@ The VLM affordance result is a candidate hypothesis. The local verifier and
 after-action observation determine whether an edge is a verified transition;
 the candidate list alone does not establish a capability.
 
-Profile facts live here as preferred observation targets and candidate PDDL
-predicate vocabulary, not as the full set of possible website states. Visual
-Delta VLM receives only the selected action and before/after screenshots; it
-does not receive profile facts, supporting facts, or planning state. Its
-observations remain raw edge-trace evidence and do not enter `PlanningState`.
-Only locally confirmed facts enter profile/planning state. Visual affordance
-observations may provide an optional technical state label; profiles do not
-derive node labels from planning facts.
+Profile facts define the experiment's accepted closed vocabulary for locations,
+capability facts, and business facts; they are not the complete website state.
+Visual Delta receives the action, before/after screenshots, current location
+anchor, and experiment profile context. Its semantic output must pass
+`validate_profile_semantic_observation`. An accepted coarse observation may enter
+`SemanticPlanningGraph`, while business-fact candidates still require observed
+change and local verification. Raw responses and rejection reasons remain in the
+edge trace. A technical state label does not define graph identity or PDDL facts.
 
 Main functions/classes:
 
@@ -132,6 +155,7 @@ Main modules:
 - `src/ai_web_explorer/grounded_web/state_embedding.py`
 - `src/ai_web_explorer/grounded_web/embedding_provider.py`
 - `src/ai_web_explorer/grounded_web/exploration_index.py`
+- `src/ai_web_explorer/grounded_web/location_exploration.py`
 
 Main responsibilities:
 
@@ -151,9 +175,9 @@ Main responsibilities:
   Stagehand policy prompt boilerplate;
 - preserve `active_facts`, `profile_fact_ids`, and `generated_fact_ids` in
   `PlanningState`;
-- retain Visual Delta observations in
-  `execution_trace.metadata.visual_delta_trace`, without using them in
-  planning transitions, target-matching planning facts, or Phase A PDDL;
+- retain raw Visual Delta responses and validation traces in
+  `execution_trace.metadata.visual_delta_trace`; only accepted semantic
+  observations and verified planning facts enter the active semantic projection;
 - store state embeddings;
 - use embedding similarity together with reliable local revisit evidence for
   matching; embeddings are memory aids, not graph identity or PDDL facts;
@@ -184,6 +208,8 @@ Main modules:
 
 - `src/ai_web_explorer/grounded_web/explorer.py`
 - `src/ai_web_explorer/grounded_web/controller.py`
+- `src/ai_web_explorer/grounded_web/frontier_replay.py`
+- `src/ai_web_explorer/grounded_web/location_exploration.py`
 
 Main responsibilities:
 
@@ -197,13 +223,18 @@ Main responsibilities:
   may still be reused;
 - call the Stagehand operation layer and VLM/DOM observation layers;
 - update graph state;
-- stop with `current_state_exhausted` when the current node has no candidate;
-- stop by budget or an optional controller terminal condition;
-- treat candidate exhaustion and the bounded step budget as route-local
-  termination, without browser-back recovery or automatic replay;
-- expose an optional per-completed-step checkpoint callback. The generic
-  controller retains a consecutive-unproductive threshold, while the real
-  Stagehand runner disables that threshold.
+- maintain a fixed candidate pool per semantic location and track success,
+  retry, stale, and no-change by `(location, action)`;
+- run an initial scan for a new location, a targeted scan after business-fact
+  changes, and only bounded supplement scans;
+- select another recoverable frontier when the current pool is exhausted and
+  restore it through reset plus stored-action replay;
+- validate only the final semantic location and required business facts during
+  replay, without exact per-raw-node gates or graph mutation;
+- stop under formal-action, consecutive-no-progress, candidate-retry,
+  per-frontier replay, and total-replay limits;
+- checkpoint graph, location memory, cumulative budgets, and replay metrics so
+  `--resume-graph` can continue in a fresh browser.
 
 Low-level DOM interactables may still be used as runtime state summary /
 embedding-matching input, but they are no longer emitted in canonical
@@ -224,6 +255,10 @@ Main functions/classes:
 - `WebKobeExplorer._resolve_current_source_id`
 - `WebKobeExplorer._record_source_business_affordances`
 - `WebKobeExplorationController.run`
+- `LocationExplorationMemory`
+- `LocationExplorationCoordinator`
+- `FrontierReplayRunner.replay`
+- `select_frontier`
 
 ### PDDL Mapping And SafeSym Bridge
 
@@ -234,25 +269,25 @@ Main modules:
 - `src/ai_web_explorer/safesym_bridge/web_kobe_pddl_projector.py`
 - `src/ai_web_explorer/safesym_bridge/web_kobe_pddl_smoke.py`
 - `src/ai_web_explorer/safesym_bridge/web_kobe_safesym_smoke.py`
+- `src/ai_web_explorer/grounded_web/semantic_planning.py`
+- `src/ai_web_explorer/safesym_bridge/minimal_semantic_pddl.py`
 - `src/ai_web_explorer/safesym_bridge/cli.py`
 
 Main responsibilities:
 
 - load `WebKobeGraph` JSON;
-- project Planning Graph locations and eligible observed business transitions
-  into Phase A PDDL; use profile facts only as the declared vocabulary for
-  concrete planning queries;
-- write domain-only artifacts for exploration-stage modeling;
-- write domain/problem artifacts when a concrete planning query is specified;
+- build a `SemanticPlanningGraph` that separates location, capability, and
+  business facts from successful raw edges;
+- generate Minimal Semantic `domain.pddl` and `problem.pddl`;
+- retain older Phase A / Location PDDL as compatibility and fallback paths;
 - run PDDL readiness checks;
 - run SafeSym parser, safety injection, and planner smoke checks.
 
-This layer should be deterministic. It should consume graph semantics, not call
-LLM/VLM directly. The offline planning abstraction produces a Planning Graph
-and audit report; Phase A projects canonical locations and eligible
-non-self-loop business transitions into `domain.pddl` only. Visual Delta
-observations, supporting facts, and raw candidate facts are not Phase A
-predicates, preconditions, or effects.
+This layer is deterministic and does not call LLM/VLM. Minimal Semantic
+projection may emit same-location capability effects, but ordinary completion
+facts do not automatically become preconditions for other actions. Business
+preconditions come only from verified profile facts. Failed, conflicting, or
+semantically unusable edges are excluded with projection-report reasons.
 
 Main functions/classes:
 
@@ -261,6 +296,9 @@ Main functions/classes:
 - `compile_web_kobe_graph_to_pddl`
 - `write_web_kobe_pddl_smoke`
 - `write_web_kobe_safesym_smoke`
+- `build_semantic_planning_graph`
+- `compile_minimal_semantic_domain`
+- `compile_minimal_semantic_problem`
 - `main`
 
 ### Experiment Runtime
@@ -284,12 +322,13 @@ Main responsibilities:
 - write the final `graph.meta.exploration_summary` (`requested_steps`,
   `steps_completed`, and `stop_reason`) after normal completion.
 
-`graph.json` is the compact, independently loadable Raw Graph; detailed
-execution evidence is resolved through `graph_evidence.json`. The checkpoint
-keeps the embedding, trace, graph, and evidence artifacts paired after each
-completed action. `raw_graph.json`, `planning_graph.json`, and
-`planning_abstraction_report.json` are separate audit/projection artifacts;
-the sidecar is not read by Phase A.
+`graph.json` is the compact, independently loadable Raw Graph; detailed execution
+evidence is resolved through `graph_evidence.json`. The checkpoint keeps the
+embedding, trace, graph, and evidence artifacts paired after each completed
+action. Active SemanticPlanningGraph and Minimal Semantic PDDL consume verified
+semantics from the graph rather than inventing facts from the sidecar.
+`raw_graph.json`, the older `planning_graph.json`, and
+`planning_abstraction_report.json` remain compatible audit artifacts.
 
 Checkpointing overwrites the latest artifacts. `--resume-graph` can explicitly
 hydrate a saved graph in a fresh browser, validate the entry state, replay a
@@ -339,7 +378,8 @@ WebKobeExplorer.explore_one_step
   -> GraphManager.identify_or_add_node
   -> optional embedding source match
   -> optional summarize_visual_affordances
-  -> local selection of one VLM-proposed business action
+  -> LocationExplorationMemory merges initial/targeted/supplement candidates
+  -> local selection of one unfinished (location, action)
   -> adapter.execute
   -> capture after state/screenshots when execution succeeds or the known
      Stagehand tool_choice error is reported
@@ -347,12 +387,15 @@ WebKobeExplorer.explore_one_step
      verify_planning_delta
   -> GraphManager.build_planning_transition
   -> GraphManager.add_edge
+  -> LocationExplorationCoordinator records outcome and business-fact changes
+  -> select_frontier + FrontierReplayRunner when the current path is exhausted
   -> Raw Graph/evidence sidecar observation
   -> controller invokes the optional completed-step checkpoint
   -> real runner writes embedding, Stagehand trace, then graph/evidence
   -> normal completion writes `graph.meta.exploration_summary`
-  -> planning abstraction groups raw observations and aggregates capabilities
-  -> Phase A projector consumes planning graph
+  -> build_semantic_planning_graph
+  -> compile_minimal_semantic_domain / compile_minimal_semantic_problem
+  -> SafeSym parse / solve
 ```
 
 For `Thinking mode does not support this tool_choice`, the explorer continues

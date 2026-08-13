@@ -17,6 +17,29 @@
 - ...
 ```
 
+## 2026-08-13 - 当前主线收敛为 location-scoped 开放探索与 Minimal Semantic PDDL
+
+> 若下方历史决策与本条冲突，以本条和当前 overview/structure 文档为准。
+
+更改：
+- 探索以语义位置为候选池边界，按 `(semantic location, canonical action)` 去重；普通能力事实、业务事实和位置事实分离。
+- 同位置普通变化继承候选池；业务事实变化触发 targeted scan；只有明显业务 surface 变化才创建新位置。
+- 当前路径耗尽后允许通过 `reset + stored actions` 重放到其他 frontier；重放只恢复断点，不修改图、候选、planning facts、扫描状态或尝试次数。
+- checkpoint 持久化 location memory、正式动作预算和 replay 指标，支持在已有图上继续实验。
+- 当前 planner-facing 验收路径改为 `SemanticPlanningGraph -> Minimal Semantic domain/problem PDDL -> SafeSym`；PDDL goal 不反向驱动探索。
+- 有界终止采用参数化正式动作、连续无进展、候选重试、单 frontier replay 和总 replay 限制。
+
+原因：
+- 需要同时解决旧 forward-only 路径的深度不足和逐 raw-state 建模造成的线性依赖，同时保留开放探索属性。
+- 位置内去重可以避免排序、筛选、加购等动作在细碎状态上反复执行；位置、能力和业务事实分离可以生成更简洁且可规划的 PDDL。
+- 浏览器回退不可靠，reset 后重放已验证动作路径是当前最小可行的深层 frontier 恢复方式。
+
+影响：
+- 旧的“当前节点候选耗尽即结束”与“只生成 Phase A domain”的描述不再代表 active 主线。
+- 当前实现可以离线生成同时含位置和业务事实的 `domain.pddl` / `problem.pddl`，下一步用真实 Practice Shopping 有界实验验证候选质量、深层 replay 和 SafeSym 求解结果。
+- 当前仍有一定硬编码：`practice_shopping_feasibility` 词表、`cart_count/item_count -> cart_has_items` 结构化捷径、`cart_non_empty` 摘要标志、CLI profile 注册、受控下单 URL，以及独立旧 ecommerce benchmark 的固定步骤。
+- profile 词表、测试数据和精确下单 URL 属于实验配置或安全边界；后续泛化优先把结构化事实映射迁入可配置 profile，并支持外部 profile 加载。
+
 ## 2026-08-10 - 对齐当前主线的观察、图和规划职责
 
 更改：

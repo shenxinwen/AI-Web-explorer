@@ -5,22 +5,40 @@
 
 ## 当前主线
 
-项目当前围绕 SafeSym-oriented Web-KOBE 主线展开：
+项目当前围绕 SafeSym-oriented、location-scoped 开放探索主线展开：
 
 ```text
-真实浏览器操作
-  -> VLM 候选假设与本地动作选择
-  -> Stagehand 执行尝试
-  -> 动作后观察与本地验证
-  -> Raw Graph + evidence sidecar + checkpoint
-  -> 离线 planning abstraction 与 Planning Graph
-  -> Phase A PDDL 投影
-  -> SafeSym smoke / 安全验证
+浏览器观察 + VLM initial scan
+  -> LocationExplorationMemory 建立当前位置候选池
+  -> 本地选择未完成的 (location, action)
+  -> Stagehand 执行一个动作
+  -> DOM / signature / screenshot 动作后观察
+  -> 记录 capability fact、business fact 或 semantic location transition
+  -> business fact 变化触发 targeted scan
+  -> 新 location 触发新的 initial scan
+  -> frontier 耗尽时 reset + stored-action replay
+  -> checkpoint 保存 graph、location memory 和累计预算
+  -> SemanticPlanningGraph
+  -> Minimal Semantic domain.pddl + problem.pddl
+  -> SafeSym parse / solve
 ```
 
-当前探索器是 forward-only：沿当前路线前进，直到候选耗尽或达到步数预算/终止条件。
-这不表示已经完成全站探索。VLM 输出的是候选假设，Stagehand 报告的是执行尝试，
-动作后观察才是验证证据；只有有成功观察边支持的候选能力才算已验证转换。
+当前探索器仍然沿浏览器当前路径前向执行，但不再在当前路径耗尽后直接结束：controller
+可以选择其他可恢复 frontier，通过重放保存的动作路径回到断点继续探索。重放只负责恢复，
+不得修改图、候选池、planning facts、扫描状态和动作尝试次数。
+
+VLM 输出的是候选假设，Stagehand 报告的是执行尝试，动作后观察才是验证证据。
+同一位置内成功动作只执行一次；普通事实变化继承原候选池，业务事实变化进行定向扫描，
+明显业务位置变化才建立新 location。
+
+planner-facing 主线现在是 `SemanticPlanningGraph -> Minimal Semantic PDDL`，同时生成
+`domain.pddl` 和 `problem.pddl`。旧 Planning Graph / Phase A、Location PDDL 和其他 projector
+仍作为兼容或历史路径存在，但不再代表当前语义验收标准。
+
+当前框架并非完全无硬编码。`practice_shopping_feasibility` profile、购物车结构化事实捷径、
+CLI profile 注册和受控下单 URL 仍是显式领域/实验配置。后续优先把
+`cart_count -> cart_has_items` 等映射迁入可配置 profile；PDDL 编译器、候选池、重放和
+controller 本身不按购物动作或位置名称分支。
 
 旧 upstream `explore` runtime 和旧 `WebObservedGraph` 探索栈已经不属于 active code path。
 
@@ -83,6 +101,7 @@ Stagehand 不应该决定 graph identity、planning facts 或 PDDL 语义。
 - `src/ai_web_explorer/grounded_web/state_summary.py`
 - `src/ai_web_explorer/grounded_web/semantic_assistor.py`
 - `src/ai_web_explorer/grounded_web/business_profile.py`
+- `src/ai_web_explorer/grounded_web/exploration_semantics.py`
 - `src/ai_web_explorer/grounded_web/business_affordance.py`
 - `src/ai_web_explorer/grounded_web/visual_delta.py`
 - `src/ai_web_explorer/grounded_web/openai_visual_delta.py`
@@ -100,7 +119,11 @@ Stagehand 不应该决定 graph identity、planning facts 或 PDDL 语义。
 VLM affordance 结果只是候选假设。候选列表本身不等于已验证能力；只有本地验证和动作后
 观察支持的成功边，才确认为已验证转换。
 
-profile facts 位于这一层。它们的定位是“优先观察目标 + PDDL 候选谓词词表”，不是网页所有可能状态的全集。Visual Delta VLM 只接收动作和 before/after 截图，不接收 profile facts、supporting facts 或规划状态；它输出的观察事实只作为 raw edge trace 证据保留，不进入 `PlanningState`。只有本地结构化 verifier 明确确认的事实才归入 profile facts。节点可使用 Visual Affordance 提供的可选技术性 state label；profile facts 不再派生节点 label。
+profile facts 位于这一层。它们是当前实验认可的位置、普通能力和业务事实闭集，不是网页所有可能状态的全集。
+Visual Delta VLM 接收动作、before/after 截图、当前位置锚点和 experiment profile context；其语义输出必须经过
+`validate_profile_semantic_observation` 闭集校验。通过校验的 coarse semantic observation 可以进入
+`SemanticPlanningGraph`，候选业务事实还必须由动作后变化与本地 verifier 确认。原始响应和拒绝原因始终保留在
+raw edge trace 中。节点可使用 Visual Affordance 提供的技术性 state label，但 label 不决定 graph identity 或 PDDL facts。
 
 主要函数/类：
 
@@ -125,6 +148,7 @@ profile facts 位于这一层。它们的定位是“优先观察目标 + PDDL �
 - `src/ai_web_explorer/grounded_web/state_embedding.py`
 - `src/ai_web_explorer/grounded_web/embedding_provider.py`
 - `src/ai_web_explorer/grounded_web/exploration_index.py`
+- `src/ai_web_explorer/grounded_web/location_exploration.py`
 
 主要职责：
 
@@ -135,7 +159,7 @@ profile facts 位于这一层。它们的定位是“优先观察目标 + PDDL �
 - 离线把 presentation-equivalent observations 保守归入 Planning Graph，并聚合候选能力及精确观察来源；
 - 传播 source-aware planning state；
 - 在 `PlanningState` 中同时保留 `active_facts`、`profile_fact_ids` 和 `generated_fact_ids`；
-- 将 Visual Delta 观察事实写入 raw edge 的 `execution_trace.metadata.visual_delta_trace`，不参与 planning transition、target matching planning facts 或 Phase A PDDL；
+- 将 Visual Delta 原始响应和校验轨迹写入 `execution_trace.metadata.visual_delta_trace`；只有闭集校验后的 semantic observation 和已验证 planning facts 才能进入当前语义投影；
 - 存储 state embeddings；
 - 使用 embedding 相似度结合可靠的本地 revisit evidence 做匹配；embedding 只是记忆辅助，
   不是 graph identity 或 PDDL facts；
@@ -165,6 +189,8 @@ embedding memory 只辅助定位和避免重复，不直接进入 PDDL。
 
 - `src/ai_web_explorer/grounded_web/explorer.py`
 - `src/ai_web_explorer/grounded_web/controller.py`
+- `src/ai_web_explorer/grounded_web/frontier_replay.py`
+- `src/ai_web_explorer/grounded_web/location_exploration.py`
 
 主要职责：
 
@@ -173,11 +199,12 @@ embedding memory 只辅助定位和避免重复，不直接进入 PDDL。
 - 使用 memory context 和重复惩罚；
 - 调用 Stagehand 操作层和 VLM/DOM 观察层；
 - 更新 graph；
-- 按 step budget 或 terminal condition 停止。
-- 当前节点候选耗尽时以 `current_state_exhausted` 停止，不执行 browser back；连续没有新 graph information 时累计无进展。
-  真实 Stagehand runner 暂时关闭连续无进展提前终止，主要受最大步数约束。当前路线的候选耗尽和步数上限
-  是路线级终止，不执行 browser-back recovery 或自动 replay，也不代表全站探索完成；显式 resume 才会按稳定路径执行 replay。
-- 每个完成动作后更新 latest checkpoint（embedding、Stagehand trace、graph/evidence），正常完成后再写一次；最终 `graph.meta.exploration_summary` 记录 `requested_steps`、`steps_completed` 和 `stop_reason`。`--resume-graph` 可显式 hydration 已保存 graph，在新浏览器中校验入口并重放稳定路径，再使用新的 step budget；failed/inflight 动作必须有精确 `--resume-retry-action` 授权。恢复不还原 cookies、localStorage 或浏览器进程，unstable replay target fail-closed，execution-event trace 保留重复尝试。
+- 以语义位置维护固定候选池，并按 `(location, action)` 记录成功、重试、stale 和 no-change；
+- 新位置执行 initial scan，业务事实变化执行 targeted scan，候选池需要补充时执行有界 supplement scan；
+- 当前候选耗尽时选择其他可恢复 frontier，通过 `FrontierReplayRunner` reset 并执行保存动作路径；
+- 重放末端只验证 semantic location 和必要业务事实，不逐 raw node 严格匹配，也不修改探索图；
+- 按正式动作、连续无进展、候选重试、单 frontier replay 和总 replay 参数停止；
+- 每个完成动作后更新 latest checkpoint；`--resume-graph` 可恢复 graph、location memory 和累计预算，在新浏览器中继续探索。恢复不还原 cookies、localStorage 或浏览器进程。
 
 低层 DOM interactables 可以继续作为运行时 state summary / embedding matching 的辅助输入，但不再输出到 canonical `graph.json` node，也不作为 graph memory 或探索决策单位。旧的 LLM action selector 路径已经移除，避免系统回退到 selector/locator 驱动的探索。
 
@@ -191,6 +218,10 @@ embedding memory 只辅助定位和避免重复，不直接进入 PDDL。
 - `WebKobeExplorer._match_current_state`
 - `WebKobeExplorer._record_source_business_affordances`
 - `WebKobeExplorationController.run`
+- `LocationExplorationMemory`
+- `LocationExplorationCoordinator`
+- `FrontierReplayRunner.replay`
+- `select_frontier`
 
 ### PDDL 映射与 SafeSym Bridge 层
 
@@ -201,22 +232,23 @@ embedding memory 只辅助定位和避免重复，不直接进入 PDDL。
 - `src/ai_web_explorer/safesym_bridge/web_kobe_pddl_projector.py`
 - `src/ai_web_explorer/safesym_bridge/web_kobe_pddl_smoke.py`
 - `src/ai_web_explorer/safesym_bridge/web_kobe_safesym_smoke.py`
+- `src/ai_web_explorer/grounded_web/semantic_planning.py`
+- `src/ai_web_explorer/safesym_bridge/minimal_semantic_pddl.py`
 - `src/ai_web_explorer/safesym_bridge/cli.py`
 
 主要职责：
 
 - 读取 `WebKobeGraph` JSON；
-- 把 Planning Graph location 和已观察成功的业务转换投影为 Phase A PDDL；profile facts 只在有具体规划查询时
-  作为声明的谓词词表使用；
-- 写出 domain/problem；
+- 从成功 raw edge 构建位置、普通能力事实、业务事实和动作前提/效果分离的 `SemanticPlanningGraph`；
+- 生成 Minimal Semantic `domain.pddl` 和 `problem.pddl`；
+- 保留旧 Phase A / Location PDDL 作为兼容与降级路径；
 - 运行 PDDL readiness smoke；
 - 运行 SafeSym parser、safety injection、planner smoke。
 
 这一层应保持确定性。它应该消费 graph 中已经记录的语义，不应该直接调用 LLM/VLM。
-`planning_abstraction.py` 离线生成 Planning Graph 和审计报告；Phase A 只投影跨 planning-state 的成功转换到
-`domain.pddl`。presentation 自环保留在 Planning Graph 中用于审计和能力发现，但不进入 PDDL；失败或缺失目标的边仍被排除。
-Visual Delta 观察事实、supporting facts、raw candidate facts 和 `PlanningState` 不作为 Phase A 的 predicates、
-preconditions 或 effects。
+Minimal Semantic 投影允许同位置普通能力成为 PDDL effect，但不会把普通完成事实自动提升成其他动作前提。
+业务前提只来自已验证的 profile facts，位置变化同时删除旧 `at_*` 并增加新 `at_*`。失败、冲突或缺少
+可用语义观察的边被排除，并在 projection report 中说明原因。
 
 主要函数/类：
 
@@ -225,9 +257,12 @@ preconditions 或 effects。
 - `compile_web_kobe_graph_to_pddl`
 - `write_web_kobe_pddl_smoke`
 - `write_web_kobe_safesym_smoke`
+- `build_semantic_planning_graph`
+- `compile_minimal_semantic_domain`
+- `compile_minimal_semantic_problem`
 - `main`
 
-graph artifact 的布局由 `src/ai_web_explorer/safesym_bridge/graph_artifacts.py` 负责：`graph.json` 是可独立加载的紧凑 Raw Graph，`graph_evidence.json` 是可选诊断 sidecar。`evidence_ref` 解析到 sidecar 中稳定的 node/edge key；历史完整 graph 继续兼容读取。Phase A 只消费 graph，不读取 sidecar，`raw_graph.json` 保留输入文件的原始 JSON 形状，因此 sidecar 证据不会被重新膨胀，也不参与 PDDL。`planning_graph.json` 与 `planning_abstraction_report.json` 是离线抽象和审计产物。该 artifact 拆分不改变探索、状态命名、matching 或 Phase A 语义。
+graph artifact 的布局由 `src/ai_web_explorer/safesym_bridge/graph_artifacts.py` 负责：`graph.json` 是可独立加载的紧凑 Raw Graph，`graph_evidence.json` 是可选诊断 sidecar。`evidence_ref` 解析到 sidecar 中稳定的 node/edge key；历史完整 graph 继续兼容读取。当前 SemanticPlanningGraph 和 Minimal Semantic PDDL 只消费 graph 中的已验证语义，不从 sidecar 创造 facts。`raw_graph.json` 保留输入原形；旧 `planning_graph.json` 与 `planning_abstraction_report.json` 继续作为兼容审计产物。
 
 ### 实验运行层
 
@@ -286,17 +321,21 @@ WebKobeExplorer.explore_one_step
   -> GraphManager.identify_or_add_node
   -> optional embedding source match
   -> optional summarize_visual_affordances
-  -> 本地从 VLM 候选中选择一个业务动作
+  -> LocationExplorationMemory 合并 initial/targeted/supplement candidates
+  -> 本地选择一个未完成的 (location, action)
   -> adapter.execute
   -> capture after state/screenshots when execution succeeds or the known Stagehand tool_choice error is reported
   -> summarize_visual_delta (observation trace only) / verify_planning_delta
   -> GraphManager.build_planning_transition
   -> GraphManager.add_edge
+  -> LocationExplorationCoordinator 记录动作结果和业务事实变化
+  -> 当前路径耗尽时 select_frontier + FrontierReplayRunner
   -> controller 调用可选的完成步骤 checkpoint
   -> 真实 runner 依次写入 embedding、Stagehand trace、graph/evidence
   -> 正常结束时写入 `graph.meta.exploration_summary`
-  -> planning abstraction groups raw observations and aggregates capabilities
-  -> Phase A projector consumes planning graph
+  -> build_semantic_planning_graph
+  -> compile_minimal_semantic_domain / compile_minimal_semantic_problem
+  -> SafeSym parse / solve
 ```
 
 对 `Thinking mode does not support this tool_choice`，探索器会继续动作后观察：有 URL path、结构签名或 Visual Delta 变化时记录成功转换，无变化时记录 `no_observed_change` 自环，并保留原始错误与 `backend_reported_success=false`。未知执行错误仍记录失败自环且跳过 Visual Delta。
