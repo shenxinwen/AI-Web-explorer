@@ -778,6 +778,40 @@ async def test_formal_attempt_budget_stops_at_configured_twenty():
 
 
 @pytest.mark.anyio
+async def test_zero_formal_budget_preserves_all_cumulative_replay_metrics():
+    explorer = FakeExplorer([])
+    controller = WebKobeExplorationController(
+        explorer,
+        limits=ExplorationLimits(max_exploration_steps=20),
+        runtime_budget_state={
+            "formal_action_attempts": 20,
+            "replay_attempt_count": 1,
+            "replay_success_count": 1,
+            "replay_failure_count": 1,
+            "replay_mismatch_count": 1,
+        },
+        replay_metric_baseline={
+            "replay_attempt_count": 5,
+            "replay_success_count": 7,
+            "replay_failure_count": 8,
+            "replay_mismatch_count": 9,
+        },
+    )
+
+    result = await controller.run(max_steps=1)
+
+    runtime_state = result.graph.meta["exploration_runtime_state"]
+    for key, expected in {
+        "replay_attempt_count": 5,
+        "replay_success_count": 7,
+        "replay_failure_count": 8,
+        "replay_mismatch_count": 9,
+    }.items():
+        assert runtime_state[key] == expected
+        assert result.graph.meta[key] == expected
+
+
+@pytest.mark.anyio
 async def test_three_semantically_unproductive_attempts_stop_run():
     explorer = FakeExplorer(
         [

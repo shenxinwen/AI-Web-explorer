@@ -1485,6 +1485,14 @@ async def test_runner_resume_uses_cumulative_runtime_state_for_zero_formal_actio
     assert meta["formal_action_attempts"] == 20
     assert meta["exploration_summary"]["steps_completed"] == 0
     assert meta["exploration_summary"]["formal_action_attempts"] == 20
+    for key, expected in {
+        "replay_attempt_count": 2,
+        "replay_success_count": 1,
+        "replay_failure_count": 1,
+        "replay_mismatch_count": 0,
+    }.items():
+        assert meta["exploration_runtime_state"][key] == expected
+        assert meta[key] == expected
 
 
 @pytest.mark.anyio

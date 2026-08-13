@@ -277,7 +277,13 @@ class WebKobeExplorationController:
                     start_node_id="",
                     total_steps_completed=state.formal_action_attempts,
                 )
-            state.replay_attempt_count = int(replay_metrics["replay_attempt_count"])
+            for key in (
+                "replay_attempt_count",
+                "replay_success_count",
+                "replay_failure_count",
+                "replay_mismatch_count",
+            ):
+                setattr(state, key, int(replay_metrics[key]))
             self._write_runtime_state(graph, state)
             return WebKobeExplorationResult(
                 graph=graph,

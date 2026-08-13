@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 import uuid
 from dataclasses import replace
 from typing import Any, Callable
@@ -89,6 +90,99 @@ def _checkpoint_value_is_true(value: object) -> bool:
         and not isinstance(value, bool)
         and value > 0
     )
+
+
+def _nonempty_screenshot_path(value: object) -> str | None:
+    if value is None:
+        return None
+    try:
+        path = os.fspath(value)
+    except TypeError:
+        return None
+    if isinstance(path, bytes):
+        path = os.fsdecode(path)
+    path = path.strip()
+    return path or None
+
+
+def _checkpoint_response_failure(
+    *,
+    reason: str,
+    observed_location: str | None = None,
+) -> tuple[str | None, dict[str, list[str]], str]:
+    return observed_location, {}, reason
+
+
+def _parse_replay_checkpoint_response(
+    raw_response: object,
+    *,
+    allowed_locations: set[str],
+    expected_location: str,
+    required_facts: tuple[str, ...],
+) -> tuple[str | None, dict[str, list[str]], str | None]:
+    try:
+        parsed = json.loads(raw_response)
+    except (TypeError, json.JSONDecodeError):
+        return _checkpoint_response_failure(
+            reason="target_semantic_location_mismatch"
+        )
+    if not isinstance(parsed, dict):
+        return _checkpoint_response_failure(
+            reason="target_semantic_location_mismatch"
+        )
+    if set(parsed) - {
+        "observed_semantic_location",
+        "verified_business_facts",
+    }:
+        return _checkpoint_response_failure(
+            reason="target_semantic_location_mismatch"
+        )
+    raw_location = parsed.get("observed_semantic_location")
+    if not isinstance(raw_location, str) or not raw_location.strip():
+        return _checkpoint_response_failure(
+            reason="target_semantic_location_mismatch"
+        )
+    observed_location = normalize_semantic_id(raw_location)
+    if not observed_location or observed_location not in allowed_locations:
+        return _checkpoint_response_failure(
+            reason="target_semantic_location_not_allowed",
+            observed_location=observed_location or None,
+        )
+    if expected_location and observed_location != expected_location:
+        return _checkpoint_response_failure(
+            reason="target_semantic_location_mismatch",
+            observed_location=observed_location,
+        )
+
+    provider_facts = parsed.get("verified_business_facts", {})
+    if not isinstance(provider_facts, dict):
+        return _checkpoint_response_failure(
+            reason="target_business_facts_mismatch",
+            observed_location=observed_location,
+        )
+    provider_evidence: dict[str, list[str]] = {}
+    for raw_fact_id, raw_evidence in provider_facts.items():
+        fact_id = normalize_semantic_id(raw_fact_id)
+        if fact_id not in required_facts:
+            return _checkpoint_response_failure(
+                reason="target_business_facts_unknown",
+                observed_location=observed_location,
+            )
+        if isinstance(raw_evidence, str):
+            values = [raw_evidence.strip()] if raw_evidence.strip() else []
+        elif isinstance(raw_evidence, list) and all(
+            isinstance(item, str) and item.strip() for item in raw_evidence
+        ):
+            values = [item.strip() for item in raw_evidence]
+        else:
+            values = []
+        if not values:
+            return _checkpoint_response_failure(
+                reason="target_business_facts_mismatch",
+                observed_location=observed_location,
+            )
+        provider_evidence[fact_id] = values
+    return observed_location, provider_evidence, None
 
 
 def _url_path(url: str) -> str:
@@ -994,13 +1088,11 @@ class WebKobeExplorer:
                 if normalize_semantic_id(fact)
             )
         )
-        if profile is not None:
-            unknown_facts = set(required) - set(profile.business_fact_ids)
-            if unknown_facts:
-                return ReplayCheckpointResult(
-                    success=False,
-                    reason="target_business_facts_unknown",
-                )
+        if profile is not None and set(required) - set(profile.business_fact_ids):
+            return ReplayCheckpointResult(
+                success=False,
+                reason="target_business_facts_unknown",
+            )
 
         verified: list[str] = []
         evidence: list[str] = []
@@ -1030,6 +1122,7 @@ class WebKobeExplorer:
                 verified.append(fact_id)
                 evidence.append(f"typed_state_fact:{fact_id}")
 
+        observed_location: str | None = None
         if profile is None:
             interactables = await self.adapter.list_interactables(snapshot)
             draft = self.semantic_assistor.describe_state(
@@ -1047,173 +1140,113 @@ class WebKobeExplorer:
                     evidence=tuple(evidence),
                     reason="target_semantic_location_mismatch",
                 )
-            if any(fact_id not in verified for fact_id in required):
+            if not any(fact_id not in verified for fact_id in required):
                 return ReplayCheckpointResult(
-                    success=False,
+                    success=True,
                     observed_semantic_location=observed_location or None,
                     verified_business_facts=tuple(verified),
                     evidence=tuple(evidence),
-                    reason="target_business_facts_mismatch",
+                    reason="replay_succeeded",
                 )
-            return ReplayCheckpointResult(
-                success=True,
-                observed_semantic_location=observed_location or None,
-                verified_business_facts=tuple(verified),
-                evidence=tuple(evidence),
-                reason="replay_succeeded",
-            )
+            allowed_locations = {observed_location}
+            descriptions: dict[str, list[str]] = {}
+        else:
+            allowed_locations = {
+                normalize_semantic_id(location)
+                for location in profile.allowed_locations
+                if normalize_semantic_id(location)
+            }
+            descriptions = {
+                rule.fact_id: list(rule.descriptions)
+                for rule in profile.business_facts
+                if rule.fact_id in required
+            }
 
-        allowed_locations = {
-            normalize_semantic_id(location)
-            for location in profile.allowed_locations
-            if normalize_semantic_id(location)
-        }
-        descriptions = {
-            rule.fact_id: list(rule.descriptions)
-            for rule in profile.business_facts
-            if rule.fact_id in required
-        }
         if self.visual_delta_provider is None:
             return ReplayCheckpointResult(
                 success=False,
+                observed_semantic_location=observed_location,
                 verified_business_facts=tuple(verified),
                 evidence=tuple(evidence),
-                reason="target_semantic_location_mismatch",
+                reason=(
+                    "target_semantic_location_mismatch"
+                    if profile is not None
+                    else "target_business_facts_mismatch"
+                ),
             )
         try:
-            screenshot = await self._capture_screenshot("replay_checkpoint")
-            if screenshot is None:
-                capture = getattr(self.adapter, "capture_screenshot", None)
-                if capture is not None:
-                    screenshot = await capture("replay_checkpoint")
-            prompt = json.dumps(
-                {
-                    "expected_semantic_location": expected_location or None,
-                    "allowed_semantic_locations": sorted(allowed_locations),
-                    "requested_business_facts": descriptions,
-                    "current_screenshot_path": screenshot,
-                    "current_signature": dict(signature),
-                    "current_page_context": {
-                        "page_id": snapshot.page_id,
-                        "url": snapshot.url,
-                        "url_path": _url_path(snapshot.url),
-                        "title": snapshot.title,
-                    },
-                },
-                ensure_ascii=False,
-                sort_keys=True,
+            screenshot = await self._capture_replay_checkpoint_screenshot()
+        except Exception:
+            screenshot = None
+        if not screenshot:
+            return ReplayCheckpointResult(
+                success=False,
+                observed_semantic_location=observed_location,
+                verified_business_facts=tuple(verified),
+                evidence=tuple(evidence),
+                reason=(
+                    "target_semantic_location_mismatch"
+                    if profile is not None
+                    else "target_business_facts_mismatch"
+                ),
             )
+        prompt = json.dumps(
+            {
+                "expected_semantic_location": expected_location or None,
+                "allowed_semantic_locations": sorted(allowed_locations),
+                "requested_business_facts": descriptions,
+                "current_screenshot_path": screenshot,
+                "current_signature": dict(signature),
+                "current_page_context": {
+                    "page_id": snapshot.page_id,
+                    "url": snapshot.url,
+                    "url_path": _url_path(snapshot.url),
+                    "title": snapshot.title,
+                },
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        try:
             raw_response = self.visual_delta_provider(
                 prompt,
                 current_screenshot_path=screenshot,
                 before_screenshot_path=screenshot,
                 after_screenshot_path=screenshot,
             )
-            parsed = json.loads(raw_response)
         except Exception:
+            raw_response = None
+        provider_location, provider_evidence, failure_reason = (
+            _parse_replay_checkpoint_response(
+                raw_response,
+                allowed_locations=allowed_locations,
+                expected_location=expected_location or (observed_location or ""),
+                required_facts=required,
+            )
+        )
+        if failure_reason is not None:
             return ReplayCheckpointResult(
                 success=False,
+                observed_semantic_location=provider_location or observed_location,
                 verified_business_facts=tuple(verified),
                 evidence=tuple(evidence),
-                reason="target_semantic_location_mismatch",
+                reason=failure_reason,
             )
-
-        if not isinstance(parsed, dict):
-            return ReplayCheckpointResult(
-                success=False,
-                verified_business_facts=tuple(verified),
-                evidence=tuple(evidence),
-                reason="target_semantic_location_mismatch",
-            )
-        if set(parsed) - {
-            "observed_semantic_location",
-            "verified_business_facts",
-        }:
-            return ReplayCheckpointResult(
-                success=False,
-                verified_business_facts=tuple(verified),
-                evidence=tuple(evidence),
-                reason="target_semantic_location_mismatch",
-            )
-        raw_location = parsed.get("observed_semantic_location")
-        if not isinstance(raw_location, str) or not raw_location.strip():
-            return ReplayCheckpointResult(
-                success=False,
-                verified_business_facts=tuple(verified),
-                evidence=tuple(evidence),
-                reason="target_semantic_location_mismatch",
-            )
-        observed_location = normalize_semantic_id(raw_location)
-        if observed_location not in allowed_locations:
-            return ReplayCheckpointResult(
-                success=False,
-                observed_semantic_location=observed_location or None,
-                verified_business_facts=tuple(verified),
-                evidence=tuple(evidence),
-                reason="target_semantic_location_not_allowed",
-            )
-        if expected_location and observed_location != expected_location:
-            return ReplayCheckpointResult(
-                success=False,
-                observed_semantic_location=observed_location,
-                verified_business_facts=tuple(verified),
-                evidence=tuple(evidence),
-                reason="target_semantic_location_mismatch",
-            )
-
-        provider_facts = parsed.get("verified_business_facts", {})
-        if not isinstance(provider_facts, dict):
-            return ReplayCheckpointResult(
-                success=False,
-                observed_semantic_location=observed_location,
-                verified_business_facts=tuple(verified),
-                evidence=tuple(evidence),
-                reason="target_business_facts_mismatch",
-            )
-        provider_evidence: dict[str, list[str]] = {}
-        for raw_fact_id, raw_evidence in provider_facts.items():
-            fact_id = normalize_semantic_id(raw_fact_id)
-            if fact_id not in required:
-                return ReplayCheckpointResult(
-                    success=False,
-                    observed_semantic_location=observed_location,
-                    verified_business_facts=tuple(verified),
-                    evidence=tuple(evidence),
-                    reason="target_business_facts_unknown",
-                )
-            if isinstance(raw_evidence, str):
-                values = [raw_evidence.strip()] if raw_evidence.strip() else []
-            elif isinstance(raw_evidence, list) and all(
-                isinstance(item, str) and item.strip() for item in raw_evidence
-            ):
-                values = [item.strip() for item in raw_evidence]
-            else:
-                values = []
-            if not values:
-                return ReplayCheckpointResult(
-                    success=False,
-                    observed_semantic_location=observed_location,
-                    verified_business_facts=tuple(verified),
-                    evidence=tuple(evidence),
-                    reason="target_business_facts_mismatch",
-                )
-            provider_evidence[fact_id] = values
         for fact_id, fact_evidence in provider_evidence.items():
             if fact_id not in verified:
                 verified.append(fact_id)
                 evidence.extend(fact_evidence)
-
         if any(fact_id not in verified for fact_id in required):
             return ReplayCheckpointResult(
                 success=False,
-                observed_semantic_location=observed_location,
+                observed_semantic_location=provider_location or observed_location,
                 verified_business_facts=tuple(verified),
                 evidence=tuple(evidence),
                 reason="target_business_facts_mismatch",
             )
         return ReplayCheckpointResult(
             success=True,
-            observed_semantic_location=observed_location or None,
+            observed_semantic_location=provider_location or observed_location,
             verified_business_facts=tuple(verified),
             evidence=tuple(evidence),
             reason="replay_succeeded",
@@ -1414,6 +1447,17 @@ class WebKobeExplorer:
             return None
         label = f"{phase}_{self.manager.total_steps_completed + 1:04d}"
         return await capture(label)
+
+    async def _capture_replay_checkpoint_screenshot(self) -> str | None:
+        screenshot = _nonempty_screenshot_path(
+            await self._capture_screenshot("replay_checkpoint")
+        )
+        if screenshot is not None:
+            return screenshot
+        capture = getattr(self.adapter, "capture_screenshot", None)
+        if capture is None:
+            return None
+        return _nonempty_screenshot_path(await capture("replay_checkpoint"))
 
     async def _observe_after_action(
         self,
