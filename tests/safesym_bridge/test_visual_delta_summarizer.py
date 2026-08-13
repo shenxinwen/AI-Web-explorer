@@ -1,4 +1,9 @@
+import json
+
 from ai_web_explorer.grounded_web.business_profile import ecommerce_checkout_profile
+from ai_web_explorer.grounded_web.exploration_semantics import (
+    practice_shopping_feasibility_profile,
+)
 from ai_web_explorer.grounded_web.graph import BrowserAction
 from ai_web_explorer.grounded_web.visual_delta import (
     VisualDeltaRequest,
@@ -43,6 +48,49 @@ def test_summarize_visual_delta_maps_provider_json_to_candidate_planning_delta()
     assert result.planning_delta.verified_added_facts == []
     assert result.trace.status == "summarized"
     assert "visual_change_summary" not in result.trace.to_dict()
+
+
+def test_visual_delta_reports_observable_change_from_structured_signatures():
+    request = VisualDeltaRequest(
+        goal="Observe the page.",
+        action=BrowserAction("click", "button.sort", "sort_products"),
+        before_screenshot_path="before.png",
+        after_screenshot_path="after.png",
+        before_signature={"url_path": "/products", "count": 2},
+        after_signature={"url_path": "/products", "count": 3},
+    )
+
+    result = summarize_visual_delta(
+        request,
+        provider=lambda *_args, **_kwargs: '{"observable_change":false}',
+    )
+
+    assert result.observable_change is True
+
+
+def test_visual_delta_allows_experiment_profile_context_and_business_fact_fields():
+    request = VisualDeltaRequest(
+        goal="Observe the page.",
+        action=BrowserAction("click", "button.add", "add_to_cart"),
+        before_screenshot_path="before.png",
+        after_screenshot_path="after.png",
+        semantic_profile_context={"business_facts": {"cart_has_items": []}},
+    )
+    prompts = []
+
+    def provider(prompt, *, before_screenshot_path, after_screenshot_path):
+        prompts.append(prompt)
+        return (
+            '{"observable_change":true,"business_facts_added":'
+            '["cart_has_items"],"business_facts_removed":[]}'
+        )
+
+    result = summarize_visual_delta(request, provider=provider)
+
+    payload = json.loads(prompts[0])
+    assert payload["semantic_profile_context"] == request.semantic_profile_context
+    assert result.observable_change is True
+    assert result.planning_delta.candidate_added_facts == ["cart_has_items"]
 
 
 def test_visual_delta_extracts_location_role_and_completion_fact():
@@ -237,6 +285,100 @@ def test_visual_delta_rejects_all_semantics_when_location_anchor_is_unresolved()
 
     result = summarize_visual_delta(request, provider=provider)
     assert result.semantic_observation is None
+
+
+def _profile_delta_request():
+    return VisualDeltaRequest(
+        goal="Explore the shopping fixture.",
+        action=BrowserAction("click", None, "sort_products"),
+        before_screenshot_path="before.png",
+        after_screenshot_path="after.png",
+        source_location_hint="shopping",
+        source_location_hint_confirmed=True,
+        allowed_location_ids=["shopping", "product_detail", "checkout", "confirmation"],
+        semantic_experiment_profile=practice_shopping_feasibility_profile(),
+    )
+
+
+def test_profile_observation_rejects_unknown_location_and_records_reason():
+    result = summarize_visual_delta(
+        _profile_delta_request(),
+        provider=lambda *_args, **_kwargs: (
+            '{"action_role":"navigation","source_location":"unknown_surface",'
+            '"target_location":"shopping"}'
+        ),
+    )
+
+    assert result.semantic_observation is None
+    assert any(
+        reason.startswith("source_location_not_allowed")
+        for reason in result.trace.metadata["semantic_observation_rejections"]
+    )
+    assert result.trace.llm_response["source_location"] == "unknown_surface"
+
+
+def test_profile_observation_filters_invented_facts_and_rejects_presentation_drift():
+    result = summarize_visual_delta(
+        _profile_delta_request(),
+        provider=lambda *_args, **_kwargs: (
+            '{"action_role":"presentation_capability",'
+            '"source_location":"shopping","target_location":"checkout",'
+            '"completion_facts":["products_sorted","invented_completion"],'
+            '"candidate_required_facts":["cart_has_items","invented_business"]}'
+        ),
+    )
+
+    assert result.semantic_observation is None
+    reasons = result.trace.metadata["semantic_observation_rejections"]
+    assert "presentation_location_drift" in reasons
+    assert "completion_fact_not_allowed:invented_completion" in reasons
+    assert "business_fact_not_allowed:invented_business" in reasons
+
+
+def test_profile_observation_filters_business_fact_fields_and_keeps_allowed_values():
+    request = _profile_delta_request()
+    result = summarize_visual_delta(
+        request,
+        provider=lambda *_args, **_kwargs: (
+            '{"action_role":"state_mutation","source_location":"shopping",'
+            '"target_location":"shopping",'
+            '"business_facts_added":["cart_has_items","invented_business"],'
+            '"business_facts_removed":[]}'
+        ),
+    )
+
+    assert result.semantic_observation is not None
+    assert result.planning_delta.candidate_added_facts == ["cart_has_items"]
+    assert "business_fact_not_allowed:invented_business" in result.trace.metadata[
+        "semantic_observation_rejections"
+    ]
+
+
+def test_profile_observation_accepts_every_approved_action_role_mapping():
+    profile = practice_shopping_feasibility_profile()
+    for action_id, role in profile.action_role_examples.items():
+        target = "checkout" if action_id == "open_checkout" else "shopping"
+        request = VisualDeltaRequest(
+            goal="Explore the shopping fixture.",
+            action=BrowserAction("click", None, action_id),
+            before_screenshot_path="before.png",
+            after_screenshot_path="after.png",
+            source_location_hint="shopping",
+            source_location_hint_confirmed=True,
+            allowed_location_ids=list(profile.allowed_locations),
+            semantic_experiment_profile=profile,
+        )
+        result = summarize_visual_delta(
+            request,
+            provider=lambda *_args, role=role, target=target, **_kwargs: (
+                '{"action_role":'
+                + json.dumps(role)
+                + ',"source_location":"shopping","target_location":'
+                + json.dumps(target)
+                + "}"
+            ),
+        )
+        assert result.semantic_observation is not None, action_id
 
 
 def test_first_entry_sibling_presentations_share_one_anchor_fail_closed():

@@ -5,6 +5,11 @@ from dataclasses import dataclass
 from typing import Any, Callable, Iterable, TYPE_CHECKING
 
 from ai_web_explorer.grounded_web.graph import WebKobeEdge, WebKobeGraph
+from ai_web_explorer.grounded_web.location_exploration import (
+    LOCATION_EXPLORATION_META_KEY,
+    LocationExplorationMemory,
+)
+from ai_web_explorer.grounded_web.semantic_model import normalize_semantic_id
 
 if TYPE_CHECKING:
     from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
@@ -20,6 +25,21 @@ REPLAYABLE_EDGE_STATUSES = frozenset(
     }
 )
 
+REPLAY_MISMATCH_REASONS = frozenset(
+    {
+        "entry_state_mismatch",
+        "target_state_mismatch",
+        "target_semantic_location_mismatch",
+        "target_semantic_location_not_allowed",
+        "target_business_facts_mismatch",
+        "target_business_facts_unknown",
+    }
+)
+
+
+def is_replay_mismatch_reason(reason: str) -> bool:
+    return reason in REPLAY_MISMATCH_REASONS
+
 
 @dataclass(frozen=True)
 class ReplayStep:
@@ -34,6 +54,26 @@ class FrontierTarget:
     node_id: str
     path: tuple[ReplayStep, ...]
     untried_action_ids: tuple[str, ...]
+    semantic_location: str | None = None
+    required_business_facts: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ReplayCheckpointResult:
+    success: bool
+    observed_semantic_location: str | None = None
+    verified_business_facts: tuple[str, ...] = ()
+    evidence: tuple[str, ...] = ()
+    reason: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "success": self.success,
+            "observed_semantic_location": self.observed_semantic_location,
+            "verified_business_facts": list(self.verified_business_facts),
+            "evidence": list(self.evidence),
+            "reason": self.reason,
+        }
 
 
 @dataclass(frozen=True)
@@ -43,6 +83,7 @@ class ReplayResult:
     failed_edge_id: str | None
     reason: str
     completed_steps: int
+    checkpoint: ReplayCheckpointResult | None = None
 
 
 class FrontierReplayRunner:
@@ -60,8 +101,6 @@ class FrontierReplayRunner:
             return ReplayResult(False, None, None, "entry_state_unavailable", 0)
         if not await self.explorer.adapter.reset_to(start_url):
             return ReplayResult(False, None, None, "entry_reset_failed", 0)
-        if not await self.explorer.validate_current_node(start_node_id):
-            return ReplayResult(False, None, None, "entry_state_mismatch", 0)
 
         completed_steps = 0
         for step in target.path:
@@ -73,33 +112,51 @@ class FrontierReplayRunner:
                     "replay_action_failed",
                     completed_steps,
                 )
-            if not await self.explorer.validate_current_node(step.target_node_id):
-                self._mark_edge(step.edge_id, "unstable")
-                return ReplayResult(
-                    False,
-                    None,
-                    step.edge_id,
-                    "target_state_mismatch",
-                    completed_steps,
-                )
-            self._mark_edge(step.edge_id, "verified")
             completed_steps += 1
+
+        checkpoint_validator = getattr(
+            self.explorer, "validate_replay_checkpoint", None
+        )
+        if checkpoint_validator is None:
+            checkpoint_ok = await self.explorer.validate_current_node(
+                target.node_id,
+                expected_semantic_location=getattr(target, "semantic_location", None),
+                expected_business_facts=getattr(target, "required_business_facts", ()),
+            )
+            checkpoint = ReplayCheckpointResult(
+                success=checkpoint_ok,
+                reason="replay_succeeded" if checkpoint_ok else "target_state_mismatch",
+            )
+        else:
+            checkpoint = await checkpoint_validator(
+                expected_semantic_location=getattr(target, "semantic_location", None),
+                expected_business_facts=getattr(target, "required_business_facts", ()),
+            )
+        if not checkpoint.success:
+            return ReplayResult(
+                False,
+                None,
+                None,
+                checkpoint.reason
+                or (
+                    "target_business_facts_mismatch"
+                    if getattr(target, "required_business_facts", ())
+                    else "target_state_mismatch"
+                ),
+                completed_steps,
+                checkpoint,
+            )
+        # The checkpoint is semantic rather than a raw-node restoration, but
+        # the next exploration step must still start from the replay target.
+        self.explorer._set_current_node(target.node_id)
         return ReplayResult(
             True,
             target.node_id,
             None,
             "replay_succeeded",
             completed_steps,
+            checkpoint,
         )
-
-    def _mark_edge(self, edge_id: str, status: str) -> None:
-        mark = getattr(self.explorer, "mark_replay_edge_validation", None)
-        if mark is not None:
-            try:
-                mark(edge_id, status)
-            except KeyError:
-                pass
-
 
 def select_frontier(
     graph: WebKobeGraph,
@@ -117,6 +174,7 @@ def select_frontier(
 
     blocked = set(blocked_node_ids)
     nodes_by_id = {node.node_id: node for node in graph.nodes}
+    location_memory = _location_memory(graph)
     adjacency: dict[str, list[WebKobeEdge]] = {}
     for edge in graph.edges:
         if (
@@ -150,12 +208,15 @@ def select_frontier(
             and (include_start or node_id != graph.start_node_id)
             and node_id not in blocked
         ):
-            candidates = _candidate_action_ids(node)
+            candidates = _location_candidate_action_ids(node, location_memory)
             untried = tuple(
                 action_id
                 for action_id in candidates
                 if (
                     action_id not in tried_by_source.get(node_id, set())
+                    or _location_action_is_pending(
+                        node, action_id, location_memory
+                    )
                     or (action_eligible is not None and action_eligible(node_id, action_id))
                 )
                 and (
@@ -168,6 +229,10 @@ def select_frontier(
                     node_id=node_id,
                     path=_path_to(node_id, parent),
                     untried_action_ids=untried,
+                    semantic_location=_node_semantic_location(node),
+                    required_business_facts=_required_facts_for_candidates(
+                        node, untried
+                    ),
                 )
 
         for edge in adjacency.get(node_id, []):
@@ -216,7 +281,15 @@ def reachable_frontier_for_node(
                 and action_eligible(node_id, action.action_name)
             )
             if candidates:
-                return FrontierTarget(node_id, _path_to(node_id, parent), candidates)
+                return FrontierTarget(
+                    node_id,
+                    _path_to(node_id, parent),
+                    candidates,
+                    semantic_location=_node_semantic_location(target_node),
+                    required_business_facts=_required_facts_for_candidates(
+                        target_node, candidates
+                    ),
+                )
             return None
         for edge in adjacency.get(current, []):
             if edge.target_node_id not in parent:
@@ -253,6 +326,88 @@ def _candidate_action_ids(node) -> tuple[str, ...]:
             for affordance in node.business_affordances
             if affordance.action_name
         )
+    )
+
+
+def _node_semantic_location(node) -> str | None:
+    for value in (
+        getattr(node, "semantic_location_hint", None),
+        getattr(node, "node_label", None),
+        getattr(getattr(node, "page_frame", None), "page_type", None),
+    ):
+        normalized = normalize_semantic_id(value) if value else ""
+        if normalized:
+            return normalized
+    return None
+
+
+def _required_facts_for_candidates(
+    node,
+    action_ids: Iterable[str],
+) -> tuple[str, ...]:
+    del action_ids
+    planning_state = getattr(node, "planning_state", None)
+    if planning_state is None:
+        return ()
+    profile_fact_ids = {
+        normalize_semantic_id(fact)
+        for fact in planning_state.profile_fact_ids
+        if normalize_semantic_id(fact)
+    }
+    return tuple(
+        dict.fromkeys(
+            normalize_semantic_id(fact)
+            for fact in planning_state.active_facts
+            if normalize_semantic_id(fact) in profile_fact_ids
+        )
+    )
+
+
+def _location_memory(graph: WebKobeGraph) -> LocationExplorationMemory | None:
+    payload = graph.meta.get(LOCATION_EXPLORATION_META_KEY)
+    if not isinstance(payload, dict):
+        return None
+    try:
+        return LocationExplorationMemory.from_dict(payload)
+    except ValueError:
+        return None
+
+
+def _location_candidate_action_ids(
+    node,
+    memory: LocationExplorationMemory | None,
+) -> tuple[str, ...]:
+    location_id = normalize_semantic_id(node.semantic_location_hint or "")
+    if memory is None or not location_id or location_id not in memory.locations:
+        return _candidate_action_ids(node)
+    pool = memory.pool_for(location_id)
+    return tuple(
+        action_id
+        for action_id, record in sorted(
+            pool.candidates.items(),
+            key=lambda item: (item[1].discovery_order, item[0]),
+        )
+        if record.status
+        in {"pending", "retryable_no_change", "retryable_failure"}
+        and record.attempts < memory.limits.max_action_attempts_per_candidate
+    )
+
+
+def _location_action_is_pending(
+    node,
+    action_id: str,
+    memory: LocationExplorationMemory | None,
+) -> bool:
+    if memory is None:
+        return False
+    location_id = normalize_semantic_id(node.semantic_location_hint or "")
+    if not location_id or location_id not in memory.locations:
+        return False
+    record = memory.pool_for(location_id).candidates.get(normalize_semantic_id(action_id))
+    return bool(
+        record is not None
+        and record.status
+        in {"pending", "retryable_no_change", "retryable_failure"}
     )
 
 

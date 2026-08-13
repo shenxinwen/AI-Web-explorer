@@ -27,6 +27,7 @@ from ai_web_explorer.grounded_web.graph import WebKobeNode
 from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.grounded_web.stagehand_prompt import BenchmarkTaskContext
 from ai_web_explorer.grounded_web.state_embedding import StateEmbeddingRecord
+from ai_web_explorer.grounded_web.location_exploration import ExplorationLimits
 from ai_web_explorer.grounded_web.resume import ResumePolicy
 
 
@@ -1152,6 +1153,371 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
 
 
 @pytest.mark.anyio
+async def test_run_stagehand_exploration_wires_location_feasibility_profile(
+    tmp_path, monkeypatch
+):
+    import playwright.async_api as playwright_async_api
+    from ai_web_explorer.grounded_web.location_exploration import ExplorationLimits
+
+    output_path = tmp_path / "graph.json"
+    captured = {}
+
+    class FakePage:
+        async def goto(self, url):
+            captured["url"] = url
+
+    class FakeBrowser:
+        async def new_page(self):
+            return FakePage()
+
+        async def close(self):
+            pass
+
+    class FakeChromium:
+        async def launch(self, **kwargs):
+            return FakeBrowser()
+
+    class FakePlaywright:
+        chromium = FakeChromium()
+
+    class FakeContext:
+        async def __aenter__(self):
+            return FakePlaywright()
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+    class FakeBaseAdapter:
+        def __init__(self, page, *, app_name, page_id=None, screenshot_dir=None):
+            self.app_name = app_name
+
+    class FakeStagehandBackend:
+        def __init__(self, *, base_backend, provider, goal, execution_mode, **kwargs):
+            captured["goal"] = goal
+            captured["stagehand_timeout"] = kwargs["action_timeout_seconds"]
+            self.app_name = base_backend.app_name
+
+    class FakeExplorer:
+        def __init__(self, **kwargs):
+            captured["explorer_limits"] = kwargs["exploration_limits"]
+            captured["profile_context"] = kwargs["semantic_profile_context"]
+            self.state_embedding_records = []
+
+    class FakeController:
+        def __init__(self, explorer, **kwargs):
+            captured["controller_limits"] = kwargs["limits"]
+            self.checkpoint = kwargs["step_checkpoint"]
+
+        async def run(self, *, max_steps):
+            captured["max_steps"] = max_steps
+            graph = WebKobeGraph(
+                app="demo",
+                start_node_id="start",
+                total_steps_completed=0,
+                meta={"frontier_replay_attempts": {}},
+            )
+            result = WebKobeExplorationResult(
+                graph=graph,
+                summary=WebKobeExplorationSummary(
+                    requested_steps=max_steps,
+                    steps_completed=0,
+                    stop_reason="frontier_exhausted",
+                    node_count=0,
+                    edge_count=0,
+                    failed_edge_count=0,
+                ),
+            )
+            self.checkpoint(graph)
+            return result
+
+    limits = ExplorationLimits()
+    monkeypatch.setattr(playwright_async_api, "async_playwright", lambda: FakeContext())
+    monkeypatch.setattr(browser_runner, "WebKobePlaywrightAdapter", FakeBaseAdapter)
+    monkeypatch.setattr(browser_runner, "StagehandAutomationBackend", FakeStagehandBackend)
+    monkeypatch.setattr(browser_runner, "WebKobeExplorer", FakeExplorer)
+    monkeypatch.setattr(browser_runner, "WebKobeExplorationController", FakeController)
+
+    await browser_runner.run_stagehand_exploration(
+        output_path,
+        start_url="https://practiceautomatedtesting.com/shopping",
+        app_name="demo",
+        provider=object(),
+        max_candidates=8,
+        limits=limits,
+        semantic_experiment_profile="practice_shopping_feasibility",
+        allow_test_site_final_order=True,
+        test_data_seed="practice-v1",
+        stagehand_action_timeout_seconds=240,
+    )
+
+    assert captured["max_steps"] == 20
+    assert captured["controller_limits"] == limits
+    assert captured["explorer_limits"] == limits
+    assert captured["stagehand_timeout"] == 240
+    assert "@example.test" in captured["goal"]
+    assert "final confirmation is allowed" in captured["goal"]
+    summary = json.loads(output_path.read_text(encoding="utf-8"))["meta"][
+        "exploration_summary"
+    ]
+    assert summary == {
+        "requested_steps": 20,
+        "steps_completed": 0,
+        "stop_reason": "frontier_exhausted",
+        "formal_action_attempts": 0,
+        "semantic_progress_count": 0,
+        "consecutive_no_progress": 0,
+        "replay_attempt_count": 0,
+        "frontier_replay_attempts": {},
+        "limits": limits.to_dict(),
+    }
+
+
+@pytest.mark.anyio
+async def test_runner_preserves_cumulative_runtime_state(tmp_path, monkeypatch):
+    import playwright.async_api as playwright_async_api
+
+    output_path = tmp_path / "graph.json"
+    runtime_state = {
+        "formal_action_attempts": 20,
+        "consecutive_no_progress": 1,
+        "semantic_progress_count": 7,
+        "replay_attempt_count": 2,
+        "replay_success_count": 1,
+        "replay_failure_count": 1,
+        "replay_mismatch_count": 0,
+        "frontier_replay_attempts": {"checkout": 1},
+        "blocked_replay_node_ids": [],
+    }
+
+    class FakePage:
+        async def goto(self, url):
+            pass
+
+    class FakeBrowser:
+        async def new_page(self):
+            return FakePage()
+
+        async def close(self):
+            pass
+
+    class FakeChromium:
+        async def launch(self, **kwargs):
+            return FakeBrowser()
+
+    class FakePlaywright:
+        chromium = FakeChromium()
+
+    class FakeContext:
+        async def __aenter__(self):
+            return FakePlaywright()
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+    class FakeBaseAdapter:
+        def __init__(self, page, *, app_name, page_id=None, screenshot_dir=None):
+            self.app_name = app_name
+
+    class FakeStagehandBackend:
+        def __init__(self, *, base_backend, provider, goal, execution_mode, **kwargs):
+            self.app_name = base_backend.app_name
+
+    class FakeExplorer:
+        def __init__(self, **kwargs):
+            self.state_embedding_records = []
+
+    class FakeController:
+        def __init__(self, explorer, **kwargs):
+            pass
+
+        async def run(self, *, max_steps):
+            return WebKobeExplorationResult(
+                graph=WebKobeGraph(
+                    app="demo",
+                    start_node_id="start",
+                    total_steps_completed=1,
+                    meta={"exploration_runtime_state": dict(runtime_state)},
+                ),
+                summary=WebKobeExplorationSummary(
+                    requested_steps=max_steps,
+                    steps_completed=1,
+                    stop_reason="max_steps",
+                    node_count=0,
+                    edge_count=0,
+                    failed_edge_count=0,
+                    semantic_progress_count=7,
+                    replay_attempt_count=2,
+                    total_steps_completed=1,
+                ),
+            )
+
+    monkeypatch.setattr(playwright_async_api, "async_playwright", lambda: FakeContext())
+    monkeypatch.setattr(browser_runner, "WebKobePlaywrightAdapter", FakeBaseAdapter)
+    monkeypatch.setattr(browser_runner, "StagehandAutomationBackend", FakeStagehandBackend)
+    monkeypatch.setattr(browser_runner, "WebKobeExplorer", FakeExplorer)
+    monkeypatch.setattr(browser_runner, "WebKobeExplorationController", FakeController)
+
+    await browser_runner.run_stagehand_exploration(
+        output_path,
+        start_url="https://practiceautomatedtesting.com/shopping",
+        app_name="demo",
+        provider=object(),
+        steps=1,
+        limits=ExplorationLimits(),
+        semantic_experiment_profile="practice_shopping_feasibility",
+        allow_test_site_final_order=True,
+    )
+
+    meta = json.loads(output_path.read_text(encoding="utf-8"))["meta"]
+    assert meta["exploration_runtime_state"]["formal_action_attempts"] == 20
+    assert meta["formal_action_attempts"] == 20
+    assert meta["exploration_summary"]["steps_completed"] == 1
+    assert meta["exploration_summary"]["formal_action_attempts"] == 20
+
+
+@pytest.mark.anyio
+async def test_runner_resume_uses_cumulative_runtime_state_for_zero_formal_actions(
+    tmp_path, monkeypatch
+):
+    import playwright.async_api as playwright_async_api
+    from types import SimpleNamespace
+
+    checkpoint_path = tmp_path / "checkpoint.json"
+    output_path = tmp_path / "resumed.json"
+    runtime_state = {
+        "formal_action_attempts": 20,
+        "consecutive_no_progress": 1,
+        "semantic_progress_count": 7,
+        "replay_attempt_count": 2,
+        "replay_success_count": 1,
+        "replay_failure_count": 1,
+        "replay_mismatch_count": 0,
+        "frontier_replay_attempts": {"checkout": 1},
+        "blocked_replay_node_ids": [],
+    }
+    resume_graph = replace(
+        browser_runner.build_debug_web_kobe_graph(),
+        app="demo",
+        meta={"exploration_runtime_state": dict(runtime_state)},
+    )
+    browser_runner.write_web_kobe_graph(resume_graph, checkpoint_path)
+    from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
+        load_web_kobe_graph_json,
+    )
+
+    reloaded_graph = load_web_kobe_graph_json(checkpoint_path)
+    controller_calls = []
+
+    class FakePage:
+        async def goto(self, url):
+            pass
+
+    class FakeBrowser:
+        async def new_page(self):
+            return FakePage()
+
+        async def close(self):
+            pass
+
+    class FakeChromium:
+        async def launch(self, **kwargs):
+            return FakeBrowser()
+
+    class FakePlaywright:
+        chromium = FakeChromium()
+
+    class FakeContext:
+        async def __aenter__(self):
+            return FakePlaywright()
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+    class FakeBaseAdapter:
+        def __init__(self, page, *, app_name, page_id=None, screenshot_dir=None):
+            self.app_name = app_name
+
+    class FakeStagehandBackend:
+        def __init__(self, *, base_backend, provider, goal, execution_mode, **kwargs):
+            self.app_name = base_backend.app_name
+
+    class FakeExplorer:
+        def __init__(self, **kwargs):
+            self.state_embedding_records = []
+            self._graph = reloaded_graph
+            self.start_node_id = reloaded_graph.start_node_id
+            self.manager = SimpleNamespace(
+                to_graph=lambda start_node_id=None: self._graph
+            )
+
+        def restore_graph(self, graph):
+            self._graph = graph
+
+    class FakeController:
+        def __init__(self, explorer, **kwargs):
+            controller_calls.append(kwargs)
+
+        async def run(self, *, max_steps):
+            raise AssertionError("controller must not execute after cumulative limit")
+
+    monkeypatch.setattr(playwright_async_api, "async_playwright", lambda: FakeContext())
+    monkeypatch.setattr(browser_runner, "WebKobePlaywrightAdapter", FakeBaseAdapter)
+    monkeypatch.setattr(browser_runner, "StagehandAutomationBackend", FakeStagehandBackend)
+    monkeypatch.setattr(browser_runner, "WebKobeExplorer", FakeExplorer)
+    monkeypatch.setattr(browser_runner, "WebKobeExplorationController", FakeController)
+
+    await browser_runner.run_stagehand_exploration(
+        output_path,
+        start_url="https://practiceautomatedtesting.com/shopping",
+        app_name="demo",
+        provider=object(),
+        steps=1,
+        resume_graph=reloaded_graph,
+        resume_policy=ResumePolicy(),
+        limits=ExplorationLimits(),
+        semantic_experiment_profile="practice_shopping_feasibility",
+        allow_test_site_final_order=True,
+    )
+
+    meta = json.loads(output_path.read_text(encoding="utf-8"))["meta"]
+    assert controller_calls == []
+    assert meta["exploration_runtime_state"]["formal_action_attempts"] == 20
+    assert meta["formal_action_attempts"] == 20
+    assert meta["exploration_summary"]["steps_completed"] == 0
+    assert meta["exploration_summary"]["formal_action_attempts"] == 20
+    for key, expected in {
+        "replay_attempt_count": 2,
+        "replay_success_count": 1,
+        "replay_failure_count": 1,
+        "replay_mismatch_count": 0,
+    }.items():
+        assert meta["exploration_runtime_state"][key] == expected
+        assert meta[key] == expected
+
+
+@pytest.mark.anyio
+async def test_run_stagehand_exploration_rejects_final_order_for_wrong_url(
+    monkeypatch, tmp_path
+):
+    import playwright.async_api as playwright_async_api
+
+    monkeypatch.setattr(
+        playwright_async_api,
+        "async_playwright",
+        lambda: pytest.fail("browser must not launch before authorization"),
+    )
+
+    with pytest.raises(ValueError, match="controlled test URL"):
+        await browser_runner.run_stagehand_exploration(
+            tmp_path / "graph.json",
+            start_url="https://fixture.test/shop",
+            provider=object(),
+            semantic_experiment_profile="practice_shopping_feasibility",
+            allow_test_site_final_order=True,
+        )
+
+
+@pytest.mark.anyio
 async def test_run_stagehand_exploration_opt_in_wires_frontier_replay(
     tmp_path,
     monkeypatch,
@@ -1448,7 +1814,13 @@ async def test_resume_bootstrap_blocks_failed_target_and_replays_fallback_fronti
         async def replay(self, target, *, start_url):
             replayed.append(target.node_id)
             if target.node_id == "first":
-                return ReplayResult(False, None, "first-edge", "replay_action_failed", 0)
+                return ReplayResult(
+                    False,
+                    None,
+                    "first-edge",
+                    "target_business_facts_mismatch",
+                    0,
+                )
             return ReplayResult(True, "second", None, "replay_succeeded", 0)
 
     class FakeController:
@@ -1501,6 +1873,13 @@ async def test_resume_bootstrap_blocks_failed_target_and_replays_fallback_fronti
     assert selected == [(), ("first",)]
     assert len(captured_checkpoints) == 1
     assert captured_checkpoints[0].meta["blocked_replay_node_ids"] == ["first"]
+    assert captured_checkpoints[0].meta["replay_mismatch_count"] == 1
+    assert (
+        captured_checkpoints[0].meta["exploration_runtime_state"][
+            "replay_mismatch_count"
+        ]
+        == 1
+    )
 
 
 @pytest.mark.anyio

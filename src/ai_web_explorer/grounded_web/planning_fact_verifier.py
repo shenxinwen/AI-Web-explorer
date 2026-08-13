@@ -6,6 +6,9 @@ from ai_web_explorer.grounded_web.business_profile import (
     BusinessFlowProfile,
     PlanningDelta,
 )
+from ai_web_explorer.grounded_web.exploration_semantics import (
+    SemanticExperimentProfile,
+)
 
 
 def _is_positive_number(value: Any) -> bool:
@@ -94,4 +97,54 @@ def verify_planning_delta(
     )
 
 
-__all__ = ["verify_planning_delta"]
+def verify_experiment_planning_delta(
+    *,
+    profile: SemanticExperimentProfile,
+    observable_change: bool,
+    candidate_added_facts: list[str],
+    candidate_removed_facts: list[str],
+    evidence: list[str],
+    structured_delta: PlanningDelta,
+) -> PlanningDelta:
+    """Merge structured facts and conservatively verify profile-scoped VLM facts."""
+
+    allowed = profile.business_fact_ids
+    verified_added = list(structured_delta.verified_added_facts)
+    verified_removed = list(structured_delta.verified_removed_facts)
+    candidate_added = list(structured_delta.candidate_added_facts)
+    candidate_removed = list(structured_delta.candidate_removed_facts)
+    evidence_items = list(structured_delta.evidence)
+    evidence_items.extend(item for item in evidence if isinstance(item, str) and item.strip())
+    has_evidence = any(item.strip() for item in evidence if isinstance(item, str))
+
+    for fact_id in candidate_added_facts:
+        if fact_id not in allowed:
+            continue
+        _add_unique(candidate_added, fact_id)
+        if observable_change and has_evidence:
+            _add_unique(verified_added, fact_id)
+    for fact_id in candidate_removed_facts:
+        if fact_id not in allowed:
+            continue
+        _add_unique(candidate_removed, fact_id)
+        if observable_change and has_evidence:
+            _add_unique(verified_removed, fact_id)
+
+    profile_fact_ids = sorted(
+        set(fact_id for fact_id in verified_added + verified_removed if fact_id in allowed)
+    )
+    return PlanningDelta(
+        candidate_added_facts=candidate_added,
+        candidate_removed_facts=candidate_removed,
+        verified_added_facts=verified_added,
+        verified_removed_facts=verified_removed,
+        preserved_profile_facts=list(structured_delta.preserved_profile_facts),
+        profile_fact_ids=profile_fact_ids,
+        generated_fact_ids=list(structured_delta.generated_fact_ids),
+        evidence=evidence_items,
+        confidence=1.0 if verified_added or verified_removed else structured_delta.confidence,
+        uncertainty_reason=structured_delta.uncertainty_reason,
+    )
+
+
+__all__ = ["verify_experiment_planning_delta", "verify_planning_delta"]

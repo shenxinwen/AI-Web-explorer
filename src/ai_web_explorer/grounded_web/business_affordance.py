@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from ai_web_explorer.grounded_web.graph import BusinessAffordance
@@ -15,6 +15,13 @@ class VisualAffordanceRequest:
     current_screenshot_path: str
     current_signature: dict[str, Any] | None = None
     max_actions: int = 5
+    scan_kind: str = "initial"
+    semantic_location: str | None = None
+    existing_action_ids: list[str] = field(default_factory=list)
+    completed_action_ids: list[str] = field(default_factory=list)
+    added_business_facts: list[str] = field(default_factory=list)
+    removed_business_facts: list[str] = field(default_factory=list)
+    semantic_profile_context: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -45,11 +52,39 @@ class VisualAffordanceResult:
     trace: VisualAffordanceTrace
     state_summary: str | None = None
     state_label: str | None = None
+    location_id: str | None = None
+    replacements: list[tuple[str, str]] = field(default_factory=list)
+    disabled_action_ids: list[str] = field(default_factory=list)
 
 
 def _prompt_for_request(request: VisualAffordanceRequest) -> str:
-    payload = {
-        "instruction": (
+    scan_kind = str(request.scan_kind or "initial").strip().lower()
+    if scan_kind == "targeted":
+        instruction = (
+            "Inspect the current screenshot only for business consequences of "
+            "the supplied business fact delta. Return empty arrays when no new "
+            "candidate is justified. Do not repeat completed actions. Report "
+            "newly_enabled, semantically_changed, and disabled actions only."
+        )
+        output_schema: dict[str, Any] = {
+            "location_id": "semantic location anchor",
+            "newly_enabled": [
+                {
+                    "intent": "snake_case canonical business action",
+                    "label": "visible action label or description",
+                    "target": "visible action target",
+                    "relevance_hint": "core | supporting | low_value",
+                    "confidence": "number from 0.0 to 1.0",
+                    "supporting_facts": ["short_stable_snake_case_fact_id"],
+                }
+            ],
+            "semantically_changed": [
+                {"old_action": "previous action", "new_action": "new action"}
+            ],
+            "disabled": ["canonical action that is no longer executable"],
+        }
+    else:
+        instruction = (
             "You are a web interface observer. Inspect the current web page "
             "screenshot, identify its functional regions, and select "
             "representative business actions that are directly executable "
@@ -82,9 +117,8 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
             "snake_case state_label describing only the currently visible "
             "state. Do not describe action history, concrete objects, search "
             "terms, or item counts in the state_label. Return JSON only."
-        ),
-        "max_candidates": request.max_actions,
-        "output_schema": {
+        )
+        output_schema = {
             "state_label": "short snake_case visible state name",
             "page_mode": "multi_region | single_surface | uncertain",
             "regions": [
@@ -105,8 +139,27 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
                     ],
                 }
             ],
-        },
+        }
+    payload = {
+        "instruction": instruction,
+        "max_candidates": request.max_actions,
+        "output_schema": output_schema,
     }
+    if scan_kind != "initial":
+        payload["scan_kind"] = scan_kind
+    if request.semantic_location is not None:
+        payload["semantic_location"] = request.semantic_location
+    if request.existing_action_ids:
+        payload["existing_action_ids"] = list(request.existing_action_ids)
+    if request.completed_action_ids:
+        payload["completed_action_ids"] = list(request.completed_action_ids)
+    if request.added_business_facts or request.removed_business_facts:
+        payload["business_delta"] = {
+            "added": list(request.added_business_facts),
+            "removed": list(request.removed_business_facts),
+        }
+    if request.semantic_profile_context is not None:
+        payload["semantic_profile_context"] = request.semantic_profile_context
     return json.dumps(payload, indent=2, ensure_ascii=False)
 
 
@@ -218,6 +271,51 @@ def _affordances_from_response(
     return affordances
 
 
+def _targeted_affordances_from_response(
+    parsed: dict[str, Any], *, max_actions: int, excluded_action_ids: set[str]
+) -> list[BusinessAffordance]:
+    raw_items = parsed.get("newly_enabled")
+    if not isinstance(raw_items, list):
+        raw_items = []
+    affordances = _affordances_from_response(
+        {"business_affordances": raw_items}, max_actions=max_actions
+    )
+    return [
+        affordance
+        for affordance in affordances
+        if affordance.action_name not in excluded_action_ids
+    ][:max_actions]
+
+
+def _action_id(value: Any) -> str | None:
+    text = _clean_text(value)
+    return text
+
+
+def _targeted_metadata(
+    parsed: dict[str, Any],
+) -> tuple[str | None, list[tuple[str, str]], list[str]]:
+    location_id = _clean_text(parsed.get("location_id"))
+    replacements: list[tuple[str, str]] = []
+    changed = parsed.get("semantically_changed")
+    if isinstance(changed, list):
+        for item in changed:
+            if not isinstance(item, dict):
+                continue
+            old_action = _action_id(item.get("old_action"))
+            new_action = _action_id(item.get("new_action"))
+            if old_action and new_action and (old_action, new_action) not in replacements:
+                replacements.append((old_action, new_action))
+    disabled: list[str] = []
+    raw_disabled = parsed.get("disabled")
+    if isinstance(raw_disabled, list):
+        for item in raw_disabled:
+            action_id = _action_id(item)
+            if action_id and action_id not in disabled:
+                disabled.append(action_id)
+    return location_id, replacements, disabled
+
+
 def summarize_visual_affordances(
     request: VisualAffordanceRequest,
     *,
@@ -266,11 +364,37 @@ def summarize_visual_affordances(
             ),
         )
 
-    return VisualAffordanceResult(
-        business_affordances=_affordances_from_response(
+    is_targeted = str(request.scan_kind or "initial").strip().lower() == "targeted"
+    location_id = _clean_text(parsed.get("location_id"))
+    replacements: list[tuple[str, str]] = []
+    disabled_action_ids: list[str] = []
+    if is_targeted:
+        affordances = _targeted_affordances_from_response(
             parsed,
             max_actions=request.max_actions,
-        ),
+            excluded_action_ids={
+                str(action_id).strip()
+                for action_id in request.completed_action_ids
+            },
+        )
+        targeted_location, replacements, disabled_action_ids = _targeted_metadata(parsed)
+        location_id = targeted_location or location_id
+    else:
+        affordances = _affordances_from_response(
+            parsed,
+            max_actions=request.max_actions,
+        )
+        if str(request.scan_kind or "initial").strip().lower() == "supplement":
+            existing = {
+                str(action_id).strip() for action_id in request.existing_action_ids
+            }
+            affordances = [
+                affordance
+                for affordance in affordances
+                if affordance.action_name not in existing
+            ][: request.max_actions]
+    return VisualAffordanceResult(
+        business_affordances=affordances,
         trace=_trace(
             prompt=prompt,
             raw_response=raw_response,
@@ -279,6 +403,9 @@ def summarize_visual_affordances(
         ),
         state_summary=_clean_text(parsed.get("state_summary")),
         state_label=_optional_string(parsed.get("state_label")),
+        location_id=location_id,
+        replacements=replacements,
+        disabled_action_ids=disabled_action_ids,
     )
 
 

@@ -9,6 +9,10 @@ from ai_web_explorer.grounded_web.business_profile import (
     BusinessFlowProfile,
     PlanningDelta,
 )
+from ai_web_explorer.grounded_web.exploration_semantics import (
+    SemanticExperimentProfile,
+    validate_profile_semantic_observation,
+)
 from ai_web_explorer.grounded_web.graph import BrowserAction
 from ai_web_explorer.grounded_web.semantic_model import (
     SemanticObservation,
@@ -36,6 +40,9 @@ class VisualDeltaRequest:
     source_location_anchor_unresolved: bool = False
     allowed_location_ids: list[str] = field(default_factory=list)
     current_location_context: str | None = None
+    semantic_profile_context: dict[str, Any] | None = None
+    observed_change: bool | None = None
+    semantic_experiment_profile: SemanticExperimentProfile | None = None
 
 
 @dataclass(frozen=True)
@@ -46,6 +53,7 @@ class VisualDeltaTrace:
     status: str
     error_type: str | None = None
     error_message: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -57,6 +65,7 @@ class VisualDeltaTrace:
             "status": self.status,
             "error_type": self.error_type,
             "error_message": self.error_message,
+            **dict(self.metadata),
         }
 
 
@@ -66,6 +75,7 @@ class VisualDeltaResult:
     trace: VisualDeltaTrace
     visual_change_kind: str = "unknown"
     semantic_observation: SemanticObservation | None = None
+    observable_change: bool = False
 
 
 def _prompt_for_request(request: VisualDeltaRequest) -> str:
@@ -128,8 +138,13 @@ def _prompt_for_request(request: VisualDeltaRequest) -> str:
             "preserved_facts",
             "semantic_evidence",
             "semantic_confidence",
+            "observable_change",
+            "business_facts_added",
+            "business_facts_removed",
         ],
     }
+    if request.semantic_profile_context is not None:
+        payload["semantic_profile_context"] = request.semantic_profile_context
     return json.dumps(payload, indent=2, ensure_ascii=False)
 
 
@@ -145,6 +160,7 @@ def _trace(
     status: str,
     error_type: str | None = None,
     error_message: str | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> VisualDeltaTrace:
     return VisualDeltaTrace(
         prompt=prompt,
@@ -153,6 +169,7 @@ def _trace(
         status=status,
         error_type=error_type,
         error_message=error_message,
+        metadata=dict(metadata or {}),
     )
 
 
@@ -176,6 +193,24 @@ def _fact_id_list(value: Any) -> list[str]:
         if len(facts) >= 8:
             break
     return facts
+
+
+def _evidence_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item.strip() for item in value if isinstance(item, str) and item.strip()]
+
+
+def _structured_signature_change(request: VisualDeltaRequest) -> bool:
+    if request.before_signature is None or request.after_signature is None:
+        return False
+    return request.before_signature != request.after_signature
+
+
+def _base_observable_change(request: VisualDeltaRequest) -> bool:
+    if request.observed_change is True:
+        return True
+    return _structured_signature_change(request)
 
 
 def _visual_change_kind(value: Any) -> str:
@@ -277,6 +312,29 @@ def summarize_visual_delta(
     candidate_added = [fact for fact in candidate_added if fact not in overlap]
     candidate_removed = [fact for fact in candidate_removed if fact not in overlap]
     visual_change_kind = _visual_change_kind(parsed.get("visual_change_kind"))
+    business_added = _fact_id_list(parsed.get("business_facts_added"))
+    business_removed = _fact_id_list(parsed.get("business_facts_removed"))
+    for fact in business_added:
+        if fact not in candidate_added:
+            candidate_added.append(fact)
+    for fact in business_removed:
+        if fact not in candidate_removed:
+            candidate_removed.append(fact)
+    overlap = set(candidate_added) & set(candidate_removed)
+    candidate_added = [fact for fact in candidate_added if fact not in overlap]
+    candidate_removed = [fact for fact in candidate_removed if fact not in overlap]
+    evidence = _evidence_list(
+        parsed.get("semantic_evidence") or parsed.get("evidence")
+    )
+    parsed_observable_change = parsed.get("observable_change")
+    vlm_observable_change = (
+        parsed_observable_change if isinstance(parsed_observable_change, bool) else False
+    )
+    observable_change = (
+        _base_observable_change(request)
+        or visual_change_kind in {"presentation", "state_indicator", "surface", "mixed"}
+        or vlm_observable_change
+    )
 
     delta = PlanningDelta(
         candidate_added_facts=candidate_added,
@@ -285,16 +343,61 @@ def summarize_visual_delta(
         verified_removed_facts=[],
         profile_fact_ids=[],
         generated_fact_ids=[],
+        evidence=evidence,
     )
+    raw_semantic_observation = semantic_observation_from_dict(parsed)
+    semantic_observation = _semantic_observation(parsed, request)
+    rejection_reasons: list[str] = []
+    if request.semantic_experiment_profile is not None:
+        validation = validate_profile_semantic_observation(
+            raw_semantic_observation,
+            profile=request.semantic_experiment_profile,
+            source_location_hint=request.source_location_hint,
+            source_location_hint_confirmed=request.source_location_hint_confirmed,
+            source_location_anchor_unresolved=request.source_location_anchor_unresolved,
+        )
+        semantic_observation = validation.observation
+        rejection_reasons.extend(validation.rejection_reasons)
+        allowed_facts = (
+            request.semantic_experiment_profile.business_fact_ids
+            | request.semantic_experiment_profile.completion_fact_ids
+        )
+        candidate_added = [fact for fact in candidate_added if fact in allowed_facts]
+        candidate_removed = [
+            fact for fact in candidate_removed if fact in allowed_facts
+        ]
+        rejection_reasons.extend(
+            [
+                f"business_fact_not_allowed:{fact}"
+                for fact in business_added + business_removed
+                if fact not in request.semantic_experiment_profile.business_fact_ids
+            ]
+        )
+        delta = PlanningDelta(
+            candidate_added_facts=candidate_added,
+            candidate_removed_facts=candidate_removed,
+            verified_added_facts=[],
+            verified_removed_facts=[],
+            profile_fact_ids=[],
+            generated_fact_ids=[],
+            evidence=evidence,
+        )
+
     return VisualDeltaResult(
         planning_delta=delta,
         visual_change_kind=visual_change_kind,
-        semantic_observation=_semantic_observation(parsed, request),
+        semantic_observation=semantic_observation,
+        observable_change=observable_change,
         trace=_trace(
             prompt=prompt,
             raw_response=raw_response,
             llm_response=parsed,
             status="summarized",
+            metadata={
+                "semantic_observation_rejections": list(
+                    dict.fromkeys(rejection_reasons)
+                )
+            },
         ),
     )
 

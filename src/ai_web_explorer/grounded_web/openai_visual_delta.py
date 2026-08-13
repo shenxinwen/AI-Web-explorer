@@ -82,6 +82,7 @@ class OpenAIVisualDeltaProvider:
 def create_openai_visual_delta_provider_from_env(
     *,
     model: str | None = None,
+    request_timeout_seconds: float | None = None,
     openai_factory: Callable[..., Any] | None = None,
     load_dotenv: Callable[[], Any] | None = None,
     environ: Mapping[str, str] | None = None,
@@ -107,8 +108,14 @@ def create_openai_visual_delta_provider_from_env(
         or DEFAULT_OPENAI_VISUAL_DELTA_MODEL
     )
     base_url = env.get("OPENAI_BASE_URL") or None
+    client_kwargs: dict[str, Any] = {
+        "api_key": api_key,
+        "base_url": base_url,
+    }
+    if request_timeout_seconds is not None:
+        client_kwargs["timeout"] = request_timeout_seconds
     return OpenAIVisualDeltaProvider(
-        client=openai_factory(api_key=api_key, base_url=base_url),
+        client=openai_factory(**client_kwargs),
         model=selected_model,
     )
 

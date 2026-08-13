@@ -49,6 +49,11 @@ from ai_web_explorer.safesym_bridge.web_kobe_safesym_smoke import (
     write_web_kobe_safesym_smoke,
 )
 from ai_web_explorer.grounded_web.stagehand_prompt import BenchmarkTaskContext
+from ai_web_explorer.grounded_web.exploration_semantics import (
+    resolve_semantic_experiment_profile,
+    validate_final_order_authorization,
+)
+from ai_web_explorer.grounded_web.location_exploration import ExplorationLimits
 from ai_web_explorer.grounded_web.resume import (
     ResumePolicy,
     resolve_retry_keys,
@@ -464,12 +469,47 @@ def main(argv: list[str] | None = None) -> int:
         default=Path("outputs/latest/stagehand_explore_trace.json"),
     )
     stagehand_explore_parser.add_argument("--model", default=None)
-    stagehand_explore_parser.add_argument("--steps", type=int, default=8)
+    stagehand_explore_parser.add_argument("--steps", type=_positive_int, default=None)
+    stagehand_explore_parser.add_argument(
+        "--max-exploration-steps", type=_positive_int, default=None
+    )
     stagehand_explore_parser.add_argument(
         "--max-candidates",
         type=_positive_int,
-        default=5,
+        default=None,
         help="Maximum VLM business candidates per node.",
+    )
+    stagehand_explore_parser.add_argument(
+        "--semantic-experiment-profile",
+        choices=["practice_shopping_feasibility"],
+        default=None,
+    )
+    stagehand_explore_parser.add_argument(
+        "--max-consecutive-no-progress", type=_positive_int, default=None
+    )
+    stagehand_explore_parser.add_argument(
+        "--max-action-attempts-per-candidate", type=_positive_int, default=None
+    )
+    stagehand_explore_parser.add_argument(
+        "--max-replay-attempts-per-frontier", type=_positive_int, default=None
+    )
+    stagehand_explore_parser.add_argument(
+        "--max-total-replays", type=_positive_int, default=None
+    )
+    stagehand_explore_parser.add_argument(
+        "--max-vlm-scan-attempts", type=_positive_int, default=None
+    )
+    stagehand_explore_parser.add_argument(
+        "--vlm-request-timeout-seconds", type=_positive_int, default=None
+    )
+    stagehand_explore_parser.add_argument(
+        "--stagehand-action-timeout-seconds", type=_positive_int, default=None
+    )
+    stagehand_explore_parser.add_argument(
+        "--allow-test-site-final-order", action="store_true"
+    )
+    stagehand_explore_parser.add_argument(
+        "--test-data-seed", default="practice-v1"
     )
     stagehand_explore_parser.add_argument("--screenshot-dir", type=Path, default=None)
     stagehand_explore_parser.add_argument(
@@ -824,6 +864,66 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
         elif args.mode == "web-kobe-stagehand-explore":
+            if args.steps is not None and args.max_exploration_steps is not None:
+                raise ValueError("--steps cannot be combined with --max-exploration-steps")
+            profile_selected = args.semantic_experiment_profile is not None
+            resolved_semantic_profile = resolve_semantic_experiment_profile(
+                args.semantic_experiment_profile
+            )
+            validate_final_order_authorization(
+                start_url=args.url,
+                profile=resolved_semantic_profile,
+                allowed=args.allow_test_site_final_order,
+            )
+            budget_selected = any(
+                value is not None
+                for value in (
+                    args.max_exploration_steps,
+                    args.max_consecutive_no_progress,
+                    args.max_action_attempts_per_candidate,
+                    args.max_replay_attempts_per_frontier,
+                        args.max_total_replays,
+                        args.max_vlm_scan_attempts,
+                    )
+                )
+            limits = None
+            if profile_selected or budget_selected:
+                limits = ExplorationLimits(
+                    max_exploration_steps=(
+                        args.max_exploration_steps
+                        or args.steps
+                        or ExplorationLimits().max_exploration_steps
+                    ),
+                    max_consecutive_no_progress=(
+                        args.max_consecutive_no_progress
+                        or ExplorationLimits().max_consecutive_no_progress
+                    ),
+                    max_action_attempts_per_candidate=(
+                        args.max_action_attempts_per_candidate
+                        or ExplorationLimits().max_action_attempts_per_candidate
+                    ),
+                    max_replay_attempts_per_frontier=(
+                        args.max_replay_attempts_per_frontier
+                        or ExplorationLimits().max_replay_attempts_per_frontier
+                    ),
+                    max_total_replays=(
+                        args.max_total_replays
+                        or ExplorationLimits().max_total_replays
+                    ),
+                    max_vlm_scan_attempts=(
+                        args.max_vlm_scan_attempts
+                        or ExplorationLimits().max_vlm_scan_attempts
+                    ),
+                    max_candidates_per_location=(
+                        args.max_candidates
+                        or ExplorationLimits().max_candidates_per_location
+                    ),
+                )
+            effective_max_candidates = args.max_candidates or (
+                ExplorationLimits().max_candidates_per_location
+                if profile_selected
+                else 5
+            )
             resume_graph = None
             resume_policy = None
             if args.resume_retry_action and args.resume_graph is None:
@@ -864,29 +964,51 @@ def main(argv: list[str] | None = None) -> int:
                 and args.output.resolve() != args.resume_graph.resolve()
             ):
                 write_web_kobe_graph(resume_graph, args.output)
+            runner_kwargs = {
+                "start_url": args.url,
+                "app_name": args.app_name,
+                "stagehand_trace_path": args.stagehand_trace,
+                "model": args.model,
+                "steps": args.max_exploration_steps or args.steps,
+                "headless": not args.headed,
+                "screenshot_dir": args.screenshot_dir,
+                "embedding_path": args.embedding_path,
+                "use_state_embeddings": args.state_embeddings,
+                "embedding_model": args.embedding_model,
+                "embedding_dimension": args.embedding_dimension,
+                "site_purpose": args.site_purpose,
+                "business_profile": args.business_profile,
+                "use_openai_visual_delta": args.openai_visual_delta,
+                "visual_delta_model": args.visual_delta_model,
+                "stagehand_execution_mode": args.stagehand_execution_mode,
+                "max_candidates": effective_max_candidates,
+                "frontier_replay": args.frontier_replay or resume_graph is not None,
+                "resume_graph": resume_graph,
+                "resume_policy": resume_policy,
+            }
+            if profile_selected or budget_selected:
+                runner_kwargs.update(
+                    {
+                        "limits": limits,
+                        "semantic_experiment_profile": args.semantic_experiment_profile,
+                    }
+                )
+            if args.allow_test_site_final_order:
+                runner_kwargs["allow_test_site_final_order"] = True
+            if args.test_data_seed != "practice-v1" or profile_selected:
+                runner_kwargs["test_data_seed"] = args.test_data_seed
+            if args.vlm_request_timeout_seconds is not None:
+                runner_kwargs["vlm_request_timeout_seconds"] = (
+                    args.vlm_request_timeout_seconds
+                )
+            if args.stagehand_action_timeout_seconds is not None:
+                runner_kwargs["stagehand_action_timeout_seconds"] = (
+                    args.stagehand_action_timeout_seconds
+                )
             output_path = asyncio.run(
                 run_stagehand_exploration(
                     args.output,
-                    start_url=args.url,
-                    app_name=args.app_name,
-                    stagehand_trace_path=args.stagehand_trace,
-                    model=args.model,
-                    steps=args.steps,
-                    headless=not args.headed,
-                    screenshot_dir=args.screenshot_dir,
-                    embedding_path=args.embedding_path,
-                    use_state_embeddings=args.state_embeddings,
-                    embedding_model=args.embedding_model,
-                    embedding_dimension=args.embedding_dimension,
-                    site_purpose=args.site_purpose,
-                    business_profile=args.business_profile,
-                    use_openai_visual_delta=args.openai_visual_delta,
-                    visual_delta_model=args.visual_delta_model,
-                    stagehand_execution_mode=args.stagehand_execution_mode,
-                    max_candidates=args.max_candidates,
-                    frontier_replay=args.frontier_replay or resume_graph is not None,
-                    resume_graph=resume_graph,
-                    resume_policy=resume_policy,
+                    **runner_kwargs,
                 )
             )
         else:

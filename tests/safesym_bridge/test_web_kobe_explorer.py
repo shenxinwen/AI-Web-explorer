@@ -1,4 +1,5 @@
 import json
+import json
 from dataclasses import replace
 
 import pytest
@@ -23,6 +24,15 @@ from ai_web_explorer.grounded_web.business_profile import (
     PlanningTransition,
     ecommerce_checkout_profile,
 )
+from ai_web_explorer.grounded_web.location_exploration import (
+    ExplorationLimits,
+    LocationExplorationCoordinator,
+    LocationExplorationMemory,
+)
+from ai_web_explorer.grounded_web.exploration_semantics import (
+    practice_shopping_feasibility_profile,
+)
+from ai_web_explorer.grounded_web.resume import ResumePolicy
 from ai_web_explorer.grounded_web.semantic_assistor import (
     DeterministicSemanticAssistor,
 )
@@ -32,6 +42,12 @@ from ai_web_explorer.grounded_web.state_embedding import (
 )
 from ai_web_explorer.grounded_web.state_facts import AbstractStateFact
 from ai_web_explorer.grounded_web.structure import StructureEvidence
+from ai_web_explorer.grounded_web.semantic_planning import (
+    build_semantic_planning_graph,
+)
+from ai_web_explorer.safesym_bridge.minimal_semantic_pddl import (
+    compile_minimal_semantic_domain,
+)
 
 
 @pytest.fixture
@@ -462,6 +478,85 @@ async def test_explore_one_step_records_profile_verified_planning_delta():
     edge = graph.edges[0]
     assert edge.planning_delta is not None
     assert edge.planning_delta.verified_added_facts == ["cart_has_items"]
+
+
+@pytest.mark.anyio
+async def test_profile_runtime_rejects_out_of_contract_semantics():
+    adapter = FakeAdapter()
+    adapter.states = [
+        replace(
+            adapter.states[0],
+            page_id="shopping",
+            url="https://fixture.test/shopping",
+        ),
+        replace(
+            adapter.states[1],
+            page_id="shopping",
+            url="https://fixture.test/shopping",
+        ),
+    ]
+
+    async def capture_screenshot(label: str):
+        return f"{label}.png"
+
+    adapter.capture_screenshot = capture_screenshot
+
+    def provider(
+        prompt,
+        *,
+        current_screenshot_path=None,
+        before_screenshot_path=None,
+        after_screenshot_path=None,
+    ):
+        if current_screenshot_path is not None:
+            return _business_affordance_response("add_to_cart_product")
+        return json.dumps(
+            {
+                "candidate_added_facts": ["invented_completion"],
+                "candidate_removed_facts": [],
+                "visual_change_kind": "surface",
+                "action_role": "navigation",
+                "source_location": "shopping",
+                "target_location": "evil_location",
+                "completion_facts": ["invented_completion"],
+                "candidate_required_facts": [],
+                "preserved_facts": [],
+                "semantic_evidence": ["Visible change."],
+                "semantic_confidence": 0.9,
+                "observable_change": True,
+                "business_facts_added": [],
+                "business_facts_removed": [],
+            }
+        )
+
+    profile = practice_shopping_feasibility_profile()
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        business_profile=profile.to_business_flow_profile(),
+        capture_screenshots=True,
+        visual_delta_provider=provider,
+        semantic_experiment_profile=profile,
+    )
+
+    graph = await explorer.explore_one_step()
+
+    edge = graph.edges[0]
+    trace = edge.execution_trace.metadata["visual_delta_trace"]
+    assert edge.semantic_observation is None
+    assert "target_location_not_allowed:evil_location" in trace[
+        "semantic_observation_rejections"
+    ]
+    assert "completion_fact_not_allowed:invented_completion" in trace[
+        "semantic_observation_rejections"
+    ]
+    semantic, _ = build_semantic_planning_graph(graph)
+    domain = compile_minimal_semantic_domain(semantic).domain
+    semantic_json = json.dumps(semantic.to_dict())
+    assert "evil_location" not in semantic_json
+    assert "invented_completion" not in semantic_json
+    assert "evil_location" not in domain
+    assert "invented_completion" not in domain
 
 
 @pytest.mark.anyio
@@ -1550,6 +1645,47 @@ def test_business_affordance_selection_does_not_downrank_action_completed_elsewh
 
     assert selected is not None
     assert selected.semantic_id == "add_item_to_cart"
+
+
+def test_location_memory_retryable_candidate_ignores_legacy_resume_policy():
+    memory = LocationExplorationMemory(
+        limits=ExplorationLimits(max_action_attempts_per_candidate=2)
+    )
+    affordance = BusinessAffordance(
+        action_name="retry_sort",
+        label="Retry sort",
+        relevance_hint="core",
+    )
+    memory.merge_scan("shopping", [affordance], kind="initial")
+    memory.record_attempt("shopping", "retry_sort", observable_change=False)
+    coordinator = LocationExplorationCoordinator(memory=memory)
+    explorer = WebKobeExplorer(
+        adapter=FakeAdapter(),
+        semantic_assistor=DeterministicSemanticAssistor(app="fake"),
+        location_exploration_coordinator=coordinator,
+        resume_policy=ResumePolicy(),
+    )
+    explorer._start_node_id = "shopping"
+    explorer.manager.identify_or_add_node(_selection_node("shopping"))
+    explorer.manager.add_edge(
+        replace(
+            _selection_edge("shopping", "shopping", "retry_sort"),
+            status="failed_execution",
+        )
+    )
+
+    selected = explorer._select_business_affordance_action(
+        exploration_context=ExplorationContext(
+            current_node_id="shopping",
+            reference_node_id="shopping",
+            is_revisit=False,
+            tried_action_ids=(),
+            avoid_action_ids=(),
+        )
+    )
+
+    assert selected is not None
+    assert selected.semantic_id == "retry_sort"
 
 
 def test_business_action_snapshots_supporting_facts_without_expected_effect_text():

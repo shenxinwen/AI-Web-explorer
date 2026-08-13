@@ -14,6 +14,7 @@ from ai_web_explorer.grounded_web.graph import (
     WebKobeGraph,
     WebKobeNode,
 )
+from ai_web_explorer.grounded_web.location_exploration import ExplorationLimits
 
 
 @pytest.fixture
@@ -435,7 +436,7 @@ async def test_controller_blocks_failed_frontier_replay_and_stops_without_graph_
             False,
             "start",
             "start__open_frontier__frontier",
-            "target_state_mismatch",
+            "target_semantic_location_mismatch",
             0,
         ),
     )
@@ -452,7 +453,8 @@ async def test_controller_blocks_failed_frontier_replay_and_stops_without_graph_
     assert result.graph.meta["replay_attempt_count"] == 1
     assert result.graph.meta["replay_success_count"] == 0
     assert result.graph.meta["replay_failure_count"] == 1
-    assert result.graph.meta["last_replay_reason"] == "target_state_mismatch"
+    assert result.graph.meta["last_replay_reason"] == "target_semantic_location_mismatch"
+    assert result.graph.meta["replay_mismatch_count"] == 1
     assert result.graph.meta["blocked_replay_node_ids"] == ["frontier"]
 
 
@@ -754,3 +756,184 @@ async def test_controller_can_disable_unproductive_step_stop():
     assert result.summary.stop_reason == "max_steps"
     assert result.summary.consecutive_unproductive_steps == 4
     assert result.summary.max_consecutive_unproductive_steps is None
+
+
+@pytest.mark.anyio
+async def test_formal_attempt_budget_stops_at_configured_twenty():
+    explorer = FakeExplorer(
+        [
+            _graph(completed=index, meta={"last_step_semantic_progress": True})
+            for index in range(1, 21)
+        ]
+    )
+    controller = WebKobeExplorationController(
+        explorer,
+        limits=ExplorationLimits(max_exploration_steps=20),
+    )
+
+    result = await controller.run()
+
+    assert result.summary.steps_completed == 20
+    assert result.summary.stop_reason == "max_exploration_steps_reached"
+
+
+@pytest.mark.anyio
+async def test_zero_formal_budget_preserves_all_cumulative_replay_metrics():
+    explorer = FakeExplorer([])
+    controller = WebKobeExplorationController(
+        explorer,
+        limits=ExplorationLimits(max_exploration_steps=20),
+        runtime_budget_state={
+            "formal_action_attempts": 20,
+            "replay_attempt_count": 1,
+            "replay_success_count": 1,
+            "replay_failure_count": 1,
+            "replay_mismatch_count": 1,
+        },
+        replay_metric_baseline={
+            "replay_attempt_count": 5,
+            "replay_success_count": 7,
+            "replay_failure_count": 8,
+            "replay_mismatch_count": 9,
+        },
+    )
+
+    result = await controller.run(max_steps=1)
+
+    runtime_state = result.graph.meta["exploration_runtime_state"]
+    for key, expected in {
+        "replay_attempt_count": 5,
+        "replay_success_count": 7,
+        "replay_failure_count": 8,
+        "replay_mismatch_count": 9,
+    }.items():
+        assert runtime_state[key] == expected
+        assert result.graph.meta[key] == expected
+
+
+@pytest.mark.anyio
+async def test_three_semantically_unproductive_attempts_stop_run():
+    explorer = FakeExplorer(
+        [
+            _graph(completed=index, meta={"last_step_semantic_progress": False})
+            for index in range(1, 5)
+        ]
+    )
+    controller = WebKobeExplorationController(
+        explorer,
+        limits=ExplorationLimits(max_consecutive_no_progress=3),
+    )
+
+    result = await controller.run()
+
+    assert result.summary.steps_completed == 3
+    assert result.summary.stop_reason == "consecutive_no_progress_limit_reached"
+
+
+@pytest.mark.anyio
+async def test_replay_blocks_each_frontier_after_two_failures_and_stops_at_four():
+    graph = _frontier_graph(frontier_actions=("inspect_frontier",))
+    second_frontier = replace(
+        graph.nodes[1], node_id="frontier_b", page_description="frontier_b"
+    )
+    second_path = replace(
+        graph.edges[0],
+        target_node_id="frontier_b",
+        action=BrowserAction("click", "#frontier_b", "open_frontier_b"),
+    )
+    graph = replace(
+        graph,
+        nodes=[graph.nodes[0], graph.nodes[1], second_frontier],
+        edges=[graph.edges[0], second_path],
+    )
+    explorer = ReplayFakeExplorer(
+        [graph],
+        ReplayResult(False, None, "edge", "target_state_mismatch", 0),
+    )
+    controller = WebKobeExplorationController(
+        explorer,
+        limits=ExplorationLimits(
+            max_total_replays=4,
+            max_replay_attempts_per_frontier=2,
+        ),
+        frontier_replay_runner=explorer,
+        start_url="https://fixture.test/shop",
+    )
+
+    result = await controller.run()
+
+    assert result.graph.meta["replay_attempt_count"] == 4
+    assert result.graph.meta["frontier_replay_attempts"] == {
+        "frontier": 2,
+        "frontier_b": 2,
+    }
+    assert result.summary.stop_reason == "total_replay_limit_reached"
+
+
+@pytest.mark.anyio
+async def test_resume_formal_attempt_budget_allows_only_remaining_attempts():
+    explorer = FakeExplorer(
+        [
+            _graph(
+                completed=19,
+                meta={
+                    "formal_action_attempts": 19,
+                    "last_step_semantic_progress": True,
+                },
+            ),
+            _graph(
+                completed=21,
+                meta={
+                    "formal_action_attempts": 21,
+                    "last_step_semantic_progress": True,
+                },
+            ),
+        ]
+    )
+    controller = WebKobeExplorationController(
+        explorer,
+        limits=ExplorationLimits(max_exploration_steps=20),
+            runtime_budget_state={"formal_action_attempts": 19},
+    )
+
+    result = await controller.run()
+
+    assert explorer.calls == 1
+    assert result.summary.steps_completed == 1
+
+
+@pytest.mark.anyio
+async def test_resume_no_progress_budget_allows_only_remaining_attempts():
+    explorer = FakeExplorer(
+        [
+            _graph(
+                completed=20,
+                meta={
+                    "formal_action_attempts": 2,
+                    "consecutive_unproductive_steps": 2,
+                    "last_step_semantic_progress": False,
+                },
+            ),
+            _graph(
+                completed=21,
+                meta={
+                    "formal_action_attempts": 3,
+                    "consecutive_unproductive_steps": 3,
+                    "last_step_semantic_progress": False,
+                },
+            ),
+        ]
+    )
+    controller = WebKobeExplorationController(
+        explorer,
+        limits=ExplorationLimits(max_consecutive_no_progress=3),
+        runtime_budget_state={
+            "formal_action_attempts": 2,
+            "consecutive_no_progress": 2,
+        },
+    )
+
+    result = await controller.run()
+
+    assert explorer.calls == 1
+    assert result.summary.stop_reason == "consecutive_no_progress_limit_reached"

@@ -1,5 +1,6 @@
-import pytest
 import json
+import pytest
+from dataclasses import replace
 
 from ai_web_explorer.grounded_web.capability_graph import ExecutionTrace, PageFrame
 from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
@@ -15,13 +16,15 @@ from ai_web_explorer.grounded_web.graph import (
     WebKobeGraph,
     WebKobeNode,
 )
+from ai_web_explorer.grounded_web.business_profile import PlanningState
+from ai_web_explorer.grounded_web.exploration_semantics import (
+    practice_shopping_feasibility_profile,
+)
+from ai_web_explorer.grounded_web.location_exploration import (
+    LOCATION_EXPLORATION_META_KEY,
+)
 from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.grounded_web.semantic_assistor import DeterministicSemanticAssistor
-from ai_web_explorer.safesym_bridge.surface_pddl import compile_surface_domain
-from ai_web_explorer.safesym_bridge.trace_pddl import compile_trace_domain
-from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
-    load_web_kobe_graph_json,
-)
 
 
 @pytest.fixture
@@ -95,6 +98,34 @@ def test_select_frontier_uses_shortest_reachable_path_deterministically():
         "start__open_b__b",
     ]
     assert target.untried_action_ids == ("inspect_b",)
+
+
+def test_select_frontier_required_facts_use_verified_target_planning_state_only():
+    target_node = replace(
+        _node("target", "inspect_target"),
+        business_affordances=[
+            BusinessAffordance(
+                "inspect_target",
+                supporting_facts=["products_sorted", "invented_fact"],
+            )
+        ],
+        planning_state=PlanningState(
+            active_facts=["cart_has_items", "products_sorted"],
+            profile_fact_ids=["cart_has_items"],
+        ),
+    )
+    graph = WebKobeGraph(
+        app="fixture",
+        start_node_id="start",
+        total_steps_completed=1,
+        nodes=[_node("start", "open_target"), target_node],
+        edges=[_edge("start", "target", "open_target")],
+    )
+
+    target = select_frontier(graph)
+
+    assert target is not None
+    assert target.required_business_facts == ("cart_has_items",)
 
 
 def test_select_frontier_does_not_use_failed_paths_or_blocked_frontiers():
@@ -240,6 +271,9 @@ class _ReplayAdapter:
     async def list_interactables(self, state):
         return []
 
+    async def capture_screenshot(self, label):
+        return f"/tmp/{label}.png"
+
     async def execute(self, action):
         self.executed.append(action.semantic_id)
         if action.semantic_id in self.failing_actions:
@@ -305,7 +339,7 @@ async def test_frontier_replay_resets_executes_and_validates_without_graph_edges
             "path": (_replay_step("start", "target", "open_target"),),
         },
     )()
-    initial_edge_count = len(explorer.manager.to_graph().edges)
+    before_graph = explorer.manager.to_graph().to_dict()
 
     result = await FrontierReplayRunner(explorer).replay(
         target,
@@ -317,7 +351,618 @@ async def test_frontier_replay_resets_executes_and_validates_without_graph_edges
     assert result.completed_steps == 1
     assert adapter.reset_calls == ["https://fixture.test/shop"]
     assert adapter.executed == ["open_target"]
-    assert len(explorer.manager.to_graph().edges) == initial_edge_count
+    assert explorer.manager.to_graph().to_dict() == before_graph
+
+@pytest.mark.anyio
+async def test_frontier_replay_does_not_mutate_edge_metadata_on_success_or_failure():
+    adapter = _ReplayAdapter(
+        [
+            StateSnapshot("start", "https://fixture.test/shop", "start", {"surface": "start"}),
+            StateSnapshot("target", "https://fixture.test/shop", "target", {"surface": "target"}),
+        ]
+    )
+    explorer = _replay_explorer(adapter)
+    target = type(
+        "Target",
+        (),
+        {"node_id": "target", "path": (_replay_step("start", "target", "open_target"),)},
+    )()
+    before = explorer.manager.to_graph().to_dict()
+
+    result = await FrontierReplayRunner(explorer).replay(
+        target,
+        start_url="https://fixture.test/shop",
+    )
+
+    assert result.success is True
+    assert explorer.manager.to_graph().to_dict() == before
+
+
+@pytest.mark.anyio
+async def test_frontier_replay_does_not_require_intermediate_raw_nodes_to_match():
+    adapter = _ReplayAdapter(
+        [
+            StateSnapshot("start", "https://fixture.test/shop", "start", {"surface": "start"}),
+            StateSnapshot("intermediate", "https://fixture.test/shop", "intermediate", {"surface": "intermediate"}),
+            StateSnapshot("target", "https://fixture.test/shop", "target", {"surface": "target"}),
+        ]
+    )
+    explorer = _replay_explorer(adapter)
+    target = type(
+        "Target",
+        (),
+        {
+            "node_id": "target",
+            "path": (
+                _replay_step("start", "unmodeled_intermediate", "open_intermediate"),
+                _replay_step("unmodeled_intermediate", "target", "open_target"),
+            ),
+            "semantic_location": "target",
+            "required_business_facts": (),
+        },
+    )()
+
+    result = await FrontierReplayRunner(explorer).replay(
+        target,
+        start_url="https://fixture.test/shop",
+    )
+
+    assert result.success is True
+    assert result.completed_steps == 2
+
+
+@pytest.mark.anyio
+async def test_frontier_replay_checkpoint_rejects_wrong_semantic_location():
+    adapter = _ReplayAdapter(
+        [
+            StateSnapshot("start", "https://fixture.test/shop", "start", {"surface": "start"}),
+            StateSnapshot("wrong", "https://fixture.test/shop", "wrong", {"surface": "wrong"}),
+        ]
+    )
+    explorer = _replay_explorer(adapter)
+    target = type(
+        "Target",
+        (),
+        {
+            "node_id": "target",
+            "path": (_replay_step("start", "target", "open_target"),),
+            "semantic_location": "target",
+            "required_business_facts": (),
+        },
+    )()
+
+    result = await FrontierReplayRunner(explorer).replay(
+        target,
+        start_url="https://fixture.test/shop",
+    )
+
+    assert result.success is False
+    assert result.reason == "target_semantic_location_mismatch"
+
+
+@pytest.mark.anyio
+async def test_frontier_replay_rejects_missing_required_business_fact():
+    adapter = _ReplayAdapter(
+        [StateSnapshot("start", "https://fixture.test/shop", "start", {"surface": "start"})]
+    )
+    explorer = _replay_explorer(adapter)
+    target = type(
+        "Target",
+        (),
+        {
+            "node_id": "start",
+            "path": (),
+            "required_business_facts": ("cart_has_items",),
+        },
+    )()
+
+    result = await FrontierReplayRunner(explorer).replay(
+        target,
+        start_url="https://fixture.test/shop",
+    )
+
+    assert result.success is False
+    assert result.reason == "target_business_facts_mismatch"
+    assert adapter.executed == []
+
+
+@pytest.mark.anyio
+async def test_frontier_replay_accepts_cart_count_as_cart_business_fact():
+    provider_calls = []
+
+    def provider(prompt, **kwargs):
+        provider_calls.append(json.loads(prompt))
+        return json.dumps(
+            {
+                "observed_semantic_location": "shopping",
+                "verified_business_facts": {},
+            }
+        )
+
+    adapter = _ReplayAdapter(
+        [
+            StateSnapshot(
+                "practice-automated-testing",
+                "https://fixture.test/shopping",
+                "Practice Automated Testing",
+                {"cart_count": 1},
+            )
+        ]
+    )
+    explorer = _replay_explorer(adapter)
+    explorer.semantic_experiment_profile = practice_shopping_feasibility_profile()
+    explorer.visual_delta_provider = provider
+    explorer.manager.meta[LOCATION_EXPLORATION_META_KEY] = {
+        "schema_version": "location-exploration-v1",
+        "locations": {
+            "shopping": {
+                "candidates": {
+                    "add_to_cart": {"attempts": 1, "status": "pending"}
+                }
+            }
+        },
+    }
+    target = type(
+        "Target",
+        (),
+        {
+            "node_id": "start",
+            "path": (),
+            "semantic_location": "shopping",
+            "required_business_facts": ("cart_has_items",),
+        },
+    )()
+
+    before_graph = explorer.manager.to_graph().to_dict()
+
+    result = await FrontierReplayRunner(explorer).replay(
+        target,
+        start_url="https://fixture.test/shopping",
+    )
+
+    assert result.success is True
+    assert result.checkpoint is not None
+    assert result.checkpoint.verified_business_facts == ("cart_has_items",)
+    assert len(provider_calls) == 1
+    assert explorer.manager.to_graph().to_dict() == before_graph
+
+
+@pytest.mark.anyio
+async def test_frontier_replay_checkpoint_provider_is_closed_vocabulary_and_evidence_backed():
+    seen_payload = {}
+
+    def provider(prompt, **kwargs):
+        seen_payload.update(json.loads(prompt))
+        return json.dumps(
+            {
+                "observed_semantic_location": "shopping",
+                "verified_business_facts": {
+                    "cart_has_items": ["A visible cart count shows one item."]
+                },
+            }
+        )
+
+    adapter = _ReplayAdapter(
+        [
+            StateSnapshot(
+                "practice-automated-testing",
+                "https://fixture.test/shopping",
+                "Practice Automated Testing",
+                {},
+            )
+        ]
+    )
+    explorer = _replay_explorer(adapter)
+    explorer.semantic_experiment_profile = practice_shopping_feasibility_profile()
+    explorer.capture_screenshots = True
+    explorer.visual_delta_provider = provider
+    target = type(
+        "Target",
+        (),
+        {
+            "node_id": "start",
+            "path": (),
+            "semantic_location": "shopping",
+            "required_business_facts": ("cart_has_items",),
+        },
+    )()
+
+    result = await FrontierReplayRunner(explorer).replay(
+        target,
+        start_url="https://fixture.test/shop",
+    )
+
+    assert result.success is True
+    assert set(seen_payload) == {
+        "expected_semantic_location",
+        "allowed_semantic_locations",
+        "requested_business_facts",
+        "current_screenshot_path",
+        "current_signature",
+        "current_page_context",
+    }
+    assert seen_payload["requested_business_facts"]["cart_has_items"]
+    assert seen_payload["current_page_context"] == {
+        "page_id": "practice-automated-testing",
+        "title": "Practice Automated Testing",
+        "url": "https://fixture.test/shopping",
+        "url_path": "/shopping",
+    }
+
+
+@pytest.mark.anyio
+async def test_frontier_replay_location_only_checkpoint_calls_provider_for_business_location():
+    calls = []
+
+    def provider(prompt, **kwargs):
+        calls.append(json.loads(prompt))
+        return json.dumps(
+            {
+                "observed_semantic_location": "shopping",
+                "verified_business_facts": {},
+            }
+        )
+
+    adapter = _ReplayAdapter(
+        [
+            StateSnapshot(
+                "practice-automated-testing",
+                "https://fixture.test/shopping",
+                "Practice Automated Testing",
+                {},
+            )
+        ]
+    )
+    explorer = _replay_explorer(adapter)
+    explorer.semantic_experiment_profile = practice_shopping_feasibility_profile()
+    explorer.visual_delta_provider = provider
+    target = type(
+        "Target",
+        (),
+        {
+            "node_id": "start",
+            "path": (),
+            "semantic_location": "shopping",
+            "required_business_facts": (),
+        },
+    )()
+
+    result = await FrontierReplayRunner(explorer).replay(
+        target,
+        start_url="https://fixture.test/shopping",
+    )
+
+    assert result.success is True
+    assert len(calls) == 1
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("capture_mode", ["missing", None, ""])
+async def test_frontier_replay_profile_checkpoint_requires_current_screenshot(
+    capture_mode,
+):
+    calls = []
+
+    def provider(prompt, **kwargs):
+        calls.append(json.loads(prompt))
+        return json.dumps(
+            {
+                "observed_semantic_location": "shopping",
+                "verified_business_facts": {},
+            }
+        )
+
+    adapter = _ReplayAdapter(
+        [
+            StateSnapshot(
+                "practice-automated-testing",
+                "https://fixture.test/shopping",
+                "Practice Automated Testing",
+                {},
+            )
+        ]
+    )
+    if capture_mode == "missing":
+        adapter.capture_screenshot = None
+    else:
+        async def capture_screenshot(label):
+            return capture_mode
+
+        adapter.capture_screenshot = capture_screenshot
+    explorer = _replay_explorer(adapter)
+    explorer.semantic_experiment_profile = practice_shopping_feasibility_profile()
+    explorer.visual_delta_provider = provider
+    target = type(
+        "Target",
+        (),
+        {
+            "node_id": "start",
+            "path": (),
+            "semantic_location": "shopping",
+            "required_business_facts": (),
+        },
+    )()
+
+    result = await FrontierReplayRunner(explorer).replay(
+        target,
+        start_url="https://fixture.test/shopping",
+    )
+
+    assert result.success is False
+    assert calls == []
+
+
+@pytest.mark.anyio
+async def test_frontier_replay_without_profile_uses_provider_for_missing_fact():
+    calls = []
+
+    def provider(prompt, **kwargs):
+        calls.append(json.loads(prompt))
+        return json.dumps(
+            {
+                "observed_semantic_location": "shopping",
+                "verified_business_facts": {
+                    "cart_has_items": ["A visible cart count shows one item."]
+                },
+            }
+        )
+
+    adapter = _ReplayAdapter(
+        [StateSnapshot("shopping", "https://fixture.test/shop", "Shopping", {})]
+    )
+    explorer = _replay_explorer(adapter)
+    explorer.visual_delta_provider = provider
+    target = type(
+        "Target",
+        (),
+        {
+            "node_id": "start",
+            "path": (),
+            "semantic_location": "shopping",
+            "required_business_facts": ("cart_has_items",),
+        },
+    )()
+
+    result = await FrontierReplayRunner(explorer).replay(
+        target,
+        start_url="https://fixture.test/shop",
+    )
+
+    assert result.success is True
+    assert len(calls) == 1
+    assert result.checkpoint.verified_business_facts == ("cart_has_items",)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "response_kind",
+    ["unknown_fact", "empty_evidence", "malformed", "provider_error"],
+)
+async def test_frontier_replay_without_profile_provider_fails_closed(response_kind):
+    calls = []
+
+    def provider(prompt, **kwargs):
+        calls.append(json.loads(prompt))
+        if response_kind == "provider_error":
+            raise RuntimeError("provider unavailable")
+        if response_kind == "malformed":
+            return "not-json"
+        if response_kind == "unknown_fact":
+            facts = {"invented_fact": ["not requested"]}
+        else:
+            facts = {"cart_has_items": []}
+        return json.dumps(
+            {
+                "observed_semantic_location": "shopping",
+                "verified_business_facts": facts,
+            }
+        )
+
+    adapter = _ReplayAdapter(
+        [StateSnapshot("shopping", "https://fixture.test/shop", "Shopping", {})]
+    )
+    explorer = _replay_explorer(adapter)
+    explorer.visual_delta_provider = provider
+    target = type(
+        "Target",
+        (),
+        {
+            "node_id": "start",
+            "path": (),
+            "semantic_location": "shopping",
+            "required_business_facts": ("cart_has_items",),
+        },
+    )()
+
+    result = await FrontierReplayRunner(explorer).replay(
+        target,
+        start_url="https://fixture.test/shop",
+    )
+
+    assert result.success is False
+    assert len(calls) == 1
+
+
+@pytest.mark.anyio
+async def test_frontier_replay_without_profile_provider_requires_screenshot():
+    calls = []
+
+    def provider(prompt, **kwargs):
+        calls.append(prompt)
+        return json.dumps(
+            {
+                "observed_semantic_location": "shopping",
+                "verified_business_facts": {
+                    "cart_has_items": ["A visible cart count shows one item."]
+                },
+            }
+        )
+
+    adapter = _ReplayAdapter(
+        [StateSnapshot("shopping", "https://fixture.test/shop", "Shopping", {})]
+    )
+    adapter.capture_screenshot = None
+    explorer = _replay_explorer(adapter)
+    explorer.visual_delta_provider = provider
+    target = type(
+        "Target",
+        (),
+        {
+            "node_id": "start",
+            "path": (),
+            "semantic_location": "shopping",
+            "required_business_facts": ("cart_has_items",),
+        },
+    )()
+
+    result = await FrontierReplayRunner(explorer).replay(
+        target,
+        start_url="https://fixture.test/shop",
+    )
+
+    assert result.success is False
+    assert calls == []
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "response_kind",
+    ["unknown_location", "wrong_location", "malformed", "provider_error"],
+)
+async def test_frontier_replay_profile_location_checkpoint_fails_closed(
+    response_kind,
+):
+    calls = []
+
+    def provider(prompt, **kwargs):
+        calls.append(json.loads(prompt))
+        if response_kind == "provider_error":
+            raise RuntimeError("provider unavailable")
+        if response_kind == "malformed":
+            return "not-json"
+        location = "evil_location" if response_kind == "unknown_location" else "checkout"
+        return json.dumps(
+            {
+                "observed_semantic_location": location,
+                "verified_business_facts": {},
+            }
+        )
+
+    adapter = _ReplayAdapter(
+        [
+            StateSnapshot(
+                "practice-automated-testing",
+                "https://fixture.test/shopping",
+                "Practice Automated Testing",
+                {},
+            )
+        ]
+    )
+    explorer = _replay_explorer(adapter)
+    explorer.semantic_experiment_profile = practice_shopping_feasibility_profile()
+    explorer.visual_delta_provider = provider
+    target = type(
+        "Target",
+        (),
+        {
+            "node_id": "start",
+            "path": (),
+            "semantic_location": "shopping",
+            "required_business_facts": (),
+        },
+    )()
+
+    result = await FrontierReplayRunner(explorer).replay(
+        target,
+        start_url="https://fixture.test/shopping",
+    )
+
+    assert len(calls) == 1
+    assert result.success is False
+
+
+@pytest.mark.anyio
+async def test_frontier_replay_business_fact_cannot_override_wrong_provider_location():
+    calls = []
+
+    def provider(prompt, **kwargs):
+        calls.append(json.loads(prompt))
+        return json.dumps(
+            {
+                "observed_semantic_location": "checkout",
+                "verified_business_facts": {
+                    "cart_has_items": ["A visible cart count shows one item."]
+                },
+            }
+        )
+
+    adapter = _ReplayAdapter(
+        [
+            StateSnapshot(
+                "practice-automated-testing",
+                "https://fixture.test/shopping",
+                "Practice Automated Testing",
+                {},
+            )
+        ]
+    )
+    explorer = _replay_explorer(adapter)
+    explorer.semantic_experiment_profile = practice_shopping_feasibility_profile()
+    explorer.visual_delta_provider = provider
+    target = type(
+        "Target",
+        (),
+        {
+            "node_id": "start",
+            "path": (),
+            "semantic_location": "shopping",
+            "required_business_facts": ("cart_has_items",),
+        },
+    )()
+
+    result = await FrontierReplayRunner(explorer).replay(
+        target,
+        start_url="https://fixture.test/shopping",
+    )
+
+    assert len(calls) == 1
+    assert result.success is False
+    assert result.reason == "target_semantic_location_mismatch"
+
+
+@pytest.mark.anyio
+async def test_frontier_replay_checkpoint_provider_unknown_fact_fails_closed():
+    adapter = _ReplayAdapter(
+        [StateSnapshot("shopping", "https://fixture.test/shop", "shopping", {})]
+    )
+    explorer = _replay_explorer(adapter)
+    explorer.semantic_experiment_profile = practice_shopping_feasibility_profile()
+    explorer.visual_delta_provider = lambda prompt, **kwargs: json.dumps(
+        {
+            "observed_semantic_location": "shopping",
+            "verified_business_facts": {
+                "invented_fact": ["not an allowed profile fact"]
+            },
+        }
+    )
+    target = type(
+        "Target",
+        (),
+        {
+            "node_id": "start",
+            "path": (),
+            "semantic_location": "shopping",
+            "required_business_facts": ("cart_has_items",),
+        },
+    )()
+
+    result = await FrontierReplayRunner(explorer).replay(
+        target,
+        start_url="https://fixture.test/shop",
+    )
+
+    assert result.success is False
+    assert result.reason == "target_business_facts_unknown"
 
 
 @pytest.mark.anyio
@@ -360,6 +1005,7 @@ async def test_frontier_replay_fails_closed_on_target_mismatch():
         {
             "node_id": "target",
             "path": (_replay_step("start", "target", "open_target"),),
+            "semantic_location": "target",
         },
     )()
 
@@ -369,9 +1015,9 @@ async def test_frontier_replay_fails_closed_on_target_mismatch():
     )
 
     assert result.success is False
-    assert result.reason == "target_state_mismatch"
-    assert result.failed_edge_id == "start__open_target__target"
-    assert result.completed_steps == 0
+    assert result.reason == "target_semantic_location_mismatch"
+    assert result.failed_edge_id is None
+    assert result.completed_steps == 1
     assert len(explorer.manager.to_graph().edges) == 0
 
 
@@ -388,6 +1034,7 @@ async def test_frontier_replay_stops_on_action_failure_without_observation():
         {
             "node_id": "target",
             "path": (_replay_step("start", "target", "open_target"),),
+            "semantic_location": "target",
         },
     )()
 
@@ -402,8 +1049,7 @@ async def test_frontier_replay_stops_on_action_failure_without_observation():
 
 
 @pytest.mark.anyio
-async def test_replay_mismatch_marks_existing_edge_unstable_across_graph_roundtrip(
-    tmp_path,
+async def test_replay_mismatch_does_not_mutate_existing_edge_across_graph_roundtrip(
 ):
     adapter = _ReplayAdapter(
         [
@@ -418,30 +1064,16 @@ async def test_replay_mismatch_marks_existing_edge_unstable_across_graph_roundtr
         {
             "node_id": "target",
             "path": (_replay_step("start", "target", "open_target"),),
+            "semantic_location": "target",
         },
     )()
     explorer.manager.add_edge(target.path[0].edge)
+    before_graph = explorer.manager.to_graph().to_dict()
 
     result = await FrontierReplayRunner(explorer).replay(
         target,
         start_url="https://fixture.test/shop",
     )
 
-    assert result.reason == "target_state_mismatch"
-    current_edge = explorer.manager.to_graph().edges[0]
-    assert current_edge.execution_trace.metadata["replay_validation_status"] == (
-        "unstable"
-    )
-
-    graph_path = tmp_path / "graph.json"
-    graph_path.write_text(
-        json.dumps(explorer.manager.to_graph().to_dict()),
-        encoding="utf-8",
-    )
-    restored = load_web_kobe_graph_json(graph_path)
-    restored_edge = restored.edges[0]
-    assert restored_edge.execution_trace.metadata["replay_validation_status"] == (
-        "unstable"
-    )
-    assert "open_target" not in compile_surface_domain(restored).domain
-    assert "open_target" in compile_trace_domain(restored).domain
+    assert result.reason == "target_semantic_location_mismatch"
+    assert explorer.manager.to_graph().to_dict() == before_graph
