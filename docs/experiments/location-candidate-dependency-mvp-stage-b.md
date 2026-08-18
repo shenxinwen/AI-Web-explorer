@@ -19,9 +19,19 @@ Branch: codex/location-candidate-dependency-mvp
 5. 864703a — test: preserve legacy affordance read compatibility
 6. b4ca8b8 — fix: keep initial action prompts profile independent
 7. 492e360 — docs: report clean location dependency MVP migration
+8. 495f938 — docs: list final migration report commit
+9. 1280d4f — fix: scope completion predicates by location
+10. 66f1388 — fix: fail closed on missing action prerequisites
+11. 9d85caa — fix: preserve failed outcome precedence over navigation
+12. 98be609 — fix: allow visible workflow prerequisite inference
+13. fc9571b — fix: require actions array for initial scans
+14. d079311 — test: align legacy scans with initial action contract
+15. 16ea52e — test: use actions contract in active scan fixture
 
-The last two commits are small post-Task-4 test/prompt-isolation corrections;
-they do not add a new runtime module or change the Task 1–4 boundaries.
+Commits 10–13 are the four requested review fixes, each implemented with a
+focused RED/GREEN test cycle. Commits 14–15 only update legacy/active test
+fixtures to exercise the resulting parser contract; they add no runtime
+module or unrelated refactor.
 
 ## Implemented behavior
 
@@ -44,6 +54,22 @@ they do not add a new runtime module or change the Task 1–4 boundaries.
   observation, target node hint, current pointer anchor, and candidate pool
   key. If the coarse page hint equals the source, the target node ID is used
   as the stable fallback.
+- A dependent edge is fail-closed when any same-location required action lacks
+  a projectable successful edge. The projection report records
+  missing_successful_required_action and the missing action IDs, so a missing,
+  failed, or non-projectable prerequisite cannot create a dependent shortcut.
+- When a three-field action outcome exists, failed and uncertain take priority
+  over node, URL, or signature changes and remain non-projectable. Only a
+  successful outcome with location_change=true can become navigation; a
+  successful unchanged-location outcome is still projectable as succeeded.
+- Initial dependency prompts allow direct inference from visible required
+  fields, disabled controls, labels, and visible workflow structure, including
+  clearly shown login or checkout steps. They reject dependencies based on
+  undisplayed site capabilities or a complete typical workflow and retain
+  requires=[] for independent actions.
+- Active initial parsing now requires a top-level actions array. regions and
+  business_affordances are not initial fallbacks; their read compatibility is
+  limited to non-initial legacy scans.
 - OpenAI visual provider default is gpt-4o-mini; environment variables and
   explicit model arguments retain precedence. DeepSeek/Stagehand response
   parsing was not changed.
@@ -61,24 +87,26 @@ they do not add a new runtime module or change the Task 1–4 boundaries.
 Using the existing D:\GitHUb\ai-web-explorer-main\.venv with PYTHONPATH
 pointing at this worktree:
 
-- Focused dependency/outcome/semantic/PDDL tests: 108 passed, 2 warnings.
-- tests/safesym_bridge/test_web_kobe_explorer.py: 81 passed, 2 warnings.
-- tests/safesym_bridge: 584 passed, 4 skipped, 2 warnings.
-- Full pytest -q: 585 passed, 4 skipped, 1 failed.
-  The sole failure is the pre-existing browser fixture launch:
+- Focused files: test_business_affordance.py 21 passed; test_semantic_planning.py
+  19 passed; the web explorer focused suite is included in the SafeSym total
+  below. All focused dependency, outcome, parser, and semantic/PDDL tests
+  passed.
+- tests/safesym_bridge: 591 passed, 4 skipped, 2 warnings.
+- Full pytest -q in the sandbox: 594 passed, 4 skipped, 1 failed.
+  The sole failure was the browser fixture launch:
   tests/test_local_shop_fixture.py::test_local_shop_fixture_supports_cart_state_changes
-  with Playwright BrowserType.launch: spawn EPERM. No browser was started
-  successfully.
-- git diff --check: passed.
+  with Playwright BrowserType.launch: spawn EPERM. The same test was then
+  rerun with controlled permission and passed: 1 passed in 3.03s.
+- git diff --check main...HEAD: passed.
 
 The correction was TDD-verified: the two new semantic-planning regression
 tests failed before the implementation change and passed afterward.
 
 ## Diff and files
 
-Implementation diff relative to main (excluding this report):
+Implementation diff relative to main (including this report):
 
-    15 files changed, 1331 insertions(+), 108 deletions(-)
+    17 files changed, 1792 insertions(+), 137 deletions(-)
 
 Changed files:
 
@@ -95,6 +123,7 @@ Changed files:
 - tests/safesym_bridge/test_action_outcome.py
 - tests/safesym_bridge/test_business_affordance.py
 - tests/safesym_bridge/test_location_exploration.py
+- tests/safesym_bridge/test_location_scoped_feasibility_pipeline.py
 - tests/safesym_bridge/test_semantic_planning.py
 - tests/safesym_bridge/test_web_kobe_explorer.py
 
