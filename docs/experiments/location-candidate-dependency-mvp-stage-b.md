@@ -88,9 +88,8 @@ Using the existing D:\GitHUb\ai-web-explorer-main\.venv with PYTHONPATH
 pointing at this worktree:
 
 - Focused files: test_business_affordance.py 21 passed; test_semantic_planning.py
-  19 passed; the web explorer focused suite is included in the SafeSym total
-  below. All focused dependency, outcome, parser, and semantic/PDDL tests
-  passed.
+  19 passed; test_web_kobe_explorer.py 83 passed. All focused dependency,
+  outcome, parser, and semantic/PDDL tests passed.
 - tests/safesym_bridge: 591 passed, 4 skipped, 2 warnings.
 - Full pytest -q in the sandbox: 594 passed, 4 skipped, 1 failed.
   The sole failure was the browser fixture launch:
