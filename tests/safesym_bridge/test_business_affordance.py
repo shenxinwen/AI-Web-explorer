@@ -424,6 +424,6 @@ def test_summarize_visual_affordances_ignores_removed_candidate_fields():
 
     result = summarize_visual_affordances(request, provider=provider)
 
-    assert result.trace.status == "failed"
-    assert result.trace.error_type == "response_contract_error"
-    assert result.business_affordances == []
+    assert result.trace.status == "summarized"
+    assert result.business_affordances[0].action_name == "legacy_action"
+    assert "expected_change" not in result.business_affordances[0].to_dict()
