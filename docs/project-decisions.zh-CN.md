@@ -67,8 +67,8 @@ Practice Shopping 真实 VLM、SafeSym 与 planner 联合验收仍待执行。
 - 本地根据执行成功的动作生成位置限定的完成 predicate；只有成功动作和成功依赖边进入
   SemanticPlanningGraph 与 PDDL。
 - 新路径绕开 profile 驱动的 targeted scan、supplement scan 和当前十四字段 Visual Delta 响应。
-- DeepSeek 仍主要通过 Stagehand SDK 执行动作，不给该执行链增加上述复杂语义返回要求；首轮
-  VLM 实验默认使用 `gpt-4o-mini`。
+- DeepSeek 仍主要通过 Stagehand SDK 执行动作，不给该执行链增加上述复杂语义返回要求；候选
+  VLM 默认使用 `gpt-4o-mini`，动作后结果观察默认使用 `gpt-4o`，两者独立配置。
 
 原因：
 - 当前主要目标是生成因果关系基本正确、可被 SafeSym 消费和求解的 PDDL，不需要让一次 VLM

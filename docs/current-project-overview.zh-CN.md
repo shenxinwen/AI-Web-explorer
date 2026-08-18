@@ -265,6 +265,8 @@ Practice Shopping 已完成一轮使用当前主线的真实有界实验，不�
 - 每个新语义位置只做一次初始扫描，返回明确动作及同位置 `requires`；
 - 本地候选池根据前置动作是否成功推导可执行性，并优先调度依赖链动作；
 - 动作后观察只返回 `outcome`、`location_change` 和简短可见 `evidence`；
+- 候选观察默认使用 `gpt-4o-mini`，动作后结果观察默认使用 `gpt-4o`；二者可通过
+  `OPENAI_VISUAL_DELTA_MODEL` 与 `OPENAI_ACTION_OUTCOME_MODEL` 独立配置，Stagehand 模型仍独立；
 - 稳定的动作完成 predicate 由本地根据成功动作生成，不再要求 VLM 输出；
 - 只有真实执行成功的动作和依赖关系进入 planner-facing graph 与 PDDL；
 - 新路径绕开 profile 驱动的 targeted scan、supplement scan 和当前多职责 Visual Delta 事实结构。

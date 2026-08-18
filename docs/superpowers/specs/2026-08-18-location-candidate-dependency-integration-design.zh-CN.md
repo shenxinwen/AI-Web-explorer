@@ -151,7 +151,9 @@ Stagehand 根据候选的自然语言描述和目标执行动作。动作完成�
 
 DeepSeek 当前主要通过 Stagehand SDK 执行动作。该链路沿用 Stagehand 的响应，只读取 `success`、`message` 和 `actionDescription` 等执行结果，不给 DeepSeek 增加候选扫描或语义观察的复杂返回协议。
 
-候选扫描和动作后观察使用上述最小 JSON 协议。默认实验模型使用 `gpt-4o-mini`；协议本身不绑定模型供应商，后续可以用 DeepSeek 或其他兼容模型做独立对比。
+候选扫描和动作后观察使用上述最小 JSON 协议。候选扫描默认使用
+`gpt-4o-mini`，动作后观察默认使用 `gpt-4o`，二者通过
+`OPENAI_VISUAL_DELTA_MODEL` 和 `OPENAI_ACTION_OUTCOME_MODEL` 独立配置；协议本身不绑定模型供应商，后续可以用其他兼容模型做独立对比。Stagehand 执行模型仍由 `STAGEHAND_MODEL` 独立配置。
 
 ## 6. 本地数据模型
 

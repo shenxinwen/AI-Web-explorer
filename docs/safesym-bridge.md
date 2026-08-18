@@ -298,12 +298,14 @@ can now reuse the existing profile, visual-delta, embedding, and Stagehand
 candidate-action capabilities:
 
 Stagehand and screenshot observation use separate model settings. Set
-`STAGEHAND_MODEL` (or `--model`) only for Stagehand action execution. Set
-`OPENAI_VISUAL_DELTA_MODEL` (or `--visual-delta-model`) for screenshot business
-affordances, state labels, and before/after Visual Delta. Never copy the
-Stagehand model name into the visual-delta option unless that separate OpenAI-
-compatible endpoint explicitly exposes the same model ID. Embeddings use
-`EMBEDDING_MODEL` independently.
+`STAGEHAND_MODEL` (or `--model`) only for Stagehand action execution. Candidate
+observation defaults to `gpt-4o-mini` and uses `OPENAI_VISUAL_DELTA_MODEL` (or
+`--visual-delta-model`); action-outcome observation defaults to `gpt-4o` and
+uses `OPENAI_ACTION_OUTCOME_MODEL` (or `--action-outcome-model`). These OpenAI
+providers are independent, and explicit provider injection remains supported.
+Never copy the Stagehand model name into either observation option unless that
+separate OpenAI-compatible endpoint explicitly exposes the same model ID.
+Embeddings use `EMBEDDING_MODEL` independently.
 
 ```powershell
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-stagehand-explore `
@@ -314,7 +316,8 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-stagehand-explore `
   --screenshot-dir outputs/experiments/saucedemo/latest/screenshots `
   --business-profile ecommerce_checkout `
   --openai-visual-delta `
-  --visual-delta-model gpt-4o `
+  --visual-delta-model gpt-4o-mini `
+  --action-outcome-model gpt-4o `
   --state-embeddings `
   --embedding-model text-embedding-v4 `
   --embedding-dimension 1024 `
