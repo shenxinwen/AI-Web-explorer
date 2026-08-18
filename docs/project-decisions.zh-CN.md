@@ -17,6 +17,69 @@
 - ...
 ```
 
+## 2026-08-13 - 可行性阶段完成，下一阶段从答案提示转向 reference ontology
+
+> 本条保留上一阶段问题判断；其中关于下一阶段采用 reference ontology、业务事实和 targeted
+> scan 的初步方案，已被下方 2026-08-18 的最小动作依赖设计取代。
+
+更改：
+- Practice Shopping 真实有界实验已跑通候选发现、Stagehand 执行、业务事实验证、
+  SemanticPlanningGraph、Minimal Semantic PDDL、SafeSym 安全注入和 Fast Downward 求解。
+- 当前阶段定位为“可行链路已成立”，不再把下一步描述为首次真实实验。
+- 明确记录当前 profile 的双重作用：它既统一语义，又把位置、事实、动作示例和契约传入候选
+  prompt，因而会提示预期能力。
+- 下一阶段保留位置事实、普通事实和业务事实三层词表，但把词表定义为动作后使用的
+  reference ontology，而不是探索器需要逐项验证的功能清单。
+- 普通动作只记录完成事实；只有验证成功的业务动作才改变持续业务状态、触发 targeted scan，
+  并可能影响后续业务动作。
+
+原因：
+- 真实实验已经证明系统能探索、生成合法 PDDL 并被 SafeSym 求解，但也暴露出 profile 使探索
+  带有“已知网站功能后再验证”的答案提示，不能代表真正的开放发现。
+- 词表仍然有价值：它可以把不同网站和 VLM 的多种表达统一成稳定 planner-facing 名称；问题
+  不在词表本身，而在候选发现之前暴露具体事实、动作契约和预期流程。
+- SauceDemo 无 profile 登录 smoke 能自主发现 `login_user`、读取公开测试凭据并进入商品页，
+  同时把登录页和商品页都粗略命名为 `swag_labs`，说明操作泛化优于开放语义归纳。
+
+影响：
+- 当前代码仍是“开放候选 + profile 引导的闭集语义验证”，文档必须如实说明，不能把下一阶段
+  原则写成已经实现。
+- 下一阶段设计应优先拆分 candidate discovery 与 after-action normalization，而不是立即为
+  第二个网站增加一份包含完整答案的专属 profile。
+- 未观察到的词表条目不应进入 Domain，也不应被视为探索覆盖缺失；词表外普通能力应允许保留
+  为生成事实，词表外业务事实仍需更严格验证。
+- 当前已知实验问题包括：`place_order` 结果被重复建模为无前提 `order_submitted` 捷径，以及
+  `filter_products` 明显成功但 `completion_facts` 缺失而生成无效果 action。
+
+## 2026-08-18 - 下一阶段采用最小动作依赖闭环
+
+更改：
+- 新位置首次候选扫描只返回明确动作及同位置 `requires`，不再要求候选阶段输出区域分类、
+  事实词表映射或永久动作类型。
+- 本地候选池根据前置动作的 `success` 状态推导动作是否可调度；前置动作终态失败时，依赖动作
+  进入 `blocked_by_failed_requirement`。
+- 动作后 VLM 观察收缩为 `outcome`、布尔 `location_change` 和简短 `evidence`。
+- 本地根据执行成功的动作生成位置限定的完成 predicate；只有成功动作和成功依赖边进入
+  SemanticPlanningGraph 与 PDDL。
+- 新路径绕开 profile 驱动的 targeted scan、supplement scan 和当前十四字段 Visual Delta 响应。
+- DeepSeek 仍主要通过 Stagehand SDK 执行动作，不给该执行链增加上述复杂语义返回要求；首轮
+  VLM 实验默认使用 `gpt-4o-mini`。
+
+原因：
+- 当前主要目标是生成因果关系基本正确、可被 SafeSym 消费和求解的 PDDL，不需要让一次 VLM
+  调用同时完成页面分类、事实归纳、动作分类、依赖推断和规划 effect 生成。
+- `actions + requires` 足以表达当前页面上的明确操作顺序；真实执行和前后观察负责验证动作，
+  本地状态负责稳定记录。
+- 减少返回字段可以降低格式错误和字段间矛盾，也避免旧 profile 继续向候选发现泄漏完整答案。
+
+影响：
+- 每个新语义位置当前只做一次扫描。首次观察无法看到或合理推断、且只在前置动作完成后动态
+  出现的新动作，暂时允许遗漏。
+- 本轮验收重精度而非召回率：可以漏动作，但识别出的动作、依赖和位置变化必须基本正确。
+- Practice Shopping 作为首个验证网站，但不得按其按钮文本、固定动作 ID 或完整流程写专用分支。
+- 详细设计和验收标准见
+  `docs/superpowers/specs/2026-08-18-location-candidate-dependency-integration-design.zh-CN.md`。
+
 ## 2026-08-13 - 当前主线收敛为 location-scoped 开放探索与 Minimal Semantic PDDL
 
 > 若下方历史决策与本条冲突，以本条和当前 overview/structure 文档为准。

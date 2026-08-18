@@ -40,6 +40,11 @@ CLI profile 注册和受控下单 URL 仍是显式领域/实验配置。后续�
 `cart_count -> cart_has_items` 等映射迁入可配置 profile；PDDL 编译器、候选池、重放和
 controller 本身不按购物动作或位置名称分支。
 
+当前 profile 还会进入 Visual Affordance 候选扫描 prompt，并包含位置闭集、事实词表、动作
+示例和动作契约。这是 active code 的真实行为，但也是下一阶段已经确认的泛化性债务：候选
+发现会受到预期能力提示。下一阶段已经确定改用最小动作依赖响应和最小动作后观察响应，
+但该解耦尚未实现，不能把它描述成当前模块行为。
+
 旧 upstream `explore` runtime 和旧 `WebObservedGraph` 探索栈已经不属于 active code path。
 
 ## 分层结构
@@ -119,11 +124,16 @@ Stagehand 不应该决定 graph identity、planning facts 或 PDDL 语义。
 VLM affordance 结果只是候选假设。候选列表本身不等于已验证能力；只有本地验证和动作后
 观察支持的成功边，才确认为已验证转换。
 
-profile facts 位于这一层。它们是当前实验认可的位置、普通能力和业务事实闭集，不是网页所有可能状态的全集。
-Visual Delta VLM 接收动作、before/after 截图、当前位置锚点和 experiment profile context；其语义输出必须经过
-`validate_profile_semantic_observation` 闭集校验。通过校验的 coarse semantic observation 可以进入
-`SemanticPlanningGraph`，候选业务事实还必须由动作后变化与本地 verifier 确认。原始响应和拒绝原因始终保留在
-raw edge trace 中。节点可使用 Visual Affordance 提供的技术性 state label，但 label 不决定 graph identity 或 PDDL facts。
+profile facts 位于这一层。当前实现把它们作为实验认可的位置、普通能力和业务事实闭集，并把
+完整 profile context 同时传给 Visual Affordance 和 Visual Delta。Visual Delta 语义输出必须经过
+`validate_profile_semantic_observation` 闭集校验；候选业务事实还必须由动作后变化与本地 verifier
+确认。原始响应和拒绝原因始终保留在 raw edge trace 中。节点可使用 Visual Affordance 提供的
+技术性 state label，但 label 不决定 graph identity 或 PDDL facts。
+
+已对齐但尚未实现的下一阶段边界是：Visual Affordance 自主发现明确动作及同位置 `requires`，
+不接收具体 profile facts、动作示例、契约、预期流程或 PDDL goal；动作后观察只返回
+`outcome`、`location_change` 和简短可见证据；稳定的动作完成 predicate 由本地根据成功动作
+生成。新路径绕开 targeted scan 和 supplement scan，也不再要求 VLM 输出 planner-facing facts。
 
 主要函数/类：
 

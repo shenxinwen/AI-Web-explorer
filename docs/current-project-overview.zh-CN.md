@@ -43,8 +43,10 @@
   -> 达到有界终止条件后投影 Minimal Semantic PDDL
 ```
 
-PDDL goal 或 SafeSym plan 不会反向传入候选生成和动作排序。探索仍然是开放式的；
-profile 只约束这轮实验认可的语义词表、证据规则和安全边界。
+PDDL goal 或 SafeSym plan 不会反向传入候选生成和动作排序。探索仍然不是一条固定任务脚本。
+但当前实现会把完整 experiment profile context 传给候选扫描和动作后 Visual Delta，且 profile
+包含位置、事实、动作示例和动作契约。它虽然没有规定执行顺序，却会向 VLM 暗示预期能力；
+这是当前阶段已确认的泛化性限制，不能继续表述为“profile 只做无偏的统一命名”。
 
 ## 三类规划状态
 
@@ -169,10 +171,12 @@ checkpoint 保存图、候选记忆、累计正式动作预算和 replay 指标�
   :effect (and
     (not (at_shopping))
     (at_checkout)
-    (cart_has_items)
   )
 )
 ```
+
+`cart_has_items` 在 STRIPS frame semantics 下会自然保持，除非动作明确删除它；不需要把已成立
+事实再次写成动作 effect。
 
 `domain.pddl` 描述已经探索并验证的动作、前提和效果；`problem.pddl` 描述起始位置、
 初始业务事实和目标。排序、筛选等可以出现在 domain 中，但如果它们不是结账必要条件，
@@ -195,6 +199,35 @@ checkpoint 保存图、候选记忆、累计正式动作预算和 replay 指标�
 
 实验默认覆盖 `outputs/experiments/<site>/latest/`，只有明确需要历史对比时才归档，
 避免重复产物无限堆积。
+
+## 2026-08-13 真实可行性实验结果
+
+Practice Shopping 已完成一轮使用当前主线的真实有界实验，不再只是离线或 fixture 验证：
+
+- 20 步硬上限下执行了 11 个正式动作，因连续 3 次无进展正常停止；
+- 前向路径直接到达结账和确认阶段，本轮 replay 次数为 0；
+- 实际验证了 `cart_has_items`、`checkout_info_complete`、
+  `payment_info_complete` 和 `order_submitted`；
+- 成功生成 SemanticPlanningGraph、`domain.pddl` 和 `problem.pddl`；
+- SafeSym 解析、安全动作注入和 Fast Downward 求解均成功。
+
+因此三个阶段目标已达到“可行链路”水平：系统能够真实探索、生成合法 PDDL，并被 SafeSym
+消费和求解。但“求解成功”不等于业务模型已经正确，当前还存在以下重要问题：
+
+1. `place_order` 的页面结果又被识别成独立 `order_submitted` 动作，形成绕过结账信息和支付
+   信息动作的规划捷径；动作与动作结果的因果归属仍不稳定。
+2. `filter_products` 的前后截图明确显示商品从 10 个变为 5 个，但 Visual Delta 同时把
+   `products_filtered` 写入 added/removed，且没有写入 `completion_facts`，最终产生无效果的
+   PDDL action；普通能力完成标志仍受模型字段稳定性影响。
+3. 当前 profile 是闭集且会进入候选 prompt，因而既承担统一表述，又部分承担能力提示和
+   约束答案；这不符合下一阶段对“真正探索”的要求。
+4. 无 profile 的 SauceDemo 登录 smoke 能自主读取公开测试凭据并成功进入商品页，证明候选发现
+   和 Stagehand 执行具备跨站能力；但登录页和商品页都被粗略命名为 `swag_labs`，说明开放语义
+   归纳尚不足以直接生成高质量 PDDL。
+
+本轮正式产物位于
+`outputs/experiments/practice_automated_testing/latest/`。实验目录不提交为产品代码，但它是当前
+阶段结论的本地证据来源。
 
 ## 泛化性与现有硬编码
 
@@ -221,30 +254,40 @@ checkpoint 保存图、候选记忆、累计正式动作预算和 replay 指标�
 - 最终下单只允许受控 PracticeAutomatedTesting URL 的安全门；
 - 旧 ecommerce benchmark 入口中的固定 checkout 实验步骤。
 
-其中 profile 词表、测试数据和受控下单 URL 属于实验配置或安全边界，可以保留。
-真正需要后续泛化的是把 `cart_count -> cart_has_items` 这类领域规则从 Explorer/Verifier
-移入可配置 profile，并最终支持从外部配置加载 profile，而不是每增加一个领域都修改代码。
+测试数据和受控下单 URL 属于实验配置或安全边界，可以保留。profile 中用于统一语言的分层
+词表也可以保留，但当前把完整词表、动作示例和契约交给候选发现的做法会产生答案提示。
+真正需要后续泛化的不只是把 `cart_count -> cart_has_items` 迁入外部配置，还包括把“自由发现”
+与“动作后归一化”明确拆开。
 
 当前开放探索主路径没有写死“排序 -> 筛选 -> 加购 -> 结账”的执行顺序，
 也没有在 PDDL 编译器中根据 `shopping`、`cart` 或 `checkout` 名称分支。
+
+## 下一阶段已确认的设计（尚未实现）
+
+下一阶段不再让 VLM 同时承担完整事实归纳和规划建模，而采用更小的“动作及依赖观察”闭环：
+
+- 候选发现只观察当前页面，不接收具体 profile facts、动作契约、预期流程或离线 PDDL goal；
+- 每个新语义位置只做一次初始扫描，返回明确动作及同位置 `requires`；
+- 本地候选池根据前置动作是否成功推导可执行性，并优先调度依赖链动作；
+- 动作后观察只返回 `outcome`、`location_change` 和简短可见 `evidence`；
+- 稳定的动作完成 predicate 由本地根据成功动作生成，不再要求 VLM 输出；
+- 只有真实执行成功的动作和依赖关系进入 planner-facing graph 与 PDDL；
+- 新路径绕开 profile 驱动的 targeted scan、supplement scan 和当前多职责 Visual Delta 事实结构。
+
+这套方案已经完成设计对齐，但尚未成为当前 runtime。详细实现边界和验收标准见
+`docs/superpowers/specs/2026-08-18-location-candidate-dependency-integration-design.zh-CN.md`。
 
 ## 当前阶段判断
 
 截至 2026-08-13：
 
-- location-scoped 开放探索的离线实现和回归测试已经合并；
+- location-scoped 开放探索的实现和回归测试已经合并；
 - 可恢复图、候选池、累计预算和 non-mutating replay 已建立；
-- Minimal Semantic PDDL 的离线验收链成立；
-- 非浏览器回归测试已覆盖主流程；
-- 新主线尚需一轮真实 Practice Shopping 实验验证 VLM 候选质量、深层 replay、位置划分和最终 PDDL。
-
-因此下一步不是继续扩展架构，而是运行一轮有界真实实验，检查：
-
-1. `shopping` 是否发现足够多且不重复的候选；
-2. 加购后是否确认 `cart_has_items` 并发现 checkout 动作；
-3. replay 是否能恢复深层 frontier；
-4. 最终 domain/problem 是否可由 SafeSym 解析并求出合理计划；
-5. 实际失败来自 VLM、Stagehand、状态规则还是网站结构。
+- Practice Shopping 真实实验已经跑通探索、业务事实验证、PDDL、SafeSym 和 planner；
+- 当前产物证明 pipeline 可行，但同时证明“profile 辅助验证”的阶段尚未等同于真正开放的
+  语义探索；
+- 下一步不应立即增加第二个网站的专属答案 profile，而应先在 Practice Shopping 实现最小
+  动作依赖闭环，验证去掉答案提示后仍能发现正确能力并生成因果正确、可求解的 PDDL。
 
 ## 相关文档
 

@@ -42,8 +42,11 @@ observe the current page
 ```
 
 PDDL goals and SafeSym plans are not fed back into candidate generation or action
-ranking. The semantic experiment profile constrains vocabulary, evidence, and
-safety boundaries; it does not impose a fixed execution sequence.
+ranking, so exploration is not a fixed task script. The current implementation
+does, however, pass the complete experiment-profile context to candidate scans
+and Visual Delta. Because that context includes locations, facts, action examples,
+and contracts, it can hint at expected capabilities even without prescribing an
+execution order. This is now a documented generality limitation.
 
 ## Planning State
 
@@ -110,9 +113,11 @@ Minimal Semantic PDDL preserves location and business state separately:
   :precondition (and (at_shopping) (cart_has_items))
   :effect (and
     (not (at_shopping))
-    (at_checkout)
-    (cart_has_items)))
+    (at_checkout)))
 ```
+
+Under STRIPS frame semantics, `cart_has_items` persists unless an action removes
+it; an already-true fact does not need to be emitted again as an effect.
 
 `domain.pddl` contains explored and verified actions; `problem.pddl` contains the
 initial location, initial business facts, and the requested goal. Sorting and
@@ -128,6 +133,34 @@ SemanticPlanningGraph, projection reports, `domain.pddl`, `problem.pddl`, and a
 SafeSym parse/solve report. The default experiment directory is a replaceable
 `outputs/experiments/<site>/latest/`; historical runs are archived only when a
 comparison is intentionally required.
+
+## 2026-08-13 Live Feasibility Result
+
+The active pipeline has now completed a real bounded Practice Shopping run:
+
+- 11 formal actions were attempted under the 20-action cap, stopping normally
+  after three consecutive no-progress attempts;
+- the forward path reached checkout and confirmation without replay in this run;
+- `cart_has_items`, `checkout_info_complete`, `payment_info_complete`, and
+  `order_submitted` were verified;
+- SemanticPlanningGraph, `domain.pddl`, and `problem.pddl` were generated;
+- SafeSym parsing, safety-action injection, and Fast Downward solving succeeded.
+
+This establishes an end-to-end feasible path, not a correct or complete learned
+business model. Known issues exposed by the run are:
+
+1. the visual result of `place_order` was also modeled as a separate
+   `order_submitted` action, creating a planner shortcut around the form actions;
+2. a visibly successful filter changed 10 products to 5, but Visual Delta put
+   `products_filtered` in both added and removed candidates and omitted it from
+   `completion_facts`, producing a no-effect PDDL action;
+3. the closed profile currently acts as both terminology and capability hinting;
+4. a no-profile SauceDemo smoke autonomously logged in with visible public test
+   credentials, but named both login and inventory `swag_labs`, showing that
+   cross-site execution generalizes better than open semantic induction.
+
+The local evidence is under
+`outputs/experiments/practice_automated_testing/latest/`.
 
 ## Generality and Known Hardcoding
 
@@ -153,19 +186,45 @@ Known hardcoded areas remain:
   safety boundary;
 - the separate legacy e-commerce benchmark's guided checkout steps.
 
-The vocabulary, fictional data, and controlled-order URL are experiment or safety
-configuration. The main generalization debt is moving structured mappings such as
-`cart_count -> cart_has_items` out of Explorer/Verifier code and into configurable
-profiles, followed by external profile loading.
+Fictional data and exact controlled-order URLs remain experiment or safety
+configuration. A layered vocabulary may remain as terminology, but sending the
+complete vocabulary, action examples, and contracts into candidate discovery is
+answer hinting. Generalization work must therefore separate open discovery from
+after-action normalization in addition to externalizing structured shortcuts.
+
+## Agreed Next-Stage Design (Not Implemented)
+
+The next stage replaces answer-guided semantic validation with a smaller
+VLM-observed action-dependency loop:
+
+- candidate discovery sees the current page, not concrete profile facts,
+  action contracts, an expected workflow, or the offline PDDL goal;
+- one initial scan per new semantic location returns concrete actions and
+  same-location `requires` links;
+- the local candidate pool derives readiness from successful prerequisites and
+  prioritizes executable dependency-chain actions;
+- after-action observation returns only `outcome`, `location_change`, and short
+  visible `evidence`;
+- the local runtime, rather than the VLM, generates stable completion predicates
+  for actions confirmed successful;
+- only successful actions and successful dependency edges enter the
+  planner-facing graph and PDDL;
+- the new path bypasses profile-driven targeted scans, supplement scans, and the
+  current multi-purpose Visual Delta fact schema.
+
+This is an approved design, not current runtime behavior. The implementation and
+acceptance details are in
+`docs/superpowers/specs/2026-08-18-location-candidate-dependency-integration-design.zh-CN.md`.
 
 ## Current Status and Next Step
 
 As of 2026-08-13, the location-scoped implementation, resumable graph and budgets,
-non-mutating replay, and offline Minimal Semantic PDDL acceptance path are merged.
-The next step is one bounded real Practice Shopping experiment. It should inspect
-candidate breadth and deduplication at `shopping`, verify `cart_has_items`, reach a
-deeper checkout frontier through replay, and confirm that SafeSym can parse and
-solve the resulting domain/problem.
+non-mutating replay, live Practice Shopping exploration, Minimal Semantic PDDL,
+and SafeSym solve path are established. The current phase has proven feasibility.
+The next phase should not add a second website-specific answer profile first. It
+should implement the minimal candidate-dependency loop on Practice Shopping,
+then measure whether the explorer still discovers correct capabilities and
+produces causal, solvable PDDL without the answer hints.
 
 ## Related Documents
 

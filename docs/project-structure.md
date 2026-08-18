@@ -48,6 +48,13 @@ generality improvement is moving mappings such as `cart_count -> cart_has_items`
 into configurable profiles. The PDDL compiler, candidate memory, replay, and
 controller do not branch on shopping-specific action or location names.
 
+The complete profile context currently also enters the Visual Affordance prompt
+and includes a closed location set, fact terms, action examples, and contracts.
+That is accurate active behavior and a confirmed source of answer hinting. The
+approved next-stage design uses a minimal action-dependency response for
+candidate discovery and a minimal outcome/location response after execution.
+Candidate/profile decoupling is not implemented yet.
+
 The old upstream `explore` runtime and the old `WebObservedGraph` exploration
 stack are not active code paths.
 
@@ -123,14 +130,21 @@ The VLM affordance result is a candidate hypothesis. The local verifier and
 after-action observation determine whether an edge is a verified transition;
 the candidate list alone does not establish a capability.
 
-Profile facts define the experiment's accepted closed vocabulary for locations,
-capability facts, and business facts; they are not the complete website state.
-Visual Delta receives the action, before/after screenshots, current location
-anchor, and experiment profile context. Its semantic output must pass
-`validate_profile_semantic_observation`. An accepted coarse observation may enter
-`SemanticPlanningGraph`, while business-fact candidates still require observed
-change and local verification. Raw responses and rejection reasons remain in the
-edge trace. A technical state label does not define graph identity or PDDL facts.
+Profile facts currently define the experiment's accepted closed vocabulary for
+locations, capability facts, and business facts. The full profile context is
+provided to both Visual Affordance and Visual Delta. Visual Delta output must pass
+`validate_profile_semantic_observation`; business-fact candidates still require
+observed change and local verification. Raw responses and rejection reasons remain
+in the edge trace. A technical state label does not define graph identity or PDDL
+facts.
+
+The approved but not yet implemented next-stage boundary is that Visual
+Affordance discovers concrete actions and same-location `requires` links without
+concrete profile facts, action examples, contracts, expected flow, or the PDDL
+goal. After-action observation returns only `outcome`, `location_change`, and
+short visible evidence. The local runtime generates stable completion predicates
+for successful actions. The new path bypasses targeted and supplement scans and
+does not ask the VLM to emit planner-facing facts.
 
 Main functions/classes:
 
