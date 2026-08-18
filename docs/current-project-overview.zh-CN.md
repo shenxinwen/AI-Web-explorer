@@ -31,22 +31,19 @@
 
 ```text
 观察当前页面
-  -> VLM 生成少量主要候选动作
-  -> 按语义位置建立候选池
-  -> 本地选择该位置尚未完成的动作
+  -> VLM 生成明确动作及同位置 requires
+  -> 新语义位置首次到达时建立一次候选池
+  -> 本地选择前提已成功的尚未完成动作
   -> Stagehand 执行一个动作
-  -> 比较动作前后的 DOM、结构化签名和截图
-  -> 记录普通能力事实、业务事实或位置变化
-  -> 业务事实变化时做一次定向候选扫描
-  -> 新位置第一次到达时生成该位置的候选池
+  -> VLM 观察 outcome、location_change 和可见 evidence
+  -> 本地记录位置限定完成事实及可选位置变化
   -> 当前路径耗尽时，通过 reset + stored actions 重放到其他 frontier
   -> 达到有界终止条件后投影 Minimal Semantic PDDL
 ```
 
 PDDL goal 或 SafeSym plan 不会反向传入候选生成和动作排序。探索仍然不是一条固定任务脚本。
-但当前实现会把完整 experiment profile context 传给候选扫描和动作后 Visual Delta，且 profile
-包含位置、事实、动作示例和动作契约。它虽然没有规定执行顺序，却会向 VLM 暗示预期能力；
-这是当前阶段已确认的泛化性限制，不能继续表述为“profile 只做无偏的统一命名”。
+当前最小依赖主路径不向 initial scan 传入 experiment profile；旧兼容路径仍可使用 profile 和
+Visual Delta，因此相关硬编码尚未从代码库删除，但不再代表 active pipeline。
 
 ## 三类规划状态
 

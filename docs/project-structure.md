@@ -381,6 +381,8 @@ web-kobe-pddl
 
 ## Important Data Flow
 
+The active minimal dependency path is:
+
 ```text
 WebKobeExplorer.explore_one_step
   -> adapter.observe_state
@@ -388,17 +390,16 @@ WebKobeExplorer.explore_one_step
   -> SemanticAssistor.describe_state
   -> GraphManager.identify_or_add_node
   -> optional embedding source match
-  -> optional summarize_visual_affordances
-  -> LocationExplorationMemory merges initial/targeted/supplement candidates
-  -> local selection of one unfinished (location, action)
+  -> one initial summarize_visual_affordances scan per new location
+  -> LocationExplorationMemory stores actions and same-location requires
+  -> local selection of one unfinished action whose requirements succeeded
   -> adapter.execute
   -> capture after state/screenshots when execution succeeds or the known
      Stagehand tool_choice error is reported
-  -> summarize_visual_delta (raw observation trace only) /
-     verify_planning_delta
+  -> minimal outcome/location_change/evidence observation
   -> GraphManager.build_planning_transition
   -> GraphManager.add_edge
-  -> LocationExplorationCoordinator records outcome and business-fact changes
+  -> LocationExplorationCoordinator records outcome and completion state
   -> select_frontier + FrontierReplayRunner when the current path is exhausted
   -> Raw Graph/evidence sidecar observation
   -> controller invokes the optional completed-step checkpoint
@@ -408,6 +409,10 @@ WebKobeExplorer.explore_one_step
   -> compile_minimal_semantic_domain / compile_minimal_semantic_problem
   -> SafeSym parse / solve
 ```
+
+The legacy compatibility path may still merge targeted/supplement candidates
+and call Visual Delta plus the structured planning-fact verifier. It is not the
+active minimal dependency flow above.
 
 For `Thinking mode does not support this tool_choice`, the explorer continues
 after-state observation. A URL/signature/visual change records a successful
