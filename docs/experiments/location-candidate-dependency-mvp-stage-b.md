@@ -18,6 +18,7 @@ Branch: codex/location-candidate-dependency-mvp
 4. 8082e82 — feat: compile verified action dependencies to PDDL
 5. 864703a — test: preserve legacy affordance read compatibility
 6. b4ca8b8 — fix: keep initial action prompts profile independent
+7. 492e360 — docs: report clean location dependency MVP migration
 
 The last two commits are small post-Task-4 test/prompt-isolation corrections;
 they do not add a new runtime module or change the Task 1–4 boundaries.
