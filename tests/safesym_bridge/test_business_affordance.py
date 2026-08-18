@@ -120,6 +120,13 @@ def test_initial_scan_parses_minimal_action_dependencies_without_planning_inputs
         assert "supporting_facts" not in prompt.lower()
         assert "confidence" not in prompt.lower()
         assert "directly executable" not in instruction
+        assert "required fields" in instruction
+        assert "disabled controls" in instruction
+        assert "visible workflow structure" in instruction
+        assert "login" in instruction
+        assert "checkout" in instruction
+        assert "domain common sense" not in instruction
+        assert "typical workflow order" not in instruction
         assert current_screenshot_path == "current.png"
         return json.dumps(
             {
