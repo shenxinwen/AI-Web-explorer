@@ -95,6 +95,7 @@ def test_initial_scan_parses_minimal_action_dependencies_without_planning_inputs
         goal="Explore visible business capabilities.",
         current_screenshot_path="current.png",
         max_actions=8,
+        semantic_profile_context={"profile_id": "must_not_be_prompted"},
     )
 
     def provider(prompt, *, current_screenshot_path):
