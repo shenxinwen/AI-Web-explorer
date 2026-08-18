@@ -421,10 +421,34 @@ def test_summarize_visual_affordances_normalizes_action_ids_and_requires():
     assert result.trace.error_type == "response_contract_error"
 
 
-def test_summarize_visual_affordances_ignores_removed_candidate_fields():
+@pytest.mark.parametrize(
+    "response",
+    [
+        '{"regions":[{"actions":[{"intent":"legacy_action","target":"button"}]}]}',
+        '{"business_affordances":[{"action_name":"legacy_action","target_hint":"button"}]}',
+    ],
+)
+def test_initial_scan_rejects_legacy_candidate_shapes(response):
     request = VisualAffordanceRequest(
         goal="Explore visible business capabilities.",
         current_screenshot_path="current.png",
+    )
+
+    result = summarize_visual_affordances(
+        request,
+        provider=lambda *_args, **_kwargs: response,
+    )
+
+    assert result.trace.status == "failed"
+    assert result.trace.error_type == "response_contract_error"
+    assert result.business_affordances == []
+
+
+def test_non_initial_scan_keeps_legacy_affordance_read_compatibility():
+    request = VisualAffordanceRequest(
+        goal="Explore visible business capabilities.",
+        current_screenshot_path="current.png",
+        scan_kind="supplement",
     )
 
     def provider(prompt, *, current_screenshot_path):

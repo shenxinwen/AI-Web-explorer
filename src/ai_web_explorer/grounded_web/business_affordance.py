@@ -477,30 +477,38 @@ def summarize_visual_affordances(
     is_targeted = scan_kind == "targeted"
     requires_by_action_id: dict[str, list[str]] = {}
     if is_initial:
-        if isinstance(parsed.get("actions"), list):
-            affordances, requires_by_action_id, contract_error = (
-                _initial_actions_from_response(
-                    parsed,
-                    max_actions=request.max_actions,
-                )
+        if not isinstance(parsed.get("actions"), list):
+            return VisualAffordanceResult(
+                business_affordances=[],
+                requires_by_action_id={},
+                trace=_trace(
+                    prompt=prompt,
+                    raw_response=raw_response,
+                    llm_response=parsed,
+                    status="failed",
+                    error_type="response_contract_error",
+                    error_message="Initial response must contain an actions array.",
+                ),
             )
-            if contract_error is not None:
-                return VisualAffordanceResult(
-                    business_affordances=[],
-                    requires_by_action_id={},
-                    trace=_trace(
-                        prompt=prompt,
-                        raw_response=raw_response,
-                        llm_response=parsed,
-                        status="failed",
-                        error_type="response_contract_error",
-                        error_message=contract_error,
-                    ),
-                )
-        else:
-            affordances = _affordances_from_response(
+
+        affordances, requires_by_action_id, contract_error = (
+            _initial_actions_from_response(
                 parsed,
                 max_actions=request.max_actions,
+            )
+        )
+        if contract_error is not None:
+            return VisualAffordanceResult(
+                business_affordances=[],
+                requires_by_action_id={},
+                trace=_trace(
+                    prompt=prompt,
+                    raw_response=raw_response,
+                    llm_response=parsed,
+                    status="failed",
+                    error_type="response_contract_error",
+                    error_message=contract_error,
+                ),
             )
     else:
         affordances = []
