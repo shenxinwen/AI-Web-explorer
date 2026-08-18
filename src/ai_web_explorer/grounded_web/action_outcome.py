@@ -81,17 +81,20 @@ def build_action_outcome_prompt(action_description: str) -> str:
         {
             "instruction": (
                 "Compare the before and after screenshots for this one executed "
-                "web action. Return success only when the visible result supports "
-                "the action, failed when the visible action failed, and uncertain "
-                "when evidence is insufficient. Decide whether the before and "
-                "after show the same semantic location. Filtering, sorting, "
-                "search, pagination, counts, selections, and form values usually "
-                "remain the same location; a stable page, modal, drawer, detail "
-                "view, workflow step, or result interface becoming active is a "
-                "location change. A brief toast, loading state, dropdown, or "
-                "temporary acknowledgement does not change location. Return only "
-                "the three fields in the output schema. Do not return facts, "
-                "completion fields, roles, confidence, or planning data."
+                "action. Prefer a definite success or failed judgment when the "
+                "screenshots provide visible evidence; use uncertain only when "
+                "the images are missing, not comparable, or conflicting. Decide "
+                "whether the before and after show the same active interaction "
+                "surface. Field values, counts, selections, filtering, search, "
+                "sorting, pagination, and styling remain the same location. If "
+                "the same main heading, controls, and page layout remain active "
+                "and only items change, location_change must be false. A stable "
+                "page, modal, drawer, detail view, workflow step, or result "
+                "interface becoming active is a location change. A brief toast, "
+                "loading state, dropdown, or temporary acknowledgement does not "
+                "change location. Return only the three fields in the output "
+                "schema. Do not return facts, completion fields, roles, "
+                "confidence, or planning data."
             ),
             "action_description": str(action_description).strip(),
             "output_schema": {
@@ -99,6 +102,53 @@ def build_action_outcome_prompt(action_description: str) -> str:
                 "location_change": True,
                 "evidence": ["short visible evidence"],
             },
+            "few_shot_examples": [
+                {
+                    "before": "A record list is visible with several rows.",
+                    "after": "The same list remains visible with fewer rows after filtering.",
+                    "answer": {
+                        "outcome": "success",
+                        "location_change": False,
+                        "evidence": ["The same record-list surface remains active."],
+                    },
+                },
+                {
+                    "before": "A table is visible with its current row order.",
+                    "after": "The same table remains visible with rows in a new order after sorting.",
+                    "answer": {
+                        "outcome": "success",
+                        "location_change": False,
+                        "evidence": ["Only the table ordering changed."],
+                    },
+                },
+                {
+                    "before": "A list page is visible behind an open export dialog.",
+                    "after": "A stable export dialog is active over the list page.",
+                    "answer": {
+                        "outcome": "success",
+                        "location_change": True,
+                        "evidence": ["The export dialog is now the active surface."],
+                    },
+                },
+                {
+                    "before": "A form is visible with an empty required field.",
+                    "after": "The same form remains visible and shows a validation error.",
+                    "answer": {
+                        "outcome": "failed",
+                        "location_change": False,
+                        "evidence": ["The form remains active and shows validation feedback."],
+                    },
+                },
+                {
+                    "before": "A project-detail form is visible with editable fields.",
+                    "after": "The same project-detail form remains visible with completed values.",
+                    "answer": {
+                        "outcome": "success",
+                        "location_change": False,
+                        "evidence": ["The same detail form remains the active surface."],
+                    },
+                },
+            ],
         },
         ensure_ascii=False,
         indent=2,

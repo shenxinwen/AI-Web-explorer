@@ -69,13 +69,39 @@ def test_action_outcome_prompt_has_exactly_three_response_fields():
         "location_change",
         "evidence",
     }
-    assert "same semantic location" in payload["instruction"].lower()
+    assert "same active interaction surface" in payload["instruction"].lower()
     assert "filtering" in payload["instruction"].lower()
     assert "search" in payload["instruction"].lower()
     assert "sorting" in payload["instruction"].lower()
     assert "pagination" in payload["instruction"].lower()
+    assert "brief toast" in payload["instruction"].lower()
     assert "completion_facts" not in prompt
     assert "semantic_profile_context" not in prompt
+
+
+def test_action_outcome_prompt_contains_domain_neutral_few_shots():
+    payload = json.loads(build_action_outcome_prompt("Apply a visible filter"))
+
+    assert set(payload) == {
+        "instruction",
+        "action_description",
+        "output_schema",
+        "few_shot_examples",
+    }
+    assert set(payload["output_schema"]) == {
+        "outcome",
+        "location_change",
+        "evidence",
+    }
+    assert len(payload["few_shot_examples"]) == 5
+    instruction = payload["instruction"].lower()
+    assert "prefer a definite success or failed judgment" in instruction
+    assert "same main heading, controls, and page layout" in instruction
+    assert "location_change must be false" in instruction
+    examples_text = json.dumps(payload["few_shot_examples"], ensure_ascii=False)
+    for token in ("filter", "sorting", "export", "form", "detail"):
+        assert token in examples_text.lower()
+    assert '"outcome": "uncertain"' not in examples_text
 
 
 def test_action_outcome_summary_preserves_raw_trace_and_errors():
