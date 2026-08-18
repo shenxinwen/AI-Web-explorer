@@ -294,11 +294,13 @@ Main responsibilities:
 - run PDDL readiness checks;
 - run SafeSym parser, safety injection, and planner smoke checks.
 
-This layer is deterministic and does not call LLM/VLM. Minimal Semantic
-projection may emit same-location capability effects, but ordinary completion
-facts do not automatically become preconditions for other actions. Business
-preconditions come only from verified profile facts. Failed, conflicting, or
-semantically unusable edges are excluded with projection-report reasons.
+This layer is deterministic and does not call LLM/VLM. The active minimal path
+emits a location-scoped completion fact for each successful action; only an
+explicit same-location `requires` link promotes the referenced completion fact
+to another action's precondition. Unrelated completion facts are not promoted.
+The legacy semantic path may additionally consume verified profile facts.
+Failed, conflicting, or semantically unusable edges are excluded with
+projection-report reasons.
 
 Main functions/classes:
 

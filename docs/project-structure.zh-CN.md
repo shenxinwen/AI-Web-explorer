@@ -109,7 +109,7 @@ Stagehand 不应该决定 graph identity、planning facts 或 PDDL 语义。
 - `src/ai_web_explorer/grounded_web/openai_visual_delta.py`
 - `src/ai_web_explorer/grounded_web/planning_fact_verifier.py`
 
-主要职责：
+观察层的 active 与兼容职责包括：
 
 - 构造确定性的 state snapshot 和 signature；
 - 为人工审查和 embedding 生成 state summary；
@@ -121,8 +121,8 @@ Stagehand 不应该决定 graph identity、planning facts 或 PDDL 语义。
 VLM affordance 结果只是候选假设。候选列表本身不等于已验证能力；只有本地验证和动作后
 观察支持的成功边，才确认为已验证转换。
 
-profile facts 位于这一层。当前实现把它们作为实验认可的位置、普通能力和业务事实闭集，并把
-完整 profile context 同时传给 Visual Affordance 和 Visual Delta。Visual Delta 语义输出必须经过
+profile facts 位于这一层。旧兼容路径把它们作为实验认可的位置、普通能力和业务事实闭集，并把
+完整 profile context 传给 Visual Affordance 和 Visual Delta。Visual Delta 语义输出必须经过
 `validate_profile_semantic_observation` 闭集校验；候选业务事实还必须由动作后变化与本地 verifier
 确认。原始响应和拒绝原因始终保留在 raw edge trace 中。节点可使用 Visual Affordance 提供的
 技术性 state label，但 label 不决定 graph identity 或 PDDL facts。

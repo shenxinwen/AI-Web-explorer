@@ -87,8 +87,9 @@ payment_info_complete
 order_submitted
 ```
 
-业务前提只来自已经验证的 profile/structured facts。候选动作的
-`supporting_facts`、普通完成事实或全部 active facts 不能自动升级成 PDDL 前提。
+当前最小依赖路径只把 initial scan 明确给出的同位置 `requires` 投影为动作前提，并且对应
+前置动作必须真实执行成功。无关完成事实、`supporting_facts` 或全部 active facts 不能自动
+升级成 PDDL 前提。旧兼容路径仍可使用已经验证的 profile/structured facts。
 
 ## 位置内动作去重
 
@@ -153,25 +154,32 @@ checkpoint 保存图、候选记忆、累计正式动作预算和 replay 指标�
 
 ## 当前 PDDL 验收标准
 
-理想产物同时表达位置和事实。例如：
+当前最小依赖路径同时表达位置和位置限定的动作完成事实。例如：
 
 ```lisp
-(:action add_to_cart
+(:action add_product_to_cart
   :precondition (and (at_shopping))
-  :effect (and (at_shopping) (cart_has_items))
+  :effect (and
+    (at_shopping)
+    (completed_shopping_add_product_to_cart)
+  )
 )
 
 (:action open_checkout
-  :precondition (and (at_shopping) (cart_has_items))
+  :precondition (and
+    (at_shopping)
+    (completed_shopping_add_product_to_cart)
+  )
   :effect (and
     (not (at_shopping))
     (at_checkout)
+    (completed_shopping_open_checkout)
   )
 )
 ```
 
-`cart_has_items` 在 STRIPS frame semantics 下会自然保持，除非动作明确删除它；不需要把已成立
-事实再次写成动作 effect。
+`completed_shopping_add_product_to_cart` 来自已验证成功动作，并且只因为 `open_checkout` 的
+显式同位置 `requires` 才成为其前提。其他已完成动作不会自动进入该动作的 precondition。
 
 `domain.pddl` 描述已经探索并验证的动作、前提和效果；`problem.pddl` 描述起始位置、
 初始业务事实和目标。排序、筛选等可以出现在 domain 中，但如果它们不是结账必要条件，
@@ -214,7 +222,7 @@ Practice Shopping 已完成一轮使用当前主线的真实有界实验，不�
 2. `filter_products` 的前后截图明确显示商品从 10 个变为 5 个，但 Visual Delta 同时把
    `products_filtered` 写入 added/removed，且没有写入 `completion_facts`，最终产生无效果的
    PDDL action；普通能力完成标志仍受模型字段稳定性影响。
-3. 当前 profile 是闭集且会进入候选 prompt，因而既承担统一表述，又部分承担能力提示和
+3. 当时使用的旧 profile 路径是闭集且会进入候选 prompt，因而既承担统一表述，又部分承担能力提示和
    约束答案；这不符合下一阶段对“真正探索”的要求。
 4. 无 profile 的 SauceDemo 登录 smoke 能自主读取公开测试凭据并成功进入商品页，证明候选发现
    和 Stagehand 执行具备跨站能力；但登录页和商品页都被粗略命名为 `swag_labs`，说明开放语义
@@ -250,7 +258,8 @@ Practice Shopping 已完成一轮使用当前主线的真实有界实验，不�
 - 旧 ecommerce benchmark 入口中的固定 checkout 实验步骤。
 
 测试数据和受控下单 URL 属于实验配置或安全边界，可以保留。profile 中用于统一语言的分层
-词表也可以保留，但当前把完整词表、动作示例和契约交给候选发现的做法会产生答案提示。
+词表也可以保留；把完整词表、动作示例和契约交给候选发现是旧兼容路径的答案提示问题，
+当前最小依赖主路径已绕开该输入。
 真正需要后续泛化的不只是把 `cart_count -> cart_has_items` 迁入外部配置，还包括把“自由发现”
 与“动作后归一化”明确拆开。
 
