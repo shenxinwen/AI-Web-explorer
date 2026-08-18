@@ -210,7 +210,7 @@ def _business_explorer(
 
 @pytest.mark.anyio
 async def test_minimal_active_path_uses_outcome_without_targeted_or_supplement_scan():
-    adapter = FakeAdapter()
+    adapter = SamePageBusinessChangeAdapter()
     memory = LocationExplorationMemory()
     coordinator = LocationExplorationCoordinator(memory=memory)
     candidate_scan_kinds = []
@@ -250,13 +250,16 @@ async def test_minimal_active_path_uses_outcome_without_targeted_or_supplement_s
         location_exploration_coordinator=coordinator,
     )
 
-    await explorer.explore_one_step()
+    graph = await explorer.explore_one_step()
 
     assert candidate_scan_kinds == ["initial"]
     assert len(outcome_calls) == 1
     assert memory.pool_for("listing").candidates["add_to_cart_product"].status == (
         "success"
     )
+    assert len(graph.edges) == 1
+    assert graph.edges[0].execution_trace.success is True
+    assert graph.meta["last_step_semantic_progress"] is True
 
 
 @pytest.mark.anyio

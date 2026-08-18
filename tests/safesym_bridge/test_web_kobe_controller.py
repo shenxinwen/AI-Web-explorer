@@ -681,6 +681,29 @@ async def test_controller_stops_after_repeated_steps_without_new_graph_informati
 
 
 @pytest.mark.anyio
+async def test_controller_resets_no_progress_after_new_successful_action_record():
+    explorer = FakeExplorer(
+        [
+            _graph(completed=1, meta={"last_step_semantic_progress": False}),
+            _graph(completed=2, meta={"last_step_semantic_progress": False}),
+            _graph(completed=3, meta={"last_step_semantic_progress": True}),
+            _graph(completed=4, meta={"last_step_semantic_progress": False}),
+        ]
+    )
+    controller = WebKobeExplorationController(
+        explorer,
+        max_consecutive_unproductive_steps=3,
+    )
+
+    result = await controller.run(max_steps=4)
+
+    assert explorer.calls == 4
+    assert result.summary.consecutive_unproductive_steps == 1
+    assert result.graph.meta["consecutive_unproductive_steps"] == 1
+    assert result.summary.semantic_progress_count == 1
+
+
+@pytest.mark.anyio
 async def test_controller_stops_when_terminal_condition_matches():
     explorer = FakeExplorer(
         [

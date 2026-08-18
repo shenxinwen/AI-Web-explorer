@@ -465,7 +465,9 @@ class LocationExplorationCoordinator:
         business_removed = list(business_removed)
         pool = self.memory.pool_for(location_before)
         attempt: CandidateAttemptOutcome | None = None
+        candidate_was_terminal = False
         if action_id in pool.candidates:
+            candidate_was_terminal = pool.candidates[action_id].terminal
             attempt = self.memory.record_attempt(
                 location_before,
                 action_id,
@@ -485,6 +487,11 @@ class LocationExplorationCoordinator:
             or completion_facts
             or added
             or removed
+            or (
+                attempt is not None
+                and attempt.status == "success"
+                and not candidate_was_terminal
+            )
         )
         if new_location:
             step_kind = "location_transition"

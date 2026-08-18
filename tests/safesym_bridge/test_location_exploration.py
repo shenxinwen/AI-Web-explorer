@@ -141,6 +141,35 @@ def test_second_no_change_attempt_closes_candidate():
     assert memory.next_candidate("shopping") is None
 
 
+def test_action_outcome_progress_requires_new_successful_candidate_record():
+    memory = LocationExplorationMemory()
+    memory.merge_scan("shopping", [_affordance("filter_products")], kind="initial")
+    coordinator = LocationExplorationCoordinator(memory=memory)
+
+    first = coordinator.record_action_outcome(
+        location_before="shopping",
+        location_after="shopping",
+        action_id="filter_products",
+        observable_change=True,
+    )
+    repeated = coordinator.record_action_outcome(
+        location_before="shopping",
+        location_after="shopping",
+        action_id="filter_products",
+        observable_change=True,
+    )
+    no_op = coordinator.record_action_outcome(
+        location_before="shopping",
+        location_after="shopping",
+        action_id="missing_action",
+        observable_change=False,
+    )
+
+    assert first.has_progress is True
+    assert repeated.has_progress is False
+    assert no_op.has_progress is False
+
+
 def test_candidate_preflight_accepts_exact_visible_canonical_target():
     coordinator = LocationExplorationCoordinator()
     affordance = BusinessAffordance(
