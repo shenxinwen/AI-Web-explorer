@@ -209,18 +209,14 @@ def _fixture_provider(scan_calls: list[tuple[str, str]]):
         }[location]
         return json.dumps(
             {
-                "location_id": location,
-                "regions": [
+                "actions": [
                     {
-                        "actions": [
-                            {
-                                "intent": action_id,
-                                "label": action_id.replace("_", " "),
-                                "confidence": 0.9,
-                            }
-                            for action_id in initial_actions
-                        ]
+                        "action_id": action_id,
+                        "description": action_id.replace("_", " "),
+                        "target": f"{action_id} control",
+                        "requires": [],
                     }
+                    for action_id in initial_actions
                 ],
             }
         )
