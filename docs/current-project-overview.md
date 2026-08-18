@@ -29,24 +29,21 @@ The active runtime is location-scoped bounded open exploration:
 
 ```text
 observe the current page
-  -> let the VLM propose a small set of important actions
-  -> create a candidate pool for the semantic location
-  -> locally select an unfinished action for that location
+  -> let the VLM propose concrete actions and same-location requires
+  -> create a candidate pool once for the semantic location
+  -> locally select an unfinished action whose requirements succeeded
   -> let Stagehand execute one action
-  -> compare DOM, structured signature, and screenshots
-  -> record a capability fact, business fact, or location transition
-  -> run a targeted scan after business-fact changes
+  -> observe outcome, location_change, and visible evidence
+  -> record a location-scoped completion fact and optional location transition
   -> create an initial pool when a new location is first reached
   -> reset and replay stored actions when another frontier must be restored
   -> stop under bounded limits and project Minimal Semantic PDDL
 ```
 
 PDDL goals and SafeSym plans are not fed back into candidate generation or action
-ranking, so exploration is not a fixed task script. The current implementation
-does, however, pass the complete experiment-profile context to candidate scans
-and Visual Delta. Because that context includes locations, facts, action examples,
-and contracts, it can hint at expected capabilities even without prescribing an
-execution order. This is now a documented generality limitation.
+ranking, so exploration is not a fixed task script. The active minimal path does
+not pass experiment-profile context into its initial candidate scan. The older
+profile/Visual Delta route remains in the repository as a compatibility path.
 
 ## Planning State
 
@@ -55,15 +52,15 @@ The planner-facing model separates three kinds of state:
 - **Location facts** such as `at_shopping`, `at_checkout`, and
   `at_confirmation`. A new location is created only for a meaningful business
   surface change.
-- **Capability facts** such as `products_sorted`, `products_filtered`, and
-  `products_found`. They describe verified site functionality and do not
-  automatically become preconditions for other actions.
+- **Completion facts** are generated locally for actions observed to succeed.
+  They become another action's precondition only when that action explicitly
+  listed the successful action in its same-location `requires`.
 - **Business facts** such as `cart_has_items`, `checkout_info_complete`, and
   `order_submitted`. These may enable or constrain later actions.
 
-Business preconditions come only from verified profile/structured facts.
-Supporting facts, ordinary completion facts, and the complete active-fact set are
-not automatically promoted into PDDL preconditions.
+The legacy semantic path can still consume verified profile/structured facts;
+the minimal dependency path does not promote supporting or unrelated completion
+facts into PDDL preconditions.
 
 ## Location-scoped Deduplication and Scanning
 
@@ -72,9 +69,8 @@ action is not selected again at the same location, but the same action may still
 be explored at a different location. Failure and no-change retries are bounded.
 
 When an action does not change location, the current candidate pool is inherited.
-A full candidate scan is reserved for the first visit to a new location. A
-business-fact change triggers a targeted scan for newly enabled actions, and a
-supplement scan is used only under bounded pool-exhaustion rules.
+The active minimal path scans only on the first visit to a new location. It does
+not trigger targeted or supplement scans; those remain legacy compatibility code.
 
 ## Replay and Resume
 
@@ -192,7 +188,7 @@ complete vocabulary, action examples, and contracts into candidate discovery is
 answer hinting. Generalization work must therefore separate open discovery from
 after-action normalization in addition to externalizing structured shortcuts.
 
-## Agreed Next-Stage Design (Not Implemented)
+## Current Minimal Action-Dependency Loop
 
 The next stage replaces answer-guided semantic validation with a smaller
 VLM-observed action-dependency loop:
@@ -212,18 +208,19 @@ VLM-observed action-dependency loop:
 - the new path bypasses profile-driven targeted scans, supplement scans, and the
   current multi-purpose Visual Delta fact schema.
 
-This is an approved design, not current runtime behavior. The implementation and
-acceptance details are in
+This path is connected to the location-scoped runtime and has offline regression
+coverage. A fresh no-answer-hints Practice Shopping VLM run and its SafeSym/
+planner acceptance remain pending. Implementation and acceptance details are in
 `docs/superpowers/specs/2026-08-18-location-candidate-dependency-integration-design.zh-CN.md`.
 
 ## Current Status and Next Step
 
-As of 2026-08-13, the location-scoped implementation, resumable graph and budgets,
+As of 2026-08-18, the location-scoped implementation, resumable graph and budgets,
 non-mutating replay, live Practice Shopping exploration, Minimal Semantic PDDL,
 and SafeSym solve path are established. The current phase has proven feasibility.
 The next phase should not add a second website-specific answer profile first. It
-should implement the minimal candidate-dependency loop on Practice Shopping,
-then measure whether the explorer still discovers correct capabilities and
+should validate the implemented minimal candidate-dependency loop on Practice
+Shopping, then measure whether the explorer still discovers correct capabilities and
 produces causal, solvable PDDL without the answer hints.
 
 ## Related Documents

@@ -66,7 +66,7 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
             "Inspect the current screenshot and return all clearly visible "
             "semantic actions that can be described precisely. First cover each "
             "distinct functional family once, then consider another action from "
-            "a family. Return at most 8 actions. Use a stable action_id for "
+            f"a family. Return at most {request.max_actions} actions. Use a stable action_id for "
             "each action, a concise execution description, and the visible target. "
             "Requires may reference only another action in this same response and "
             "must represent a direct prerequisite supported by visible required "
@@ -332,6 +332,8 @@ def _initial_actions_from_response(
     raw_items = parsed.get("actions")
     if not isinstance(raw_items, list):
         return [], {}, "initial response actions must be an array"
+    if len(raw_items) > max_actions:
+        return [], {}, "initial response exceeds the action limit"
 
     records: dict[str, tuple[str, str, list[str]]] = {}
     ordered_ids: list[str] = []
@@ -370,7 +372,6 @@ def _initial_actions_from_response(
         records[action_id] = (description, target, requires)
         ordered_ids.append(action_id)
 
-    ordered_ids = ordered_ids[:max_actions]
     requires_by_action_id = {
         action_id: list(records[action_id][2]) for action_id in ordered_ids
     }

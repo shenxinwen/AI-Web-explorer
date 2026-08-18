@@ -368,6 +368,16 @@ be run with local browser execution permission.
 
 ## Current Boundaries
 
+The location-scoped active path now has a minimal dependency-driven contract:
+one strict initial screenshot response supplies `actions` with same-location
+`requires`; each execution is followed by only `outcome`, `location_change`,
+and visible `evidence`. Local memory schedules satisfied dependencies and
+creates location-scoped completion predicates for successful actions. Missing,
+invalid, cyclic, or over-limit dependency responses fail closed, and
+failed/uncertain outcomes do not create planner-facing state or locations.
+Offline bridge regression covers this path; a fresh Practice Shopping VLM run
+followed by SafeSym and planner acceptance is still pending.
+
 - `grounded_web` owns browser observation, operation, state deltas, and graph
   construction.
 - `safesym_bridge` consumes graph artifacts and writes PDDL/smoke outputs.

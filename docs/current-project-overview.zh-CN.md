@@ -104,11 +104,9 @@ order_submitted
 同一位置内成功执行过的动作不会再次选择。失败或无明显变化的动作可以按配置重试，
 达到上限后不再占用探索预算。相同动作如果真实存在于另一个位置，仍然可以在那里探索。
 
-动作后若位置未变，系统继承当前位置的候选池，不进行完整重新扫描。只有以下情况会扫描：
-
-- 第一次到达一个新位置时进行 initial scan；
-- 业务事实发生变化时进行 targeted scan，询问是否出现新动作；
-- 候选池确实需要补充时进行有界 supplement scan。
+动作后若位置未变，系统继承当前位置的候选池，不进行完整重新扫描。当前最小动作依赖路径在
+第一次到达新位置时只做一次 initial scan，返回动作及同位置 `requires`；不再因业务事实变化
+触发 targeted scan，也不做 supplement scan。旧扫描机制仍为兼容路径保留在代码中。
 
 ## 动作结果与节点规则
 
@@ -262,7 +260,7 @@ Practice Shopping 已完成一轮使用当前主线的真实有界实验，不�
 当前开放探索主路径没有写死“排序 -> 筛选 -> 加购 -> 结账”的执行顺序，
 也没有在 PDDL 编译器中根据 `shopping`、`cart` 或 `checkout` 名称分支。
 
-## 下一阶段已确认的设计（尚未实现）
+## 当前最小动作依赖闭环
 
 下一阶段不再让 VLM 同时承担完整事实归纳和规划建模，而采用更小的“动作及依赖观察”闭环：
 
@@ -274,20 +272,22 @@ Practice Shopping 已完成一轮使用当前主线的真实有界实验，不�
 - 只有真实执行成功的动作和依赖关系进入 planner-facing graph 与 PDDL；
 - 新路径绕开 profile 驱动的 targeted scan、supplement scan 和当前多职责 Visual Delta 事实结构。
 
-这套方案已经完成设计对齐，但尚未成为当前 runtime。详细实现边界和验收标准见
+这套方案已接入 location-scoped active path，并通过离线回归；尚未完成去掉答案提示后的
+Practice Shopping 真实 VLM 探索和新产物的 SafeSym/规划验收。详细实现边界和验收标准见
 `docs/superpowers/specs/2026-08-18-location-candidate-dependency-integration-design.zh-CN.md`。
 
 ## 当前阶段判断
 
-截至 2026-08-13：
+截至 2026-08-18：
 
 - location-scoped 开放探索的实现和回归测试已经合并；
 - 可恢复图、候选池、累计预算和 non-mutating replay 已建立；
 - Practice Shopping 真实实验已经跑通探索、业务事实验证、PDDL、SafeSym 和 planner；
 - 当前产物证明 pipeline 可行，但同时证明“profile 辅助验证”的阶段尚未等同于真正开放的
   语义探索；
-- 下一步不应立即增加第二个网站的专属答案 profile，而应先在 Practice Shopping 实现最小
-  动作依赖闭环，验证去掉答案提示后仍能发现正确能力并生成因果正确、可求解的 PDDL。
+- 最小动作依赖闭环已离线接入；下一步不应立即增加第二个网站的专属答案 profile，而应先在
+  Practice Shopping 做真实 VLM 验收，验证去掉答案提示后仍能发现正确能力并生成因果基本正确、
+  可被 SafeSym 消费和求解的 PDDL。
 
 ## 相关文档
 

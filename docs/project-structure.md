@@ -10,12 +10,11 @@ The repository is centered on SafeSym-oriented, location-scoped open exploration
 
 ```text
 browser observation + VLM initial scan
-  -> LocationExplorationMemory creates a location candidate pool
-  -> local selection of an unfinished (location, action)
+  -> LocationExplorationMemory stores actions and same-location requires
+  -> local selection of an unfinished action whose requirements succeeded
   -> Stagehand executes one action
-  -> DOM / signature / screenshot after-action observation
-  -> record a capability fact, business fact, or semantic-location transition
-  -> targeted scan after a business-fact change
+  -> screenshot outcome / location_change / evidence observation
+  -> record a location-scoped completion fact and optional location transition
   -> initial scan after first reaching a new location
   -> reset + stored-action replay when another frontier must be restored
   -> checkpoint graph, location memory, and cumulative budgets
@@ -32,9 +31,10 @@ planning facts, scan state, or candidate attempt counts.
 
 VLM output is a candidate hypothesis, Stagehand reports an execution attempt, and
 after-action observation supplies verification evidence. A successful action is
-deduplicated within its semantic location. Capability changes inherit the existing
-pool, business-fact changes trigger a targeted scan, and only meaningful business
-surface changes create a new location.
+deduplicated within its semantic location and unlocks explicitly dependent actions.
+The active minimal path preserves the pool on the same page, scans each new location
+once, and does not invoke targeted or supplement scans. Those mechanisms remain as
+legacy compatibility code.
 
 The planner-facing acceptance path is now `SemanticPlanningGraph -> Minimal
 Semantic PDDL`, producing both `domain.pddl` and `problem.pddl`. Older Planning
@@ -48,12 +48,9 @@ generality improvement is moving mappings such as `cart_count -> cart_has_items`
 into configurable profiles. The PDDL compiler, candidate memory, replay, and
 controller do not branch on shopping-specific action or location names.
 
-The complete profile context currently also enters the Visual Affordance prompt
-and includes a closed location set, fact terms, action examples, and contracts.
-That is accurate active behavior and a confirmed source of answer hinting. The
-approved next-stage design uses a minimal action-dependency response for
-candidate discovery and a minimal outcome/location response after execution.
-Candidate/profile decoupling is not implemented yet.
+The legacy path can still send complete profile context into Visual Affordance.
+The active minimal path instead uses a profile-free action-dependency response
+for candidate discovery and a minimal outcome/location response after execution.
 
 The old upstream `explore` runtime and the old `WebObservedGraph` exploration
 stack are not active code paths.
@@ -138,7 +135,7 @@ observed change and local verification. Raw responses and rejection reasons rema
 in the edge trace. A technical state label does not define graph identity or PDDL
 facts.
 
-The approved but not yet implemented next-stage boundary is that Visual
+The active location-scoped boundary is that Visual
 Affordance discovers concrete actions and same-location `requires` links without
 concrete profile facts, action examples, contracts, expected flow, or the PDDL
 goal. After-action observation returns only `outcome`, `location_change`, and
@@ -239,8 +236,8 @@ Main responsibilities:
 - update graph state;
 - maintain a fixed candidate pool per semantic location and track success,
   retry, stale, and no-change by `(location, action)`;
-- run an initial scan for a new location, a targeted scan after business-fact
-  changes, and only bounded supplement scans;
+- run one initial action/dependency scan for a new location and bypass targeted
+  and supplement scans on the active minimal path;
 - select another recoverable frontier when the current pool is exhausted and
   restore it through reset plus stored-action replay;
 - validate only the final semantic location and required business facts during

@@ -9,12 +9,11 @@
 
 ```text
 浏览器观察 + VLM initial scan
-  -> LocationExplorationMemory 建立当前位置候选池
-  -> 本地选择未完成的 (location, action)
+  -> LocationExplorationMemory 保存动作及同位置 requires
+  -> 本地选择前提已成功的未完成 (location, action)
   -> Stagehand 执行一个动作
-  -> DOM / signature / screenshot 动作后观察
-  -> 记录 capability fact、business fact 或 semantic location transition
-  -> business fact 变化触发 targeted scan
+  -> screenshot 动作后观察 outcome/location_change/evidence
+  -> 记录位置限定完成 fact 和可选 semantic location transition
   -> 新 location 触发新的 initial scan
   -> frontier 耗尽时 reset + stored-action replay
   -> checkpoint 保存 graph、location memory 和累计预算
@@ -28,8 +27,8 @@
 不得修改图、候选池、planning facts、扫描状态和动作尝试次数。
 
 VLM 输出的是候选假设，Stagehand 报告的是执行尝试，动作后观察才是验证证据。
-同一位置内成功动作只执行一次；普通事实变化继承原候选池，业务事实变化进行定向扫描，
-明显业务位置变化才建立新 location。
+同一位置内成功动作只执行一次并解锁明确依赖它的动作；同页继承原候选池，新位置只扫描一次。
+active path 不做 targeted/supplement scan，旧机制仅作为兼容代码保留。
 
 planner-facing 主线现在是 `SemanticPlanningGraph -> Minimal Semantic PDDL`，同时生成
 `domain.pddl` 和 `problem.pddl`。旧 Planning Graph / Phase A、Location PDDL 和其他 projector
@@ -40,10 +39,8 @@ CLI profile 注册和受控下单 URL 仍是显式领域/实验配置。后续�
 `cart_count -> cart_has_items` 等映射迁入可配置 profile；PDDL 编译器、候选池、重放和
 controller 本身不按购物动作或位置名称分支。
 
-当前 profile 还会进入 Visual Affordance 候选扫描 prompt，并包含位置闭集、事实词表、动作
-示例和动作契约。这是 active code 的真实行为，但也是下一阶段已经确认的泛化性债务：候选
-发现会受到预期能力提示。下一阶段已经确定改用最小动作依赖响应和最小动作后观察响应，
-但该解耦尚未实现，不能把它描述成当前模块行为。
+旧兼容路径仍可把 profile 传入 Visual Affordance；location-scoped active path 已改用不含
+profile 答案的最小动作依赖响应和最小动作后观察响应。旧 profile/Visual Delta 路径仍保留。
 
 旧 upstream `explore` runtime 和旧 `WebObservedGraph` 探索栈已经不属于 active code path。
 
@@ -130,7 +127,7 @@ profile facts 位于这一层。当前实现把它们作为实验认可的位置
 确认。原始响应和拒绝原因始终保留在 raw edge trace 中。节点可使用 Visual Affordance 提供的
 技术性 state label，但 label 不决定 graph identity 或 PDDL facts。
 
-已对齐但尚未实现的下一阶段边界是：Visual Affordance 自主发现明确动作及同位置 `requires`，
+当前 location-scoped active path 的边界是：Visual Affordance 自主发现明确动作及同位置 `requires`，
 不接收具体 profile facts、动作示例、契约、预期流程或 PDDL goal；动作后观察只返回
 `outcome`、`location_change` 和简短可见证据；稳定的动作完成 predicate 由本地根据成功动作
 生成。新路径绕开 targeted scan 和 supplement scan，也不再要求 VLM 输出 planner-facing facts。
@@ -210,7 +207,7 @@ embedding memory 只辅助定位和避免重复，不直接进入 PDDL。
 - 调用 Stagehand 操作层和 VLM/DOM 观察层；
 - 更新 graph；
 - 以语义位置维护固定候选池，并按 `(location, action)` 记录成功、重试、stale 和 no-change；
-- 新位置执行 initial scan，业务事实变化执行 targeted scan，候选池需要补充时执行有界 supplement scan；
+- 新位置执行一次 initial scan 并本地调度依赖链；active path 不触发 targeted/supplement scan，旧机制仅作兼容保留；
 - 当前候选耗尽时选择其他可恢复 frontier，通过 `FrontierReplayRunner` reset 并执行保存动作路径；
 - 重放末端只验证 semantic location 和必要业务事实，不逐 raw node 严格匹配，也不修改探索图；
 - 按正式动作、连续无进展、候选重试、单 frontier replay 和总 replay 参数停止；
@@ -256,8 +253,8 @@ embedding memory 只辅助定位和避免重复，不直接进入 PDDL。
 - 运行 SafeSym parser、safety injection、planner smoke。
 
 这一层应保持确定性。它应该消费 graph 中已经记录的语义，不应该直接调用 LLM/VLM。
-Minimal Semantic 投影允许同位置普通能力成为 PDDL effect，但不会把普通完成事实自动提升成其他动作前提。
-业务前提只来自已验证的 profile facts，位置变化同时删除旧 `at_*` 并增加新 `at_*`。失败、冲突或缺少
+Minimal Semantic 投影为每个成功动作生成位置限定完成 fact；只有 initial scan 明确给出的同位置
+`requires` 才会把相应完成 fact 投影为其他动作的前提。位置变化同时删除旧 `at_*` 并增加新 `at_*`。失败、冲突或缺少
 可用语义观察的边被排除，并在 projection report 中说明原因。
 
 主要函数/类：
@@ -331,11 +328,11 @@ WebKobeExplorer.explore_one_step
   -> GraphManager.identify_or_add_node
   -> optional embedding source match
   -> optional summarize_visual_affordances
-  -> LocationExplorationMemory 合并 initial/targeted/supplement candidates
-  -> 本地选择一个未完成的 (location, action)
+  -> LocationExplorationMemory 保存一次 initial scan 的 actions/requires
+  -> 本地选择一个 requirements 已满足的未完成 (location, action)
   -> adapter.execute
   -> capture after state/screenshots when execution succeeds or the known Stagehand tool_choice error is reported
-  -> summarize_visual_delta (observation trace only) / verify_planning_delta
+  -> 最小动作后观察返回 outcome/location_change/evidence
   -> GraphManager.build_planning_transition
   -> GraphManager.add_edge
   -> LocationExplorationCoordinator 记录动作结果和业务事实变化

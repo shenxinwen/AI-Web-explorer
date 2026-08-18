@@ -206,7 +206,7 @@ def test_visual_affordance_prompt_prioritizes_breadth_without_external_task_goal
         action_schema = payload["output_schema"]["actions"][0]
 
         assert "distinct functional family" in instruction
-        assert "at most 8 actions" in instruction
+        assert "at most 5 actions" in instruction
         assert action_schema["action_id"] == "stable_snake_case_action"
         assert set(action_schema) == {
             "action_id",
@@ -245,16 +245,19 @@ def test_visual_affordance_prompt_treats_max_actions_as_upper_bound():
         max_actions=5,
     )
 
+    captured = {}
+
     def provider(prompt, *, current_screenshot_path):
-        assert "at most 8 actions" in prompt
-        assert "Do not infer actions from common website patterns" in prompt
-        assert "profile" not in prompt.lower()
-        assert "checkout" not in prompt.lower()
+        captured["prompt"] = prompt
         return '{"actions":[]}'
 
     result = summarize_visual_affordances(request, provider=provider)
 
+    assert result.trace.status == "summarized"
     assert result.business_affordances == []
+    prompt = captured["prompt"]
+    assert "at most 5 actions" in prompt
+    assert "profile" not in prompt.lower()
 
 
 def test_visual_affordance_prompt_has_only_minimal_action_schema():
@@ -288,7 +291,7 @@ def test_visual_affordance_ignores_non_string_state_label_without_losing_actions
     assert result.business_affordances == []
 
 
-def test_summarize_visual_affordances_enforces_max_actions_upper_bound():
+def test_summarize_visual_affordances_rejects_response_over_max_actions():
     request = VisualAffordanceRequest(
         goal="Explore shopping capabilities.",
         current_screenshot_path="current.png",
@@ -308,10 +311,10 @@ def test_summarize_visual_affordances_enforces_max_actions_upper_bound():
 
     result = summarize_visual_affordances(request, provider=provider)
 
-    assert [item.action_name for item in result.business_affordances] == [
-        "first_action",
-        "second_action",
-    ]
+    assert result.business_affordances == []
+    assert result.trace.status == "failed"
+    assert result.trace.error_type == "response_contract_error"
+    assert result.trace.error_message == "initial response exceeds the action limit"
 
 
 def _targeted_request():

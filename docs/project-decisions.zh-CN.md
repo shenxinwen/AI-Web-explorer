@@ -53,6 +53,11 @@
 
 ## 2026-08-18 - 下一阶段采用最小动作依赖闭环
 
+实施状态（2026-08-18）：该闭环已接入 location-scoped active path，并完成离线回归。initial
+响应采用严格 `actions` schema；超额、缺字段、悬空/循环依赖均 fail closed。只有 `success`
+动作产生完成事实和位置转移；`failed/uncertain` 不创建新位置、候选池或语义进展。新路径的
+Practice Shopping 真实 VLM、SafeSym 与 planner 联合验收仍待执行。
+
 更改：
 - 新位置首次候选扫描只返回明确动作及同位置 `requires`，不再要求候选阶段输出区域分类、
   事实词表映射或永久动作类型。
