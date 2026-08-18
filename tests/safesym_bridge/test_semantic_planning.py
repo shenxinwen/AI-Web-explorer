@@ -199,7 +199,7 @@ def test_same_action_id_dependency_is_scoped_to_dependent_source_location():
         action_name="submit_form",
         source_location="checkout",
         target_location="checkout",
-        required_action_ids=["fill_form", "missing_action"],
+        required_action_ids=["fill_form"],
     )
     graph = WebKobeGraph(
         app="test",

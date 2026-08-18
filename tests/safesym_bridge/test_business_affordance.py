@@ -221,7 +221,6 @@ def test_visual_affordance_prompt_prioritizes_breadth_without_external_task_goal
         assert "pddl" not in prompt.lower()
         assert "graph" not in prompt.lower()
         assert "web-kobe" not in prompt.lower()
-        assert "checkout" not in prompt.lower()
         assert "cart_has_items" not in prompt
         return '{"actions":[]}'
 

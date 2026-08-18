@@ -112,15 +112,29 @@ def _default_visual_provider(
         after_screenshot_path=None,
     ):
         if current_screenshot_path is not None:
-            return (
-                '{"business_affordances":['
-                f'{{"action_name":"{action_name}",'
-                f'"label":"{action_label}",'
-                f'"relevance_hint":"{relevance}",'
-                f'"target_hint":"{target_hint}",'
-                '"confidence":0.9}'
-                "],"
-                '"state_summary":"Business page with actionable controls."}'
+            scan_kind = json.loads(prompt).get("scan_kind", "initial")
+            if scan_kind != "initial":
+                return (
+                    '{"business_affordances":['
+                    f'{{"action_name":"{action_name}",'
+                    f'"label":"{action_label}",'
+                    f'"relevance_hint":"{relevance}",'
+                    f'"target_hint":"{target_hint}",'
+                    '"confidence":0.9}'
+                    "],"
+                    '"state_summary":"Business page with actionable controls."}'
+                )
+            return json.dumps(
+                {
+                    "actions": [
+                        {
+                            "action_id": action_name,
+                            "description": action_label,
+                            "target": target_hint,
+                            "requires": [],
+                        }
+                    ]
+                }
             )
         added = added_facts if added_facts is not None else ["cart_has_items"]
         removed = removed_facts if removed_facts is not None else []
@@ -945,7 +959,18 @@ async def test_profile_runtime_rejects_out_of_contract_semantics():
         after_screenshot_path=None,
     ):
         if current_screenshot_path is not None:
-            return _business_affordance_response("add_to_cart_product")
+            return json.dumps(
+                {
+                    "actions": [
+                        {
+                            "action_id": "add_to_cart_product",
+                            "description": "Add to cart",
+                            "target": "Add to cart control",
+                            "requires": [],
+                        }
+                    ]
+                }
+            )
         return json.dumps(
             {
                 "candidate_added_facts": ["invented_completion"],

@@ -875,6 +875,11 @@ class WebKobeExplorer:
                 edge_status = "failed_execution"
             elif action_outcome_result.outcome == "uncertain":
                 edge_status = "no_observed_change"
+            elif (
+                action_outcome_result.outcome == "success"
+                and edge_status == "no_observed_change"
+            ):
+                edge_status = "succeeded"
         allow_outcome_navigation = (
             action_outcome_result is None
             or (
@@ -1482,6 +1487,7 @@ class WebKobeExplorer:
                     current_screenshot_path=before_screenshot_path,
                     current_signature=before.signature,
                     max_actions=self.max_candidates,
+                    scan_kind="supplement",
                 ),
                 provider=self.visual_delta_provider,
             )
