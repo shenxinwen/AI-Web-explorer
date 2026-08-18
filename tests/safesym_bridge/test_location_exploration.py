@@ -52,6 +52,76 @@ def test_same_action_is_deduped_within_location_but_not_across_locations():
     assert memory.next_candidate("product_detail").action_name == "add_to_cart"
 
 
+def test_dependency_records_round_trip_and_schedule_requirements_first():
+    memory = LocationExplorationMemory()
+    memory.merge_scan(
+        "checkout",
+        [
+            _affordance("fill_billing"),
+            _affordance("fill_payment"),
+            _affordance("place_order"),
+            _affordance("sort_products"),
+        ],
+        kind="initial",
+        requires_by_action_id={
+            "fill_billing": [],
+            "fill_payment": [],
+            "place_order": ["fill_billing", "fill_payment"],
+            "sort_products": [],
+        },
+    )
+
+    pool = memory.pool_for("checkout")
+    assert pool.candidates["place_order"].requires == [
+        "fill_billing",
+        "fill_payment",
+    ]
+    assert memory.next_candidate("checkout").action_name == "fill_billing"
+
+    memory.record_attempt("checkout", "fill_billing", observable_change=True)
+    assert memory.next_candidate("checkout").action_name == "fill_payment"
+    memory.record_attempt("checkout", "fill_payment", observable_change=True)
+    assert memory.next_candidate("checkout").action_name == "place_order"
+
+    restored = LocationExplorationMemory.from_dict(memory.to_dict())
+    restored_record = restored.pool_for("checkout").candidates["place_order"]
+    assert restored_record.requires == ["fill_billing", "fill_payment"]
+    assert restored.next_candidate("checkout").action_name == "place_order"
+
+
+def test_failed_requirement_blocks_target_but_leaves_independent_action_eligible():
+    memory = LocationExplorationMemory(
+        limits=ExplorationLimits(max_action_attempts_per_candidate=1)
+    )
+    memory.merge_scan(
+        "checkout",
+        [
+            _affordance("fill_billing"),
+            _affordance("place_order"),
+            _affordance("sort_products"),
+        ],
+        kind="initial",
+        requires_by_action_id={
+            "fill_billing": [],
+            "place_order": ["fill_billing"],
+            "sort_products": [],
+        },
+    )
+
+    memory.record_attempt(
+        "checkout",
+        "fill_billing",
+        observable_change=False,
+        failed=True,
+    )
+
+    assert (
+        memory.pool_for("checkout").candidates["place_order"].status
+        == "blocked_by_failed_requirement"
+    )
+    assert memory.next_candidate("checkout").action_name == "sort_products"
+
+
 def test_second_no_change_attempt_closes_candidate():
     memory = LocationExplorationMemory(
         limits=ExplorationLimits(max_action_attempts_per_candidate=2)
@@ -302,13 +372,19 @@ def test_scoped_explorer_inherits_pool_and_runs_one_targeted_scan():
             return json.dumps(
                 {
                     "location_id": "shopping",
-                    "regions": [
+                    "actions": [
                         {
-                            "actions": [
-                                {"intent": "sort_products", "confidence": 0.9},
-                                {"intent": "filter_products", "confidence": 0.8},
-                            ]
-                        }
+                            "action_id": "sort_products",
+                            "description": "Sort visible products",
+                            "target": "sort control",
+                            "requires": [],
+                        },
+                        {
+                            "action_id": "filter_products",
+                            "description": "Filter visible products",
+                            "target": "filter control",
+                            "requires": [],
+                        },
                     ],
                 }
             )

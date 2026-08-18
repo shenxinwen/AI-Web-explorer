@@ -26,6 +26,7 @@ LOCATION_EXPLORATION_SCHEMA_VERSION = "location-exploration-v1"
 TERMINAL_CANDIDATE_STATUSES = frozenset(
     {
         "success",
+        "blocked_by_failed_requirement",
         "no_observable_change",
         "failed_retry_exhausted",
         "stale/disabled",
@@ -104,6 +105,7 @@ class TargetedScanKey:
 @dataclass
 class LocationCandidateRecord:
     affordance: BusinessAffordance
+    requires: list[str] = field(default_factory=list)
     status: str = "pending"
     attempts: int = 0
     discovery_order: int = 0
@@ -121,6 +123,7 @@ class LocationCandidateRecord:
         return {
             "action_id": self.action_id,
             "affordance": self.affordance.to_dict(),
+            "requires": list(self.requires),
             "status": self.status,
             "attempts": self.attempts,
             "discovery_order": self.discovery_order,
@@ -133,6 +136,7 @@ class LocationCandidateRecord:
         affordance = _affordance_from_dict(affordance_data)
         return cls(
             affordance=affordance,
+            requires=_normalized_ids(data.get("requires") or []),
             status=str(data.get("status", "pending")),
             attempts=int(data.get("attempts", 0)),
             discovery_order=int(data.get("discovery_order", 0)),
@@ -328,6 +332,7 @@ class LocationExplorationCoordinator:
                     normalized_location,
                     result.business_affordances,
                     kind=kind,
+                    requires_by_action_id=result.requires_by_action_id,
                     replacements=result.replacements,
                     disabled_action_ids=result.disabled_action_ids,
                     trace=result.trace.to_dict(),
@@ -610,6 +615,7 @@ class LocationExplorationMemory:
         affordances: Iterable[BusinessAffordance],
         *,
         kind: str = "initial",
+        requires_by_action_id: Mapping[str, Iterable[str]] | None = None,
         replacements: Iterable[tuple[str, str]] = (),
         disabled_action_ids: Iterable[str] = (),
         trace: dict[str, Any] | None = None,
@@ -636,20 +642,38 @@ class LocationExplorationMemory:
                 pool.candidates[normalized].status = "stale/disabled"
 
         added: list[str] = []
+        affordances = tuple(affordances)
+        normalized_requires = {
+            normalize_semantic_id(action_id): _normalized_ids(requirements)
+            for action_id, requirements in (requires_by_action_id or {}).items()
+            if normalize_semantic_id(action_id)
+        }
+        known_scan_ids = {
+            normalize_semantic_id(affordance.action_name)
+            for affordance in affordances
+            if normalize_semantic_id(affordance.action_name)
+        }
         for affordance in affordances:
             action_id = normalize_semantic_id(affordance.action_name)
             if not action_id:
                 continue
             normalized_affordance = _normalized_affordance(affordance, action_id)
+            requires = [
+                requirement
+                for requirement in normalized_requires.get(action_id, [])
+                if requirement in known_scan_ids and requirement != action_id
+            ]
             existing = pool.candidates.get(action_id)
             if existing is not None:
                 if not existing.terminal:
                     existing.affordance = normalized_affordance
+                    existing.requires = requires
                 continue
             if len(pool.candidates) >= self.limits.max_candidates_per_location:
                 continue
             pool.candidates[action_id] = LocationCandidateRecord(
                 affordance=normalized_affordance,
+                requires=requires,
                 discovery_order=len(pool.candidates),
             )
             added.append(action_id)
@@ -675,6 +699,7 @@ class LocationExplorationMemory:
         excluded_action_ids: Iterable[str] = (),
     ) -> BusinessAffordance | None:
         pool = self.pool_for(location_id)
+        self._propagate_failed_requirements(pool)
         excluded = {
             normalize_semantic_id(action_id)
             for action_id in excluded_action_ids
@@ -687,6 +712,11 @@ class LocationExplorationMemory:
             in {"pending", "retryable_no_change", "retryable_failure"}
             and record.attempts < self.limits.max_action_attempts_per_candidate
             and record.action_id not in excluded
+            and all(
+                requirement in pool.candidates
+                and pool.candidates[requirement].status == "success"
+                for requirement in record.requires
+            )
         ]
         if not eligible:
             return None
@@ -694,12 +724,36 @@ class LocationExplorationMemory:
         return min(
             eligible,
             key=lambda item: (
+                0
+                if item.requires
+                or any(
+                    item.action_id in other.requires
+                    for other in pool.candidates.values()
+                )
+                else 1,
                 relevance.get(item.affordance.relevance_hint, 3),
                 -(item.affordance.confidence or 0.0),
                 item.discovery_order,
                 item.action_id,
             ),
         ).affordance
+
+    @staticmethod
+    def _propagate_failed_requirements(pool: LocationCandidatePool) -> None:
+        changed = True
+        while changed:
+            changed = False
+            for record in pool.candidates.values():
+                if record.terminal or not record.requires:
+                    continue
+                if any(
+                    requirement not in pool.candidates
+                    or pool.candidates[requirement].status
+                    in TERMINAL_CANDIDATE_STATUSES - {"success"}
+                    for requirement in record.requires
+                ):
+                    record.status = "blocked_by_failed_requirement"
+                    changed = True
 
     def record_attempt(
         self,
@@ -744,6 +798,7 @@ class LocationExplorationMemory:
                 if record.attempts >= self.limits.max_action_attempts_per_candidate
                 else "retryable_no_change"
             )
+        self._propagate_failed_requirements(pool)
         return CandidateAttemptOutcome(
             normalized_location,
             normalized_action,
