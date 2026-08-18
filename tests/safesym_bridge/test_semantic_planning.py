@@ -128,7 +128,10 @@ def test_sort_stays_at_location_and_adds_completion_fact():
     semantic, _ = build_semantic_planning_graph(graph)
     action = semantic.actions[0]
     assert action.required_facts == []
-    assert action.added_facts == ["products_sorted"]
+    assert action.added_facts == [
+        "completed_shopping_sort_products",
+        "products_sorted",
+    ]
     assert action.source_location == action.target_location == "shopping"
 
 
@@ -175,6 +178,69 @@ def test_successful_action_dependencies_become_completion_preconditions():
     assert completion_fact < domain.index(":effect", place_order)
 
 
+def test_same_action_id_dependency_is_scoped_to_dependent_source_location():
+    shopping_fill = _edge(
+        source="shopping_start",
+        target="shopping_after_fill",
+        action_name="fill_form",
+        source_location="shopping",
+        target_location="shopping",
+    )
+    checkout_fill = _edge(
+        source="checkout_start",
+        target="checkout_after_fill",
+        action_name="fill_form",
+        source_location="checkout",
+        target_location="checkout",
+    )
+    checkout_submit = _edge(
+        source="checkout_after_fill",
+        target="checkout_after_submit",
+        action_name="submit_form",
+        source_location="checkout",
+        target_location="checkout",
+        required_action_ids=["fill_form", "missing_action"],
+    )
+    graph = WebKobeGraph(
+        app="test",
+        start_node_id="shopping_start",
+        total_steps_completed=3,
+        nodes=[
+            _node("shopping_start"),
+            _node("shopping_after_fill"),
+            _node("checkout_start"),
+            _node("checkout_after_fill"),
+            _node("checkout_after_submit"),
+        ],
+        edges=[shopping_fill, checkout_fill, checkout_submit],
+    )
+
+    semantic, _ = build_semantic_planning_graph(graph)
+    submit = next(
+        action for action in semantic.actions if action.action_name == "submit_form"
+    )
+
+    assert submit.required_facts == ["completed_checkout_fill_form"]
+    assert "completed_shopping_fill_form" not in submit.required_facts
+
+
+def test_every_successful_action_gets_a_location_qualified_completion_fact():
+    graph = _graph_with_edge(
+        _edge(
+            action_name="filter_products",
+            role="presentation_capability",
+        )
+    )
+
+    semantic, _ = build_semantic_planning_graph(graph)
+    action = semantic.actions[0]
+    domain = compile_minimal_semantic_domain(semantic).domain
+
+    assert action.added_facts == ["completed_shopping_filter_products"]
+    assert "completed_shopping_filter_products" in semantic.capability_facts
+    assert "(completed_shopping_filter_products)" in domain
+
+
 def test_add_to_cart_changes_fact_without_creating_combination_location():
     graph = _graph_with_edge(
         _edge(
@@ -185,7 +251,10 @@ def test_add_to_cart_changes_fact_without_creating_combination_location():
     )
     semantic, _ = build_semantic_planning_graph(graph)
     assert semantic.locations == ["shopping"]
-    assert semantic.actions[0].added_facts == ["cart_has_items"]
+    assert semantic.actions[0].added_facts == [
+        "cart_has_items",
+        "completed_shopping_add_to_cart_from_shopping",
+    ]
 
 
 def test_unpromoted_preserved_profile_fact_is_not_created_by_ordinary_action():

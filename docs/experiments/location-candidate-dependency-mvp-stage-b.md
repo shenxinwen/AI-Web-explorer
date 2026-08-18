@@ -50,6 +50,11 @@ they do not add a new runtime module or change the Task 1–4 boundaries.
 - Initial action prompts do not include profile context, contracts, workflow
   answers, or site-specific action tokens. A generic hardcoded-token scan of
   added production lines was empty.
+- Follow-up causal correction: completion facts are keyed by
+  (source_location, action_id), so same-named actions at other locations
+  cannot satisfy a dependency. Every projectable successful action now gets
+  its own location-qualified completion fact, including independent actions;
+  failed, uncertain, and non-projectable edges do not.
 
 ## Offline verification
 
@@ -58,13 +63,16 @@ pointing at this worktree:
 
 - Focused dependency/outcome/semantic/PDDL tests: 108 passed, 2 warnings.
 - tests/safesym_bridge/test_web_kobe_explorer.py: 81 passed, 2 warnings.
-- tests/safesym_bridge: 582 passed, 4 skipped, 2 warnings.
+- tests/safesym_bridge: 584 passed, 4 skipped, 2 warnings.
 - Full pytest -q: 585 passed, 4 skipped, 1 failed.
   The sole failure is the pre-existing browser fixture launch:
   tests/test_local_shop_fixture.py::test_local_shop_fixture_supports_cart_state_changes
   with Playwright BrowserType.launch: spawn EPERM. No browser was started
   successfully.
 - git diff --check: passed.
+
+The correction was TDD-verified: the two new semantic-planning regression
+tests failed before the implementation change and passed afterward.
 
 ## Diff and files
 
