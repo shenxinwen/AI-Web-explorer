@@ -371,7 +371,6 @@ def test_scoped_explorer_inherits_pool_and_runs_one_targeted_scan():
                 )
             return json.dumps(
                 {
-                    "location_id": "shopping",
                     "actions": [
                         {
                             "action_id": "sort_products",

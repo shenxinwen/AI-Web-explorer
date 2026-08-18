@@ -335,29 +335,42 @@ def _initial_actions_from_response(
 
     records: dict[str, tuple[str, str, list[str]]] = {}
     ordered_ids: list[str] = []
-    for item in raw_items[:max_actions]:
+    for item in raw_items:
         if not isinstance(item, dict):
             return [], {}, "initial response action must be an object"
-        action_id = normalize_semantic_id(item.get("action_id", ""))
-        description = _clean_text(item.get("description"))
-        target = _clean_text(item.get("target"))
+        if set(item) != {"action_id", "description", "target", "requires"}:
+            return [], {}, "initial action keys do not match the contract"
+        raw_action_id = item["action_id"]
+        raw_description = item["description"]
+        raw_target = item["target"]
+        if not all(
+            isinstance(value, str) and value.strip()
+            for value in (raw_action_id, raw_description, raw_target)
+        ):
+            return [], {}, "initial action text fields must be non-empty strings"
+        action_id = normalize_semantic_id(raw_action_id)
+        description = raw_description.strip()
+        target = raw_target.strip()
         if not action_id or not description or not target:
             return [], {}, "initial action requires action_id, description, and target"
         if action_id in records:
             return [], {}, f"duplicate initial action_id: {action_id}"
-        raw_requires = item.get("requires", [])
-        if isinstance(raw_requires, str):
-            raw_requires = [raw_requires]
+        raw_requires = item["requires"]
         if not isinstance(raw_requires, list):
             return [], {}, f"requires must be an array for {action_id}"
         requires: list[str] = []
         for value in raw_requires:
+            if not isinstance(value, str) or not value.strip():
+                return [], {}, f"requires entries must be non-empty strings for {action_id}"
             requirement = normalize_semantic_id(value)
-            if requirement and requirement not in requires:
+            if not requirement:
+                return [], {}, f"requires entries must be valid IDs for {action_id}"
+            if requirement not in requires:
                 requires.append(requirement)
         records[action_id] = (description, target, requires)
         ordered_ids.append(action_id)
 
+    ordered_ids = ordered_ids[:max_actions]
     requires_by_action_id = {
         action_id: list(records[action_id][2]) for action_id in ordered_ids
     }
@@ -477,7 +490,7 @@ def summarize_visual_affordances(
     is_targeted = scan_kind == "targeted"
     requires_by_action_id: dict[str, list[str]] = {}
     if is_initial:
-        if not isinstance(parsed.get("actions"), list):
+        if set(parsed) != {"actions"} or not isinstance(parsed.get("actions"), list):
             return VisualAffordanceResult(
                 business_affordances=[],
                 requires_by_action_id={},

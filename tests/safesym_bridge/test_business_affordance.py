@@ -443,6 +443,34 @@ def test_initial_scan_rejects_legacy_candidate_shapes(response):
     assert result.business_affordances == []
 
 
+@pytest.mark.parametrize(
+    "response",
+    [
+        '{"actions":[{"action_id":"fill_form","description":"Fill","target":"form"}]}',
+        '{"actions":[{"action_id":"fill_form","description":"Fill","target":"form","requires":"other"}]}',
+        '{"actions":[],"extra":"unexpected"}',
+        '{"actions":[{"action_id":"fill_form","description":"Fill","target":"form","requires":[],"extra":true}]}',
+        '{"actions":[{"action_id":"fill_form","description":"Fill","target":"form","requires":[1]}]}',
+        '{"actions":[{"action_id":"fill_form","description":"Fill","target":"form","requires":[{}]}]}',
+    ],
+)
+def test_initial_scan_rejects_non_strict_actions_contract(response):
+    request = VisualAffordanceRequest(
+        goal="Explore visible business capabilities.",
+        current_screenshot_path="current.png",
+    )
+
+    result = summarize_visual_affordances(
+        request,
+        provider=lambda *_args, **_kwargs: response,
+    )
+
+    assert result.trace.status == "failed"
+    assert result.trace.error_type == "response_contract_error"
+    assert result.business_affordances == []
+    assert result.requires_by_action_id == {}
+
+
 def test_non_initial_scan_keeps_legacy_affordance_read_compatibility():
     request = VisualAffordanceRequest(
         goal="Explore visible business capabilities.",
