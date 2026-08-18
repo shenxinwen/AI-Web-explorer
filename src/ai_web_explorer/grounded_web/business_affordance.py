@@ -63,23 +63,21 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
     scan_kind = str(request.scan_kind or "initial").strip().lower()
     if scan_kind == "initial":
         instruction = (
-            "Inspect the current screenshot and return all clearly visible "
-            "semantic actions that can be described precisely. First cover each "
-            "distinct functional family once, then consider another action from "
-            f"a family. Return at most {request.max_actions} actions. Use a stable action_id for "
-            "each action, a concise execution description, and the visible target. "
-            "Requires may reference only another action in this same response and "
-            "must represent a direct prerequisite supported by visible required "
-            "fields, disabled controls, labels, or visible workflow structure; "
-            "this permits reasonable inference from clearly shown login or "
-            "checkout steps. Independent actions must use an empty requires list. "
-            "An action that has a same-response prerequisite is blocked until that "
-            "prerequisite succeeds. Do not infer dependencies from undisplayed "
-            "site capabilities or a complete typical workflow. Do not use visual "
-            "proximity alone. "
-            "Success or result text is not an action. Evidence must be short and "
-            "directly visible. Do not return result states, facts, roles, or planner "
-            "fields. Return JSON only."
+            "Inspect the current screenshot and return clearly visible semantic "
+            "actions on the active interaction surface. The active interaction "
+            "surface is the frontmost operable page, dialog, drawer, or modal; "
+            "covered background controls are not candidates. Return directly "
+            "executable actions and visible blocked actions, using a stable "
+            "action_id, one precise description, and a visible target. Related "
+            "controls serving one purpose may be grouped into one semantic action. "
+            "First cover each distinct functional family, then consider a second "
+            "action from a family; the limit is not a quota, and the list may be "
+            f"empty or contain at most {request.max_actions} actions. "
+            "Requires may reference only another action in this response and mean "
+            "an indispensable direct prerequisite, not a recommendation, visual "
+            "order, or independent-field order. Independent actions must be "
+            "represented independently with requires=[]. Completed, history, and "
+            "result states are not actions or requirements. Return JSON only."
         )
         output_schema: dict[str, Any] = {
             "actions": [
@@ -91,6 +89,53 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
                 }
             ]
         }
+        few_shot_examples: list[dict[str, Any]] = [
+            {
+                "screen": "Create Project dialog with related required fields and a Create button.",
+                "actions": [
+                    {
+                        "action_id": "complete_project_details",
+                        "description": "Fill the related required project fields.",
+                        "target": "Create Project dialog fields",
+                        "requires": [],
+                    },
+                    {
+                        "action_id": "create_project",
+                        "description": "Submit the completed project form.",
+                        "target": "Create button",
+                        "requires": ["complete_project_details"],
+                    },
+                ],
+            },
+            {
+                "screen": "data-table toolbar with sort and column controls.",
+                "actions": [
+                    {
+                        "action_id": "sort_table",
+                        "description": "Sort the visible table.",
+                        "target": "sort control",
+                        "requires": [],
+                    },
+                    {
+                        "action_id": "configure_columns",
+                        "description": "Choose visible table columns.",
+                        "target": "column control",
+                        "requires": [],
+                    },
+                ],
+            },
+            {
+                "screen": "Export Complete modal with a download control and dimmed background.",
+                "actions": [
+                    {
+                        "action_id": "download_report",
+                        "description": "Download the completed report.",
+                        "target": "Download control in the modal",
+                        "requires": [],
+                    }
+                ],
+            },
+        ]
     elif scan_kind == "targeted":
         instruction = (
             "Inspect the current screenshot only for business consequences of "
@@ -177,6 +222,8 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
         "max_candidates": request.max_actions,
         "output_schema": output_schema,
     }
+    if scan_kind == "initial":
+        payload["few_shot_examples"] = few_shot_examples
     if scan_kind != "initial":
         payload["scan_kind"] = scan_kind
     if request.semantic_location is not None:

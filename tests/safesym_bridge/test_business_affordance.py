@@ -119,14 +119,12 @@ def test_initial_scan_parses_minimal_action_dependencies_without_planning_inputs
         assert "relevance_hint" not in prompt.lower()
         assert "supporting_facts" not in prompt.lower()
         assert "confidence" not in prompt.lower()
-        assert "directly executable" not in instruction
-        assert "required fields" in instruction
-        assert "disabled controls" in instruction
-        assert "visible workflow structure" in instruction
-        assert "login" in instruction
-        assert "checkout" in instruction
-        assert "domain common sense" not in instruction
-        assert "typical workflow order" not in instruction
+        assert "directly executable" in instruction
+        assert "active interaction surface" in instruction
+        assert "limit is not a quota" in instruction
+        assert "independently" in instruction
+        assert "indispensable direct prerequisite" in instruction
+        assert "independent-field order" in instruction
         assert current_screenshot_path == "current.png"
         return json.dumps(
             {
@@ -158,6 +156,47 @@ def test_initial_scan_parses_minimal_action_dependencies_without_planning_inputs
         "fill_identity": [],
         "submit_form": ["fill_identity"],
     }
+
+
+def test_initial_prompt_contains_validated_domain_neutral_few_shots():
+    request = VisualAffordanceRequest(
+        goal="Explore visible business capabilities.",
+        current_screenshot_path="current.png",
+        max_actions=8,
+    )
+    captured = {}
+
+    def provider(prompt, *, current_screenshot_path):
+        captured["prompt"] = prompt
+        return '{"actions":[]}'
+
+    result = summarize_visual_affordances(request, provider=provider)
+    payload = json.loads(captured["prompt"])
+    examples = json.dumps(payload["few_shot_examples"])
+
+    assert set(payload) == {
+        "instruction",
+        "max_candidates",
+        "output_schema",
+        "few_shot_examples",
+    }
+    assert set(payload["output_schema"]) == {"actions"}
+    assert len(payload["few_shot_examples"]) == 3
+    assert "active interaction surface" in payload["instruction"]
+    assert "limit is not a quota" in payload["instruction"]
+    assert "independently" in payload["instruction"]
+    assert "profile" not in captured["prompt"].lower()
+    assert "checkout" not in captured["prompt"].lower()
+    assert "payment" not in captured["prompt"].lower()
+    for token in (
+        "Create Project",
+        "complete_project_details",
+        "data-table toolbar",
+        "Export Complete",
+        "download_report",
+    ):
+        assert token in examples
+    assert result.trace.status == "summarized"
 
 
 @pytest.mark.parametrize(
