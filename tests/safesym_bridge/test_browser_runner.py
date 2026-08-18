@@ -1295,6 +1295,130 @@ async def test_run_stagehand_exploration_wires_location_feasibility_profile(
 
 
 @pytest.mark.anyio
+async def test_run_stagehand_exploration_resolves_separate_openai_observation_providers(
+    tmp_path, monkeypatch
+):
+    import playwright.async_api as playwright_async_api
+
+    output_path = tmp_path / "graph.json"
+    captured = {}
+    factory_calls = []
+    candidate_provider = object()
+    outcome_provider = object()
+
+    def fake_candidate_factory(**kwargs):
+        factory_calls.append(("candidate", kwargs))
+        return candidate_provider
+
+    def fake_outcome_factory(**kwargs):
+        factory_calls.append(("outcome", kwargs))
+        return outcome_provider
+
+    class FakePage:
+        async def goto(self, url):
+            captured["url"] = url
+
+    class FakeBrowser:
+        async def new_page(self, **kwargs):
+            return FakePage()
+
+        async def close(self):
+            pass
+
+    class FakeChromium:
+        async def launch(self, **kwargs):
+            return FakeBrowser()
+
+    class FakePlaywright:
+        chromium = FakeChromium()
+
+    class FakeContext:
+        async def __aenter__(self):
+            return FakePlaywright()
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+    class FakeBaseAdapter:
+        def __init__(self, page, *, app_name, page_id=None, screenshot_dir=None):
+            self.app_name = app_name
+
+    class FakeStagehandBackend:
+        def __init__(self, *, base_backend, provider, goal, execution_mode, **kwargs):
+            self.app_name = base_backend.app_name
+
+    class FakeExplorer:
+        def __init__(self, **kwargs):
+            captured["visual_delta_provider"] = kwargs["visual_delta_provider"]
+            captured["action_outcome_provider"] = kwargs["action_outcome_provider"]
+            self.state_embedding_records = []
+
+    class FakeController:
+        def __init__(self, explorer, **kwargs):
+            pass
+
+        async def run(self, *, max_steps):
+            graph = WebKobeGraph(
+                app="demo",
+                start_node_id="start",
+                total_steps_completed=max_steps,
+            )
+            return WebKobeExplorationResult(
+                graph=graph,
+                summary=WebKobeExplorationSummary(
+                    requested_steps=max_steps,
+                    steps_completed=max_steps,
+                    stop_reason="max_steps",
+                    node_count=0,
+                    edge_count=0,
+                    failed_edge_count=0,
+                ),
+            )
+
+    monkeypatch.setattr(playwright_async_api, "async_playwright", lambda: FakeContext())
+    monkeypatch.setattr(browser_runner, "WebKobePlaywrightAdapter", FakeBaseAdapter)
+    monkeypatch.setattr(browser_runner, "StagehandAutomationBackend", FakeStagehandBackend)
+    monkeypatch.setattr(browser_runner, "WebKobeExplorer", FakeExplorer)
+    monkeypatch.setattr(browser_runner, "WebKobeExplorationController", FakeController)
+    monkeypatch.setattr(
+        browser_runner,
+        "create_openai_visual_delta_provider_from_env",
+        fake_candidate_factory,
+    )
+    monkeypatch.setattr(
+        browser_runner,
+        "create_openai_action_outcome_provider_from_env",
+        fake_outcome_factory,
+    )
+
+    await browser_runner.run_stagehand_exploration(
+        output_path,
+        start_url="https://shop.test/",
+        app_name="demo",
+        provider=object(),
+        steps=1,
+        screenshot_dir=tmp_path / "screenshots",
+        use_openai_visual_delta=True,
+        visual_delta_model="candidate-model",
+        action_outcome_model="outcome-model",
+        vlm_request_timeout_seconds=12.5,
+    )
+
+    assert captured["visual_delta_provider"] is candidate_provider
+    assert captured["action_outcome_provider"] is outcome_provider
+    assert factory_calls == [
+        (
+            "candidate",
+            {"model": "candidate-model", "request_timeout_seconds": 12.5},
+        ),
+        (
+            "outcome",
+            {"model": "outcome-model", "request_timeout_seconds": 12.5},
+        ),
+    ]
+
+
+@pytest.mark.anyio
 async def test_runner_preserves_cumulative_runtime_state(tmp_path, monkeypatch):
     import playwright.async_api as playwright_async_api
 

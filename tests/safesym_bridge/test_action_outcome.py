@@ -96,6 +96,23 @@ def test_action_outcome_prompt_contains_domain_neutral_few_shots():
         "evidence",
     }
     assert len(payload["few_shot_examples"]) == 5
+    assert [example["action_description"] for example in payload["few_shot_examples"]] == [
+        "Filter the records by status",
+        "Change the table sort order",
+        "Open the export dialog",
+        "Submit the required form",
+        "Complete the required project details",
+    ]
+    assert payload["few_shot_examples"][2] == {
+        "action_description": "Open the export dialog",
+        "before": "The report editor is active.",
+        "after": "A stable Export Report modal is active over the editor.",
+        "answer": {
+            "outcome": "success",
+            "location_change": True,
+            "evidence": ["The Export Report modal is now the active surface."],
+        },
+    }
     instruction = payload["instruction"].lower()
     assert "prefer a definite success or failed judgment" in instruction
     assert "same main heading, controls, and page layout" in instruction

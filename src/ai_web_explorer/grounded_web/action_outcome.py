@@ -104,6 +104,7 @@ def build_action_outcome_prompt(action_description: str) -> str:
             },
             "few_shot_examples": [
                 {
+                    "action_description": "Filter the records by status",
                     "before": "A record list is visible with several rows.",
                     "after": "The same list remains visible with fewer rows after filtering.",
                     "answer": {
@@ -113,6 +114,7 @@ def build_action_outcome_prompt(action_description: str) -> str:
                     },
                 },
                 {
+                    "action_description": "Change the table sort order",
                     "before": "A table is visible with its current row order.",
                     "after": "The same table remains visible with rows in a new order after sorting.",
                     "answer": {
@@ -122,15 +124,17 @@ def build_action_outcome_prompt(action_description: str) -> str:
                     },
                 },
                 {
-                    "before": "A list page is visible behind an open export dialog.",
-                    "after": "A stable export dialog is active over the list page.",
+                    "action_description": "Open the export dialog",
+                    "before": "The report editor is active.",
+                    "after": "A stable Export Report modal is active over the editor.",
                     "answer": {
                         "outcome": "success",
                         "location_change": True,
-                        "evidence": ["The export dialog is now the active surface."],
+                        "evidence": ["The Export Report modal is now the active surface."],
                     },
                 },
                 {
+                    "action_description": "Submit the required form",
                     "before": "A form is visible with an empty required field.",
                     "after": "The same form remains visible and shows a validation error.",
                     "answer": {
@@ -140,6 +144,7 @@ def build_action_outcome_prompt(action_description: str) -> str:
                     },
                 },
                 {
+                    "action_description": "Complete the required project details",
                     "before": "A project-detail form is visible with editable fields.",
                     "after": "The same project-detail form remains visible with completed values.",
                     "answer": {
