@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from ai_web_explorer.grounded_web.graph import BusinessAffordance
+from ai_web_explorer.grounded_web.semantic_model import normalize_semantic_id
 
 VisualAffordanceProvider = Callable[..., str]
 
@@ -50,6 +51,7 @@ class VisualAffordanceTrace:
 class VisualAffordanceResult:
     business_affordances: list[BusinessAffordance]
     trace: VisualAffordanceTrace
+    requires_by_action_id: dict[str, list[str]] = field(default_factory=dict)
     state_summary: str | None = None
     state_label: str | None = None
     location_id: str | None = None
@@ -59,7 +61,33 @@ class VisualAffordanceResult:
 
 def _prompt_for_request(request: VisualAffordanceRequest) -> str:
     scan_kind = str(request.scan_kind or "initial").strip().lower()
-    if scan_kind == "targeted":
+    if scan_kind == "initial":
+        instruction = (
+            "Inspect the current screenshot and return all clearly visible "
+            "semantic actions that can be described precisely. First cover each "
+            "distinct functional family once, then consider another action from "
+            "a family. Return at most 8 actions. Use a stable action_id for "
+            "each action, a concise execution description, and the visible target. "
+            "Requires may reference only another action in this same response and "
+            "must represent a direct visible prerequisite; independent actions "
+            "must use an empty requires list. An action that has a same-response "
+            "prerequisite is blocked until that prerequisite succeeds. Do not use "
+            "domain common sense, typical workflow order, or visual proximity. "
+            "Success or result text is not an action. Evidence must be short and "
+            "directly visible. Do not return result states, facts, roles, or planner "
+            "fields. Return JSON only."
+        )
+        output_schema: dict[str, Any] = {
+            "actions": [
+                {
+                    "action_id": "stable_snake_case_action",
+                    "description": "one precise visible semantic operation",
+                    "target": "visible target",
+                    "requires": ["other_action_id"],
+                }
+            ]
+        }
+    elif scan_kind == "targeted":
         instruction = (
             "Inspect the current screenshot only for business consequences of "
             "the supplied business fact delta. Return empty arrays when no new "
@@ -292,6 +320,82 @@ def _action_id(value: Any) -> str | None:
     return text
 
 
+def _initial_actions_from_response(
+    parsed: dict[str, Any],
+    *,
+    max_actions: int,
+) -> tuple[list[BusinessAffordance], dict[str, list[str]], str | None]:
+    raw_items = parsed.get("actions")
+    if not isinstance(raw_items, list):
+        return [], {}, "initial response actions must be an array"
+
+    records: dict[str, tuple[str, str, list[str]]] = {}
+    ordered_ids: list[str] = []
+    for item in raw_items[:max_actions]:
+        if not isinstance(item, dict):
+            return [], {}, "initial response action must be an object"
+        action_id = normalize_semantic_id(item.get("action_id", ""))
+        description = _clean_text(item.get("description"))
+        target = _clean_text(item.get("target"))
+        if not action_id or not description or not target:
+            return [], {}, "initial action requires action_id, description, and target"
+        if action_id in records:
+            return [], {}, f"duplicate initial action_id: {action_id}"
+        raw_requires = item.get("requires", [])
+        if isinstance(raw_requires, str):
+            raw_requires = [raw_requires]
+        if not isinstance(raw_requires, list):
+            return [], {}, f"requires must be an array for {action_id}"
+        requires: list[str] = []
+        for value in raw_requires:
+            requirement = normalize_semantic_id(value)
+            if requirement and requirement not in requires:
+                requires.append(requirement)
+        records[action_id] = (description, target, requires)
+        ordered_ids.append(action_id)
+
+    requires_by_action_id = {
+        action_id: list(records[action_id][2]) for action_id in ordered_ids
+    }
+    known_ids = set(records)
+    for action_id, requires in requires_by_action_id.items():
+        for requirement in requires:
+            if requirement == action_id:
+                return [], {}, f"self dependency: {action_id}"
+            if requirement not in known_ids:
+                return [], {}, f"dangling dependency: {requirement} -> {action_id}"
+
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(action_id: str) -> bool:
+        if action_id in visiting:
+            return False
+        if action_id in visited:
+            return True
+        visiting.add(action_id)
+        for requirement in requires_by_action_id[action_id]:
+            if not visit(requirement):
+                return False
+        visiting.remove(action_id)
+        visited.add(action_id)
+        return True
+
+    if not all(visit(action_id) for action_id in ordered_ids):
+        return [], {}, "cyclic initial dependency graph"
+
+    affordances = [
+        BusinessAffordance(
+            action_name=action_id,
+            label=records[action_id][0],
+            target_hint=records[action_id][1],
+            source="vlm",
+        )
+        for action_id in ordered_ids
+    ]
+    return affordances, requires_by_action_id, None
+
+
 def _targeted_metadata(
     parsed: dict[str, Any],
 ) -> tuple[str | None, list[tuple[str, str]], list[str]]:
@@ -364,7 +468,32 @@ def summarize_visual_affordances(
             ),
         )
 
-    is_targeted = str(request.scan_kind or "initial").strip().lower() == "targeted"
+    scan_kind = str(request.scan_kind or "initial").strip().lower()
+    is_initial = scan_kind == "initial"
+    is_targeted = scan_kind == "targeted"
+    requires_by_action_id: dict[str, list[str]] = {}
+    if is_initial:
+        affordances, requires_by_action_id, contract_error = (
+            _initial_actions_from_response(
+                parsed,
+                max_actions=request.max_actions,
+            )
+        )
+        if contract_error is not None:
+            return VisualAffordanceResult(
+                business_affordances=[],
+                requires_by_action_id={},
+                trace=_trace(
+                    prompt=prompt,
+                    raw_response=raw_response,
+                    llm_response=parsed,
+                    status="failed",
+                    error_type="response_contract_error",
+                    error_message=contract_error,
+                ),
+            )
+    else:
+        affordances = []
     location_id = _clean_text(parsed.get("location_id"))
     replacements: list[tuple[str, str]] = []
     disabled_action_ids: list[str] = []
@@ -379,7 +508,7 @@ def summarize_visual_affordances(
         )
         targeted_location, replacements, disabled_action_ids = _targeted_metadata(parsed)
         location_id = targeted_location or location_id
-    else:
+    elif not is_initial:
         affordances = _affordances_from_response(
             parsed,
             max_actions=request.max_actions,
@@ -395,6 +524,7 @@ def summarize_visual_affordances(
             ][: request.max_actions]
     return VisualAffordanceResult(
         business_affordances=affordances,
+        requires_by_action_id=requires_by_action_id,
         trace=_trace(
             prompt=prompt,
             raw_response=raw_response,

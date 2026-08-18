@@ -57,40 +57,126 @@ def test_summarize_visual_affordances_maps_provider_json():
     )
 
     def provider(prompt, *, current_screenshot_path):
-        assert "representative business actions" in prompt
+        assert "semantic actions" in prompt
         assert current_screenshot_path == "current.png"
         return (
-            '{"state_label":"product_list_sorted",'
-            '"page_mode":"multi_region","regions":['
-            '{"region_id":"region_1","purpose":"Manage visible items",'
-            '"actions":['
-            '{"intent":"add_item_to_cart",'
-            '"label":"Add to cart",'
+            '{"actions":['
+            '{"action_id":"add_item_to_cart",'
+            '"description":"Add a visible item to the cart",'
             '"target":"button labeled Add to cart on a visible item",'
-            '"supporting_facts":["item_control_visible","cart_control_visible"]},'
-            '{"intent":"open_cart",'
-            '"label":"Cart",'
-            '"target":"cart link"}'
-            ']}]}'
+            '"requires":[]},'
+            '{"action_id":"open_cart",'
+            '"description":"Open the cart",'
+            '"target":"cart link", "requires":[]}'
+            ']}'
         )
 
     result = summarize_visual_affordances(request, provider=provider)
 
     assert result.trace.status == "summarized"
     assert result.state_summary is None
-    assert result.state_label == "product_list_sorted"
+    assert result.state_label is None
     assert [item.action_name for item in result.business_affordances] == [
         "add_item_to_cart",
         "open_cart",
     ]
-    assert result.business_affordances[0].relevance_hint == "unknown"
+    assert result.requires_by_action_id == {
+        "add_item_to_cart": [],
+        "open_cart": [],
+    }
     assert result.business_affordances[0].target_hint == (
         "button labeled Add to cart on a visible item"
     )
-    assert result.business_affordances[0].supporting_facts == [
-        "item_control_visible",
-        "cart_control_visible",
+    assert result.business_affordances[0].supporting_facts == []
+
+
+def test_initial_scan_parses_minimal_action_dependencies_without_planning_inputs():
+    request = VisualAffordanceRequest(
+        goal="Explore visible business capabilities.",
+        current_screenshot_path="current.png",
+        max_actions=8,
+    )
+
+    def provider(prompt, *, current_screenshot_path):
+        payload = json.loads(prompt)
+        instruction = payload["instruction"]
+        assert payload["output_schema"] == {
+            "actions": [
+                {
+                    "action_id": "stable_snake_case_action",
+                    "description": "one precise visible semantic operation",
+                    "target": "visible target",
+                    "requires": ["other_action_id"],
+                }
+            ]
+        }
+        assert "profile" not in prompt.lower()
+        assert "contract" not in prompt.lower()
+        assert "goal" not in prompt.lower()
+        assert "regions" not in prompt.lower()
+        assert "page_mode" not in prompt.lower()
+        assert "relevance_hint" not in prompt.lower()
+        assert "supporting_facts" not in prompt.lower()
+        assert "confidence" not in prompt.lower()
+        assert "directly executable" not in instruction
+        assert current_screenshot_path == "current.png"
+        return json.dumps(
+            {
+                "actions": [
+                    {
+                        "action_id": "fill_identity",
+                        "description": "Fill the visible identity form",
+                        "target": "identity form",
+                        "requires": [],
+                    },
+                    {
+                        "action_id": "submit_form",
+                        "description": "Submit the visible form",
+                        "target": "submit button",
+                        "requires": ["fill_identity"],
+                    },
+                ]
+            }
+        )
+
+    result = summarize_visual_affordances(request, provider=provider)
+
+    assert result.trace.status == "summarized"
+    assert [item.action_name for item in result.business_affordances] == [
+        "fill_identity",
+        "submit_form",
     ]
+    assert result.requires_by_action_id == {
+        "fill_identity": [],
+        "submit_form": ["fill_identity"],
+    }
+
+
+@pytest.mark.parametrize(
+    "actions",
+    [
+        [{"action_id": "submit_form", "description": "Submit", "target": "button", "requires": ["missing"]}],
+        [{"action_id": "submit_form", "description": "Submit", "target": "button", "requires": ["submit_form"]}],
+        [
+            {"action_id": "first", "description": "First", "target": "one", "requires": ["second"]},
+            {"action_id": "second", "description": "Second", "target": "two", "requires": ["first"]},
+        ],
+    ],
+)
+def test_initial_scan_rejects_invalid_action_dependency_graph(actions):
+    request = VisualAffordanceRequest(
+        goal="Explore visible business capabilities.",
+        current_screenshot_path="current.png",
+    )
+
+    result = summarize_visual_affordances(
+        request,
+        provider=lambda *_args, **_kwargs: json.dumps({"actions": actions}),
+    )
+
+    assert result.trace.status == "failed"
+    assert result.trace.error_type == "response_contract_error"
+    assert result.business_affordances == []
 
 
 @pytest.mark.parametrize(
@@ -109,15 +195,17 @@ def test_visual_affordance_prompt_prioritizes_breadth_without_external_task_goal
     def provider(prompt, *, current_screenshot_path):
         payload = json.loads(prompt)
         instruction = payload["instruction"]
-        action_schema = payload["output_schema"]["regions"][0]["actions"][0]
+        action_schema = payload["output_schema"]["actions"][0]
 
-        assert "breadth of functional coverage" in instruction
-        assert "one representative action per functional family" in instruction
-        assert "new surface, object, dialog, page, or workflow stage" in instruction
-        assert "local refinement" in instruction
-        assert "concrete visible target" in instruction
-        assert action_schema["relevance_hint"] == "core | supporting | low_value"
-        assert action_schema["confidence"] == "number from 0.0 to 1.0"
+        assert "distinct functional family" in instruction
+        assert "at most 8 actions" in instruction
+        assert action_schema["action_id"] == "stable_snake_case_action"
+        assert set(action_schema) == {
+            "action_id",
+            "description",
+            "target",
+            "requires",
+        }
 
         assert "profile" not in payload
         assert "current_planning_facts" not in payload
@@ -127,7 +215,7 @@ def test_visual_affordance_prompt_prioritizes_breadth_without_external_task_goal
         assert "web-kobe" not in prompt.lower()
         assert "checkout" not in prompt.lower()
         assert "cart_has_items" not in prompt
-        return '{"page_mode":"uncertain","regions":[]}'
+        return '{"actions":[]}'
 
     result = summarize_visual_affordances(request, provider=provider)
 
@@ -151,33 +239,18 @@ def test_visual_affordance_prompt_treats_max_actions_as_upper_bound():
     )
 
     def provider(prompt, *, current_screenshot_path):
-        assert "upper bound, not a quota" in prompt
-        assert "Return fewer actions when fewer are actually available" in prompt
-        assert "multi_region" in prompt
-        assert "single_surface" in prompt
+        assert "at most 8 actions" in prompt
         assert "Do not infer actions from common website patterns" in prompt
         assert "profile" not in prompt.lower()
         assert "checkout" not in prompt.lower()
-        return (
-            '{"page_mode":"single_surface","regions":['
-            '{"region_id":"region_1","purpose":"Focused object actions",'
-            '"actions":['
-            '{"intent":"add_to_cart","target":"Add to cart",'
-            '"supporting_facts":["item_visible"]},'
-            '{"intent":"close_product_details","target":"Close",'
-            '"supporting_facts":[]}'
-            ']}]}'
-        )
+        return '{"actions":[]}'
 
     result = summarize_visual_affordances(request, provider=provider)
 
-    assert [item.action_name for item in result.business_affordances] == [
-        "add_to_cart",
-        "close_product_details",
-    ]
+    assert result.business_affordances == []
 
 
-def test_visual_affordance_prompt_requests_top_level_state_label():
+def test_visual_affordance_prompt_has_only_minimal_action_schema():
     request = VisualAffordanceRequest(
         goal="Explore visible business capabilities.",
         current_screenshot_path="current.png",
@@ -185,14 +258,12 @@ def test_visual_affordance_prompt_requests_top_level_state_label():
 
     def provider(prompt, *, current_screenshot_path):
         payload = json.loads(prompt)
-        assert payload["output_schema"]["state_label"] == (
-            "short snake_case visible state name"
-        )
-        return '{"state_label":"product_list_sorted","regions":[]}'
+        assert set(payload["output_schema"]) == {"actions"}
+        return '{"actions":[]}'
 
     result = summarize_visual_affordances(request, provider=provider)
 
-    assert result.state_label == "product_list_sorted"
+    assert result.state_label is None
 
 
 def test_visual_affordance_ignores_non_string_state_label_without_losing_actions():
@@ -202,17 +273,12 @@ def test_visual_affordance_ignores_non_string_state_label_without_losing_actions
     )
 
     def provider(prompt, *, current_screenshot_path):
-        return (
-            '{"state_label":{"name":"not-a-label"},"regions":['
-            '{"actions":[{"intent":"sort_products","target":"Sort"}]}]}'
-        )
+        return '{"actions":[]}'
 
     result = summarize_visual_affordances(request, provider=provider)
 
     assert result.state_label is None
-    assert [item.action_name for item in result.business_affordances] == [
-        "sort_products"
-    ]
+    assert result.business_affordances == []
 
 
 def test_summarize_visual_affordances_enforces_max_actions_upper_bound():
@@ -223,17 +289,14 @@ def test_summarize_visual_affordances_enforces_max_actions_upper_bound():
     )
 
     def provider(prompt, *, current_screenshot_path):
-        return (
-            '{"page_mode":"multi_region","regions":['
-            '{"region_id":"region_1","purpose":"First region",'
-            '"actions":['
-            '{"intent":"first_action","target":"First",'
-            '"supporting_facts":["first_visible"]},'
-            '{"intent":"second_action","target":"Second",'
-            '"supporting_facts":["second_visible"]},'
-            '{"intent":"third_action","target":"Third",'
-            '"supporting_facts":["third_visible"]}'
-            ']}]}'
+        return json.dumps(
+            {
+                "actions": [
+                    {"action_id": "first_action", "description": "First", "target": "First", "requires": []},
+                    {"action_id": "second_action", "description": "Second", "target": "Second", "requires": []},
+                    {"action_id": "third_action", "description": "Third", "target": "Third", "requires": []},
+                ]
+            }
         )
 
     result = summarize_visual_affordances(request, provider=provider)
@@ -324,34 +387,30 @@ def test_summarize_visual_affordances_rejects_non_object_response():
     assert result.business_affordances == []
 
 
-def test_summarize_visual_affordances_normalizes_supporting_facts():
+def test_summarize_visual_affordances_normalizes_action_ids_and_requires():
     request = VisualAffordanceRequest(
         goal="Explore visible business capabilities.",
         current_screenshot_path="current.png",
     )
 
     def provider(prompt, *, current_screenshot_path):
-        return (
-            '{"regions":[{"actions":[{"intent":"inspect",'
-            '"supporting_facts":[" visible_control ","","   ",'
-            '"visible_control","second_fact","third_fact","fourth_fact",'
-            '"fifth_fact","sixth_fact","seventh_fact","eighth_fact",'
-            '"ninth_fact"]}]}]}'
+        return json.dumps(
+            {
+                "actions": [
+                    {
+                        "action_id": " Inspect Action ",
+                        "description": "Inspect",
+                        "target": "visible control",
+                        "requires": ["", " Inspect Action "],
+                    }
+                ]
+            }
         )
 
     result = summarize_visual_affordances(request, provider=provider)
 
-    assert result.business_affordances[0].supporting_facts == [
-        "visible_control",
-        "second_fact",
-        "third_fact",
-        "fourth_fact",
-        "fifth_fact",
-        "sixth_fact",
-        "seventh_fact",
-        "eighth_fact",
-        "ninth_fact",
-    ][:8]
+    assert result.trace.status == "failed"
+    assert result.trace.error_type == "response_contract_error"
 
 
 def test_summarize_visual_affordances_ignores_removed_candidate_fields():
@@ -365,7 +424,6 @@ def test_summarize_visual_affordances_ignores_removed_candidate_fields():
 
     result = summarize_visual_affordances(request, provider=provider)
 
-    affordance = result.business_affordances[0]
-    assert affordance.action_name == "legacy_action"
-    assert "expected_change" not in affordance.to_dict()
-    assert "evidence" not in affordance.to_dict()
+    assert result.trace.status == "failed"
+    assert result.trace.error_type == "response_contract_error"
+    assert result.business_affordances == []
