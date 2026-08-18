@@ -802,7 +802,12 @@ class WebKobeExplorer:
 
         target_node = _node_from_draft(after_draft)
         outcome_location_hint = source_location_hint
-        if action_outcome_result is not None and action_outcome_result.location_change:
+        outcome_location_change_accepted = bool(
+            action_outcome_result is not None
+            and action_outcome_result.outcome == "success"
+            and action_outcome_result.location_change
+        )
+        if outcome_location_change_accepted:
             outcome_location_hint = (
                 _optional_semantic_id(after_draft.page_frame.page_type)
                 or _optional_semantic_id(after.page_id)
@@ -882,10 +887,7 @@ class WebKobeExplorer:
                 edge_status = "succeeded"
         allow_outcome_navigation = (
             action_outcome_result is None
-            or (
-                action_outcome_result.outcome == "success"
-                and action_outcome_result.location_change
-            )
+            or outcome_location_change_accepted
         )
         if (
             allow_outcome_navigation
@@ -909,6 +911,10 @@ class WebKobeExplorer:
             if semantic_observation is not None
             else outcome_location_hint or location_before
         )
+        outcome_is_non_success = bool(
+            action_outcome_result is not None
+            and action_outcome_result.outcome != "success"
+        )
         completion_facts = (
             list(semantic_observation.completion_facts)
             if semantic_observation is not None
@@ -929,12 +935,16 @@ class WebKobeExplorer:
                 location_before=location_before,
                 location_after=location_after,
                 action_id=selected.canonical_action_name or selected.semantic_id,
-                observable_change=bool(
-                    observed_delta
-                    or state_changed
-                    or (
-                        action_outcome_result is not None
-                        and action_outcome_result.outcome == "success"
+                observable_change=(
+                    False
+                    if outcome_is_non_success
+                    else bool(
+                        observed_delta
+                        or state_changed
+                        or (
+                            action_outcome_result is not None
+                            and action_outcome_result.outcome == "success"
+                        )
                     )
                 ),
                 completion_facts=completion_facts,

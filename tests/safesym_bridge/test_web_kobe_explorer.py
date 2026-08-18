@@ -592,8 +592,11 @@ async def test_failed_or_uncertain_outcome_cannot_be_promoted_to_navigation(outc
         memory=LocationExplorationMemory()
     )
 
+    scan_locations = []
+
     def candidate_provider(prompt, **kwargs):
         payload = json.loads(prompt)
+        scan_locations.append(payload.get("semantic_location"))
         action_id = (
             "open_checkout"
             if payload.get("semantic_location") == "listing"
@@ -638,6 +641,19 @@ async def test_failed_or_uncertain_outcome_cannot_be_promoted_to_navigation(outc
     assert edge.status not in {"succeeded_with_navigation", "succeeded_with_observed_change"}
     assert semantic.actions == []
     assert report.excluded_edges
+    assert set(coordinator.memory.locations) == {"listing"}
+    assert scan_locations == ["listing"]
+    assert explorer._current_node_id == edge.source_node_id
+    source_anchor, unresolved = _semantic_location_anchor(
+        explorer.manager.node_for_id(edge.source_node_id)
+    )
+    assert source_anchor == "listing"
+    assert unresolved is False
+    assert graph.meta["last_step_kind"] not in {
+        "location_transition",
+        "initial_location_scan",
+    }
+    assert graph.meta["last_step_semantic_progress"] is False
 
 
 def test_explorer_restore_graph_preserves_candidates_without_current_browser_pointer():
