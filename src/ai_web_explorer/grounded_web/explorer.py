@@ -875,10 +875,18 @@ class WebKobeExplorer:
                 edge_status = "failed_execution"
             elif action_outcome_result.outcome == "uncertain":
                 edge_status = "no_observed_change"
-        if source_id != target_id and edge_status in {
-            "no_observed_change",
-            "failed_execution",
-        }:
+        allow_outcome_navigation = (
+            action_outcome_result is None
+            or (
+                action_outcome_result.outcome == "success"
+                and action_outcome_result.location_change
+            )
+        )
+        if (
+            allow_outcome_navigation
+            and source_id != target_id
+            and edge_status in {"no_observed_change", "failed_execution"}
+        ):
             edge_status = "succeeded_with_navigation"
         self._record_state_embedding(
             node_id=target_id,

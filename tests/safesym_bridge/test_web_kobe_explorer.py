@@ -527,6 +527,105 @@ async def test_real_location_change_same_page_type_uses_one_new_location_anchor(
     assert candidate_locations == ["checkout", target_location]
 
 
+class OutcomeTargetChangeAdapter:
+    app_name = "outcome_target_change_fixture"
+
+    def __init__(self):
+        self.states = [
+            StateSnapshot(
+                page_id="listing",
+                url="https://example.test/listing",
+                title="Listing",
+                signature={"surface": "listing"},
+            ),
+            StateSnapshot(
+                page_id="checkout",
+                url="https://example.test/checkout",
+                title="Checkout",
+                signature={"surface": "checkout"},
+            ),
+        ]
+        self.executed = []
+
+    async def observe_state(self):
+        return self.states[min(len(self.executed), 1)]
+
+    async def list_interactables(self, state):
+        action_id = "open_checkout" if not self.executed else "fill_billing"
+        return [
+            {
+                "semantic_id": action_id,
+                "description": action_id.replace("_", " "),
+                "locator": f"button.{action_id}",
+                "action_kind": "click",
+                "explored": False,
+            }
+        ]
+
+    async def execute(self, action):
+        self.executed.append(action)
+        return True
+
+    async def capture_screenshot(self, label):
+        return f"{label}-{len(self.executed)}.png"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("outcome", ["failed", "uncertain"])
+async def test_failed_or_uncertain_outcome_cannot_be_promoted_to_navigation(outcome):
+    adapter = OutcomeTargetChangeAdapter()
+    coordinator = LocationExplorationCoordinator(
+        memory=LocationExplorationMemory()
+    )
+
+    def candidate_provider(prompt, **kwargs):
+        payload = json.loads(prompt)
+        action_id = (
+            "open_checkout"
+            if payload.get("semantic_location") == "listing"
+            else "fill_billing"
+        )
+        return json.dumps(
+            {
+                "actions": [
+                    {
+                        "action_id": action_id,
+                        "description": action_id.replace("_", " "),
+                        "target": f"{action_id} control",
+                        "requires": [],
+                    }
+                ]
+            }
+        )
+
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=DeterministicSemanticAssistor(app=adapter.app_name),
+        business_profile=None,
+        capture_screenshots=True,
+        visual_delta_provider=candidate_provider,
+        action_outcome_provider=lambda prompt, **kwargs: json.dumps(
+            {
+                "outcome": outcome,
+                "location_change": True,
+                "evidence": ["The target state changed but outcome is not success."],
+            }
+        ),
+        location_exploration_coordinator=coordinator,
+    )
+
+    graph = await explorer.explore_one_step()
+    edge = graph.edges[0]
+    semantic, report = build_semantic_planning_graph(graph)
+
+    assert edge.status == (
+        "failed_execution" if outcome == "failed" else "no_observed_change"
+    )
+    assert edge.status not in {"succeeded_with_navigation", "succeeded_with_observed_change"}
+    assert semantic.actions == []
+    assert report.excluded_edges
+
+
 def test_explorer_restore_graph_preserves_candidates_without_current_browser_pointer():
     explorer = _business_explorer(FakeAdapter())
     graph = WebKobeGraph(
