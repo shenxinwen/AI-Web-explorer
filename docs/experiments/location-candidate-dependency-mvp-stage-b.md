@@ -27,11 +27,13 @@ Branch: codex/location-candidate-dependency-mvp
 13. fc9571b — fix: require actions array for initial scans
 14. d079311 — test: align legacy scans with initial action contract
 15. 16ea52e — test: use actions contract in active scan fixture
+16. 5d42c1a — fix: keep failed outcomes at source location
+17. c9c7ee4 — fix: enforce strict initial action schema
 
 Commits 10–13 are the four requested review fixes, each implemented with a
 focused RED/GREEN test cycle. Commits 14–15 only update legacy/active test
-fixtures to exercise the resulting parser contract; they add no runtime
-module or unrelated refactor.
+fixtures to exercise the resulting parser contract; commits 16–17 are the two
+new High-blocker fixes, each implemented with a focused RED/GREEN test cycle.
 
 ## Implemented behavior
 
@@ -44,9 +46,11 @@ module or unrelated refactor.
 - Executed-action observation uses exactly outcome, location_change, and
   evidence. Success is converted locally to a coarse SemanticObservation;
   failed and uncertain outcomes are not projectable.
-- The active outcome path uses an initial scan at a newly observed location
-  and bypasses targeted/supplement scans. Legacy response reading remains
-  only as a low-cost compatibility path.
+- The active outcome path uses an initial scan only after a successful outcome
+  with location_change=true; failed and uncertain outcomes remain at the
+  source location, do not create a target pool, and do not produce location
+  transition or semantic progress. Legacy response reading remains only as a
+  low-cost compatibility path.
 - Successful dependency actions produce completed_<location>_<action>
   predicates. Dependent actions receive those predicates as required facts,
   and Minimal Semantic PDDL therefore cannot execute a dependent first.
@@ -62,6 +66,9 @@ module or unrelated refactor.
   over node, URL, or signature changes and remain non-projectable. Only a
   successful outcome with location_change=true can become navigation; a
   successful unchanged-location outcome is still projectable as succeeded.
+- The raw outcome trace is retained even when its location_change field
+  contradicts a failed or uncertain outcome; local memory, current anchor,
+  and scan selection use the source location in that case.
 - Initial dependency prompts allow direct inference from visible required
   fields, disabled controls, labels, and visible workflow structure, including
   clearly shown login or checkout steps. They reject dependencies based on
@@ -70,6 +77,11 @@ module or unrelated refactor.
 - Active initial parsing now requires a top-level actions array. regions and
   business_affordances are not initial fallbacks; their read compatibility is
   limited to non-initial legacy scans.
+- Initial parsing is fail-closed on any schema deviation: root and item keys
+  must be exact, requires must be explicitly present as a list of non-empty
+  string IDs, and action_id/description/target must be non-empty strings.
+  Invalid responses produce no formal affordances or requirements;
+  actions=[] remains valid.
 - OpenAI visual provider default is gpt-4o-mini; environment variables and
   explicit model arguments retain precedence. DeepSeek/Stagehand response
   parsing was not changed.
@@ -87,25 +99,25 @@ module or unrelated refactor.
 Using the existing D:\GitHUb\ai-web-explorer-main\.venv with PYTHONPATH
 pointing at this worktree:
 
-- Focused files: test_business_affordance.py 21 passed; test_semantic_planning.py
-  19 passed; test_web_kobe_explorer.py 83 passed. All focused dependency,
-  outcome, parser, and semantic/PDDL tests passed.
-- tests/safesym_bridge: 591 passed, 4 skipped, 2 warnings.
-- Full pytest -q in the sandbox: 594 passed, 4 skipped, 1 failed.
+- Focused files: business_affordance, semantic_planning, web_kobe_explorer,
+  and location_exploration: 143 passed, 2 warnings.
+- tests/safesym_bridge: 597 passed, 4 skipped, 2 warnings.
+- Full pytest -q in the sandbox: 600 passed, 4 skipped, 1 failed.
   The sole failure was the browser fixture launch:
   tests/test_local_shop_fixture.py::test_local_shop_fixture_supports_cart_state_changes
   with Playwright BrowserType.launch: spawn EPERM. The same test was then
-  rerun with controlled permission and passed: 1 passed in 3.03s.
+  rerun with controlled permission and passed: 1 passed in 1.54s.
 - git diff --check main...HEAD: passed.
 
-The correction was TDD-verified: the two new semantic-planning regression
-tests failed before the implementation change and passed afterward.
+Both new High-blocker regression groups were TDD-verified: the failed/
+uncertain location-isolation cases and strict-schema cases failed before their
+respective implementation changes and passed afterward.
 
 ## Diff and files
 
 Implementation diff relative to main (including this report):
 
-    17 files changed, 1821 insertions(+), 137 deletions(-)
+    17 files changed, 1887 insertions(+), 138 deletions(-)
 
 Changed files:
 
