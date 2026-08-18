@@ -271,6 +271,7 @@ def _edge_from_dict(data: dict[str, Any]) -> WebKobeEdge:
         semantic_observation=_semantic_observation_from_dict(
             data.get("semantic_observation")
         ),
+        required_action_ids=list(data.get("required_action_ids", [])),
         visual_change_kind=str(data.get("visual_change_kind", "unknown")),
         visit_count=int(data.get("visit_count", 1)),
         status=str(data.get("status", "verified")),

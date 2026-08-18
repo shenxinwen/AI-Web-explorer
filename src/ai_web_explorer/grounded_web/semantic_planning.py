@@ -37,6 +37,10 @@ def _edge_name(edge: WebKobeEdge) -> str:
     return normalize_semantic_id(edge.action.canonical_action_name or edge.action.semantic_id)
 
 
+def _completion_fact(location: str, action_name: str) -> str:
+    return normalize_semantic_id(f"completed_{location}_{action_name}")
+
+
 def _source_state(graph: WebKobeGraph, edge: WebKobeEdge):
     nodes = {node.node_id: node for node in graph.nodes}
     node = nodes.get(edge.source_node_id)
@@ -98,6 +102,27 @@ def build_semantic_planning_graph(
     action_contracts = action_contracts_from_prompt_context(
         graph.meta.get("semantic_profile_context")
     )
+    required_action_names = {
+        normalize_semantic_id(action_id)
+        for edge in graph.edges
+        for action_id in edge.required_action_ids
+        if normalize_semantic_id(action_id)
+    }
+    successful_completion_facts: dict[str, list[str]] = {}
+    for edge in graph.edges:
+        if (
+            edge.execution_trace.success
+            and edge.status in PROJECTABLE_EDGE_STATUSES
+            and edge.semantic_observation is not None
+        ):
+            action_name = _edge_name(edge)
+            observation = edge.semantic_observation
+            source_location = normalize_semantic_id(observation.source_location)
+            if action_name in required_action_names and source_location:
+                fact = _completion_fact(source_location, action_name)
+                successful_completion_facts.setdefault(action_name, [])
+                if fact not in successful_completion_facts[action_name]:
+                    successful_completion_facts[action_name].append(fact)
 
     for edge in graph.edges:
         observation = edge.semantic_observation
@@ -179,6 +204,15 @@ def build_semantic_planning_graph(
             else []
         )
         required_facts = _unique_sorted(required_facts + contract_required)
+        dependency_facts: list[str] = []
+        for required_action_id in edge.required_action_ids:
+            dependency_facts.extend(
+                successful_completion_facts.get(
+                    normalize_semantic_id(required_action_id),
+                    [],
+                )
+            )
+        required_facts = _unique_sorted(required_facts + dependency_facts)
         _record_provenance(
             fact_provenance,
             edge=edge,
@@ -204,6 +238,18 @@ def build_semantic_planning_graph(
                 if fact in action_contract.removed_facts
             ]
         added_facts = list(verified_added)
+        completion_fact = None
+        if role and _edge_name(edge) in required_action_names:
+            completion_fact = _completion_fact(source_location, _edge_name(edge))
+            added_facts = _unique_sorted(added_facts + [completion_fact])
+            capability_facts.add(completion_fact)
+            _record_provenance(
+                fact_provenance,
+                edge=edge,
+                facts=[completion_fact],
+                kind="action_completion",
+                source="successful_action",
+            )
         if role in PRESENTATION_ROLES and observation.evidence:
             completion_facts = _unique_sorted(observation.completion_facts)
             added_facts = _unique_sorted(added_facts + completion_facts)

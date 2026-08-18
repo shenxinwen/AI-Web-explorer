@@ -209,6 +209,7 @@ class WebKobeEdge:
     planning_delta: PlanningDelta | None = None
     planning_transition: PlanningTransition | None = None
     semantic_observation: SemanticObservation | None = None
+    required_action_ids: list[str] = field(default_factory=list)
     visual_change_kind: str = "unknown"
     visit_count: int = 1
     status: str = "verified"
@@ -249,6 +250,7 @@ class WebKobeEdge:
                 if self.semantic_observation is not None
                 else None
             ),
+            "required_action_ids": list(self.required_action_ids),
             "visual_change_kind": self.visual_change_kind,
             "visit_count": self.visit_count,
             "status": self.status,

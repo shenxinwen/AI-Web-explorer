@@ -943,6 +943,19 @@ class WebKobeExplorer:
                 has_progress=False,
                 step_kind="legacy_business_edge",
             )
+        required_action_ids: list[str] = []
+        if self.location_scoped_exploration:
+            candidate_record = (
+                self.location_exploration_coordinator.memory.pool_for(
+                    location_before
+                ).candidates.get(
+                    normalize_semantic_id(
+                        selected.canonical_action_name or selected.semantic_id
+                    )
+                )
+            )
+            if candidate_record is not None:
+                required_action_ids = list(candidate_record.requires)
         edge = WebKobeEdge(
             source_node_id=source_id,
             target_node_id=target_id,
@@ -966,6 +979,7 @@ class WebKobeExplorer:
             planning_delta=planning_delta,
             planning_transition=planning_transition,
             semantic_observation=semantic_observation,
+            required_action_ids=required_action_ids,
             visual_change_kind=visual_change_kind,
             status=edge_status,
             evidence=[Evidence(source="web_kobe_explorer", url=before.url)],

@@ -57,6 +57,7 @@ def _edge(
     source_profile_fact_ids=None,
     supporting_facts=None,
     planning_delta=None,
+    required_action_ids=None,
 ):
     return WebKobeEdge(
         source_node_id=source,
@@ -83,6 +84,7 @@ def _edge(
             True,
         ),
         planning_delta=planning_delta,
+        required_action_ids=list(required_action_ids or []),
         semantic_observation=SemanticObservation(
             action_role=role,
             source_location=source_location,
@@ -128,6 +130,49 @@ def test_sort_stays_at_location_and_adds_completion_fact():
     assert action.required_facts == []
     assert action.added_facts == ["products_sorted"]
     assert action.source_location == action.target_location == "shopping"
+
+
+def test_successful_action_dependencies_become_completion_preconditions():
+    prerequisite = _edge(
+        action_name="fill_billing",
+        role="presentation_capability",
+        target="after_billing",
+        completion_facts=[],
+    )
+    dependent = _edge(
+        source="after_billing",
+        target="after_order",
+        action_name="place_order",
+        role="commit",
+        required_action_ids=["fill_billing"],
+    )
+    graph = WebKobeGraph(
+        app="test",
+        start_node_id="start",
+        total_steps_completed=2,
+        nodes=[_node("start"), _node("after_billing"), _node("after_order")],
+        edges=[prerequisite, dependent],
+    )
+
+    semantic, report = build_semantic_planning_graph(graph)
+
+    assert set(report.included_raw_edge_ids) == {
+        prerequisite.edge_id,
+        dependent.edge_id,
+    }
+    prerequisite_action = next(
+        action for action in semantic.actions if action.action_name == "fill_billing"
+    )
+    dependent_action = next(
+        action for action in semantic.actions if action.action_name == "place_order"
+    )
+    assert "completed_shopping_fill_billing" in prerequisite_action.added_facts
+    assert "completed_shopping_fill_billing" in dependent_action.required_facts
+    domain = compile_minimal_semantic_domain(semantic).domain
+    assert "(completed_shopping_fill_billing)" in domain
+    place_order = domain.index("(:action place_order")
+    completion_fact = domain.index("(completed_shopping_fill_billing)", place_order)
+    assert completion_fact < domain.index(":effect", place_order)
 
 
 def test_add_to_cart_changes_fact_without_creating_combination_location():

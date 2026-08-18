@@ -329,6 +329,204 @@ async def test_minimal_active_path_scans_new_location_with_initial_contract():
     assert "checkout" in memory.locations
 
 
+class CheckoutDependencyAdapter:
+    app_name = "checkout_dependency_fixture"
+
+    def __init__(self, *, after_page_id="checkout"):
+        self.state = StateSnapshot(
+            page_id="checkout",
+            url="https://example.test/checkout",
+            title="Checkout",
+            signature={"surface": "checkout"},
+        )
+        self.after_state = StateSnapshot(
+            page_id=after_page_id,
+            url="https://example.test/checkout",
+            title="Checkout",
+            signature={"surface": "checkout"},
+        )
+        self.executed = []
+
+    async def observe_state(self):
+        return self.after_state if self.executed else self.state
+
+    async def list_interactables(self, state):
+        action_id = "fill_billing" if not self.executed else "place_order"
+        return [
+            {
+                "semantic_id": action_id,
+                "description": action_id.replace("_", " "),
+                "locator": f"button.{action_id}",
+                "action_kind": "click",
+                "explored": False,
+            }
+        ]
+
+    async def execute(self, action):
+        self.executed.append(action)
+        return True
+
+    async def capture_screenshot(self, label):
+        return f"{label}-{len(self.executed)}.png"
+
+
+def _checkout_dependency_candidate_provider(prompt, **kwargs):
+    return json.dumps(
+        {
+            "actions": [
+                {
+                    "action_id": "fill_billing",
+                    "description": "Fill the visible billing form.",
+                    "target": "Billing form",
+                    "requires": [],
+                },
+                {
+                    "action_id": "place_order",
+                    "description": "Submit the visible checkout form.",
+                    "target": "Submit control",
+                    "requires": ["fill_billing"],
+                },
+            ]
+        }
+    )
+
+
+@pytest.mark.anyio
+async def test_real_outcome_path_projects_dependency_actions_to_semantic_pddl():
+    adapter = CheckoutDependencyAdapter()
+    coordinator = LocationExplorationCoordinator(memory=LocationExplorationMemory())
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=DeterministicSemanticAssistor(app=adapter.app_name),
+        business_profile=None,
+        capture_screenshots=True,
+        visual_delta_provider=_checkout_dependency_candidate_provider,
+        action_outcome_provider=lambda prompt, **kwargs: json.dumps(
+            {
+                "outcome": "success",
+                "location_change": False,
+                "evidence": ["The checkout surface remains visible."],
+            }
+        ),
+        location_exploration_coordinator=coordinator,
+    )
+
+    await explorer.explore_one_step()
+    graph = await explorer.explore_one_step()
+    semantic, report = build_semantic_planning_graph(graph)
+
+    actions = {action.action_name: action for action in semantic.actions}
+    assert report.excluded_edges == []
+    assert actions["fill_billing"].added_facts == [
+        "completed_checkout_fill_billing"
+    ]
+    assert actions["place_order"].required_facts == [
+        "completed_checkout_fill_billing"
+    ]
+    domain = compile_minimal_semantic_domain(semantic).domain
+    assert "(completed_checkout_fill_billing)" in domain
+    assert ":precondition (and (at_checkout) (completed_checkout_fill_billing))" in domain
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("outcome", ["failed", "uncertain"])
+async def test_real_failed_or_uncertain_outcome_is_not_projected(outcome):
+    adapter = CheckoutDependencyAdapter()
+    coordinator = LocationExplorationCoordinator(memory=LocationExplorationMemory())
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=DeterministicSemanticAssistor(app=adapter.app_name),
+        business_profile=None,
+        capture_screenshots=True,
+        visual_delta_provider=_checkout_dependency_candidate_provider,
+        action_outcome_provider=lambda prompt, **kwargs: json.dumps(
+            {
+                "outcome": outcome,
+                "location_change": False,
+                "evidence": ["The result is not a successful action."],
+            }
+        ),
+        location_exploration_coordinator=coordinator,
+    )
+
+    graph = await explorer.explore_one_step()
+    semantic, report = build_semantic_planning_graph(graph)
+
+    assert semantic.actions == []
+    assert report.excluded_edges[0]["reason"] in {
+        "failed_execution",
+        "non_projectable_status",
+    }
+
+
+@pytest.mark.anyio
+async def test_real_location_change_same_page_type_uses_one_new_location_anchor():
+    adapter = CheckoutDependencyAdapter(after_page_id="checkout")
+    memory = LocationExplorationMemory()
+    coordinator = LocationExplorationCoordinator(memory=memory)
+    candidate_locations = []
+    outcome_calls = []
+
+    def candidate_provider(prompt, **kwargs):
+        payload = json.loads(prompt)
+        location = payload.get("semantic_location")
+        candidate_locations.append(location)
+        if location == "checkout":
+            return _checkout_dependency_candidate_provider(prompt, **kwargs)
+        return json.dumps(
+            {
+                "actions": [
+                    {
+                        "action_id": "target_location_action",
+                        "description": "Use the action on the new location.",
+                        "target": "New location control",
+                        "requires": [],
+                    }
+                ]
+            }
+        )
+
+    def outcome_provider(prompt, **kwargs):
+        outcome_calls.append(kwargs)
+        return json.dumps(
+            {
+                "outcome": "success",
+                "location_change": len(outcome_calls) == 1,
+                "evidence": ["The active interface was observed."],
+            }
+        )
+
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=DeterministicSemanticAssistor(app=adapter.app_name),
+        business_profile=None,
+        capture_screenshots=True,
+        visual_delta_provider=candidate_provider,
+        action_outcome_provider=outcome_provider,
+        location_exploration_coordinator=coordinator,
+    )
+
+    graph = await explorer.explore_one_step()
+    semantic, _ = build_semantic_planning_graph(graph)
+    edge = graph.edges[0]
+    target_node = next(node for node in graph.nodes if node.node_id == edge.target_node_id)
+    target_location = semantic.actions[0].target_location
+    anchored_location, unresolved = _semantic_location_anchor(target_node)
+
+    assert edge.semantic_observation.target_location == target_location
+    assert target_location != "checkout"
+    assert target_node.semantic_location_hint == target_location
+    assert unresolved is False
+    assert anchored_location == target_location
+    assert explorer._current_node_id == edge.target_node_id
+    assert target_location in memory.locations
+    assert candidate_locations == ["checkout", target_location]
+
+    await explorer.explore_one_step()
+    assert adapter.executed[1].semantic_id == "target_location_action"
+    assert candidate_locations == ["checkout", target_location]
+
+
 def test_explorer_restore_graph_preserves_candidates_without_current_browser_pointer():
     explorer = _business_explorer(FakeAdapter())
     graph = WebKobeGraph(
