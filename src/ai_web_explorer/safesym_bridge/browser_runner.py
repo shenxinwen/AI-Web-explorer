@@ -55,6 +55,7 @@ from ai_web_explorer.grounded_web.semantic_assistor import (
     DeterministicSemanticAssistor,
 )
 from ai_web_explorer.grounded_web.openai_visual_delta import (
+    create_openai_action_outcome_provider_from_env,
     create_openai_visual_delta_provider_from_env,
 )
 from ai_web_explorer.grounded_web.embedding_provider import (
@@ -452,15 +453,21 @@ async def run_ecommerce_stagehand_step(
     model: str | None = None,
     screenshot_dir: Path | None = None,
     visual_delta_provider=None,
+    action_outcome_provider=None,
     use_openai_visual_delta: bool = False,
     visual_delta_model: str | None = None,
+    action_outcome_model: str | None = None,
     allow_final_order: bool = False,
     benchmark_context: BenchmarkTaskContext | None = None,
     experiment_plan: ExperimentPlan | None = None,
 ) -> Path:
     from playwright.async_api import async_playwright
 
-    if (visual_delta_provider is not None or use_openai_visual_delta) and (
+    if (
+        visual_delta_provider is not None
+        or action_outcome_provider is not None
+        or use_openai_visual_delta
+    ) and (
         screenshot_dir is None
     ):
         raise ValueError("screenshot_dir is required for visual delta analysis.")
@@ -469,6 +476,15 @@ async def run_ecommerce_stagehand_step(
         resolved_visual_delta_provider = create_openai_visual_delta_provider_from_env(
             model=visual_delta_model,
         )
+    resolved_action_outcome_provider = action_outcome_provider
+    if resolved_action_outcome_provider is None and (
+        use_openai_visual_delta or action_outcome_model is not None
+    ):
+        resolved_action_outcome_provider = create_openai_action_outcome_provider_from_env(
+            model=action_outcome_model,
+        )
+    if resolved_action_outcome_provider is None:
+        resolved_action_outcome_provider = resolved_visual_delta_provider
     resolved_experiment_plan = experiment_plan or ecommerce_checkout_experiment_plan(
         allow_final_order=allow_final_order,
     )
@@ -545,7 +561,7 @@ async def run_ecommerce_stagehand_step(
                     else None
                 ),
                 visual_delta_provider=resolved_visual_delta_provider,
-                action_outcome_provider=resolved_visual_delta_provider,
+                action_outcome_provider=resolved_action_outcome_provider,
             )
             controller = WebKobeExplorationController(explorer)
             if allow_final_order:
@@ -584,8 +600,10 @@ async def run_stagehand_exploration(
     model: str | None = None,
     screenshot_dir: Path | None = None,
     visual_delta_provider=None,
+    action_outcome_provider=None,
     use_openai_visual_delta: bool = False,
     visual_delta_model: str | None = None,
+    action_outcome_model: str | None = None,
     state_embedding_provider=None,
     embedding_path: Path | None = None,
     use_state_embeddings: bool = False,
@@ -637,7 +655,11 @@ async def run_stagehand_exploration(
         else None
     )
 
-    if (visual_delta_provider is not None or use_openai_visual_delta) and (
+    if (
+        visual_delta_provider is not None
+        or action_outcome_provider is not None
+        or use_openai_visual_delta
+    ) and (
         screenshot_dir is None
     ):
         raise ValueError("screenshot_dir is required for visual delta analysis.")
@@ -647,6 +669,16 @@ async def run_stagehand_exploration(
             model=visual_delta_model,
             request_timeout_seconds=vlm_request_timeout_seconds,
         )
+    resolved_action_outcome_provider = action_outcome_provider
+    if resolved_action_outcome_provider is None and (
+        use_openai_visual_delta or action_outcome_model is not None
+    ):
+        resolved_action_outcome_provider = create_openai_action_outcome_provider_from_env(
+            model=action_outcome_model,
+            request_timeout_seconds=vlm_request_timeout_seconds,
+        )
+    if resolved_action_outcome_provider is None:
+        resolved_action_outcome_provider = resolved_visual_delta_provider
     resolved_embedding_provider = state_embedding_provider
     if resolved_embedding_provider is None and use_state_embeddings:
         resolved_embedding_provider = create_embedding_provider_from_env(
@@ -728,7 +760,7 @@ async def run_stagehand_exploration(
                 capture_screenshots=screenshot_dir is not None,
                 business_profile=resolved_business_profile,
                 visual_delta_provider=resolved_visual_delta_provider,
-                action_outcome_provider=resolved_visual_delta_provider,
+                action_outcome_provider=resolved_action_outcome_provider,
                 enable_exploration_memory=resolved_embedding_provider is not None,
                 state_embedding_provider=resolved_embedding_provider,
                 action_embedding_provider=resolved_embedding_provider,

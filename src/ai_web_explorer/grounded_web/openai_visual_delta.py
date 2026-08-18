@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 DEFAULT_OPENAI_VISUAL_DELTA_MODEL = "gpt-4o-mini"
+DEFAULT_OPENAI_ACTION_OUTCOME_MODEL = "gpt-4o"
 
 
 def _image_data_url(path: str | Path) -> str:
@@ -120,8 +121,48 @@ def create_openai_visual_delta_provider_from_env(
     )
 
 
+def create_openai_action_outcome_provider_from_env(
+    *,
+    model: str | None = None,
+    request_timeout_seconds: float | None = None,
+    openai_factory: Callable[..., Any] | None = None,
+    load_dotenv: Callable[[], Any] | None = None,
+    environ: Mapping[str, str] | None = None,
+) -> OpenAIVisualDeltaProvider:
+    if load_dotenv is None:
+        from dotenv import load_dotenv as load_dotenv
+    load_dotenv()
+
+    env = os.environ if environ is None else environ
+    api_key = env.get("OPENAI_API_KEY")
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY is required for OpenAI action outcome.")
+
+    if openai_factory is None:
+        import openai
+
+        openai_factory = openai.OpenAI
+
+    selected_model = (
+        model or env.get("OPENAI_ACTION_OUTCOME_MODEL") or DEFAULT_OPENAI_ACTION_OUTCOME_MODEL
+    )
+    base_url = env.get("OPENAI_BASE_URL") or None
+    client_kwargs: dict[str, Any] = {
+        "api_key": api_key,
+        "base_url": base_url,
+    }
+    if request_timeout_seconds is not None:
+        client_kwargs["timeout"] = request_timeout_seconds
+    return OpenAIVisualDeltaProvider(
+        client=openai_factory(**client_kwargs),
+        model=selected_model,
+    )
+
+
 __all__ = [
+    "DEFAULT_OPENAI_ACTION_OUTCOME_MODEL",
     "DEFAULT_OPENAI_VISUAL_DELTA_MODEL",
     "OpenAIVisualDeltaProvider",
+    "create_openai_action_outcome_provider_from_env",
     "create_openai_visual_delta_provider_from_env",
 ]

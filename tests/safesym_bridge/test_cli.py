@@ -832,6 +832,7 @@ def test_main_web_kobe_ecommerce_stagehand_smoke_wires_benchmark_runner(
         screenshot_dir=None,
         use_openai_visual_delta=False,
         visual_delta_model=None,
+        action_outcome_model=None,
         allow_final_order=False,
         benchmark_context=None,
     ):
@@ -847,6 +848,7 @@ def test_main_web_kobe_ecommerce_stagehand_smoke_wires_benchmark_runner(
                 screenshot_dir,
                 use_openai_visual_delta,
                 visual_delta_model,
+                action_outcome_model,
                 allow_final_order,
                 benchmark_context.site_label,
                 benchmark_context.test_credentials,
@@ -890,6 +892,8 @@ def test_main_web_kobe_ecommerce_stagehand_smoke_wires_benchmark_runner(
             "--checkout-postal-code",
             "42424",
             "--allow-final-order",
+            "--action-outcome-model",
+            "gpt-4o",
         ]
     )
 
@@ -906,6 +910,7 @@ def test_main_web_kobe_ecommerce_stagehand_smoke_wires_benchmark_runner(
             Path("outputs/latest/screenshots"),
             False,
             None,
+            "gpt-4o",
             True,
             "public demo e-commerce site",
             {"username": "fixture_user", "password": "fixture_password"},
@@ -1088,6 +1093,7 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
         business_profile=None,
         use_openai_visual_delta=False,
         visual_delta_model=None,
+        action_outcome_model=None,
         stagehand_execution_mode="business_milestone",
         max_candidates=5,
         frontier_replay=False,
@@ -1112,6 +1118,7 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
                 business_profile,
                 use_openai_visual_delta,
                 visual_delta_model,
+                action_outcome_model,
                 stagehand_execution_mode,
                 max_candidates,
             )
@@ -1157,6 +1164,8 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
             "--openai-visual-delta",
             "--visual-delta-model",
             "gpt-4o-mini",
+            "--action-outcome-model",
+            "gpt-4o",
             "--stagehand-execution-mode",
             "observed_action",
             "--max-candidates",
@@ -1184,6 +1193,7 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
             "ecommerce_checkout",
             True,
             "gpt-4o-mini",
+            "gpt-4o",
             "observed_action",
             2,
         )

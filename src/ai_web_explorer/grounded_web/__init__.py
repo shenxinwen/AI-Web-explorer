@@ -41,7 +41,10 @@ from ai_web_explorer.grounded_web.graph import (
     WebKobeGraph,
 )
 from ai_web_explorer.grounded_web.openai_visual_delta import (
+    DEFAULT_OPENAI_ACTION_OUTCOME_MODEL,
+    DEFAULT_OPENAI_VISUAL_DELTA_MODEL,
     OpenAIVisualDeltaProvider,
+    create_openai_action_outcome_provider_from_env,
     create_openai_visual_delta_provider_from_env,
 )
 from ai_web_explorer.grounded_web.planning_fact_verifier import (
@@ -61,6 +64,8 @@ __all__ = [
     "BrowserAction",
     "BusinessAffordance",
     "BusinessFlowProfile",
+    "DEFAULT_OPENAI_ACTION_OUTCOME_MODEL",
+    "DEFAULT_OPENAI_VISUAL_DELTA_MODEL",
     "FactEvidenceRule",
     "GeneratedCheckoutData",
     "OpenAIVisualDeltaProvider",
@@ -79,6 +84,7 @@ __all__ = [
     "WebKobeGraph",
     "WebKobePlaywrightAdapter",
     "create_openai_visual_delta_provider_from_env",
+    "create_openai_action_outcome_provider_from_env",
     "ecommerce_checkout_profile",
     "generate_checkout_test_data",
     "practice_shopping_feasibility_profile",

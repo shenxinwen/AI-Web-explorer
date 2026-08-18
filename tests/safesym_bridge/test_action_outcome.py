@@ -10,7 +10,9 @@ from ai_web_explorer.grounded_web.action_outcome import (
     summarize_action_outcome,
 )
 from ai_web_explorer.grounded_web.openai_visual_delta import (
+    DEFAULT_OPENAI_ACTION_OUTCOME_MODEL,
     create_openai_visual_delta_provider_from_env,
+    create_openai_action_outcome_provider_from_env,
 )
 
 
@@ -177,3 +179,32 @@ def test_openai_visual_provider_defaults_to_mini_and_honors_explicit_model():
 
     assert provider.model == "gpt-4o-mini"
     assert explicit.model == "gpt-4o"
+
+
+def test_openai_action_outcome_provider_has_independent_model_precedence():
+    class FakeClient:
+        pass
+
+    def factory(**kwargs):
+        return FakeClient()
+
+    common = {
+        "openai_factory": factory,
+        "load_dotenv": lambda: None,
+        "environ": {
+            "OPENAI_API_KEY": "test-key",
+            "OPENAI_ACTION_OUTCOME_MODEL": "env-outcome-model",
+        },
+    }
+    default = create_openai_action_outcome_provider_from_env(
+        **{**common, "environ": {"OPENAI_API_KEY": "test-key"}}
+    )
+    from_env = create_openai_action_outcome_provider_from_env(**common)
+    explicit = create_openai_action_outcome_provider_from_env(
+        model="explicit-outcome-model", **common
+    )
+
+    assert DEFAULT_OPENAI_ACTION_OUTCOME_MODEL == "gpt-4o"
+    assert default.model == "gpt-4o"
+    assert from_env.model == "env-outcome-model"
+    assert explicit.model == "explicit-outcome-model"

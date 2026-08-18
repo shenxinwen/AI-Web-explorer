@@ -418,6 +418,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Optional OpenAI vision model override for --openai-visual-delta.",
     )
     ecommerce_stagehand_parser.add_argument(
+        "--action-outcome-model",
+        default=None,
+        help="Optional OpenAI action-outcome model override.",
+    )
+    ecommerce_stagehand_parser.add_argument(
         "--allow-final-order",
         action="store_true",
         help="Allow explicit test-site final order confirmation.",
@@ -547,6 +552,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     stagehand_explore_parser.add_argument("--openai-visual-delta", action="store_true")
     stagehand_explore_parser.add_argument("--visual-delta-model", default=None)
+    stagehand_explore_parser.add_argument("--action-outcome-model", default=None)
     stagehand_explore_parser.add_argument(
         "--stagehand-execution-mode",
         choices=["business_milestone", "observed_action"],
@@ -865,6 +871,7 @@ def main(argv: list[str] | None = None) -> int:
                     screenshot_dir=args.screenshot_dir,
                     use_openai_visual_delta=args.openai_visual_delta,
                     visual_delta_model=args.visual_delta_model,
+                    action_outcome_model=args.action_outcome_model,
                     allow_final_order=args.allow_final_order,
                     benchmark_context=benchmark_context,
                 )
@@ -986,6 +993,7 @@ def main(argv: list[str] | None = None) -> int:
                 "business_profile": args.business_profile,
                 "use_openai_visual_delta": args.openai_visual_delta,
                 "visual_delta_model": args.visual_delta_model,
+                "action_outcome_model": args.action_outcome_model,
                 "stagehand_execution_mode": args.stagehand_execution_mode,
                 "max_candidates": effective_max_candidates,
                 "frontier_replay": args.frontier_replay or resume_graph is not None,

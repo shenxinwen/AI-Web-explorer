@@ -1046,6 +1046,11 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
     trace_path = tmp_path / "stagehand_trace.json"
     calls = []
     captured = {}
+    candidate_provider = lambda prompt, **kwargs: (
+        '{"visible_change_summary":"changed","candidate_added_facts":[],'
+        '"candidate_removed_facts":[],"evidence":[],"confidence":0.5}'
+    )
+    outcome_provider = object()
 
     class FakePage:
         async def goto(self, url):
@@ -1098,6 +1103,7 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
             assert explorer.business_profile is not None
             assert explorer.business_profile.site_type == "ecommerce_checkout"
             assert explorer.visual_delta_provider("prompt") == '{"visible_change_summary":"changed","candidate_added_facts":[],"candidate_removed_facts":[],"evidence":[],"confidence":0.5}'
+            assert explorer.action_outcome_provider is outcome_provider
             captured["limit"] = max_consecutive_unproductive_steps
             captured["checkpoint"] = step_checkpoint
 
@@ -1142,7 +1148,8 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
         site_purpose="demo store",
         business_profile="ecommerce_checkout",
         max_candidates=2,
-        visual_delta_provider=lambda prompt, **kwargs: '{"visible_change_summary":"changed","candidate_added_facts":[],"candidate_removed_facts":[],"evidence":[],"confidence":0.5}',
+        visual_delta_provider=candidate_provider,
+        action_outcome_provider=outcome_provider,
         **viewport_kwargs,
     )
 
