@@ -71,6 +71,11 @@ from ai_web_explorer.grounded_web.visual_delta import (
     VisualDeltaRequest,
     summarize_visual_delta,
 )
+from ai_web_explorer.grounded_web.action_outcome import (
+    ActionOutcomeProvider,
+    semantic_observation_from_action_outcome,
+    summarize_action_outcome,
+)
 from ai_web_explorer.grounded_web.resume import (
     ActionAttemptKey,
     ResumePolicy,
@@ -372,6 +377,7 @@ class WebKobeExplorer:
         business_profile: BusinessFlowProfile | None = None,
         capture_screenshots: bool = False,
         visual_delta_provider: VisualDeltaProvider | None = None,
+        action_outcome_provider: ActionOutcomeProvider | None = None,
         state_embedding_provider: EmbeddingProvider | None = None,
         action_embedding_provider: EmbeddingProvider | None = None,
         state_embedding_records: list[StateEmbeddingRecord] | None = None,
@@ -394,6 +400,7 @@ class WebKobeExplorer:
         self.max_candidates = max_candidates
         self.capture_screenshots = capture_screenshots
         self.visual_delta_provider = visual_delta_provider
+        self.action_outcome_provider = action_outcome_provider
         self.state_embedding_provider = state_embedding_provider
         self.action_embedding_provider = action_embedding_provider
         self.state_embedding_records = list(state_embedding_records or [])
@@ -678,6 +685,7 @@ class WebKobeExplorer:
         visual_change_kind = "unknown"
         semantic_observation = None
         visual_observable_change = False
+        action_outcome_result = None
         source_location_hint = None if anchor_unresolved else source_anchor
         allowed_location_ids = sorted(
             set(
@@ -692,6 +700,27 @@ class WebKobeExplorer:
             }
         )
         if (
+            observation_allowed
+            and self.action_outcome_provider is not None
+            and before_screenshot_path is not None
+            and after_screenshot_path is not None
+        ):
+            action_outcome_result = summarize_action_outcome(
+                before_screenshot_path=before_screenshot_path,
+                after_screenshot_path=after_screenshot_path,
+                action_description=selected.description or selected.semantic_id,
+                provider=self.action_outcome_provider,
+            )
+            if action_outcome_result.trace is not None:
+                execution_metadata["action_outcome_trace"] = (
+                    action_outcome_result.trace.to_dict()
+                )
+            visual_delta_evidence = list(action_outcome_result.evidence)
+            visual_observable_change = action_outcome_result.outcome == "success"
+            visual_change_kind = (
+                "surface" if action_outcome_result.location_change else "none"
+            )
+        elif (
             observation_allowed
             and self.visual_delta_provider is not None
             and before_screenshot_path is not None
@@ -749,6 +778,10 @@ class WebKobeExplorer:
             or visual_fact_change
             or visual_kind_change
             or visual_observable_change
+            or bool(
+                action_outcome_result is not None
+                and action_outcome_result.location_change
+            )
         )
         if self.semantic_experiment_profile is not None:
             planning_delta = verify_experiment_planning_delta(
@@ -768,12 +801,19 @@ class WebKobeExplorer:
             )
 
         target_node = _node_from_draft(after_draft)
+        outcome_location_hint = source_location_hint
+        if action_outcome_result is not None and action_outcome_result.location_change:
+            outcome_location_hint = (
+                _optional_semantic_id(after_draft.page_frame.page_type)
+                or _optional_semantic_id(after.page_id)
+                or source_location_hint
+            )
         target_node = replace(
             target_node,
             semantic_location_hint=(
                 semantic_observation.target_location
                 if semantic_observation is not None
-                else source_location_hint
+                else outcome_location_hint
             ),
         )
         if not observation_allowed or not state_changed:
@@ -790,6 +830,18 @@ class WebKobeExplorer:
                     removed_facts=visual_delta_facts[1],
                 ),
             )
+        if action_outcome_result is not None:
+            semantic_observation = semantic_observation_from_action_outcome(
+                action_outcome_result,
+                source_location=source_location_hint or source_id,
+                target_location_hint=outcome_location_hint,
+                target_node_id=target_node.node_id,
+            )
+            if semantic_observation is not None:
+                target_node = replace(
+                    target_node,
+                    semantic_location_hint=semantic_observation.target_location,
+                )
 
         target_match = None
         if state_changed:
@@ -818,6 +870,11 @@ class WebKobeExplorer:
             visual_fact_change or visual_kind_change
         ):
             edge_status = "succeeded_with_observed_change"
+        if action_outcome_result is not None:
+            if action_outcome_result.outcome == "failed":
+                edge_status = "failed_execution"
+            elif action_outcome_result.outcome == "uncertain":
+                edge_status = "no_observed_change"
         if source_id != target_id and edge_status in {
             "no_observed_change",
             "failed_execution",
@@ -837,7 +894,7 @@ class WebKobeExplorer:
         location_after = (
             semantic_observation.target_location
             if semantic_observation is not None
-            else location_before
+            else outcome_location_hint or location_before
         )
         completion_facts = (
             list(semantic_observation.completion_facts)
@@ -859,11 +916,24 @@ class WebKobeExplorer:
                 location_before=location_before,
                 location_after=location_after,
                 action_id=selected.canonical_action_name or selected.semantic_id,
-                observable_change=bool(observed_delta or state_changed),
+                observable_change=bool(
+                    observed_delta
+                    or state_changed
+                    or (
+                        action_outcome_result is not None
+                        and action_outcome_result.outcome == "success"
+                    )
+                ),
                 completion_facts=completion_facts,
                 business_added=business_added,
                 business_removed=business_removed,
-                failed=edge_status == "failed_execution",
+                failed=(
+                    edge_status == "failed_execution"
+                    or (
+                        action_outcome_result is not None
+                        and action_outcome_result.outcome == "failed"
+                    )
+                ),
             )
         else:
             outcome = OutcomeUpdate(
@@ -909,8 +979,30 @@ class WebKobeExplorer:
         edge_was_new = _edge_novelty_key(edge) not in known_edge_keys
         self.manager.add_edge(edge)
         targeted_scan_novel = False
+        location_scan_novel = False
         if (
             self.location_scoped_exploration
+            and action_outcome_result is not None
+            and outcome.new_location
+            and after_screenshot_path is not None
+            and self.visual_delta_provider is not None
+        ):
+            _target_location, _target_result, target_added = (
+                self.location_exploration_coordinator.ensure_candidates(
+                    location_after,
+                    goal=self.goal,
+                    screenshot_path=after_screenshot_path,
+                    current_signature=after.signature,
+                    provider=self.visual_delta_provider,
+                    max_actions=self.max_candidates,
+                    scan_kind="initial",
+                )
+            )
+            location_scan_novel = bool(target_added)
+            self._sync_location_affordance_snapshots(location_after)
+        elif (
+            self.location_scoped_exploration
+            and action_outcome_result is None
             and
             outcome.targeted_scan_required
             and after_screenshot_path is not None
@@ -937,10 +1029,14 @@ class WebKobeExplorer:
         self.manager.meta["last_step_graph_changed"] = graph_changed
         if self.location_scoped_exploration:
             self.manager.meta["last_step_semantic_progress"] = bool(
-                outcome.has_progress or targeted_scan_novel
+                outcome.has_progress or targeted_scan_novel or location_scan_novel
             )
             self.manager.meta["last_step_kind"] = (
-                "targeted_scan" if targeted_scan_novel else outcome.step_kind
+                "initial_location_scan"
+                if location_scan_novel
+                else "targeted_scan"
+                if targeted_scan_novel
+                else outcome.step_kind
             )
         self.manager.meta["last_step_status"] = (
             "productive" if graph_changed else "unproductive"
@@ -1408,6 +1504,8 @@ class WebKobeExplorer:
                 kind="initial",
             )
         supplement_needed = (
+            self.action_outcome_provider is None
+            and
             pool.initial_scan_complete
             and not pool.supplement_scan_complete
             and (not pool.candidates or pool.exhausted)

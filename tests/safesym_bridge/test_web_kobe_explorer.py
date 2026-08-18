@@ -160,6 +160,8 @@ def _business_explorer(
     *,
     business_profile=None,
     visual_delta_provider=None,
+    action_outcome_provider=None,
+    location_exploration_coordinator=None,
     state_embedding_provider=None,
     state_embedding_records=None,
     enable_exploration_memory: bool = False,
@@ -183,11 +185,148 @@ def _business_explorer(
         business_profile=business_profile or ecommerce_checkout_profile(),
         capture_screenshots=True,
         visual_delta_provider=visual_delta_provider or _default_visual_provider(),
+        action_outcome_provider=action_outcome_provider,
+        location_exploration_coordinator=location_exploration_coordinator,
         state_embedding_provider=state_embedding_provider,
         state_embedding_records=state_embedding_records,
         enable_exploration_memory=enable_exploration_memory,
         attempt_checkpoint=attempt_checkpoint,
     )
+
+
+@pytest.mark.anyio
+async def test_minimal_active_path_uses_outcome_without_targeted_or_supplement_scan():
+    adapter = FakeAdapter()
+    memory = LocationExplorationMemory()
+    coordinator = LocationExplorationCoordinator(memory=memory)
+    candidate_scan_kinds = []
+    outcome_calls = []
+
+    def candidate_provider(prompt, **kwargs):
+        payload = json.loads(prompt)
+        candidate_scan_kinds.append(payload.get("scan_kind", "initial"))
+        return json.dumps(
+            {
+                "actions": [
+                    {
+                        "action_id": "add_to_cart_product",
+                        "description": "Add the visible product to the cart.",
+                        "target": "Add to cart control",
+                        "requires": [],
+                    }
+                ]
+            }
+        )
+
+    def outcome_provider(prompt, **kwargs):
+        outcome_calls.append(kwargs)
+        return json.dumps(
+            {
+                "outcome": "success",
+                "location_change": False,
+                "evidence": ["The listing screen remains active."],
+            }
+        )
+
+    explorer = _business_explorer(
+        adapter,
+        business_profile=None,
+        visual_delta_provider=candidate_provider,
+        action_outcome_provider=outcome_provider,
+        location_exploration_coordinator=coordinator,
+    )
+
+    await explorer.explore_one_step()
+
+    assert candidate_scan_kinds == ["initial"]
+    assert len(outcome_calls) == 1
+    assert memory.pool_for("listing").candidates["add_to_cart_product"].status == (
+        "success"
+    )
+
+
+@pytest.mark.anyio
+async def test_minimal_active_path_scans_new_location_with_initial_contract():
+    class LocationSwitchAdapter(FakeAdapter):
+        def __init__(self):
+            super().__init__()
+            self.states = [
+                self.states[0],
+                replace(
+                    self.states[0],
+                    page_id="checkout",
+                    url="https://example.test/checkout",
+                ),
+            ]
+
+        async def list_interactables(self, state):
+            action_id = (
+                "open_checkout" if state.page_id == "listing" else "fill_billing"
+            )
+            return [
+                {
+                    "semantic_id": action_id,
+                    "description": action_id.replace("_", " "),
+                    "locator": f"button.{action_id}",
+                    "action_kind": "click",
+                    "explored": False,
+                }
+            ]
+
+        async def capture_screenshot(self, label):
+            return f"{label}-{len(self.executed)}.png"
+
+    adapter = LocationSwitchAdapter()
+    memory = LocationExplorationMemory()
+    coordinator = LocationExplorationCoordinator(memory=memory)
+    candidate_locations = []
+
+    def candidate_provider(prompt, **kwargs):
+        payload = json.loads(prompt)
+        candidate_locations.append(payload.get("semantic_location"))
+        action_id = (
+            "open_checkout"
+            if payload.get("semantic_location") == "listing"
+            else "fill_billing"
+        )
+        return json.dumps(
+            {
+                "actions": [
+                    {
+                        "action_id": action_id,
+                        "description": action_id.replace("_", " "),
+                        "target": f"{action_id} control",
+                        "requires": [],
+                    }
+                ]
+            }
+        )
+
+    outcome_calls = []
+
+    def outcome_provider(prompt, **kwargs):
+        outcome_calls.append(kwargs)
+        return json.dumps(
+            {
+                "outcome": "success",
+                "location_change": len(outcome_calls) == 1,
+                "evidence": ["The visible interface was observed."],
+            }
+        )
+
+    explorer = _business_explorer(
+        adapter,
+        business_profile=None,
+        visual_delta_provider=candidate_provider,
+        action_outcome_provider=outcome_provider,
+        location_exploration_coordinator=coordinator,
+    )
+
+    await explorer.explore_one_step()
+    await explorer.explore_one_step()
+
+    assert candidate_locations == ["listing", "checkout"]
+    assert "checkout" in memory.locations
 
 
 def test_explorer_restore_graph_preserves_candidates_without_current_browser_pointer():

@@ -545,6 +545,7 @@ async def run_ecommerce_stagehand_step(
                     else None
                 ),
                 visual_delta_provider=resolved_visual_delta_provider,
+                action_outcome_provider=resolved_visual_delta_provider,
             )
             controller = WebKobeExplorationController(explorer)
             if allow_final_order:
@@ -727,6 +728,7 @@ async def run_stagehand_exploration(
                 capture_screenshots=screenshot_dir is not None,
                 business_profile=resolved_business_profile,
                 visual_delta_provider=resolved_visual_delta_provider,
+                action_outcome_provider=resolved_visual_delta_provider,
                 enable_exploration_memory=resolved_embedding_provider is not None,
                 state_embedding_provider=resolved_embedding_provider,
                 action_embedding_provider=resolved_embedding_provider,
