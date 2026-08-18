@@ -224,6 +224,60 @@ def test_same_action_id_dependency_is_scoped_to_dependent_source_location():
     assert "completed_shopping_fill_form" not in submit.required_facts
 
 
+@pytest.mark.parametrize("prerequisite_state", ["absent", "failed", "non_projectable"])
+def test_dependent_edge_is_excluded_when_required_success_is_missing(
+    prerequisite_state,
+):
+    dependent = _edge(
+        source="checkout_after_fill",
+        target="checkout_after_submit",
+        action_name="place_order",
+        source_location="checkout",
+        target_location="checkout",
+        required_action_ids=["fill_form"],
+    )
+    edges = [dependent]
+    if prerequisite_state != "absent":
+        prerequisite = _edge(
+            source="checkout_start",
+            target="checkout_after_fill",
+            action_name="fill_form",
+            source_location="checkout",
+            target_location="checkout",
+        )
+        if prerequisite_state == "failed":
+            prerequisite = replace(
+                prerequisite,
+                status="failed_execution",
+                execution_trace=replace(prerequisite.execution_trace, success=False),
+            )
+        else:
+            prerequisite = replace(prerequisite, status="no_observed_change")
+        edges.insert(0, prerequisite)
+    graph = WebKobeGraph(
+        app="test",
+        start_node_id="checkout_start",
+        total_steps_completed=len(edges),
+        nodes=[
+            _node("checkout_start"),
+            _node("checkout_after_fill"),
+            _node("checkout_after_submit"),
+        ],
+        edges=edges,
+    )
+
+    semantic, report = build_semantic_planning_graph(graph)
+
+    assert not any(action.action_name == "place_order" for action in semantic.actions)
+    exclusion = next(
+        item
+        for item in report.excluded_edges
+        if item.get("raw_edge_id") == dependent.edge_id
+    )
+    assert exclusion["reason"] == "missing_successful_required_action"
+    assert exclusion["missing_action_ids"] == ["fill_form"]
+
+
 def test_every_successful_action_gets_a_location_qualified_completion_fact():
     graph = _graph_with_edge(
         _edge(

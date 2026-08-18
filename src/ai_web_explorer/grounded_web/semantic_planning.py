@@ -146,6 +146,27 @@ def build_semantic_planning_graph(
         if role not in SEMANTIC_ACTION_ROLES or role == "unknown":
             excluded_edges.append(_excluded(edge, "unknown_action_role"))
             continue
+        missing_required_actions = sorted(
+            {
+                normalize_semantic_id(required_action_id)
+                for required_action_id in edge.required_action_ids
+                if normalize_semantic_id(required_action_id)
+                and (
+                    source_location,
+                    normalize_semantic_id(required_action_id),
+                )
+                not in successful_completion_facts
+            }
+        )
+        if missing_required_actions:
+            excluded_edges.append(
+                {
+                    "raw_edge_id": edge.edge_id,
+                    "reason": "missing_successful_required_action",
+                    "missing_action_ids": missing_required_actions,
+                }
+            )
+            continue
 
         source_state = _source_state(graph, edge)
         action_contract = action_contracts.get(_edge_name(edge))
