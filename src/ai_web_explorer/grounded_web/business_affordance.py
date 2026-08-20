@@ -68,10 +68,20 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
             "surface is the frontmost operable page, dialog, drawer, or modal; "
             "covered background controls are not candidates. Return directly "
             "executable actions and visible blocked actions, using a stable "
-            "action_id, one precise description, and a visible target. Related "
-            "controls serving one purpose may be grouped into one semantic action. "
-            "First cover each distinct functional family, then consider a second "
-            "action from a family; the limit is not a quota, and the list may be "
+            "action_id, one precise description, and a visible target. Before "
+            "returning actions, group visible controls by semantic effect; this "
+            "grouping is mandatory. When the same operation appears on different "
+            "instances of the same kind of object, return one action: the concrete "
+            "object is an execution parameter, not a separate semantic action. "
+            "When one function offers several dimensions, modes, options, or "
+            "selectable values, return one action for that function, not one action "
+            "per value. Different filter conditions or the result subset they "
+            "produce are parameters of one filtering action. A different sort "
+            "field or direction is a parameter of one sorting action. Keep actions "
+            "separate only when they perform different kinds of operation or serve "
+            "different workflow roles. Do not use a "
+            "vague umbrella action to merge different effects. The limit is not a "
+            "quota, and the list may be "
             f"empty or contain at most {request.max_actions} actions. "
             "Requires may reference only another action in this response and mean "
             "an indispensable direct prerequisite, not a recommendation, visual "
@@ -134,6 +144,37 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
                         "requires": [],
                     }
                 ],
+            },
+            {
+                "screen": "A list contains many records, each with an Open button.",
+                "correct_actions": ["open_record"],
+                "incorrect_actions": [
+                    "open_record_a",
+                    "open_record_b",
+                    "open_record_c",
+                ],
+                "reason": (
+                    "The record is an execution parameter; the semantic effect is "
+                    "the same."
+                ),
+            },
+            {
+                "screen": (
+                    "A results page has filters for type, status, owner, and date, "
+                    "plus several sort orders."
+                ),
+                "correct_actions": ["filter_results", "sort_results"],
+                "incorrect_actions": [
+                    "filter_by_type",
+                    "filter_by_status",
+                    "sort_newest",
+                    "sort_oldest",
+                ],
+                "reason": (
+                    "Filter dimensions are values of one filtering function; sort "
+                    "orders are values of one sorting function. Filtering and "
+                    "sorting remain separate because their effects differ."
+                ),
             },
         ]
     elif scan_kind == "targeted":

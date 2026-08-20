@@ -181,10 +181,15 @@ def test_initial_prompt_contains_validated_domain_neutral_few_shots():
         "few_shot_examples",
     }
     assert set(payload["output_schema"]) == {"actions"}
-    assert len(payload["few_shot_examples"]) == 3
+    assert len(payload["few_shot_examples"]) == 5
     assert "active interaction surface" in payload["instruction"]
     assert "limit is not a quota" in payload["instruction"]
     assert "independently" in payload["instruction"]
+    assert "grouping is mandatory" in payload["instruction"].lower()
+    assert "execution parameter" in payload["instruction"].lower()
+    assert "selectable value" in payload["instruction"].lower()
+    assert "result subset" in payload["instruction"].lower()
+    assert "sort field or direction" in payload["instruction"].lower()
     assert "profile" not in captured["prompt"].lower()
     assert "checkout" not in captured["prompt"].lower()
     assert "payment" not in captured["prompt"].lower()
@@ -194,6 +199,11 @@ def test_initial_prompt_contains_validated_domain_neutral_few_shots():
         "data-table toolbar",
         "Export Complete",
         "download_report",
+        "open_record",
+        "open_record_a",
+        "filter_results",
+        "filter_by_status",
+        "sort_newest",
     ):
         assert token in examples
     assert result.trace.status == "summarized"
@@ -244,7 +254,8 @@ def test_visual_affordance_prompt_prioritizes_breadth_without_external_task_goal
         instruction = payload["instruction"]
         action_schema = payload["output_schema"]["actions"][0]
 
-        assert "distinct functional family" in instruction
+        assert "group visible controls by semantic effect" in instruction
+        assert "concrete object is an execution parameter" in instruction
         assert "at most 5 actions" in instruction
         assert action_schema["action_id"] == "stable_snake_case_action"
         assert set(action_schema) == {
