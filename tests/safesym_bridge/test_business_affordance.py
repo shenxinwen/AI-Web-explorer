@@ -102,6 +102,7 @@ def test_initial_scan_parses_minimal_action_dependencies_without_planning_inputs
         payload = json.loads(prompt)
         instruction = payload["instruction"]
         assert payload["output_schema"] == {
+            "location_id": "short stable snake_case active surface name",
             "actions": [
                 {
                     "action_id": "stable_snake_case_action",
@@ -128,6 +129,7 @@ def test_initial_scan_parses_minimal_action_dependencies_without_planning_inputs
         assert current_screenshot_path == "current.png"
         return json.dumps(
             {
+                "location_id": "account_form",
                 "actions": [
                     {
                         "action_id": "fill_identity",
@@ -148,6 +150,7 @@ def test_initial_scan_parses_minimal_action_dependencies_without_planning_inputs
     result = summarize_visual_affordances(request, provider=provider)
 
     assert result.trace.status == "summarized"
+    assert result.location_id == "account_form"
     assert [item.action_name for item in result.business_affordances] == [
         "fill_identity",
         "submit_form",
@@ -180,7 +183,9 @@ def test_initial_prompt_contains_validated_domain_neutral_few_shots():
         "output_schema",
         "few_shot_examples",
     }
-    assert set(payload["output_schema"]) == {"actions"}
+    assert set(payload["output_schema"]) == {"location_id", "actions"}
+    assert "active surface" in payload["instruction"]
+    assert "item counts" in payload["instruction"]
     assert len(payload["few_shot_examples"]) == 5
     assert "active interaction surface" in payload["instruction"]
     assert "limit is not a quota" in payload["instruction"]

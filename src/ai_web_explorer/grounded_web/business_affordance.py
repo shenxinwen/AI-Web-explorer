@@ -87,9 +87,13 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
             "an indispensable direct prerequisite, not a recommendation, visual "
             "order, or independent-field order. Independent actions must be "
             "represented independently with requires=[]. Completed, history, and "
-            "result states are not actions or requirements. Return JSON only."
+            "result states are not actions or requirements. Also name the current "
+            "active surface once with a short stable snake_case location_id. Base "
+            "the name only on the visible surface, not action history, concrete "
+            "objects, search terms, or item counts. Return JSON only."
         )
         output_schema: dict[str, Any] = {
+            "location_id": "short stable snake_case active surface name",
             "actions": [
                 {
                     "action_id": "stable_snake_case_action",
@@ -579,7 +583,9 @@ def summarize_visual_affordances(
     is_targeted = scan_kind == "targeted"
     requires_by_action_id: dict[str, list[str]] = {}
     if is_initial:
-        if set(parsed) != {"actions"} or not isinstance(parsed.get("actions"), list):
+        if set(parsed) not in ({"actions"}, {"location_id", "actions"}) or not isinstance(
+            parsed.get("actions"), list
+        ):
             return VisualAffordanceResult(
                 business_affordances=[],
                 requires_by_action_id={},
