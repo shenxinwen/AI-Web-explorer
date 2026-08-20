@@ -85,6 +85,34 @@ Practice Shopping 真实 VLM、SafeSym 与 planner 联合验收仍待执行。
 - 详细设计和验收标准见
   `docs/superpowers/specs/2026-08-18-location-candidate-dependency-integration-design.zh-CN.md`。
 
+## 2026-08-20 - 分开验收探索执行与语义提取能力
+
+更改：
+- 将当前能力划分为“探索执行链”和“语义提取与建模链”。Stagehand 负责执行已选择动作并取得
+  新观察；VLM 候选/依赖提取、动作后结果判断、本地候选记忆、语义投影、PDDL 和 SafeSym
+  归入后者。
+- 近期暂停新的完整 Stagehand 探索轮次，优先使用 Practice Shopping 已有真实截图开展静态实验。
+  截图序列作为外部执行器提供的观察，只验收语义信息质量和后续规划结构。
+- 记录一次性执行层小实验结果：Stagehand `observe -> act` 能正确识别并执行 Category 下拉框
+  选择 Electronics；该方向尚未接入主线，也尚未实现跨运行 Action 缓存。
+
+原因：
+- 已有真实实验已经证明端到端链路与执行能力基本可行，但 Stagehand `agentExecute` 的上下文和
+  token 开销会干扰当前对 VLM 语义结构本身的判断。
+- 初始候选扫描和动作后观察都以截图为主要输入；位置候选记忆、SemanticPlanningGraph、PDDL
+  编译和 SafeSym 求解也不要求动作必须由 Stagehand 执行，因此可以隔离验收。
+- 当前最重要的问题是确认：在没有 profile 答案提示时，系统是否能提取真实动作、正确的
+  `requires`、位置变化和完成关系，而不是再次证明浏览器可以点击控件。
+
+影响：
+- 静态实验可以验收候选精度、虚假依赖、操作顺序、空候选页面、位置判断、本地依赖解锁以及
+  PDDL 的合法性和可规划性；不验收元素定位、真实运行时约束、reset/replay、断点恢复和自动
+  到达截图状态。
+- 当前仅是能力和数据边界可分离；`WebKobeExplorer` 仍在同一循环中编排执行、观察和图写入，
+  因此文档不得宣称已经形成两个完全独立的产品 pipeline。
+- 短期使用薄的离线实验编排复用现有模块，不为实验目的重构主 Explorer。静态验收通过后，再
+  决定是否把普通原子动作从 `agentExecute` 切换为 `observe -> act` 并加入持久缓存。
+
 ## 2026-08-13 - 当前主线收敛为 location-scoped 开放探索与 Minimal Semantic PDDL
 
 > 若下方历史决策与本条冲突，以本条和当前 overview/structure 文档为准。

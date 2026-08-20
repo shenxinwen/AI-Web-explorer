@@ -284,18 +284,48 @@ Practice Shopping 已完成一轮使用当前主线的真实有界实验，不�
 Practice Shopping 真实 VLM 探索和新产物的 SafeSym/规划验收。详细实现边界和验收标准见
 `docs/superpowers/specs/2026-08-18-location-candidate-dependency-integration-design.zh-CN.md`。
 
+## 探索执行与语义提取的验收边界
+
+项目在能力上可以拆成两条相对独立的链：
+
+```text
+探索执行：当前页面 -> 候选调度 -> 执行动作 -> 获得下一页面观察
+语义建模：截图观察 -> 动作及 requires -> 结果/位置判断 -> 本地记忆 -> 语义图 -> PDDL
+```
+
+Stagehand 属于探索执行链。候选解析、动作后观察、位置候选记忆、依赖解锁、
+SemanticPlanningGraph、Minimal Semantic PDDL 和 SafeSym 验收可以在已有真实截图上独立测试。
+静态实验把已有截图序列视为外部执行器提供的观察，不据此宣称系统能够自动到达这些状态。
+
+当前代码尚未把两条链实现为完全独立的顶层 pipeline：`WebKobeExplorer` 仍在同一运行循环中
+编排执行器、截图、结果观察、Raw Edge 写入和新位置扫描。因此当前准确表述是“能力与核心数据
+结构可独立验收，但运行编排仍有耦合”。短期不为此重构 Explorer；静态实验使用薄的离线编排，
+复用现有 VLM 合同、本地候选记忆、语义投影和 PDDL 编译器。
+
+近期静态验收主要回答：如果执行器持续提供正确页面观察，系统能否自主提取真实动作、避免给
+独立动作虚构 `requires`、识别明显操作依赖和位置变化、允许无动作页面返回空候选，并最终生成
+无明显因果捷径且可被 SafeSym 消费和求解的 PDDL。它不验收元素定位、真实交互约束、reset、
+frontier replay、断点恢复或自动到达截图状态的能力。
+
+执行层另有一个已完成的一次性小实验：在 Practice Shopping 上，Stagehand `observe` 正确返回
+Category 下拉框的 `selectOptionFromDropdown("Electronics")` 动作，随后将该 Action 对象直接
+交给 `act` 成功执行。`observe` 约 1.24 秒，确定性 `act` 约 0.03 秒。该结果只证明
+`observe -> act` 可作为原子动作的低成本执行方向；主线目前尚未由 `agentExecute` 切换到该模式，
+跨运行缓存也尚未实现。
+
 ## 当前阶段判断
 
-截至 2026-08-18：
+截至 2026-08-20：
 
 - location-scoped 开放探索的实现和回归测试已经合并；
 - 可恢复图、候选池、累计预算和 non-mutating replay 已建立；
 - Practice Shopping 真实实验已经跑通探索、业务事实验证、PDDL、SafeSym 和 planner；
 - 当前产物证明 pipeline 可行，但同时证明“profile 辅助验证”的阶段尚未等同于真正开放的
   语义探索；
-- 最小动作依赖闭环已离线接入；下一步不应立即增加第二个网站的专属答案 profile，而应先在
-  Practice Shopping 做真实 VLM 验收，验证去掉答案提示后仍能发现正确能力并生成因果基本正确、
-  可被 SafeSym 消费和求解的 PDDL。
+- 最小动作依赖闭环已离线接入；下一步不应立即增加第二个网站的专属答案 profile；
+- 近期先暂停 Stagehand 主线实验，使用 Practice Shopping 已有真实截图隔离验收语义提取与
+  建模链，确认其能提取有效动作和依赖并生成可规划 PDDL；通过后再恢复真实执行验收；
+- `observe -> act` 已通过一个筛选动作的小实验，但仍是待接入的执行层优化，不代表主线行为。
 
 ## 相关文档
 
