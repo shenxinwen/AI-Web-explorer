@@ -232,12 +232,12 @@ Practice Shopping 已完成一轮使用当前主线的真实有界实验，不�
 `outputs/experiments/practice_automated_testing/latest/`。实验目录不提交为产品代码，但它是当前
 阶段结论的本地证据来源。
 
-## 泛化性与现有硬编码
+## 泛化性与硬编码边界
 
-当前实现不是完全无硬编码。准确定位是：
+截至 2026-08-20，当前最小语义主链中的“站点答案硬编码”问题已经解决。准确定位是：
 
 ```text
-通用探索框架 + 可选领域/实验 profile + 少量电商结构化捷径
+无站点答案提示的 active semantic path + 保留但不参与 initial scan 的旧兼容/实验代码
 ```
 
 已经通用化的部分包括：
@@ -248,27 +248,31 @@ Practice Shopping 已完成一轮使用当前主线的真实有界实验，不�
 - SemanticPlanningGraph 与 Minimal Semantic PDDL 编译器；
 - 普通能力和业务事实的分离规则。
 
-当前仍存在的显式硬编码包括：
+以下站点或领域相关内容仍保留在代码库中，但不等同于当前候选发现被写死：
 
-- `practice_shopping_feasibility` profile 的位置、动作和事实词表；
-- `cart_count` / `item_count` 等字段到 `cart_has_items` 的结构化映射；
-- state summary 中的 `cart_non_empty` 提示；
-- profile 名称在 CLI/registry 中的注册；
-- 最终下单只允许受控 PracticeAutomatedTesting URL 的安全门；
-- 旧 ecommerce benchmark 入口中的固定 checkout 实验步骤。
+- `practice_shopping_feasibility` profile、profile registry 以及旧 targeted/supplement scan，属于旧兼容
+  路径；initial scan 不读取这些内容；
+- `cart_count` / `item_count` 到 `cart_has_items` 的结构化映射和 `cart_non_empty` summary，属于旧业务
+  事实归一化能力，当前最小动作完成 predicate 不依赖它们；
+- SauceDemo benchmark 的公开测试凭据、结账表单测试数据和起始 URL，属于执行实验输入，不是候选
+  动作答案；
+- 最终下单只允许受控 PracticeAutomatedTesting URL，属于安全边界；
+- 旧 ecommerce benchmark 的固定 checkout 步骤，以及当前静态实验脚本中的固定截图对、动作别名
+  和 source/target 映射，属于历史入口或验收夹具，不参与产品 initial scan。
 
-测试数据和受控下单 URL 属于实验配置或安全边界，可以保留。profile 中用于统一语言的分层
-词表也可以保留；把完整词表、动作示例和契约交给候选发现是旧兼容路径的答案提示问题，
-当前最小依赖主路径已绕开该输入。
-真正需要后续泛化的不只是把 `cart_count -> cart_has_items` 迁入外部配置，还包括把“自由发现”
-与“动作后归一化”明确拆开。
+当前 initial scan 只根据截图提出动作及同位置 `requires`，不会收到站点 profile、完整动作词表、
+动作契约、预期业务流程、外部任务 goal 或 PDDL goal；代表性动作 few-shot 也使用领域中立表达。
+SauceDemo 静态验收复用了同一 prompt、parser、候选记忆、语义图和 PDDL 投影，没有增加
+SauceDemo 专属动作表、按钮文本分支或固定流程。因此，“移除候选发现中的站点答案硬编码”不再是
+下一步任务。后续若增强跨位置业务状态，应继续通过通用观察和归一化机制完成，不能把站点答案
+重新放回候选 prompt。
 
 当前开放探索主路径没有写死“排序 -> 筛选 -> 加购 -> 结账”的执行顺序，
 也没有在 PDDL 编译器中根据 `shopping`、`cart` 或 `checkout` 名称分支。
 
 ## 当前最小动作依赖闭环
 
-下一阶段不再让 VLM 同时承担完整事实归纳和规划建模，而采用更小的“动作及依赖观察”闭环：
+当前 active path 不再让 VLM 同时承担完整事实归纳和规划建模，而采用更小的“动作及依赖观察”闭环：
 
 - 候选发现只观察当前页面，不接收具体 profile facts、动作契约、预期流程或离线 PDDL goal；
 - 每个新语义位置只做一次初始扫描，返回明确动作及同位置 `requires`；
@@ -280,8 +284,8 @@ Practice Shopping 已完成一轮使用当前主线的真实有界实验，不�
 - 只有真实执行成功的动作和依赖关系进入 planner-facing graph 与 PDDL；
 - 新路径绕开 profile 驱动的 targeted scan、supplement scan 和当前多职责 Visual Delta 事实结构。
 
-这套方案已接入 location-scoped active path，并通过离线回归；尚未完成去掉答案提示后的
-Practice Shopping 真实 VLM 探索和新产物的 SafeSym/规划验收。详细实现边界和验收标准见
+这套方案已接入 location-scoped active path，并通过离线回归；去掉答案提示后的 Practice Shopping
+和 SauceDemo 静态 VLM、SafeSym 与规划验收也已完成。详细实现边界和验收标准见
 `docs/superpowers/specs/2026-08-18-location-candidate-dependency-integration-design.zh-CN.md`。
 
 ## 探索执行与语义提取的验收边界
@@ -307,6 +311,24 @@ SemanticPlanningGraph、Minimal Semantic PDDL 和 SafeSym 验收可以在已有�
 无明显因果捷径且可被 SafeSym 消费和求解的 PDDL。它不验收元素定位、真实交互约束、reset、
 frontier replay、断点恢复或自动到达截图状态的能力。
 
+### 2026-08-20 静态语义验收结果
+
+Practice Shopping 和 SauceDemo 的真实截图实验已经证明语义 MVP 主链可用。候选扫描改用
+`gpt-4o` 后，重复对象上的同类动作、筛选维度和排序方式能够合并为代表性语义动作；登录提交和
+结账信息提交的同位置 `requires` 能正确进入本地完成状态。SauceDemo 的十组严格动作前后截图中，
+动作后 `outcome` 全部判断为成功，同页动作和跨页动作的 `location_change` 均与真实观察一致；
+登录页、商品列表、购物车、结账信息、结账总览和成功页也被稳定区分。
+
+十个成功动作均进入 `SemanticPlanningGraph`，没有投影排除项。Minimal Semantic PDDL 能正常
+生成，SafeSym 解析、安全动作注入、基础规划和安全规划均成功。该结果只证明：假设执行器持续
+提供正确观察，当前语义结构能够形成合法、可求解的 planner-facing 产物；不证明执行器能够自动
+到达这些状态。
+
+当前保留一个明确的非阻塞语义缺口：`open_cart` 本身不应依赖 `add_to_cart`，但空购物车不能继续
+结账。现有最小动作完成 predicate 尚未自动形成跨位置持续业务事实
+`add_to_cart -> cart_has_items -> proceed_to_checkout`，因此规划器可能跳过加购。该问题记录为
+后续跨位置业务状态增强，不阻塞当前主线转向执行端。
+
 执行层另有一个已完成的一次性小实验：在 Practice Shopping 上，Stagehand `observe` 正确返回
 Category 下拉框的 `selectOptionFromDropdown("Electronics")` 动作，随后将该 Action 对象直接
 交给 `act` 成功执行。`observe` 约 1.24 秒，确定性 `act` 约 0.03 秒。该结果只证明
@@ -320,11 +342,13 @@ Category 下拉框的 `selectOptionFromDropdown("Electronics")` 动作，随后�
 - location-scoped 开放探索的实现和回归测试已经合并；
 - 可恢复图、候选池、累计预算和 non-mutating replay 已建立；
 - Practice Shopping 真实实验已经跑通探索、业务事实验证、PDDL、SafeSym 和 planner；
-- 当前产物证明 pipeline 可行，但同时证明“profile 辅助验证”的阶段尚未等同于真正开放的
-  语义探索；
-- 最小动作依赖闭环已离线接入；下一步不应立即增加第二个网站的专属答案 profile；
-- 近期先暂停 Stagehand 主线实验，使用 Practice Shopping 已有真实截图隔离验收语义提取与
-  建模链，确认其能提取有效动作和依赖并生成可规划 PDDL；通过后再恢复真实执行验收；
+- SauceDemo 无 profile 静态实验已跑通候选、依赖、位置、动作结果、语义投影、PDDL 和 SafeSym；
+- 当前产物证明语义 MVP 可行，但跨位置持续业务状态仍不完整，不能表述为完整网站因果模型；
+- 最小动作依赖闭环的静态验收已通过，候选发现中的站点答案硬编码已从 active path 移除；
+- 主线从静态语义验收转向执行端：验证给定语义动作能否被稳定定位和执行，并把真实下一页面
+  观察交回现有语义链；
+- 执行端验收继续沿用通用语义动作，不新增 SauceDemo 按钮文本分支或固定流程；“去除站点答案
+  硬编码”不再作为下一阶段待解决问题；
 - `observe -> act` 已通过一个筛选动作的小实验，但仍是待接入的执行层优化，不代表主线行为。
 
 ## 相关文档

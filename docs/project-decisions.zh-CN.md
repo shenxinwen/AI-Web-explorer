@@ -17,6 +17,39 @@
 - ...
 ```
 
+## 2026-08-20 - 静态语义 MVP 通过，主线转向执行端验收
+
+更改：
+- 使用 Practice Shopping 和 SauceDemo 的真实截图隔离验收候选动作、同位置 `requires`、
+  `outcome`、`location_change`、语义位置、`SemanticPlanningGraph`、Minimal Semantic PDDL 和
+  SafeSym；截图由外部执行器或受控浏览器操作提供，不把静态结果表述为自动探索能力。
+- 初始候选扫描的验收模型使用 `gpt-4o`。代表性动作 prompt 强制把重复对象、筛选维度和排序选项
+  参数化合并，同时保留不同语义效果的动作。
+- SauceDemo 十个成功动作全部进入语义图，投影无排除项；PDDL、SafeSym 解析、安全注入、基础
+  计划和安全计划均成功。
+- 静态语义 MVP 通过后，近期主线恢复到执行端验收：给定已选语义动作，验证执行器的元素定位、
+  原子执行和下一页面观察获取。短期不为实验重构 `WebKobeExplorer`。
+- 确认当前 initial scan 已移除站点答案提示：不接收 profile、完整动作词表、动作契约、预期流程、
+  外部任务 goal 或 PDDL goal。SauceDemo 验收未增加专属候选分支。
+
+原因：
+- 严格动作前后截图已经证明，同位置依赖、结果判断和位置变化可以在不调用 Stagehand 的情况下
+  正常工作；继续增加同类静态页面的边际价值低于验证真实执行稳定性。
+- 当前最大的未验证风险已经从“能否形成 SafeSym 可消费的 PDDL”转为“语义动作能否稳定落到
+  正确网页控件，并持续返回真实观察”。
+- `open_cart` 不应错误依赖 `add_to_cart`。规划器能够跳过加购的真实原因是尚未恢复跨位置持续
+  业务事实 `cart_has_items`，而不是购物车入口候选缺少前置动作。
+
+影响：
+- 当前可以表述为“语义 MVP 主链成立”，但不能表述为完整因果模型或自动网站覆盖。
+- 可以表述为“候选发现中的站点答案硬编码已从 active semantic path 移除”。旧 profile、旧
+  targeted/supplement scan、benchmark 参数和固定静态验收序列仍保留，但分别属于兼容代码、
+  实验配置或测试夹具，不参与产品 initial scan。本条取代 2026-08-13 对 active path 的旧判断。
+- `add_to_cart -> cart_has_items -> proceed_to_checkout` 记录为后续语义增强；它是已知的规划捷径，
+  但不阻塞执行端最小实验。
+- 下一轮执行实验优先使用现有通用候选和真实页面观察，不引入 SauceDemo 专属动作表、按钮文本
+  分支或固定业务脚本。`agentExecute` 与 `observe -> act` 的切换和缓存仍需通过单独证据决定。
+
 ## 2026-08-13 - 可行性阶段完成，下一阶段从答案提示转向 reference ontology
 
 > 本条保留上一阶段问题判断；其中关于下一阶段采用 reference ontology、业务事实和 targeted
