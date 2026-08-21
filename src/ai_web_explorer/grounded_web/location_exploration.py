@@ -326,8 +326,16 @@ class LocationExplorationCoordinator:
             if result.trace.status == "summarized":
                 result_location = normalize_semantic_id(result.location_id or "")
                 if kind == "initial" and result_location:
+                    provisional_location = normalized_location
+                    provisional_pool = pool
                     normalized_location = result_location
                     pool = self.memory.pool_for(normalized_location)
+                    if (
+                        provisional_location != normalized_location
+                        and not provisional_pool.candidates
+                        and not provisional_pool.audit_log
+                    ):
+                        self.memory.locations.pop(provisional_location, None)
                 added = self.memory.merge_scan(
                     normalized_location,
                     result.business_affordances,

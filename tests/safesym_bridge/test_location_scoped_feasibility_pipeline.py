@@ -182,6 +182,12 @@ def _fixture_provider(scan_calls: list[tuple[str, str]]):
             )
         scan_kind = payload.get("scan_kind", "initial")
         location = payload.get("semantic_location", "shopping")
+        if location not in {"shopping", "checkout", "confirmation"}:
+            location = next(
+                candidate
+                for candidate in ("shopping", "checkout", "confirmation")
+                if location.startswith(candidate)
+            )
         scan_calls.append((scan_kind, location))
         if scan_kind == "targeted":
             return json.dumps(
@@ -209,6 +215,7 @@ def _fixture_provider(scan_calls: list[tuple[str, str]]):
         }[location]
         return json.dumps(
             {
+                "location_id": location,
                 "actions": [
                     {
                         "action_id": action_id,

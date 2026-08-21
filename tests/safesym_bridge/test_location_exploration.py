@@ -368,6 +368,10 @@ def test_stale_preflight_consumes_zero_formal_action_attempts():
     explorer = WebKobeExplorer(
         adapter=_DisabledCandidateAdapter(),
         semantic_assistor=DeterministicSemanticAssistor(app="scoped"),
+        capture_screenshots=True,
+        visual_delta_provider=lambda prompt, **kwargs: json.dumps(
+            {"location_id": "shopping", "actions": []}
+        ),
         location_exploration_coordinator=LocationExplorationCoordinator(memory=memory),
         exploration_limits=ExplorationLimits(),
     )
@@ -400,6 +404,7 @@ def test_scoped_explorer_inherits_pool_and_runs_one_targeted_scan():
                 )
             return json.dumps(
                 {
+                    "location_id": "shopping",
                     "actions": [
                         {
                             "action_id": "sort_products",

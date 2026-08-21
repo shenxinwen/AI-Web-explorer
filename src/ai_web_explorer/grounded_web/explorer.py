@@ -207,15 +207,7 @@ def _semantic_location_anchor(node: WebKobeNode) -> tuple[str | None, bool]:
     )
     if unresolved:
         return None, True
-    for candidate in (
-        node.semantic_location_hint,
-        node.node_label,
-        node.page_frame.page_type,
-    ):
-        normalized = _optional_semantic_id(candidate)
-        if normalized:
-            return normalized, False
-    return None, False
+    return _optional_semantic_id(node.semantic_location_hint) or None, False
 
 
 def _safe_vlm_state_label(value: str | None, *, fallback: str) -> str:
@@ -816,9 +808,13 @@ class WebKobeExplorer:
         target_node = replace(
             target_node,
             semantic_location_hint=(
-                semantic_observation.target_location
-                if semantic_observation is not None
-                else outcome_location_hint
+                None
+                if outcome_location_change_accepted
+                else (
+                    semantic_observation.target_location
+                    if semantic_observation is not None
+                    else source_location_hint
+                )
             ),
         )
         if not observation_allowed or not state_changed:
@@ -842,11 +838,6 @@ class WebKobeExplorer:
                 target_location_hint=outcome_location_hint,
                 target_node_id=target_node.node_id,
             )
-            if semantic_observation is not None:
-                target_node = replace(
-                    target_node,
-                    semantic_location_hint=semantic_observation.target_location,
-                )
 
         target_match = None
         if state_changed:
@@ -871,6 +862,42 @@ class WebKobeExplorer:
         }
         target_id = self.manager.identify_or_add_node(target_node)
         node_was_new = target_id not in known_node_ids
+
+        location_scan_novel = False
+        if (
+            self.location_scoped_exploration
+            and outcome_location_change_accepted
+            and after_screenshot_path is not None
+            and self.visual_delta_provider is not None
+        ):
+            provisional_target = normalize_semantic_id(target_id)
+            target_location, target_result, target_added = (
+                self.location_exploration_coordinator.ensure_candidates(
+                    provisional_target,
+                    goal=self.goal,
+                    screenshot_path=after_screenshot_path,
+                    current_signature=after.signature,
+                    provider=self.visual_delta_provider,
+                    max_actions=self.max_candidates,
+                    scan_kind="initial",
+                )
+            )
+            if target_result is not None and target_result.location_id:
+                location_scan_novel = bool(target_added)
+                outcome_location_hint = target_location
+                semantic_observation = semantic_observation_from_action_outcome(
+                    action_outcome_result,
+                    source_location=source_location_hint or source_id,
+                    target_location_hint=target_location,
+                    target_node_id=target_id,
+                )
+                self.manager.identify_or_add_node(
+                    replace(
+                        self.manager.node_for_id(target_id),
+                        semantic_location_hint=target_location,
+                    )
+                )
+                self._sync_location_affordance_snapshots(target_location)
         if edge_status == "no_observed_change" and (
             visual_fact_change or visual_kind_change
         ):
@@ -1016,7 +1043,6 @@ class WebKobeExplorer:
         edge_was_new = _edge_novelty_key(edge) not in known_edge_keys
         self.manager.add_edge(edge)
         targeted_scan_novel = False
-        location_scan_novel = False
         if (
             self.location_scoped_exploration
             and action_outcome_result is not None
@@ -1035,7 +1061,7 @@ class WebKobeExplorer:
                     scan_kind="initial",
                 )
             )
-            location_scan_novel = bool(target_added)
+            location_scan_novel = location_scan_novel or bool(target_added)
             self._sync_location_affordance_snapshots(location_after)
         elif (
             self.location_scoped_exploration
@@ -1531,13 +1557,14 @@ class WebKobeExplorer:
             )
             return
         source_anchor, anchor_unresolved = _semantic_location_anchor(source_node)
-        if anchor_unresolved or not source_anchor:
+        if anchor_unresolved:
             return
+        scan_anchor = source_anchor or normalize_semantic_id(source_node.node_id)
         coordinator = self.location_exploration_coordinator
-        pool = coordinator.memory.pool_for(source_anchor)
+        pool = coordinator.memory.pool_for(scan_anchor)
         if source_node.business_affordances and not pool.initial_scan_complete:
             coordinator.memory.merge_scan(
-                source_anchor,
+                scan_anchor,
                 source_node.business_affordances,
                 kind="initial",
             )
@@ -1549,7 +1576,7 @@ class WebKobeExplorer:
             and (not pool.candidates or pool.exhausted)
         )
         if pool.initial_scan_complete and not supplement_needed:
-            affordances = coordinator.affordances_for(source_anchor)
+            affordances = coordinator.affordances_for(scan_anchor)
             if affordances and affordances != source_node.business_affordances:
                 self.manager.identify_or_add_node(
                     replace(source_node, business_affordances=affordances)
@@ -1557,7 +1584,7 @@ class WebKobeExplorer:
             self._visual_affordance_observed_node_ids.add(source_id)
             return
         effective_location, result, _added = coordinator.ensure_candidates(
-            source_anchor,
+            scan_anchor,
             goal=self.goal,
             screenshot_path=before_screenshot_path,
             current_signature=before.signature,
@@ -1567,8 +1594,10 @@ class WebKobeExplorer:
         )
         if result is None or result.trace.status != "summarized":
             return
-        if result.location_id and effective_location != source_anchor:
+        if result.location_id:
             source_anchor = effective_location
+        elif source_anchor is None:
+            return
         if source_node.semantic_location_hint != source_anchor:
             source_node = replace(source_node, semantic_location_hint=source_anchor)
         self._visual_affordance_observed_node_ids.add(source_id)

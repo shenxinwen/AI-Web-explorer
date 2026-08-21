@@ -126,6 +126,7 @@ def _default_visual_provider(
                 )
             return json.dumps(
                 {
+                    "location_id": "listing",
                     "actions": [
                         {
                             "action_id": action_name,
@@ -158,7 +159,7 @@ def _business_affordance_response(
     relevance: str = "core",
 ) -> str:
     return (
-        '{"business_affordances":['
+        '{"location_id":"listing","business_affordances":['
         f'{{"action_name":"{action_name}",'
         f'"label":"{action_name.replace("_", " ").title()}",'
         f'"relevance_hint":"{relevance}",'
@@ -221,6 +222,7 @@ async def test_minimal_active_path_uses_outcome_without_targeted_or_supplement_s
         candidate_scan_kinds.append(payload.get("scan_kind", "initial"))
         return json.dumps(
             {
+                "location_id": "listing",
                 "actions": [
                     {
                         "action_id": "add_to_cart_product",
@@ -299,15 +301,12 @@ async def test_minimal_active_path_scans_new_location_with_initial_contract():
     candidate_locations = []
 
     def candidate_provider(prompt, **kwargs):
-        payload = json.loads(prompt)
-        candidate_locations.append(payload.get("semantic_location"))
-        action_id = (
-            "open_checkout"
-            if payload.get("semantic_location") == "listing"
-            else "fill_billing"
-        )
+        location_id = "listing" if not candidate_locations else "checkout"
+        candidate_locations.append(location_id)
+        action_id = "open_checkout" if location_id == "listing" else "fill_billing"
         return json.dumps(
             {
+                "location_id": location_id,
                 "actions": [
                     {
                         "action_id": action_id,
@@ -390,6 +389,7 @@ class CheckoutDependencyAdapter:
 def _checkout_dependency_candidate_provider(prompt, **kwargs):
     return json.dumps(
         {
+            "location_id": "checkout",
             "actions": [
                 {
                     "action_id": "fill_billing",
@@ -485,13 +485,13 @@ async def test_real_location_change_same_page_type_uses_one_new_location_anchor(
     outcome_calls = []
 
     def candidate_provider(prompt, **kwargs):
-        payload = json.loads(prompt)
-        location = payload.get("semantic_location")
+        location = "checkout" if not candidate_locations else "order_review"
         candidate_locations.append(location)
         if location == "checkout":
             return _checkout_dependency_candidate_provider(prompt, **kwargs)
         return json.dumps(
             {
+                "location_id": location,
                 "actions": [
                     {
                         "action_id": "target_location_action",
@@ -598,15 +598,11 @@ async def test_failed_or_uncertain_outcome_cannot_be_promoted_to_navigation(outc
     scan_locations = []
 
     def candidate_provider(prompt, **kwargs):
-        payload = json.loads(prompt)
-        scan_locations.append(payload.get("semantic_location"))
-        action_id = (
-            "open_checkout"
-            if payload.get("semantic_location") == "listing"
-            else "fill_billing"
-        )
+        scan_locations.append("listing")
+        action_id = "open_checkout"
         return json.dumps(
             {
+                "location_id": "listing",
                 "actions": [
                     {
                         "action_id": action_id,
@@ -980,6 +976,7 @@ async def test_profile_runtime_rejects_out_of_contract_semantics():
         if current_screenshot_path is not None:
             return json.dumps(
                 {
+                    "location_id": "shopping",
                     "actions": [
                         {
                             "action_id": "add_to_cart_product",
@@ -2146,7 +2143,9 @@ def test_location_memory_retryable_candidate_ignores_legacy_resume_policy():
         resume_policy=ResumePolicy(),
     )
     explorer._start_node_id = "shopping"
-    explorer.manager.identify_or_add_node(_selection_node("shopping"))
+    explorer.manager.identify_or_add_node(
+        replace(_selection_node("shopping"), semantic_location_hint="shopping")
+    )
     explorer.manager.add_edge(
         replace(
             _selection_edge("shopping", "shopping", "retry_sort"),
@@ -2894,7 +2893,19 @@ async def test_explore_one_step_persists_semantic_observation_on_successful_edge
         after_screenshot_path=None,
     ):
         if current_screenshot_path is not None:
-            return _business_affordance_response("add_to_cart_product")
+            return json.dumps(
+                {
+                    "location_id": "listing",
+                    "actions": [
+                        {
+                            "action_id": "add_to_cart_product",
+                            "description": "Add the visible product to the cart.",
+                            "target": "Add to cart control",
+                            "requires": [],
+                        }
+                    ],
+                }
+            )
         assert '"source_location_hint": "listing"' in prompt
         assert "Do not invent a new location on every step." in prompt
         return (
@@ -2910,9 +2921,13 @@ async def test_explore_one_step_persists_semantic_observation_on_successful_edge
     explorer = _business_explorer(
         FakeAdapter(),
         visual_delta_provider=visual_provider,
+        location_exploration_coordinator=LocationExplorationCoordinator(
+            memory=LocationExplorationMemory()
+        ),
     )
     graph = await explorer.explore_one_step()
 
+    assert graph.edges, graph.meta
     observation = graph.edges[0].semantic_observation
     assert observation is not None
     assert observation.source_location == "listing"
@@ -2938,6 +2953,21 @@ def test_explorer_does_not_reconfirm_an_unresolved_location_anchor():
         },
     )
     assert _semantic_location_anchor(node) == (None, True)
+
+
+def test_deterministic_node_names_do_not_become_semantic_location_anchors():
+    node = replace(
+        _selection_node("inventory"),
+        semantic_location_hint=None,
+        node_label="inventory",
+        page_frame=replace(
+            _selection_node("inventory").page_frame,
+            page_type="swag_labs",
+        ),
+        naming_provenance={"source": "deterministic_fallback"},
+    )
+
+    assert _semantic_location_anchor(node) == (None, False)
 
 
 class TypedFactsAdapter(FakeAdapter):
