@@ -167,6 +167,7 @@ def _compact_edge(edge: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]
             "status",
             "visit_count",
             "visual_change_kind",
+            "required_action_ids",
         )
     }
     compact["action"] = _compact_action(edge.get("action", {}))

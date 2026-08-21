@@ -555,7 +555,7 @@ def main(argv: list[str] | None = None) -> int:
     stagehand_explore_parser.add_argument("--action-outcome-model", default=None)
     stagehand_explore_parser.add_argument(
         "--stagehand-execution-mode",
-        choices=["business_milestone", "observed_action"],
+        choices=["business_milestone", "observed_action", "observe_act"],
         default="observed_action",
     )
     stagehand_explore_parser.add_argument(

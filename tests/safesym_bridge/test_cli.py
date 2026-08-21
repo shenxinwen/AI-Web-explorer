@@ -1167,7 +1167,7 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
             "--action-outcome-model",
             "gpt-4o",
             "--stagehand-execution-mode",
-            "observed_action",
+            "observe_act",
             "--max-candidates",
             "2",
             "--headed",
@@ -1194,7 +1194,7 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
             True,
             "gpt-4o-mini",
             "gpt-4o",
-            "observed_action",
+            "observe_act",
             2,
         )
     ]

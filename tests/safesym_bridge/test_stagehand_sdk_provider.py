@@ -8,6 +8,7 @@ from ai_web_explorer.grounded_web.stagehand_sdk_provider import (
     StagehandSdkProvider,
     create_async_stagehand_provider_from_env,
 )
+from ai_web_explorer.grounded_web.stagehand_actions import StagehandObservedAction
 from ai_web_explorer.grounded_web.stagehand_actions import StagehandActResult
 
 
@@ -277,6 +278,8 @@ class FakeSession:
     def __init__(self):
         self.acted_input = None
         self.acted_page = None
+        self.observed_instruction = None
+        self.observed_page = None
         self.executed_agent_config = None
         self.executed_options = None
         self.executed_page = None
@@ -292,6 +295,24 @@ class FakeSession:
                     actionDescription="Clicked Login",
                 ),
                 actionId="act_1",
+            )
+        )
+
+    async def observe(self, instruction, page=None):
+        self.observed_instruction = instruction
+        self.observed_page = page
+        return SimpleNamespace(
+            data=SimpleNamespace(
+                result=[
+                    SimpleNamespace(
+                        description="Login button to submit the form.",
+                        selector="xpath=/html/body/form/input[@type='submit']",
+                        method="click",
+                        arguments=[],
+                        backendNodeId=42,
+                    )
+                ],
+                actionId="observe_1",
             )
         )
 
@@ -347,6 +368,42 @@ async def test_stagehand_sdk_provider_acts_on_instruction_text():
     )
     assert result.success is True
     assert result.action_description == "Clicked Login"
+
+
+@pytest.mark.anyio
+async def test_stagehand_sdk_provider_observes_then_acts_on_concrete_action():
+    session = FakeSession()
+    page = object()
+    provider = StagehandSdkProvider(session=session, page=page)
+
+    actions = await provider.observe_action("Click the Login button")
+    result = await provider.act_action(actions[0])
+
+    assert actions == [
+        StagehandObservedAction(
+            description="Login button to submit the form.",
+            selector="xpath=/html/body/form/input[@type='submit']",
+            method="click",
+            arguments=(),
+            raw={
+                "description": "Login button to submit the form.",
+                "selector": "xpath=/html/body/form/input[@type='submit']",
+                "method": "click",
+                "arguments": [],
+                "backendNodeId": 42,
+            },
+        )
+    ]
+    assert session.observed_instruction == "Click the Login button"
+    assert session.observed_page is page
+    assert session.acted_input == {
+        "description": "Login button to submit the form.",
+        "selector": "xpath=/html/body/form/input[@type='submit']",
+        "method": "click",
+        "arguments": [],
+    }
+    assert session.acted_page is page
+    assert result.success is True
 
 
 @pytest.mark.anyio

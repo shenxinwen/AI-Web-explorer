@@ -5,6 +5,7 @@ from typing import Any, Callable, Mapping
 
 from ai_web_explorer.grounded_web.stagehand_actions import (
     StagehandActResult,
+    StagehandObservedAction,
 )
 
 
@@ -54,6 +55,57 @@ class StagehandSdkProvider:
         self.page = page
         self._agent_model_config = (
             dict(agent_model_config) if agent_model_config is not None else None
+        )
+
+    async def observe_action(
+        self,
+        instruction: str,
+    ) -> list[StagehandObservedAction]:
+        observe_args = {"instruction": instruction}
+        if self.page is not None:
+            observe_args["page"] = self.page
+        response = await self.session.observe(**observe_args)
+        raw_data = _to_dict(getattr(response, "data", response))
+        raw_items = raw_data.get("result") or []
+        if not isinstance(raw_items, list):
+            raw_items = [raw_items]
+        return [
+            StagehandObservedAction(
+                description=str(item.get("description", "")),
+                selector=str(item.get("selector", "")),
+                method=str(item.get("method", "")),
+                arguments=tuple(str(value) for value in item.get("arguments") or []),
+                raw=dict(item),
+            )
+            for item in raw_items
+            if isinstance(item, dict)
+        ]
+
+    async def act_action(
+        self,
+        action: StagehandObservedAction,
+    ) -> StagehandActResult:
+        act_args: dict[str, Any] = {
+            "input": {
+                "description": action.description,
+                "selector": action.selector,
+                "method": action.method,
+                "arguments": list(action.arguments),
+            }
+        }
+        if self.page is not None:
+            act_args["page"] = self.page
+        response = await self.session.act(**act_args)
+        raw_data = _to_dict(getattr(response, "data", response))
+        result_data = _to_dict(raw_data.get("result"))
+        return StagehandActResult(
+            success=bool(result_data.get("success", raw_data.get("success", True))),
+            message=result_data.get("message"),
+            action_description=(
+                result_data.get("actionDescription")
+                or result_data.get("action_description")
+            ),
+            raw=raw_data,
         )
 
     async def act_instruction(self, instruction: str) -> StagehandActResult:

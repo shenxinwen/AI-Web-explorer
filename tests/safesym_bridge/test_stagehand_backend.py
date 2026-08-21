@@ -6,6 +6,7 @@ from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.grounded_web.graph import BrowserAction
 from ai_web_explorer.grounded_web.stagehand_actions import (
     StagehandActResult,
+    StagehandObservedAction,
 )
 from ai_web_explorer.grounded_web.stagehand_backend import (
     StagehandAutomationBackend,
@@ -79,6 +80,8 @@ class FakeStagehandProvider:
     def __init__(self):
         self.acted_instructions = []
         self.executed_instructions = []
+        self.observed_instructions = []
+        self.acted_actions = []
 
     async def act_instruction(self, instruction):
         self.acted_instructions.append(instruction)
@@ -98,6 +101,27 @@ class FakeStagehandProvider:
             raw={"actions": [{"type": "act", "action": "fill username"}]},
         )
 
+    async def observe_action(self, instruction):
+        self.observed_instructions.append(instruction)
+        return [
+            StagehandObservedAction(
+                description="Login button",
+                selector="#login-button",
+                method="click",
+                arguments=(),
+                raw={"backendNodeId": 42},
+            )
+        ]
+
+    async def act_action(self, action):
+        self.acted_actions.append(action)
+        return StagehandActResult(
+            success=True,
+            message="Clicked",
+            action_description=action.description,
+            raw={"actionId": "act_observed"},
+        )
+
 
 @pytest.mark.anyio
 async def test_stagehand_backend_observed_action_mode_delegates_base_evidence():
@@ -107,6 +131,28 @@ async def test_stagehand_backend_observed_action_mode_delegates_base_evidence():
         provider=provider,
         goal="Explore shopping capabilities.",
         execution_mode="observed_action",
+    )
+    state = await backend.observe_state()
+
+    actions = await backend.list_interactables(state)
+
+    assert actions == [
+        {
+            "semantic_id": "dom_login_button",
+            "description": "Login button evidence",
+            "locator": "#login-button",
+            "action_kind": "click",
+        }
+    ]
+
+
+@pytest.mark.anyio
+async def test_stagehand_backend_observe_act_mode_delegates_base_evidence():
+    backend = StagehandAutomationBackend(
+        base_backend=DeterministicInteractablesBaseBackend(),
+        provider=FakeStagehandProvider(),
+        goal="Explore visible functionality.",
+        execution_mode="observe_act",
     )
     state = await backend.observe_state()
 
@@ -297,6 +343,43 @@ async def test_stagehand_backend_executes_business_intent_action_instruction():
     assert backend.last_execution_metadata["stagehand_execution_mode"] == (
         "business_intent"
     )
+
+
+@pytest.mark.anyio
+async def test_stagehand_backend_observe_act_mode_avoids_agent_execute():
+    provider = FakeStagehandProvider()
+    backend = StagehandAutomationBackend(
+        base_backend=FakeBaseBackend(),
+        provider=provider,
+        goal="Explore visible functionality.",
+        execution_mode="observe_act",
+    )
+
+    success = await backend.execute(
+        BrowserAction(
+            action_kind="business_intent",
+            locator=None,
+            semantic_id="submit_login",
+            canonical_action_name="submit_login",
+            description="Click the Login button",
+        )
+    )
+
+    assert success is True
+    assert provider.observed_instructions == ["Click the Login button"]
+    assert len(provider.acted_actions) == 1
+    assert provider.executed_instructions == []
+    assert provider.acted_instructions == []
+    assert backend.last_execution_metadata["stagehand_execution_mode"] == (
+        "observe_act"
+    )
+    assert backend.last_execution_metadata["stagehand_observed_action"] == {
+        "description": "Login button",
+        "selector": "#login-button",
+        "method": "click",
+        "arguments": [],
+        "backendNodeId": 42,
+    }
 
 
 @pytest.mark.anyio

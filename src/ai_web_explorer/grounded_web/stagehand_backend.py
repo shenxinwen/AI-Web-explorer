@@ -10,6 +10,7 @@ from ai_web_explorer.grounded_web.graph import BrowserAction
 from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.grounded_web.stagehand_actions import (
     StagehandProvider,
+    StagehandObservedAction,
     StagehandStepTrace,
     stagehand_trace_metadata,
 )
@@ -24,7 +25,9 @@ class StagehandAutomationBackend:
         base_backend: AutomationBackend,
         provider: StagehandProvider,
         goal: str,
-        execution_mode: Literal["observed_action", "business_milestone"] = (
+        execution_mode: Literal[
+            "observed_action", "observe_act", "business_milestone"
+        ] = (
             "observed_action"
         ),
         business_milestone_max_steps: int = 5,
@@ -147,7 +150,7 @@ class StagehandAutomationBackend:
                 }
             ]
 
-        if self.execution_mode == "observed_action":
+        if self.execution_mode in {"observed_action", "observe_act"}:
             return await self.base_backend.list_interactables(state)
 
     async def execute(self, action: BrowserAction | dict[str, Any]) -> bool:
@@ -228,23 +231,42 @@ class StagehandAutomationBackend:
     ) -> bool:
         if self._exploration_context_prompt:
             instruction = "\n\n".join([instruction, self._exploration_context_prompt])
+        observed_action: StagehandObservedAction | None = None
+        trace_execution_mode = execution_mode
         try:
-            execute_instruction = getattr(self.provider, "execute_instruction", None)
-            if execute_instruction is not None:
-                invocation = execute_instruction(
-                    instruction,
-                    max_steps=self.business_milestone_max_steps,
+            if self.execution_mode == "observe_act":
+                async def observe_then_act():
+                    actions = await self.provider.observe_action(instruction)
+                    if not actions:
+                        raise ValueError("stagehand_observe_returned_no_actions")
+                    action = actions[0]
+                    return action, await self.provider.act_action(action)
+
+                invocation = observe_then_act()
+                trace_execution_mode = "observe_act"
+            else:
+                execute_instruction = getattr(
+                    self.provider, "execute_instruction", None
                 )
-            else:
-                act_instruction = getattr(self.provider, "act_instruction")
-                invocation = act_instruction(instruction)
+                if execute_instruction is not None:
+                    invocation = execute_instruction(
+                        instruction,
+                        max_steps=self.business_milestone_max_steps,
+                    )
+                else:
+                    act_instruction = getattr(self.provider, "act_instruction")
+                    invocation = act_instruction(instruction)
             if self.action_timeout_seconds is None:
-                result = await invocation
+                invocation_result = await invocation
             else:
-                result = await asyncio.wait_for(
+                invocation_result = await asyncio.wait_for(
                     invocation,
                     timeout=self.action_timeout_seconds,
                 )
+            if self.execution_mode == "observe_act":
+                observed_action, result = invocation_result
+            else:
+                result = invocation_result
         except asyncio.TimeoutError:
             self.last_execution_error = "stagehand_action_timeout"
             trace = StagehandStepTrace(
@@ -253,7 +275,9 @@ class StagehandAutomationBackend:
                 error=self.last_execution_error,
             )
             self.last_execution_metadata = stagehand_trace_metadata(trace)
-            self.last_execution_metadata["stagehand_execution_mode"] = execution_mode
+            self.last_execution_metadata["stagehand_execution_mode"] = (
+                trace_execution_mode
+            )
             self.last_execution_metadata.update(step_metadata)
             return False
         except Exception as error:
@@ -264,15 +288,20 @@ class StagehandAutomationBackend:
                 error=self.last_execution_error,
             )
             self.last_execution_metadata = stagehand_trace_metadata(trace)
-            self.last_execution_metadata["stagehand_execution_mode"] = execution_mode
+            self.last_execution_metadata["stagehand_execution_mode"] = (
+                trace_execution_mode
+            )
             self.last_execution_metadata.update(step_metadata)
             return False
         trace = StagehandStepTrace(
             instruction=instruction,
             act_result=result,
+            observed_action=observed_action,
         )
         self.last_execution_metadata = stagehand_trace_metadata(trace)
-        self.last_execution_metadata["stagehand_execution_mode"] = execution_mode
+        self.last_execution_metadata["stagehand_execution_mode"] = (
+            trace_execution_mode
+        )
         self.last_execution_metadata.update(step_metadata)
         self.last_execution_error = None if result.success else result.message
         return result.success

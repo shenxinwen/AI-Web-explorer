@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 
 from ai_web_explorer.grounded_web.business_profile import (
     PlanningDelta,
@@ -20,8 +21,14 @@ from ai_web_explorer.grounded_web.graph import (
     ReferenceObservation,
 )
 from ai_web_explorer.grounded_web.semantic_model import SemanticObservation
+from ai_web_explorer.grounded_web.semantic_planning import (
+    build_semantic_planning_graph,
+)
 from ai_web_explorer.safesym_bridge.graph_artifacts import (
     build_graph_artifact_payload,
+)
+from ai_web_explorer.safesym_bridge.minimal_semantic_pddl import (
+    compile_minimal_semantic_domain,
 )
 from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
     load_web_kobe_graph_json,
@@ -166,6 +173,7 @@ def _verbose_graph_fixture() -> WebKobeGraph:
         visit_count=1,
         status="succeeded_with_observed_change",
         evidence=[evidence],
+        required_action_ids=["enter_username", "enter_password"],
     )
     return WebKobeGraph(
         app="shop",
@@ -173,6 +181,7 @@ def _verbose_graph_fixture() -> WebKobeGraph:
         total_steps_completed=1,
         nodes=[product_list, search_results],
         edges=[edge],
+        execution_events=[edge],
         meta={"experiment": "verbose fixture", "frontier": {"count": 1}},
     )
 
@@ -244,6 +253,72 @@ def test_compact_payload_preserves_semantic_observation_for_projection():
     edge = payload.compact_graph["edges"][0]
     assert edge["semantic_observation"]["source_location"] == "shopping"
     assert edge["semantic_observation"]["completion_facts"] == ["products_sorted"]
+
+
+def test_compact_payload_preserves_required_action_ids_for_edges_and_events():
+    payload = build_graph_artifact_payload(_verbose_graph_fixture())
+
+    assert payload.compact_graph["edges"][0]["required_action_ids"] == [
+        "enter_username",
+        "enter_password",
+    ]
+    assert payload.compact_graph["execution_events"][0]["required_action_ids"] == [
+        "enter_username",
+        "enter_password",
+    ]
+
+
+def test_compact_roundtrip_preserves_action_dependencies_in_semantic_pddl(tmp_path):
+    graph = _verbose_graph_fixture()
+    base_edge = graph.edges[0]
+
+    def action_edge(action_name, *, required_action_ids=()):
+        return replace(
+            base_edge,
+            action=replace(
+                base_edge.action,
+                semantic_id=action_name,
+                canonical_action_name=action_name,
+            ),
+            required_action_ids=list(required_action_ids),
+            semantic_observation=replace(
+                base_edge.semantic_observation,
+                action_role="presentation_capability",
+                source_location="login_page",
+                target_location="login_page",
+                completion_facts=[],
+            ),
+        )
+
+    edges = [
+        action_edge("enter_username"),
+        action_edge("enter_password"),
+        action_edge(
+            "submit_login",
+            required_action_ids=("enter_username", "enter_password"),
+        ),
+    ]
+    graph = replace(graph, edges=edges, execution_events=edges)
+    path = tmp_path / "compact.json"
+    path.write_text(
+        json.dumps(build_graph_artifact_payload(graph).compact_graph),
+        encoding="utf-8",
+    )
+
+    loaded = load_web_kobe_graph_json(path)
+    semantic, _ = build_semantic_planning_graph(loaded)
+    domain = compile_minimal_semantic_domain(semantic).domain
+    submit_start = domain.index("(:action submit_login")
+    submit_effect = domain.index(":effect", submit_start)
+
+    assert (
+        domain.index("(completed_login_page_enter_username)", submit_start)
+        < submit_effect
+    )
+    assert (
+        domain.index("(completed_login_page_enter_password)", submit_start)
+        < submit_effect
+    )
 
 
 def test_compact_payload_preserves_semantic_location_hint():
