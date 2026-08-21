@@ -140,8 +140,8 @@ def _resolve_business_profile(
 
 def build_saucedemo_stagehand_benchmark_context(
     *,
-    test_username: str = "standard_user",
-    test_password: str = "secret_sauce",
+    test_username: str,
+    test_password: str,
     checkout_first_name: str = "Test",
     checkout_last_name: str = "User",
     checkout_postal_code: str = "12345",

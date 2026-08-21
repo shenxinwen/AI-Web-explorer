@@ -175,7 +175,7 @@ def test_non_success_action_outcome_has_no_coarse_observation(outcome):
     )
 
 
-def test_openai_visual_provider_defaults_to_mini_and_honors_explicit_model():
+def test_openai_visual_provider_defaults_to_gpt_4o_and_honors_explicit_model():
     class FakeClient:
         pass
 
@@ -194,7 +194,7 @@ def test_openai_visual_provider_defaults_to_mini_and_honors_explicit_model():
         environ={"OPENAI_API_KEY": "test-key"},
     )
 
-    assert provider.model == "gpt-4o-mini"
+    assert provider.model == "gpt-4o"
     assert explicit.model == "gpt-4o"
 
 

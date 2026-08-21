@@ -2067,13 +2067,8 @@ async def test_explore_one_step_prefers_high_ranked_current_business_affordance(
     assert adapter.executed[1].semantic_id == "add_item_to_cart"
     assert adapter.executed[1].canonical_action_name == "add_item_to_cart"
     assert "button labeled Add to cart" in adapter.executed[1].description
-    assert (
-        "Execute only this selected business action"
-        in adapter.executed[1].description
-    )
-    assert (
-        "Do not continue to the next business goal"
-        in adapter.executed[1].description
+    assert adapter.executed[1].description == (
+        "Add item to cart. Target: button labeled Add to cart."
     )
     assert [edge.action.semantic_id for edge in graph.edges] == [
         "add_item_to_cart",
@@ -2180,6 +2175,23 @@ def test_business_action_snapshots_supporting_facts_without_expected_effect_text
     assert action.supporting_facts == ["search_input_visible"]
     assert "search input" in action.description
     assert "Expected visible change:" not in action.description
+
+
+def test_business_action_reuses_vlm_description_and_target_as_atomic_instruction():
+    action = _business_action_from_affordance(
+        BusinessAffordance(
+            action_name="open_cart",
+            label="Open the shopping cart to view selected items.",
+            target_hint="Cart icon in the header",
+        )
+    )
+
+    assert action.description == (
+        "Open the shopping cart to view selected items. "
+        "Target: Cart icon in the header."
+    )
+    assert "open_cart" not in action.description
+    assert "business goal" not in action.description
 
 
 def test_business_affordance_selection_returns_none_when_local_frontier_exhausted():

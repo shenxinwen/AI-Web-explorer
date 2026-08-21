@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-DEFAULT_OPENAI_VISUAL_DELTA_MODEL = "gpt-4o-mini"
+DEFAULT_OPENAI_VISUAL_DELTA_MODEL = "gpt-4o"
 DEFAULT_OPENAI_ACTION_OUTCOME_MODEL = "gpt-4o"
 
 

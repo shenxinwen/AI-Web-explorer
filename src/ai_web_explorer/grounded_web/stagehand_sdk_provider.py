@@ -170,6 +170,7 @@ _PROVIDER_KEY_ENV_BY_MODEL_PREFIX = {
     "xai": "XAI_API_KEY",
 }
 _LOCAL_NO_PROXY_HOSTS = ("localhost", "127.0.0.1", "::1")
+DEFAULT_STAGEHAND_MODEL = "openai/gpt-4o"
 
 
 def _resolve_model_name(
@@ -177,12 +178,7 @@ def _resolve_model_name(
     *,
     env: Mapping[str, str],
 ) -> str:
-    resolved_model_name = model_name or env.get("STAGEHAND_MODEL")
-    if not resolved_model_name:
-        raise ValueError(
-            "Stagehand model is required. Pass --model or set STAGEHAND_MODEL."
-        )
-    return resolved_model_name
+    return model_name or env.get("STAGEHAND_MODEL") or DEFAULT_STAGEHAND_MODEL
 
 
 def _resolve_model_api_key(*, model_name: str, env: Mapping[str, str]) -> str | None:

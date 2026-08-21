@@ -26,22 +26,19 @@ async def test_create_stagehand_provider_from_env_reports_missing_sdk(monkeypatc
 
 
 @pytest.mark.anyio
-async def test_create_stagehand_provider_from_env_requires_model(monkeypatch):
-    class FakeAsyncStagehand:
-        pass
+async def test_create_stagehand_provider_defaults_to_openai_gpt_4o(monkeypatch):
+    calls = []
+    _install_fake_stagehand(monkeypatch, calls)
 
-    monkeypatch.setitem(
-        sys.modules,
-        "stagehand",
-        SimpleNamespace(AsyncStagehand=FakeAsyncStagehand),
+    await create_async_stagehand_provider_from_env(
+        load_dotenv=lambda: None,
+        environ={"OPENAI_API_KEY": "openai-test-key"},
     )
-    monkeypatch.delenv("STAGEHAND_MODEL", raising=False)
 
-    with pytest.raises(ValueError, match="Stagehand model is required"):
-        await create_async_stagehand_provider_from_env(
-            load_dotenv=lambda: None,
-            environ={},
-        )
+    assert calls == [
+        ("client", {"model_api_key": "openai-test-key", "server": "local"}),
+        ("start", {"model_name": "openai/gpt-4o", "browser": {"type": "local"}}),
+    ]
 
 
 @pytest.mark.anyio

@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -1053,6 +1054,10 @@ def test_main_web_kobe_ecommerce_stagehand_smoke_cleans_latest_output_dir(
             str(trace),
             "--screenshot-dir",
             str(screenshots),
+            "--test-username",
+            "fixture_user",
+            "--test-password",
+            "fixture_password",
             "--clean-output-dir",
         ]
     )
@@ -1163,7 +1168,7 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
             "ecommerce_checkout",
             "--openai-visual-delta",
             "--visual-delta-model",
-            "gpt-4o-mini",
+            "gpt-4o",
             "--action-outcome-model",
             "gpt-4o",
             "--stagehand-execution-mode",
@@ -1192,7 +1197,7 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
             "demo store",
             "ecommerce_checkout",
             True,
-            "gpt-4o-mini",
+            "gpt-4o",
             "gpt-4o",
             "observe_act",
             2,
@@ -1894,3 +1899,15 @@ def test_main_web_kobe_phase_a_failed_problem_query_removes_stale_problem(
     )
     assert not (output_dir / "problem.pddl").exists()
     assert marker.read_text(encoding="utf-8") == "keep"
+def test_saucedemo_benchmark_requires_explicit_credentials():
+    args = SimpleNamespace(
+        benchmark="saucedemo",
+        test_username=None,
+        test_password=None,
+        checkout_first_name="Test",
+        checkout_last_name="User",
+        checkout_postal_code="12345",
+    )
+
+    with pytest.raises(ValueError, match="explicit test credentials"):
+        cli._build_ecommerce_benchmark_context(args)

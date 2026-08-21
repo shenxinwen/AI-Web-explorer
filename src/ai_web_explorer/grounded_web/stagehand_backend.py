@@ -16,6 +16,17 @@ from ai_web_explorer.grounded_web.stagehand_actions import (
 )
 
 
+def _agent_business_instruction(semantic_id: str, atomic_instruction: str) -> str:
+    return " ".join(
+        [
+            f"Execute only this selected business action: {semantic_id}.",
+            atomic_instruction,
+            "Stop after the first visible completion or clear failure.",
+            "Do not continue to the next business goal.",
+        ]
+    )
+
+
 class StagehandAutomationBackend:
     app_name: str
 
@@ -176,6 +187,11 @@ class StagehandAutomationBackend:
                 if isinstance(action, BrowserAction)
                 else str(action.get("description") or semantic_id)
             )
+            if self.execution_mode != "observe_act":
+                instruction = _agent_business_instruction(
+                    semantic_id,
+                    instruction or semantic_id,
+                )
             return await self._execute_business_intent(
                 instruction or semantic_id,
                 {"business_action_id": semantic_id},
@@ -229,7 +245,10 @@ class StagehandAutomationBackend:
         execution_mode: str,
         step_metadata: dict[str, Any],
     ) -> bool:
-        if self._exploration_context_prompt:
+        if (
+            self.execution_mode != "observe_act"
+            and self._exploration_context_prompt
+        ):
             instruction = "\n\n".join([instruction, self._exploration_context_prompt])
         observed_action: StagehandObservedAction | None = None
         trace_execution_mode = execution_mode

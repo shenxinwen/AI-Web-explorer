@@ -261,14 +261,16 @@ def _node_from_draft(draft) -> WebKobeNode:
 
 
 def _business_action_from_affordance(affordance: BusinessAffordance) -> BrowserAction:
-    details = [
-        "Execute only this selected business action: "
-        f"{affordance.action_name}.",
-        "Stop after the first visible completion or clear failure.",
-        "Do not continue to the next business goal.",
-    ]
+    label = (
+        affordance.label
+        or affordance.action_name.replace("_", " ").capitalize()
+    ).strip()
+    if label and label[-1] not in ".!?":
+        label += "."
+    details = [label]
     if affordance.target_hint:
-        details.append(f"Target hint: {affordance.target_hint}.")
+        target = affordance.target_hint.strip().rstrip(".")
+        details.append(f"Target: {target}.")
     return BrowserAction(
         action_kind="business_intent",
         locator=None,

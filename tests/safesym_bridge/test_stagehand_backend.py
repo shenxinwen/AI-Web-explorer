@@ -335,8 +335,11 @@ async def test_stagehand_backend_executes_business_intent_action_instruction():
     assert success is True
     assert provider.executed_instructions == [
         (
+            "Execute only this selected business action: add_item_to_cart. "
             "Business action: add_item_to_cart. Target hint: button labeled "
-            "Add to cart. Evidence: A product card contains an Add to cart button.",
+            "Add to cart. Evidence: A product card contains an Add to cart button. "
+            "Stop after the first visible completion or clear failure. "
+            "Do not continue to the next business goal.",
             5,
         )
     ]
@@ -380,6 +383,39 @@ async def test_stagehand_backend_observe_act_mode_avoids_agent_execute():
         "arguments": [],
         "backendNodeId": 42,
     }
+
+
+@pytest.mark.anyio
+async def test_stagehand_backend_observe_act_does_not_append_exploration_memory():
+    provider = FakeStagehandProvider()
+    backend = StagehandAutomationBackend(
+        base_backend=FakeBaseBackend(),
+        provider=provider,
+        goal="Explore visible functionality.",
+        execution_mode="observe_act",
+    )
+    backend.set_exploration_context(
+        "Exploration memory:\nAvoid repeating actions: sort_products"
+    )
+
+    success = await backend.execute(
+        BrowserAction(
+            action_kind="business_intent",
+            locator=None,
+            semantic_id="open_cart",
+            canonical_action_name="open_cart",
+            description=(
+                "Open the shopping cart to view selected items. "
+                "Target: Cart icon in the header."
+            ),
+        )
+    )
+
+    assert success is True
+    assert provider.observed_instructions == [
+        "Open the shopping cart to view selected items. "
+        "Target: Cart icon in the header."
+    ]
 
 
 @pytest.mark.anyio

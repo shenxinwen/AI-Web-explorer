@@ -297,10 +297,10 @@ The generic Stagehand runner is the bounded-exploration integration surface. It
 can now reuse the existing profile, visual-delta, embedding, and Stagehand
 candidate-action capabilities:
 
-Stagehand and screenshot observation use separate model settings. Set
-`STAGEHAND_MODEL` (or `--model`) only for Stagehand action execution. Candidate
-observation defaults to `gpt-4o-mini` and uses `OPENAI_VISUAL_DELTA_MODEL` (or
-`--visual-delta-model`); action-outcome observation defaults to `gpt-4o` and
+Stagehand and screenshot observation retain separate model settings, but all
+three paths now default to GPT-4o. Set `STAGEHAND_MODEL` (or `--model`) only for
+Stagehand action execution. Candidate observation defaults to `gpt-4o` and uses
+`OPENAI_VISUAL_DELTA_MODEL` (or `--visual-delta-model`); action-outcome observation defaults to `gpt-4o` and
 uses `OPENAI_ACTION_OUTCOME_MODEL` (or `--action-outcome-model`). These OpenAI
 providers are independent, and explicit provider injection remains supported.
 Never copy the Stagehand model name into either observation option unless that
@@ -316,12 +316,12 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-stagehand-explore `
   --screenshot-dir outputs/experiments/saucedemo/latest/screenshots `
   --business-profile ecommerce_checkout `
   --openai-visual-delta `
-  --visual-delta-model gpt-4o-mini `
+  --visual-delta-model gpt-4o `
   --action-outcome-model gpt-4o `
   --state-embeddings `
   --embedding-model text-embedding-v4 `
   --embedding-dimension 1024 `
-  --model deepseek/deepseek-v4-flash `
+  --model openai/gpt-4o `
   --steps 8
 ```
 

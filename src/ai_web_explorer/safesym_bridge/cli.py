@@ -97,9 +97,13 @@ def _build_ecommerce_benchmark_context(args) -> BenchmarkTaskContext:
         "postal_code": args.checkout_postal_code,
     }
     if args.benchmark == "saucedemo":
+        if not args.test_username or not args.test_password:
+            raise ValueError(
+                "SauceDemo benchmark requires explicit test credentials."
+            )
         return build_saucedemo_stagehand_benchmark_context(
-            test_username=args.test_username or "standard_user",
-            test_password=args.test_password or "secret_sauce",
+            test_username=args.test_username,
+            test_password=args.test_password,
             checkout_first_name=args.checkout_first_name,
             checkout_last_name=args.checkout_last_name,
             checkout_postal_code=args.checkout_postal_code,
