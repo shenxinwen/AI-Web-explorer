@@ -1099,9 +1099,11 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
         use_openai_visual_delta=False,
         visual_delta_model=None,
         action_outcome_model=None,
-        stagehand_execution_mode="business_milestone",
-        max_candidates=5,
-        frontier_replay=False,
+            stagehand_execution_mode="business_milestone",
+            max_candidates=5,
+            limits=None,
+            semantic_experiment_profile=None,
+            frontier_replay=False,
         resume_graph=None,
         resume_policy=None,
     ):
@@ -1149,7 +1151,7 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
             str(output),
             "--stagehand-trace",
             str(trace),
-            "--steps",
+            "--max-exploration-steps",
             "4",
             "--model",
             "deepseek/test",
@@ -1357,7 +1359,7 @@ def test_main_stagehand_explore_accepts_location_feasibility_parameters(
     assert captured["stagehand_action_timeout_seconds"] == 240
 
 
-def test_main_stagehand_explore_rejects_steps_and_max_exploration_steps(
+def test_main_stagehand_explore_rejects_legacy_steps(
     monkeypatch, capsys
 ):
     monkeypatch.setattr(
@@ -1367,7 +1369,7 @@ def test_main_stagehand_explore_rejects_steps_and_max_exploration_steps(
         raising=False,
     )
 
-    assert (
+    with pytest.raises(SystemExit):
         main(
             [
                 "web-kobe-stagehand-explore",
@@ -1375,13 +1377,9 @@ def test_main_stagehand_explore_rejects_steps_and_max_exploration_steps(
                 "https://fixture.test/shop",
                 "--steps",
                 "2",
-                "--max-exploration-steps",
-                "20",
             ]
         )
-        == 1
-    )
-    assert "cannot be combined" in capsys.readouterr().out
+    assert "unrecognized arguments: --steps 2" in capsys.readouterr().err
 
 
 def test_main_stagehand_explore_rejects_final_order_for_wrong_url(

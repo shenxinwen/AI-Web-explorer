@@ -9,6 +9,7 @@ from ai_web_explorer.grounded_web.automation_backend import AutomationBackend
 from ai_web_explorer.grounded_web.graph import BrowserAction
 from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.grounded_web.stagehand_actions import (
+    StagehandActResult,
     StagehandProvider,
     StagehandObservedAction,
     StagehandStepTrace,
@@ -251,6 +252,7 @@ class StagehandAutomationBackend:
         ):
             instruction = "\n\n".join([instruction, self._exploration_context_prompt])
         observed_action: StagehandObservedAction | None = None
+        observed_actions: list[StagehandObservedAction] = []
         trace_execution_mode = execution_mode
         try:
             if self.execution_mode == "observe_act":
@@ -258,8 +260,45 @@ class StagehandAutomationBackend:
                     actions = await self.provider.observe_action(instruction)
                     if not actions:
                         raise ValueError("stagehand_observe_returned_no_actions")
-                    action = actions[0]
-                    return action, await self.provider.act_action(action)
+                    results: list[StagehandActResult] = []
+                    for action in actions:
+                        result = await self.provider.act_action(action)
+                        results.append(result)
+                        if not result.success:
+                            break
+                    aggregate_result = StagehandActResult(
+                        success=all(result.success for result in results),
+                        message=next(
+                            (
+                                result.message
+                                for result in reversed(results)
+                                if result.message
+                            ),
+                            None,
+                        ),
+                        action_description=instruction,
+                        raw={
+                            "atomic_steps": [
+                                {
+                                    "observed_action": {
+                                        "description": action.description,
+                                        "selector": action.selector,
+                                        "method": action.method,
+                                        "arguments": list(action.arguments),
+                                        **dict(action.raw),
+                                    },
+                                    "act_result": {
+                                        "success": result.success,
+                                        "message": result.message,
+                                        "action_description": result.action_description,
+                                        **dict(result.raw),
+                                    },
+                                }
+                                for action, result in zip(actions, results)
+                            ]
+                        },
+                    )
+                    return actions, aggregate_result
 
                 invocation = observe_then_act()
                 trace_execution_mode = "observe_act"
@@ -283,7 +322,7 @@ class StagehandAutomationBackend:
                     timeout=self.action_timeout_seconds,
                 )
             if self.execution_mode == "observe_act":
-                observed_action, result = invocation_result
+                observed_actions, result = invocation_result
             else:
                 result = invocation_result
         except asyncio.TimeoutError:
@@ -312,12 +351,25 @@ class StagehandAutomationBackend:
             )
             self.last_execution_metadata.update(step_metadata)
             return False
+        if observed_actions:
+            observed_action = observed_actions[0]
         trace = StagehandStepTrace(
             instruction=instruction,
             act_result=result,
             observed_action=observed_action,
         )
         self.last_execution_metadata = stagehand_trace_metadata(trace)
+        if observed_actions:
+            self.last_execution_metadata["stagehand_observed_actions"] = [
+                {
+                    "description": action.description,
+                    "selector": action.selector,
+                    "method": action.method,
+                    "arguments": list(action.arguments),
+                    **dict(action.raw),
+                }
+                for action in observed_actions
+            ]
         self.last_execution_metadata["stagehand_execution_mode"] = (
             trace_execution_mode
         )

@@ -386,6 +386,59 @@ async def test_stagehand_backend_observe_act_mode_avoids_agent_execute():
 
 
 @pytest.mark.anyio
+async def test_stagehand_backend_observe_act_executes_all_observed_actions_in_order():
+    class MultiActionProvider(FakeStagehandProvider):
+        async def observe_action(self, instruction):
+            self.observed_instructions.append(instruction)
+            return [
+                StagehandObservedAction(
+                    description="Username input",
+                    selector="#username",
+                    method="fill",
+                    arguments=("standard_user",),
+                ),
+                StagehandObservedAction(
+                    description="Password input",
+                    selector="#password",
+                    method="fill",
+                    arguments=("secret_sauce",),
+                ),
+            ]
+
+        async def act_action(self, action):
+            self.acted_actions.append(action)
+            return StagehandActResult(
+                success=True,
+                message="Filled one credential field",
+                action_description=action.description,
+            )
+
+    provider = MultiActionProvider()
+    backend = StagehandAutomationBackend(
+        base_backend=FakeBaseBackend(),
+        provider=provider,
+        goal="Explore visible functionality.",
+        execution_mode="observe_act",
+    )
+
+    success = await backend.execute(
+        BrowserAction(
+            action_kind="business_intent",
+            locator=None,
+            semantic_id="enter_credentials",
+            canonical_action_name="enter_credentials",
+            description="Fill in the username and password fields.",
+        )
+    )
+
+    assert success is True
+    assert [action.description for action in provider.acted_actions] == [
+        "Username input",
+        "Password input",
+    ]
+
+
+@pytest.mark.anyio
 async def test_stagehand_backend_observe_act_does_not_append_exploration_memory():
     provider = FakeStagehandProvider()
     backend = StagehandAutomationBackend(

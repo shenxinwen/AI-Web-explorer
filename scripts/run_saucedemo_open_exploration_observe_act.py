@@ -31,21 +31,24 @@ async def _observe_action_with_saucedemo_overrides(
             )
         ]
     actions = await _original_observe_action(self, instruction)
-    if "password" in normalized_instruction:
-        return [
-            replace(action, arguments=("secret_sauce",))
-            if action.method == "fill"
-            else action
-            for action in actions
-        ]
-    if "username" not in normalized_instruction:
-        return actions
-    return [
-        replace(action, arguments=("standard_user",))
-        if action.method == "fill"
-        else action
-        for action in actions
-    ]
+    overridden_actions = []
+    for action in actions:
+        if action.method != "fill":
+            overridden_actions.append(action)
+            continue
+
+        action_text = f"{action.description} {action.selector}".casefold()
+        if "password" in action_text:
+            overridden_actions.append(
+                replace(action, arguments=("secret_sauce",))
+            )
+        elif "username" in action_text:
+            overridden_actions.append(
+                replace(action, arguments=("standard_user",))
+            )
+        else:
+            overridden_actions.append(action)
+    return overridden_actions
 
 
 async def _create_saucedemo_provider(**kwargs):

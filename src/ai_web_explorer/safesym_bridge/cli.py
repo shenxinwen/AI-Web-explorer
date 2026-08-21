@@ -478,7 +478,6 @@ def main(argv: list[str] | None = None) -> int:
         default=Path("outputs/latest/stagehand_explore_trace.json"),
     )
     stagehand_explore_parser.add_argument("--model", default=None)
-    stagehand_explore_parser.add_argument("--steps", type=_positive_int, default=None)
     stagehand_explore_parser.add_argument(
         "--max-exploration-steps", type=_positive_int, default=None
     )
@@ -881,8 +880,6 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
         elif args.mode == "web-kobe-stagehand-explore":
-            if args.steps is not None and args.max_exploration_steps is not None:
-                raise ValueError("--steps cannot be combined with --max-exploration-steps")
             profile_selected = args.semantic_experiment_profile is not None
             resolved_semantic_profile = resolve_semantic_experiment_profile(
                 args.semantic_experiment_profile
@@ -906,11 +903,10 @@ def main(argv: list[str] | None = None) -> int:
             limits = None
             if profile_selected or budget_selected:
                 limits = ExplorationLimits(
-                    max_exploration_steps=(
-                        args.max_exploration_steps
-                        or args.steps
-                        or ExplorationLimits().max_exploration_steps
-                    ),
+                        max_exploration_steps=(
+                            args.max_exploration_steps
+                            or ExplorationLimits().max_exploration_steps
+                        ),
                     max_consecutive_no_progress=(
                         args.max_consecutive_no_progress
                         or ExplorationLimits().max_consecutive_no_progress
@@ -986,7 +982,7 @@ def main(argv: list[str] | None = None) -> int:
                 "app_name": args.app_name,
                 "stagehand_trace_path": args.stagehand_trace,
                 "model": args.model,
-                "steps": args.max_exploration_steps or args.steps,
+                "steps": args.max_exploration_steps,
                 "headless": not args.headed,
                 "screenshot_dir": args.screenshot_dir,
                 "embedding_path": args.embedding_path,

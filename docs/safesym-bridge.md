@@ -322,7 +322,7 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-stagehand-explore `
   --embedding-model text-embedding-v4 `
   --embedding-dimension 1024 `
   --model openai/gpt-4o `
-  --steps 8
+  --max-exploration-steps 8
 ```
 
 `observed_action` is the default mode for generic exploration. In the preferred
