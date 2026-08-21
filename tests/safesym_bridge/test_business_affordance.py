@@ -195,6 +195,23 @@ def test_initial_prompt_contains_validated_domain_neutral_few_shots():
     assert "selectable value" in payload["instruction"].lower()
     assert "result subset" in payload["instruction"].lower()
     assert "sort field or direction" in payload["instruction"].lower()
+    assert "prefer precision over recall" in payload["instruction"].lower()
+    assert "controls whose meaning cannot be determined confidently" in payload[
+        "instruction"
+    ].lower()
+    assert "hidden or speculative actions" in payload["instruction"].lower()
+    assert "group related fields" in payload["instruction"].lower()
+    assert "successful or informational page" in payload["instruction"].lower()
+    assert "text describing success, completion, history" in payload[
+        "instruction"
+    ].lower()
+    assert "two independent filters" in payload["instruction"].lower()
+    assert "maximum action count is an upper bound" in payload[
+        "instruction"
+    ].lower()
+    assert "shopping-cart icon" in payload["instruction"].lower()
+    assert "open_cart or view_cart" in payload["instruction"].lower()
+    assert "badge is not required" in payload["instruction"].lower()
     assert "profile" not in captured["prompt"].lower()
     assert "checkout" not in captured["prompt"].lower()
     assert "payment" not in captured["prompt"].lower()
