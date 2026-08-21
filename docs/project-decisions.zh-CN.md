@@ -17,6 +17,35 @@
 - ...
 ```
 
+## 2026-08-21 - 恢复完整候选 Prompt，执行端聚焦组合动作展开
+
+更改：
+- 通过提交 `fe257bc` 将完整 initial scan Prompt 接入 active path，明确 active surface、位置命名、
+  动作粒度、代表性合并、可见/阻塞动作、直接依赖、结果页面和 precision-first 规则。
+- 为纯截图观察加入有限的购物车图标提示：在购物、目录或商品页面中，明显的购物车图标可以提出
+  `open_cart`/`view_cart` 候选；角标是支持证据但不是必要条件。该提示不规定动作依赖或业务流程。
+- 当前候选扫描、动作 outcome 和 Stagehand 实验统一使用 GPT-4o；SauceDemo 动态实验显式选择
+  `observe_act`，但通用 CLI 默认仍为 `observed_action`。
+- 运行一轮不启用 frontier replay 的 SauceDemo 开放探索，产物保存在
+  `outputs/experiments/saucedemo/open_exploration_full_prompt_gpt4o_v2`。
+
+原因：
+- Practice Shopping 三次扫描证明完整 Prompt 能稳定把重复商品、筛选和排序归并为代表性动作；
+  SauceDemo 图片对照证明购物车图标提示能够恢复此前遗漏的 `view_cart` 候选。
+- 最新动态实验在登录页生成正确的高层候选 `enter_credentials`，但 Stagehand `observe -> act` 一次
+  只执行用户名字段，暴露出高层语义动作与原子 UI 执行粒度之间的真实接口缺口。
+- 候选只是待验证假设；只有真实执行和截图 outcome 成功的动作才进入 SemanticPlanningGraph 与
+  PDDL，因此有限的图标召回提示不会直接污染 planner-facing 模型。
+
+影响：
+- 下一项主线只处理“一个组合语义动作如何展开为多个原子执行动作”。语义图继续保留粗粒度动作，
+  执行 trace 可以包含多个原子步骤；所有必要步骤成功后才记录高层动作 success。
+- SauceDemo 公开账号和 selector 覆盖继续只存在于该网站实验脚本，不进入通用产品路径。
+- 当前不启用 frontier replay；位置候选耗尽时实验直接结束。后续需要分支恢复时再显式启用
+  reset-and-replay，不在本阶段同时调整调度。
+- 购物车图标规则是通用视觉提示，不是 SauceDemo 固定动作表，也不为 `open_cart` 硬编码
+  `requires=[add_to_cart]`。
+
 ## 2026-08-20 - 静态语义 MVP 通过，主线转向执行端验收
 
 更改：

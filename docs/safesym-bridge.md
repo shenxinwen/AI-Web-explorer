@@ -333,6 +333,21 @@ as a legacy fallback mode and for checkout benchmark smoke paths, but it should
 not be treated as the main generic exploration path. Visual delta requires
 `--screenshot-dir` because it compares before/after screenshots.
 
+SauceDemo execution experiments may explicitly select `--stagehand-execution-mode
+observe_act` to separate Stagehand observation from deterministic `act(Action)`.
+This is not the generic CLI default. A semantic candidate may describe a grouped
+operation such as `enter_credentials`, while one observed Stagehand Action may
+cover only one field. The current active implementation does not yet expand one
+grouped semantic action into multiple observed atomic Actions; callers must not
+mark the grouped action successful until every required atomic step has executed
+and the screenshot outcome validates the whole semantic operation.
+
+Frontier replay is also opt-in. Without `--frontier-replay`, exhausting all
+eligible candidates at the current semantic location ends the run with
+`current_state_exhausted`. With replay enabled, the controller may reset to the
+start URL and replay a verified path to another reachable location that still
+has pending candidates.
+
 ## SauceDemo Role
 
 SauceDemo remains useful as an app-specific regression target, especially for

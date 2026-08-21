@@ -65,6 +65,33 @@ async def test_saucedemo_script_leaves_unrelated_actions_unchanged(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_saucedemo_script_does_not_open_cart_for_add_to_cart(monkeypatch):
+    expected = [
+        StagehandObservedAction(
+            description="Add Sauce Labs Backpack to cart",
+            selector='[data-test="add-to-cart-sauce-labs-backpack"]',
+            method="click",
+        )
+    ]
+
+    async def observe_returns_add_action(provider, instruction):
+        return expected
+
+    monkeypatch.setattr(
+        experiment,
+        "_original_observe_action",
+        observe_returns_add_action,
+    )
+
+    actions = await experiment._observe_action_with_saucedemo_overrides(
+        object(),
+        "Add a product to the shopping cart. Target: Add to cart button.",
+    )
+
+    assert actions == expected
+
+
+@pytest.mark.anyio
 async def test_saucedemo_script_supplies_public_password(monkeypatch):
     async def observe_returns_placeholder(provider, instruction):
         return [

@@ -329,11 +329,38 @@ Practice Shopping 和 SauceDemo 的真实截图实验已经证明语义 MVP 主�
 `add_to_cart -> cart_has_items -> proceed_to_checkout`，因此规划器可能跳过加购。该问题记录为
 后续跨位置业务状态增强，不阻塞当前主线转向执行端。
 
-执行层另有一个已完成的一次性小实验：在 Practice Shopping 上，Stagehand `observe` 正确返回
-Category 下拉框的 `selectOptionFromDropdown("Electronics")` 动作，随后将该 Action 对象直接
-交给 `act` 成功执行。`observe` 约 1.24 秒，确定性 `act` 约 0.03 秒。该结果只证明
-`observe -> act` 可作为原子动作的低成本执行方向；主线目前尚未由 `agentExecute` 切换到该模式，
-跨运行缓存也尚未实现。
+执行层最初在 Practice Shopping 上完成了一个 `observe -> act` 原子动作探针：Stagehand
+`observe` 正确返回 Category 下拉框的 `selectOptionFromDropdown("Electronics")` 动作，随后将该
+Action 对象直接交给 `act` 成功执行。`observe` 约 1.24 秒，确定性 `act` 约 0.03 秒。后续
+SauceDemo 开放探索实验已显式使用 `observe_act` 模式；通用 CLI 的默认执行模式仍是
+`observed_action`，因此不能把实验脚本选择表述为全局默认切换。跨运行 Action 缓存尚未实现。
+
+### 2026-08-21 VLM Prompt 恢复与执行粒度实验
+
+提交 `fe257bc` 已将 2026-08-20 对齐的完整 initial scan Prompt 接入 active path。当前合同明确
+区分 active surface、稳定位置命名、语义动作粒度、代表性动作合并、可见/阻塞动作、直接依赖、
+结果页面和精度优先规则。Practice Shopping 同一商品页三次独立 GPT-4o 扫描稳定返回
+`search_items`、`filter_results`、`sort_results` 和 `add_to_cart`，重复商品、筛选维度和排序方式
+均合并为代表性动作。
+
+纯截图观察在 Practice Shopping 和 SauceDemo 中都曾漏掉无文字的购物车图标。当前 Prompt 因此
+加入一个有限的购物场景视觉提示：商品或目录页面中明显的购物车图标可以提出
+`open_cart`/`view_cart` 候选，数量角标是支持证据但不是必要条件。该规则只提高候选召回，不提供
+完整流程或依赖，也不直接进入 PDDL；动作仍须经过真实执行和截图 outcome 验证。加入提示的一次性
+对照中，SauceDemo 加购前和加购后截图都返回了 `view_cart`。
+
+最新动态实验位于
+`outputs/experiments/saucedemo/open_exploration_full_prompt_gpt4o_v2`。实验使用 GPT-4o、显式
+`observe_act`、12 步上限且未启用 frontier replay。候选扫描正确把登录页归并为
+`enter_credentials` 和 `submit_login requires [enter_credentials]`，但执行没有通过登录：
+Stagehand 对组合动作只返回并执行了用户名字段，SauceDemo 专用凭据覆盖又因同一指令同时包含
+password 而把用户名值替换为 `secret_sauce`，密码字段没有填写。`submit_login` 两次收到密码必填
+错误后进入 `failed_retry_exhausted`，实验以 `current_state_exhausted` 结束。
+
+该结果把当前执行端主问题收敛为：语义图希望保留一个粗粒度高层动作，但 `observe -> act` 执行层
+需要把它展开为多个原子 UI 操作，并在所有必要原子步骤成功后才将高层动作记为 success。这个问题
+同时适用于登录凭据、联系信息、地址和支付表单。当前未启用 replay 时，当前位置耗尽会直接终止；
+只有显式启用 frontier replay 后，Controller 才会 reset 并重放已验证路径到其他 pending frontier。
 
 ## 当前阶段判断
 
@@ -349,7 +376,8 @@ Category 下拉框的 `selectOptionFromDropdown("Electronics")` 动作，随后�
   观察交回现有语义链；
 - 执行端验收继续沿用通用语义动作，不新增 SauceDemo 按钮文本分支或固定流程；“去除站点答案
   硬编码”不再作为下一阶段待解决问题；
-- `observe -> act` 已通过一个筛选动作的小实验，但仍是待接入的执行层优化，不代表主线行为。
+- SauceDemo 实验已显式使用 `observe_act`，但组合语义动作尚不能可靠展开为多个原子执行步骤；
+  通用默认仍为 `observed_action`，跨运行缓存也尚未实现。
 
 ## 相关文档
 

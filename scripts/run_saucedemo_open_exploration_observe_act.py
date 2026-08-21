@@ -19,7 +19,10 @@ async def _observe_action_with_saucedemo_overrides(
     instruction: str,
 ):
     normalized_instruction = instruction.casefold()
-    if "shopping cart" in normalized_instruction:
+    if (
+        "shopping cart" in normalized_instruction
+        and normalized_instruction.startswith(("open ", "view "))
+    ):
         return [
             StagehandObservedAction(
                 description="SauceDemo shopping cart link",
