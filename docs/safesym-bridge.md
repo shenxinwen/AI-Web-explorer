@@ -305,7 +305,19 @@ Frontier replay is also opt-in. Without `--frontier-replay`, exhausting all
 eligible candidates at the current semantic location ends the run with
 `current_state_exhausted`. With replay enabled, the controller may reset to the
 start URL and replay a verified path to another reachable location that still
-has pending candidates.
+has pending candidates. The path is contracted by semantic location: it keeps
+location-changing actions and any completed same-location actions explicitly
+required by them, but omits unrelated same-location history. Successful replay
+restores the saved node, semantic location, and candidate pool; it does not scan,
+discover actions, mutate the graph, or consume candidate attempts.
+
+The default endpoint policy trusts a fully successful saved action path and does
+not call the VLM or require raw-node equality. A legacy checkpoint validator is
+available behind `explorer.replay_checkpoint_validation_enabled`. After the first
+formal exploration action following replay, a unique historical URL pattern may
+perform a one-shot handoff back to an existing semantic location. URL matching is
+therefore recovery-only and does not replace semantic-location discovery during
+normal exploration.
 
 ## SauceDemo Role
 
@@ -353,7 +365,15 @@ creates location-scoped completion predicates for successful actions. Missing,
 invalid, cyclic, or over-limit dependency responses fail closed, and
 failed/uncertain outcomes do not create planner-facing state or locations.
 Offline bridge regression covers this path; a fresh Practice Shopping VLM run
-followed by SafeSym and planner acceptance is still pending.
+and the latest SauceDemo resume graph have both completed SafeSym/planner
+acceptance. The SauceDemo `resume_url_handoff_v1` projection includes 13
+successful edges and excludes the failed/non-projectable sort and filter edges.
+With `login_form` as start and `checkout_complete_page` as goal, SafeSym parsing,
+safety injection, base planning, and safe planning all succeed. The safe plan
+adds an information-verification check before checkout-information submission.
+The remaining model-quality gap is persistent cross-location business state:
+without `cart_has_items`, the shortest plan can omit `add_to_cart` even though the
+PDDL is syntactically valid and solvable.
 
 - `grounded_web` owns browser observation, operation, state deltas, and graph
   construction.

@@ -126,11 +126,20 @@ Raw Graph 可以保留细粒度观察和执行证据；planner-facing SemanticPl
 
 ```text
 reset 到起始 URL
-  -> 执行图中保存的动作序列
-  -> 在目标端做一次截图语义位置和必要业务事实校验
-  -> 恢复临时 current-node 指针
+  -> 执行 semantic-location 路径中的位置变化动作
+  -> 在需要时先执行路径动作显式依赖的已完成同位置动作
+  -> 全部动作成功后恢复目标 node、semantic location 和既有候选池
   -> 继续探索未完成动作
 ```
+
+当前默认不在 replay 末端重新调用 VLM，也不要求匹配 raw node。只要保存路径中的动作全部成功，
+就假定目标位置已恢复；旧的 checkpoint validator 仅作为可选兼容开关保留。这样可以避免恢复阶段
+产生新的语义判断并与历史位置冲突。
+
+replay 路径不是 raw graph 的最短动作路径。它按 semantic location 收缩：保留实际改变位置的动作，
+跳过与恢复无关的同位置历史动作；如果某个保留动作声明了同位置 `requires`，则把已经完成的依赖动作
+补入路径。例如恢复购物车时，不会仅因为历史上执行过 `add_to_cart` 就自动再次加购；只有
+`view_cart` 明确依赖它时才会重放它。
 
 重放本身不允许：
 
@@ -140,6 +149,10 @@ reset 到起始 URL
 
 checkpoint 保存图、候选记忆、累计正式动作预算和 replay 指标。实验中断后可以从最近断点继续，
 无需清空已有图重新运行。
+
+恢复后的第一次正式探索动作完成后，runner 可用唯一匹配的历史 URL pattern 做一次性位置交接，
+将浏览器落点重新关联到已有 semantic location 和候选池。该机制只服务 replay 后的上下文恢复；
+普通探索仍以 VLM 语义位置为主，不使用 URL 替代语义发现。
 
 ## 有界终止
 
@@ -230,13 +243,21 @@ checkpoint 保存图、候选记忆、累计正式动作预算和 replay 指标�
 当前实验没有启用语义 experiment profile 或 action contract，因此不能把 `cart_has_items` 当作本轮
 `view_cart` 候选的前置条件。
 
-重放机制仍是“reset 起始页 + 重执行保存路径 + 检查断点”的语义重放，不是浏览器会话快照恢复。最近一次恢复实验
-尝试 4 次均在重放动作阶段失败，成功 0 次，且当前 trace 没有持久化具体失败的动作 ID；因此重放设计存在，
-但可靠性尚未通过实验验收。
+随后从该 checkpoint 继续运行的 `resume_url_handoff_v1` 实验已经通过 replay 验收：4 次 replay 尝试全部成功，
+路径使用 `enter_credentials -> submit_login -> view_cart` 恢复购物车，没有把无依赖关系的 `add_to_cart`
+重新加入路径。恢复后正常探索继续完成 `continue_shopping`、`cancel_checkout`、`complete_checkout` 和
+`navigate_home`；`continue_shopping` 回到商品页后，一次性 URL handoff 正确复用既有 `product_catalog`
+候选池，没有创建 `product_listing_page` 别名或重复执行已完成商品动作。
 
-同一轮图已成功完成完整语义投影：包含 9 个成功动作、5 个语义位置，排序和筛选失败边未进入投影；由于没有
-提供显式 goal，只生成了 `domain.pddl` 和语义投影报告，没有 `problem.pddl`。因此目前可以对已探索子图做部分规划，
-例如从登录页规划到结账概览，但尚不能声称已经形成包含 `complete_checkout`/`place_order` 的完整下单计划。
+该实验还暴露出 frontier selector 会从 raw node affordance 复活位置级已终止候选并触发一次多余 replay；
+现已改为以 location candidate memory 的状态为准，并加入回归测试。replay 失败记录包含失败动作 ID、
+目标位置和原因，选择器随后可以尝试其他 frontier；每个 frontier 2 次、总计 4 次的限制保持不变。
+
+最新恢复实验图已投影到 `resume_url_handoff_v1/minimal_semantic_pddl`：13 条成功边进入语义图，
+`filter_products` 因不可投影、`sort_products` 因执行失败被排除。以 `login_form` 为起点、
+`checkout_complete_page` 为目标生成的 domain/problem 已通过 SafeSym 解析、安全动作注入、基础规划和安全规划；
+安全计划在提交结账信息前插入了信息验证动作。当前仍缺少跨位置持久业务事实 `cart_has_items`，因此最短计划
+会跳过 `add_to_cart`；这属于业务因果质量缺口，不影响本轮 replay 与 PDDL/SafeSym 链路验收。
 
 ## 2026-08-13 真实可行性实验结果
 
@@ -410,14 +431,14 @@ password 而把用户名值替换为 `secret_sauce`，密码字段没有填写�
 - 可恢复图、候选池、累计预算和 non-mutating replay 已建立，候选级两次重试已成为真实 runner 的终止边界；
 - Practice Shopping 真实实验已经跑通探索、业务事实验证、PDDL、SafeSym 和 planner；
 - SauceDemo 无 profile 动态实验已验证单动作去重、组合动作展开、候选结果记录和语义投影；
-- 最新 25 步实验在 13 个正式动作后因当前候选耗尽结束，未达到步数上限；
-- 语义投影可以生成部分 `domain.pddl`，但没有显式 goal 时不会生成 `problem.pddl`，当前图也没有探索到
-  `complete_checkout`/`place_order`；
-- 重放仍未通过可靠性验收，最近 4 次重放尝试全部失败；
+- 25 步初始实验在 13 个正式动作后因当前候选耗尽结束；随后从 checkpoint 恢复的实验继续完成了
+  `complete_checkout` 等剩余候选；
+- 最新恢复图已生成带显式 goal 的 `domain.pddl` 和 `problem.pddl`，并通过 SafeSym 与 planner 验收；
+- 最新断点恢复实验的 4 次 replay 全部成功，能够回到尚有候选的 frontier 并继续正常探索；
 - 当前产物证明语义 MVP 可行，但跨位置持续业务状态仍不完整，不能表述为完整网站因果模型；
 - 最小动作依赖闭环的静态验收已通过，候选发现中的站点答案硬编码已从 active path 移除；
 - 主线继续验证给定语义动作能否稳定定位、按策略完成原子执行，并把真实下一页面观察交回现有语义链；
-- 当前剩余重点是调度器对终止动作的优先级、跨位置业务事实，以及重放失败动作的诊断和恢复。
+- 当前剩余重点是跨位置业务事实（尤其 `cart_has_items`）和更广泛网站上的 replay 泛化验证。
 
 ## 相关文档
 

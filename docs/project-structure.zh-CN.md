@@ -208,8 +208,12 @@ embedding memory 只辅助定位和避免重复，不直接进入 PDDL。
 - 以语义位置维护固定候选池，并按 `(location, action)` 记录成功、重试、stale 和 no-change；
 - 新位置执行一次 initial scan 并本地调度依赖链；active path 不触发 targeted/supplement scan，旧机制仅作兼容保留；
 - 当前候选耗尽时选择其他可恢复 frontier，通过 `FrontierReplayRunner` reset 并执行保存动作路径；
-- 重放末端只验证 semantic location 和必要业务事实，不逐 raw node 严格匹配，也不修改探索图；
-- 按正式动作、连续无进展、候选重试、单 frontier replay 和总 replay 参数停止；
+- replay path 按 semantic location 收缩，只保留位置变化动作及其已完成的显式同位置 `requires`，不重放无关的同位置动作；
+- 默认以路径动作全部成功作为恢复完成条件，不重新调用 VLM 或逐 raw node 验证；可选 legacy checkpoint validator 默认关闭；
+- replay 成功后恢复目标 node、semantic location 和既有候选池，不执行候选发现，也不修改探索图、候选状态或尝试次数；
+- replay 后第一次正式动作可通过唯一历史 URL pattern 做一次性 semantic-location handoff；普通探索的语义位置判断不受影响；
+- frontier 是否仍可探索以 location candidate memory 为准，raw node affordance 不能复活已完成或已失败耗尽的候选；
+- 按正式动作上限、候选重试、单 frontier replay 和总 replay 参数停止；真实 runner 不使用全局连续无进展提前终止；
 - 每个完成动作后更新 latest checkpoint；`--resume-graph` 可恢复 graph、location memory 和累计预算，在新浏览器中继续探索。恢复不还原 cookies、localStorage 或浏览器进程。
 
 低层 DOM interactables 可以继续作为运行时 state summary / embedding matching 的辅助输入，但不再输出到 canonical `graph.json` node，也不作为 graph memory 或探索决策单位。旧的 LLM action selector 路径已经移除，避免系统回退到 selector/locator 驱动的探索。

@@ -17,6 +17,37 @@
 - ...
 ```
 
+## 2026-08-23 - Replay 只恢复上下文，并完成 SauceDemo 验收
+
+更改：
+- 明确 replay 与正常探索的边界：replay 只把浏览器恢复到已知 frontier，不发现候选、不观察 outcome、
+  不写 graph/edge/planning facts，也不修改扫描状态和候选尝试次数。
+- replay path 从 raw graph 动作最短路改为 semantic-location 路径：保留位置变化动作，并补入这些动作
+  已完成的显式同位置 `requires`；无关的同位置动作不会因为曾经执行过而被重放。
+- 路径动作全部成功时默认认为目标位置已恢复，不再调用 VLM 或要求 raw node 匹配；旧 checkpoint
+  validator 作为可选兼容开关保留，默认关闭。
+- replay 成功后恢复目标 node、semantic location 和既有候选池。第一次正式探索动作后允许使用唯一
+  历史 URL pattern 做一次性位置交接；该 URL 机制不进入普通探索的语义位置判断。
+- frontier eligibility 以 location candidate memory 为准，避免 raw node affordance 复活位置级已经
+  `completed`、`stale` 或重试耗尽的候选。compact graph 同时保留 replay 所需的 action description 和
+  `execution_policy`，SauceDemo 登录 replay 继续使用实验脚本中的公开账号凭据覆盖。
+
+原因：
+- 从购物车执行 `continue_shopping` 回到已耗尽的商品页时，controller 应恢复到其他仍有 pending 候选的
+  frontier，而不是以 `current_state_exhausted` 结束。
+- raw graph BFS 会把无关的同位置历史动作纳入路径；replay 末端再次做 VLM 位置命名还可能把同一商品页
+  命名成新的 semantic location。两者都会让“恢复上下文”意外承担探索和建模职责。
+
+证据与影响：
+- SauceDemo `resume_url_handoff_v1` 从既有 checkpoint 继续，4 次 replay 全部成功；购物车恢复路径为
+  `enter_credentials -> submit_login -> view_cart`，没有重复执行无显式依赖的 `add_to_cart`。
+- replay 后正常探索继续执行 `continue_shopping`、`cancel_checkout`、`complete_checkout` 和
+  `navigate_home`；商品页复用了 `product_catalog` 候选池，没有生成 `product_listing_page` 别名或
+  重复执行已完成的商品动作。选择器触发一次多余 replay 的问题已用位置候选状态修复并覆盖回归测试。
+- 最新图投影包含 13 条成功边；以登录页到结账完成页为问题时，SafeSym 解析、安全注入、基础规划和
+  安全规划均成功。当前最短计划仍可能跳过 `add_to_cart`，因为跨位置持久事实 `cart_has_items` 尚未建模；
+  这是下一阶段的业务因果质量问题，不由 replay 承担。
+
 ## 2026-08-23 - 清理旧运行时设计
 
 更改：
@@ -59,11 +90,11 @@
   目标但只执行 1 个，`complete_checkout_information` 执行 3/3 个原子 Action。
 - 结账概览同时产生 `cancel_checkout` 和 `complete_checkout`，调度器按发现顺序先取消，Finish 仍 pending。
   这属于终止动作优先级/调度问题，不是组合动作展开失败。
-- 重放仍采用 reset 起始页后重执行保存路径的语义机制；最近一次 4 次尝试全部在动作重放阶段失败，成功 0 次，
-  且尚未持久化具体失败动作 ID，因此重放尚未通过可靠性验收。
+- 本节记录的初始恢复实验曾有 4 次动作重放失败；该结果已由上方 `resume_url_handoff_v1` 的
+  4/4 成功验收取代。当前失败记录会保留动作 ID、目标位置和原因，并继续尝试其他 frontier。
 - 语义投影已成功生成包含 9 个成功动作和 5 个位置的 `domain.pddl`；失败的排序/筛选边被排除。未提供显式
   goal 时不生成 `problem.pddl`，当前图也不包含完整的 `complete_checkout`/`place_order` 计划。
-- 后续优先补充终止动作的目标导向排序、跨位置业务事实和重放失败诊断，不新增站点按钮文本分支或固定流程。
+- 后续优先补充跨位置业务事实和更多网站上的 replay 泛化验证，不新增站点按钮文本分支或固定流程。
 
 ## 2026-08-21 - 恢复完整候选 Prompt，执行端聚焦组合动作展开（历史对照）
 
