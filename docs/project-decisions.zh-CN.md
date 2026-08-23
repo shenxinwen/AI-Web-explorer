@@ -17,7 +17,55 @@
 - ...
 ```
 
-## 2026-08-21 - 恢复完整候选 Prompt，执行端聚焦组合动作展开
+## 2026-08-23 - 清理旧运行时设计
+
+更改：
+- 删除 `business_milestone` execution mode、旧 ecommerce smoke CLI/runner、`experiment_plan` 和 milestone prompt。
+- 删除 `SemanticExperimentProfile`、`ActionContract` 及其 semantic profile 注入和运行时闭集校验。
+- 保留 `BusinessFlowProfile`，仅用于本地结构化事实验证和 planner projection；保留 `targeted/supplement scan`、
+  `observed_action` 与 `observe_act` 主线能力。
+
+原因：
+- 当前 active path 是 VLM 提候选、本地选择、Stagehand 执行动作并观察结果；旧路径已经不参与主链路，继续保留会造成
+  重复维护和入口混淆。
+
+影响：
+- CLI 只提供 `observed_action` 和 `observe_act` 两种 Stagehand execution mode，受控 final-order URL 安全校验仍保留。
+- 当前文档和测试已与运行时代码对齐；旧实验方案仅作为历史设计记录保留。
+
+## 2026-08-23 - 执行策略、候选重试和当前实验边界对齐
+
+更改：
+- 在候选 Prompt 和 backend 之间引入 `execution_policy`：`single_instance` 只执行代表性候选的第一个
+  Stagehand Action，`composite` 按顺序执行 `observe` 返回的全部 Action；高层动作只有在全部必要原子步骤
+  成功后才进入后续 outcome 观察。
+- 将策略字段保存在 `BrowserAction` 和图数据中，并覆盖序列化、恢复和语义投影；当前只使用单动作和组合动作，
+  暂不启用 batch。
+- 真实 Stagehand runner 的终止边界改为候选级最多尝试 2 次、单 frontier 最多重放 2 次、总重放最多 4 次，
+  配合实验级正式动作上限；关闭全局连续无进展提前终止。
+- 当前 SauceDemo 实验不启用 semantic experiment profile/action contract；`BusinessFlowProfile` 仍可作为可选的
+  本地结构化事实配置。
+
+原因：
+- `observe` 可以返回一个高层动作对应的多个原子 UI Action。让 backend 只取 `actions[0]` 会导致登录、结账
+  信息等组合动作只填充第一个字段；而对加购等单实例动作执行全部返回结果又会造成重复 mutation。
+- VLM 候选不一定可执行，单纯用全局“没有进展”判断无法区分某个候选失败和当前页面真的没有剩余能力。
+- 当前实验需要验证执行粒度和语义链路本身，旧 profile 的 `cart_has_items` 等业务事实不能作为 active open
+  exploration 的隐式前提。
+
+证据与影响：
+- 最新 SauceDemo 无 profile、GPT-4o、`observe_act`、25 步实验完成 13 个正式动作，9 个语义进展，0 次重放，
+  以 `current_state_exhausted` 结束；`enter_credentials` 执行 2/2 个原子 Action，`add_to_cart` 观察到 6 个
+  目标但只执行 1 个，`complete_checkout_information` 执行 3/3 个原子 Action。
+- 结账概览同时产生 `cancel_checkout` 和 `complete_checkout`，调度器按发现顺序先取消，Finish 仍 pending。
+  这属于终止动作优先级/调度问题，不是组合动作展开失败。
+- 重放仍采用 reset 起始页后重执行保存路径的语义机制；最近一次 4 次尝试全部在动作重放阶段失败，成功 0 次，
+  且尚未持久化具体失败动作 ID，因此重放尚未通过可靠性验收。
+- 语义投影已成功生成包含 9 个成功动作和 5 个位置的 `domain.pddl`；失败的排序/筛选边被排除。未提供显式
+  goal 时不生成 `problem.pddl`，当前图也不包含完整的 `complete_checkout`/`place_order` 计划。
+- 后续优先补充终止动作的目标导向排序、跨位置业务事实和重放失败诊断，不新增站点按钮文本分支或固定流程。
+
+## 2026-08-21 - 恢复完整候选 Prompt，执行端聚焦组合动作展开（历史对照）
 
 更改：
 - 通过提交 `fe257bc` 将完整 initial scan Prompt 接入 active path，明确 active surface、位置命名、
@@ -248,7 +296,8 @@ Practice Shopping 真实 VLM、SafeSym 与 planner 联合验收仍待执行。
 影响：
 - graph 仍然可以记录更开放的 VLM generated facts，不会因为 profile 词表不完整而丢失状态信息。
 - profile facts 的稳定入口变成本地 verifier；后续若要把 generated fact 晋升为 profile fact，必须增加显式规则或审查流程。
-- 现有 `VisualDeltaRequest.profile` 和 graph manager 的兼容参数暂时保留，但不再作为 VLM 输入或自动匹配依据。
+- 旧实现中的 `VisualDeltaRequest.profile` 已随 semantic profile 清理删除；`graph manager` 的
+  `BusinessFlowProfile` 参数仍仅用于本地结构化规划状态处理，不作为 VLM 输入或自动匹配依据。
 
 ## 2026-08-08 - Stagehand tool_choice 异常必须继续动作后观察
 

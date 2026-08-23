@@ -8,9 +8,6 @@ from ai_web_explorer.grounded_web.business_affordance import (
     VisualAffordanceRequest,
     summarize_visual_affordances,
 )
-from ai_web_explorer.grounded_web.exploration_semantics import (
-    practice_shopping_feasibility_profile,
-)
 
 
 def test_exploration_and_prompts_do_not_consume_trace_planning_inputs():
@@ -95,7 +92,6 @@ def test_initial_scan_parses_minimal_action_dependencies_without_planning_inputs
         goal="Explore visible business capabilities.",
         current_screenshot_path="current.png",
         max_actions=8,
-        semantic_profile_context={"profile_id": "must_not_be_prompted"},
     )
 
     def provider(prompt, *, current_screenshot_path):
@@ -453,7 +449,6 @@ def _targeted_request():
         completed_action_ids=["add_to_cart"],
         added_business_facts=["cart_has_items"],
         removed_business_facts=[],
-        semantic_profile_context=practice_shopping_feasibility_profile().to_prompt_context(),
     )
 
 

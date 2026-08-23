@@ -17,9 +17,6 @@ from ai_web_explorer.grounded_web.graph import (
     WebKobeNode,
 )
 from ai_web_explorer.grounded_web.business_profile import PlanningState
-from ai_web_explorer.grounded_web.exploration_semantics import (
-    practice_shopping_feasibility_profile,
-)
 from ai_web_explorer.grounded_web.location_exploration import (
     LOCATION_EXPLORATION_META_KEY,
 )
@@ -490,7 +487,6 @@ async def test_frontier_replay_accepts_cart_count_as_cart_business_fact():
         ]
     )
     explorer = _replay_explorer(adapter)
-    explorer.semantic_experiment_profile = practice_shopping_feasibility_profile()
     explorer.visual_delta_provider = provider
     explorer.manager.meta[LOCATION_EXPLORATION_META_KEY] = {
         "schema_version": "location-exploration-v1",
@@ -553,7 +549,6 @@ async def test_frontier_replay_checkpoint_provider_is_closed_vocabulary_and_evid
         ]
     )
     explorer = _replay_explorer(adapter)
-    explorer.semantic_experiment_profile = practice_shopping_feasibility_profile()
     explorer.capture_screenshots = True
     explorer.visual_delta_provider = provider
     target = type(
@@ -614,7 +609,6 @@ async def test_frontier_replay_location_only_checkpoint_calls_provider_for_busin
         ]
     )
     explorer = _replay_explorer(adapter)
-    explorer.semantic_experiment_profile = practice_shopping_feasibility_profile()
     explorer.visual_delta_provider = provider
     target = type(
         "Target",
@@ -670,7 +664,6 @@ async def test_frontier_replay_profile_checkpoint_requires_current_screenshot(
 
         adapter.capture_screenshot = capture_screenshot
     explorer = _replay_explorer(adapter)
-    explorer.semantic_experiment_profile = practice_shopping_feasibility_profile()
     explorer.visual_delta_provider = provider
     target = type(
         "Target",
@@ -859,7 +852,6 @@ async def test_frontier_replay_profile_location_checkpoint_fails_closed(
         ]
     )
     explorer = _replay_explorer(adapter)
-    explorer.semantic_experiment_profile = practice_shopping_feasibility_profile()
     explorer.visual_delta_provider = provider
     target = type(
         "Target",
@@ -907,7 +899,6 @@ async def test_frontier_replay_business_fact_cannot_override_wrong_provider_loca
         ]
     )
     explorer = _replay_explorer(adapter)
-    explorer.semantic_experiment_profile = practice_shopping_feasibility_profile()
     explorer.visual_delta_provider = provider
     target = type(
         "Target",
@@ -936,7 +927,6 @@ async def test_frontier_replay_checkpoint_provider_unknown_fact_fails_closed():
         [StateSnapshot("shopping", "https://fixture.test/shop", "shopping", {})]
     )
     explorer = _replay_explorer(adapter)
-    explorer.semantic_experiment_profile = practice_shopping_feasibility_profile()
     explorer.visual_delta_provider = lambda prompt, **kwargs: json.dumps(
         {
             "observed_semantic_location": "shopping",

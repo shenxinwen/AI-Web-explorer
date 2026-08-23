@@ -22,7 +22,6 @@ class VisualAffordanceRequest:
     completed_action_ids: list[str] = field(default_factory=list)
     added_business_facts: list[str] = field(default_factory=list)
     removed_business_facts: list[str] = field(default_factory=list)
-    semantic_profile_context: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -363,8 +362,6 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
             "added": list(request.added_business_facts),
             "removed": list(request.removed_business_facts),
         }
-    if request.semantic_profile_context is not None and scan_kind != "initial":
-        payload["semantic_profile_context"] = request.semantic_profile_context
     return json.dumps(payload, indent=2, ensure_ascii=False)
 
 

@@ -23,16 +23,6 @@ from ai_web_explorer.grounded_web.business_profile import (
     BusinessFlowProfile,
     ecommerce_checkout_profile,
 )
-from ai_web_explorer.grounded_web.exploration_semantics import (
-    SemanticExperimentProfile,
-    generate_checkout_test_data,
-    resolve_semantic_experiment_profile,
-    validate_final_order_authorization,
-)
-from ai_web_explorer.grounded_web.experiment_plan import (
-    ExperimentPlan,
-    ecommerce_checkout_experiment_plan,
-)
 from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
 from ai_web_explorer.grounded_web.frontier_replay import (
     FrontierReplayRunner,
@@ -65,10 +55,10 @@ from ai_web_explorer.grounded_web.stagehand_backend import (
     StagehandAutomationBackend,
 )
 from ai_web_explorer.grounded_web.stagehand_prompt import (
-    BenchmarkTaskContext,
-    ECOMMERCE_CHECKOUT_DOMAIN_GUIDANCE,
     build_generic_stagehand_exploration_goal,
-    build_ecommerce_checkout_stagehand_goal,
+)
+from ai_web_explorer.grounded_web.exploration_semantics import (
+    validate_final_order_authorization,
 )
 from ai_web_explorer.grounded_web.stagehand_sdk_provider import (
     create_async_stagehand_provider_from_env,
@@ -82,20 +72,6 @@ from ai_web_explorer.safesym_bridge.graph_artifacts import (
     build_graph_artifact_payload,
 )
 
-
-ECOMMERCE_CHECKOUT_OVERVIEW_STAGEHAND_GOAL = build_ecommerce_checkout_stagehand_goal(
-    allow_final_order=False,
-)
-ECOMMERCE_CHECKOUT_COMPLETE_STAGEHAND_GOAL = build_ecommerce_checkout_stagehand_goal(
-    allow_final_order=True,
-)
-ECOMMERCE_CHECKOUT_OVERVIEW_EXPLORER_GOAL = (
-    "Reach an e-commerce checkout overview without placing the order."
-)
-ECOMMERCE_CHECKOUT_COMPLETE_EXPLORER_GOAL = (
-    "Complete an e-commerce test checkout flow through the confirmation page."
-)
-SAUCEDEMO_BENCHMARK_START_URL = "https://www.saucedemo.com/"
 
 _RUNTIME_STATE_KEYS = (
     "formal_action_attempts",
@@ -136,28 +112,6 @@ def _resolve_business_profile(
     if profile == "ecommerce_checkout":
         return ecommerce_checkout_profile()
     raise ValueError(f"Unsupported business profile: {profile}")
-
-
-def build_saucedemo_stagehand_benchmark_context(
-    *,
-    test_username: str,
-    test_password: str,
-    checkout_first_name: str = "Test",
-    checkout_last_name: str = "User",
-    checkout_postal_code: str = "12345",
-) -> BenchmarkTaskContext:
-    return BenchmarkTaskContext(
-        site_label="public demo e-commerce site",
-        test_credentials={
-            "username": test_username,
-            "password": test_password,
-        },
-        checkout_data={
-            "first_name": checkout_first_name,
-            "last_name": checkout_last_name,
-            "postal_code": checkout_postal_code,
-        },
-    )
 
 
 def build_debug_web_kobe_graph() -> WebKobeGraph:
@@ -353,31 +307,6 @@ def _frontier_metrics_for_graph(graph: WebKobeGraph) -> dict[str, object]:
     }
 
 
-def _is_ecommerce_terminal_graph(graph: WebKobeGraph) -> bool:
-    if not graph.edges:
-        return False
-    target_id = graph.edges[-1].target_node_id
-    nodes_by_id = {node.node_id: node for node in graph.nodes}
-    target = nodes_by_id.get(target_id)
-    if target is None:
-        return False
-    active_facts = (
-        set(target.planning_state.active_facts)
-        if target.planning_state is not None
-        else set()
-    )
-    if "order_completed" in active_facts:
-        return True
-    reference_url = (
-        target.reference_observation.url
-        if target.reference_observation is not None
-        else ""
-    )
-    url = reference_url or target.page_frame.url
-    normalized = url.lower().replace("_", "-")
-    return "checkout-complete" in normalized or "order-complete" in normalized
-
-
 def _pick_free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
@@ -441,153 +370,6 @@ async def run_web_kobe_exploration(
             await browser.close()
 
 
-async def run_ecommerce_stagehand_step(
-    output_path: Path,
-    *,
-    start_url: str,
-    app_name: str = "ecommerce",
-    stagehand_trace_path: Path | None = None,
-    headless: bool = True,
-    steps: int = 8,
-    provider=None,
-    model: str | None = None,
-    screenshot_dir: Path | None = None,
-    visual_delta_provider=None,
-    action_outcome_provider=None,
-    use_openai_visual_delta: bool = False,
-    visual_delta_model: str | None = None,
-    action_outcome_model: str | None = None,
-    allow_final_order: bool = False,
-    benchmark_context: BenchmarkTaskContext | None = None,
-    experiment_plan: ExperimentPlan | None = None,
-) -> Path:
-    from playwright.async_api import async_playwright
-
-    if (
-        visual_delta_provider is not None
-        or action_outcome_provider is not None
-        or use_openai_visual_delta
-    ) and (
-        screenshot_dir is None
-    ):
-        raise ValueError("screenshot_dir is required for visual delta analysis.")
-    resolved_visual_delta_provider = visual_delta_provider
-    if resolved_visual_delta_provider is None and use_openai_visual_delta:
-        resolved_visual_delta_provider = create_openai_visual_delta_provider_from_env(
-            model=visual_delta_model,
-        )
-    resolved_action_outcome_provider = action_outcome_provider
-    if resolved_action_outcome_provider is None and (
-        use_openai_visual_delta or action_outcome_model is not None
-    ):
-        resolved_action_outcome_provider = create_openai_action_outcome_provider_from_env(
-            model=action_outcome_model,
-        )
-    if resolved_action_outcome_provider is None:
-        resolved_action_outcome_provider = resolved_visual_delta_provider
-    resolved_experiment_plan = experiment_plan or ecommerce_checkout_experiment_plan(
-        allow_final_order=allow_final_order,
-    )
-
-    def _experiment_step_for(step_number: int):
-        return resolved_experiment_plan.step_for_number(step_number)
-
-    stagehand_goal = build_ecommerce_checkout_stagehand_goal(
-        allow_final_order=allow_final_order,
-        benchmark_context=benchmark_context,
-        current_step=None,
-        experiment_plan=resolved_experiment_plan,
-    )
-
-    def _stagehand_goal_for(step_number: int) -> str:
-        return stagehand_goal
-
-    def _experiment_metadata_for(step_number: int) -> dict[str, object]:
-        step = _experiment_step_for(step_number)
-        if step is None:
-            return {"experiment_plan_id": resolved_experiment_plan.plan_id}
-        return {
-            "experiment_plan_id": resolved_experiment_plan.plan_id,
-            **step.to_metadata(),
-        }
-
-    cdp_port = _pick_free_port() if provider is None else None
-    launch_args = (
-        [f"--remote-debugging-port={cdp_port}"] if cdp_port is not None else None
-    )
-    async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(
-            headless=headless,
-            args=launch_args,
-        )
-        local_cdp_url = (
-            _read_cdp_websocket_url(cdp_port) if cdp_port is not None else None
-        )
-        page = await browser.new_page()
-        try:
-            await page.goto(start_url)
-            resolved_provider = provider
-            if resolved_provider is None:
-                resolved_provider = await create_async_stagehand_provider_from_env(
-                    model_name=model,
-                    page=page,
-                    local_cdp_url=local_cdp_url,
-                )
-            base_adapter = WebKobePlaywrightAdapter(
-                page,
-                app_name=app_name,
-                screenshot_dir=screenshot_dir,
-            )
-            adapter = StagehandAutomationBackend(
-                base_backend=base_adapter,
-                provider=resolved_provider,
-                goal=stagehand_goal,
-                execution_mode="business_milestone",
-                goal_provider=_stagehand_goal_for,
-                business_step_metadata_provider=_experiment_metadata_for,
-            )
-            explorer = WebKobeExplorer(
-                adapter=adapter,
-                semantic_assistor=DeterministicSemanticAssistor(app=app_name),
-                goal=(
-                    ECOMMERCE_CHECKOUT_COMPLETE_EXPLORER_GOAL
-                    if allow_final_order
-                    else ECOMMERCE_CHECKOUT_OVERVIEW_EXPLORER_GOAL
-                ),
-                capture_screenshots=screenshot_dir is not None,
-                business_profile=(
-                    ecommerce_checkout_profile()
-                    if resolved_visual_delta_provider is not None
-                    else None
-                ),
-                visual_delta_provider=resolved_visual_delta_provider,
-                action_outcome_provider=resolved_action_outcome_provider,
-            )
-            controller = WebKobeExplorationController(explorer)
-            if allow_final_order:
-                controller.terminal_condition = _is_ecommerce_terminal_graph
-            result = await controller.run(max_steps=max(steps, 1))
-            graph = result.graph
-            write_web_kobe_graph(graph, output_path)
-            if stagehand_trace_path is not None:
-                traces = graph.meta.get("stagehand_traces")
-                if traces is None:
-                    traces = [
-                        edge.execution_trace.metadata
-                        for edge in graph.edges
-                        if edge.execution_trace.metadata.get("action_source")
-                        == "stagehand"
-                    ]
-                stagehand_trace_path.parent.mkdir(parents=True, exist_ok=True)
-                stagehand_trace_path.write_text(
-                    json.dumps(traces, indent=2, ensure_ascii=False),
-                    encoding="utf-8",
-                )
-            return output_path
-        finally:
-            await browser.close()
-
-
 async def run_stagehand_exploration(
     output_path: Path,
     *,
@@ -617,9 +399,7 @@ async def run_stagehand_exploration(
     resume_graph: WebKobeGraph | None = None,
     resume_policy: ResumePolicy | None = None,
     limits: ExplorationLimits | None = None,
-    semantic_experiment_profile: str | SemanticExperimentProfile | None = None,
     allow_test_site_final_order: bool = False,
-    test_data_seed: str = "practice-v1",
     viewport_width: int = 1440,
     viewport_height: int = 1000,
     vlm_request_timeout_seconds: float | None = None,
@@ -627,33 +407,15 @@ async def run_stagehand_exploration(
 ) -> Path:
     from playwright.async_api import async_playwright
 
-    resolved_semantic_profile = (
-        resolve_semantic_experiment_profile(semantic_experiment_profile)
-        if isinstance(semantic_experiment_profile, str)
-        else semantic_experiment_profile
-    )
     final_order_allowed = validate_final_order_authorization(
         start_url=start_url,
-        profile=resolved_semantic_profile,
         allowed=allow_test_site_final_order,
     )
     if resume_graph is not None and limits is None:
         persisted_memory = resume_graph.meta.get(LOCATION_EXPLORATION_META_KEY)
         if isinstance(persisted_memory, dict):
             limits = ExplorationLimits.from_dict(persisted_memory.get("limits"))
-    location_scoped = limits is not None or resolved_semantic_profile is not None
-    if location_scoped and limits is None:
-        limits = ExplorationLimits()
-    benchmark_context = (
-        generate_checkout_test_data(test_data_seed).to_benchmark_context()
-        if resolved_semantic_profile is not None
-        else None
-    )
-    semantic_profile_context = (
-        resolved_semantic_profile.to_prompt_context()
-        if resolved_semantic_profile is not None
-        else None
-    )
+    location_scoped = limits is not None
 
     if (
         visual_delta_provider is not None
@@ -692,12 +454,9 @@ async def run_stagehand_exploration(
     )
     stagehand_goal = build_generic_stagehand_exploration_goal(
         site_purpose=site_purpose,
-        benchmark_context=benchmark_context,
         allow_final_order=final_order_allowed,
     )
     resolved_business_profile = _resolve_business_profile(business_profile)
-    if resolved_business_profile is None and resolved_semantic_profile is not None:
-        resolved_business_profile = resolved_semantic_profile.to_business_flow_profile()
     if resume_policy is not None and resume_graph is None:
         raise ValueError("resume_policy_requires_resume_graph")
     if resume_graph is not None:
@@ -768,8 +527,6 @@ async def run_stagehand_exploration(
                 max_candidates=max_candidates,
                 resume_policy=resume_policy,
                 exploration_limits=limits,
-                semantic_profile_context=semantic_profile_context,
-                semantic_experiment_profile=resolved_semantic_profile,
             )
             def checkpoint(graph: WebKobeGraph) -> None:
                 if location_scoped and limits is not None:

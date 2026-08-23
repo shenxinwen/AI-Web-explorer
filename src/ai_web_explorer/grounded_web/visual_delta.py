@@ -5,14 +5,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from ai_web_explorer.grounded_web.business_profile import (
-    BusinessFlowProfile,
-    PlanningDelta,
-)
-from ai_web_explorer.grounded_web.exploration_semantics import (
-    SemanticExperimentProfile,
-    validate_profile_semantic_observation,
-)
+from ai_web_explorer.grounded_web.business_profile import PlanningDelta
 from ai_web_explorer.grounded_web.graph import BrowserAction
 from ai_web_explorer.grounded_web.semantic_model import (
     SemanticObservation,
@@ -32,7 +25,6 @@ class VisualDeltaRequest:
     action: BrowserAction
     before_screenshot_path: str
     after_screenshot_path: str
-    profile: BusinessFlowProfile | None = None
     before_signature: dict[str, Any] | None = None
     after_signature: dict[str, Any] | None = None
     source_location_hint: str | None = None
@@ -40,9 +32,7 @@ class VisualDeltaRequest:
     source_location_anchor_unresolved: bool = False
     allowed_location_ids: list[str] = field(default_factory=list)
     current_location_context: str | None = None
-    semantic_profile_context: dict[str, Any] | None = None
     observed_change: bool | None = None
-    semantic_experiment_profile: SemanticExperimentProfile | None = None
 
 
 @dataclass(frozen=True)
@@ -122,11 +112,8 @@ def _prompt_for_request(request: VisualDeltaRequest) -> str:
             "use true only when a visible change consistent with the executed "
             "action is observable; otherwise use false. This is observation "
             "evidence only, not a business fact or planning effect."
-            " semantic_profile_context.completion_facts is a reference vocabulary "
-            "with evidence descriptions, not a response template. The response "
-            "completion_facts must be a JSON array of strings containing zero or "
-            "more selected fact IDs from that vocabulary, and must be [] when no "
-            "approved completion fact is directly supported by the visible change."
+            " The response completion_facts must be a JSON array of strings; "
+            "use [] when no completion fact is directly supported by the visible change."
         ),
         "action": action,
         "location_context": {
@@ -169,8 +156,6 @@ def _prompt_for_request(request: VisualDeltaRequest) -> str:
             "business_facts_removed": ["selected_business_fact_id"],
         },
     }
-    if request.semantic_profile_context is not None:
-        payload["semantic_profile_context"] = request.semantic_profile_context
     return json.dumps(payload, indent=2, ensure_ascii=False)
 
 
@@ -377,43 +362,7 @@ def summarize_visual_delta(
         or not all(isinstance(item, str) for item in parsed["completion_facts"])
     ):
         rejection_reasons.append("completion_facts_must_be_list_of_fact_ids")
-    raw_semantic_observation = semantic_observation_from_dict(parsed)
     semantic_observation = _semantic_observation(parsed, request)
-    if request.semantic_experiment_profile is not None:
-        validation = validate_profile_semantic_observation(
-            raw_semantic_observation,
-            profile=request.semantic_experiment_profile,
-            source_location_hint=request.source_location_hint,
-            source_location_hint_confirmed=request.source_location_hint_confirmed,
-            source_location_anchor_unresolved=request.source_location_anchor_unresolved,
-        )
-        semantic_observation = validation.observation
-        rejection_reasons.extend(validation.rejection_reasons)
-        allowed_facts = (
-            request.semantic_experiment_profile.business_fact_ids
-            | request.semantic_experiment_profile.completion_fact_ids
-        )
-        candidate_added = [fact for fact in candidate_added if fact in allowed_facts]
-        candidate_removed = [
-            fact for fact in candidate_removed if fact in allowed_facts
-        ]
-        rejection_reasons.extend(
-            [
-                f"business_fact_not_allowed:{fact}"
-                for fact in business_added + business_removed
-                if fact not in request.semantic_experiment_profile.business_fact_ids
-            ]
-        )
-        delta = PlanningDelta(
-            candidate_added_facts=candidate_added,
-            candidate_removed_facts=candidate_removed,
-            verified_added_facts=[],
-            verified_removed_facts=[],
-            profile_fact_ids=[],
-            generated_fact_ids=[],
-            evidence=evidence,
-        )
-
     return VisualDeltaResult(
         planning_delta=delta,
         visual_change_kind=visual_change_kind,

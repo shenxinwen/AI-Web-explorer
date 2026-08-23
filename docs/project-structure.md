@@ -41,16 +41,16 @@ Semantic PDDL`, producing both `domain.pddl` and `problem.pddl`. Older Planning
 Graph / Phase A, Location PDDL, and other projectors remain as compatibility or
 historical paths rather than the current semantic acceptance standard.
 
-The framework is not completely free of hardcoding. The Practice Shopping
-profile, cart structured-fact shortcuts, CLI profile registration, and controlled
-final-order URL remain explicit domain/experiment configuration. The next
-generality improvement is moving mappings such as `cart_count -> cart_has_items`
-into configurable profiles. The PDDL compiler, candidate memory, replay, and
-controller do not branch on shopping-specific action or location names.
+The framework is not completely free of hardcoding. Cart structured-fact
+shortcuts, the optional `ecommerce_checkout` BusinessFlowProfile, and the
+controlled final-order URL remain explicit domain/experiment configuration. The
+PDDL compiler, candidate memory, replay, and controller do not branch on
+shopping-specific action or location names.
 
-The legacy path can still send complete profile context into Visual Affordance.
-The active minimal path instead uses a profile-free action-dependency response
-for candidate discovery and a minimal outcome/location response after execution.
+Semantic experiment profiles and action contracts are no longer runtime paths.
+Candidate discovery uses a profile-free action-dependency response; the optional
+BusinessFlowProfile is consumed locally for structured verification and planning
+projection rather than injected into VLM prompts.
 
 The old upstream `explore` runtime and the old `WebObservedGraph` exploration
 stack are not active code paths.
@@ -127,13 +127,11 @@ The VLM affordance result is a candidate hypothesis. The local verifier and
 after-action observation determine whether an edge is a verified transition;
 the candidate list alone does not establish a capability.
 
-Profile facts currently define the experiment's accepted closed vocabulary for
-locations, capability facts, and business facts. The full profile context is
-provided to both Visual Affordance and Visual Delta. Visual Delta output must pass
-`validate_profile_semantic_observation`; business-fact candidates still require
-observed change and local verification. Raw responses and rejection reasons remain
-in the edge trace. A technical state label does not define graph identity or PDDL
-facts.
+The optional BusinessFlowProfile defines structured fact predicates for local
+verification and planner-facing projection. It is not a closed VLM vocabulary and
+is not injected into Visual Affordance or Visual Delta. Raw visual responses remain
+in the edge trace, while only locally verified structured facts enter the planning
+state. A technical state label does not define graph identity or PDDL facts.
 
 The active location-scoped boundary is that Visual
 Affordance discovers concrete actions and same-location `requires` links without
@@ -298,7 +296,8 @@ This layer is deterministic and does not call LLM/VLM. The active minimal path
 emits a location-scoped completion fact for each successful action; only an
 explicit same-location `requires` link promotes the referenced completion fact
 to another action's precondition. Unrelated completion facts are not promoted.
-The legacy semantic path may additionally consume verified profile facts.
+The optional BusinessFlowProfile may supply verified structured facts locally;
+semantic experiment profiles and action contracts are not runtime dependencies.
 Failed, conflicting, or semantically unusable edges are excluded with
 projection-report reasons.
 
@@ -321,14 +320,13 @@ Owns CLI-facing experiment setup.
 Main modules:
 
 - `src/ai_web_explorer/safesym_bridge/browser_runner.py`
-- `src/ai_web_explorer/grounded_web/experiment_plan.py`
 
 Main responsibilities:
 
 - launch Playwright;
 - configure Stagehand;
 - configure VLM and embedding providers;
-- wire benchmark/test context;
+- wire optional business-profile/test context;
 - write graph, trace, screenshot, embedding, PDDL, and smoke outputs;
 - checkpoint embeddings and Stagehand trace before committing the graph/evidence
   pair after each completed action;
@@ -358,16 +356,13 @@ Main functions/classes:
 
 - `run_web_kobe_exploration`
 - `run_stagehand_exploration`
-- `run_ecommerce_stagehand_step`
 - `write_web_kobe_graph`
-- `ecommerce_checkout_experiment_plan`
 
 ## Current Recommended Commands
 
 ```text
-web-kobe-explore
-web-kobe-stagehand-explore
-web-kobe-ecommerce-stagehand-smoke
+web-kobe-stagehand-explore      # active VLM/Stagehand open exploration
+web-kobe-explore                # deterministic Playwright graph smoke
 web-kobe-domain-from-graph
 web-kobe-pddl-from-graph
 web-kobe-pddl-smoke

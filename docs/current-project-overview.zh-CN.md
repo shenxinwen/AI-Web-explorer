@@ -42,8 +42,8 @@
 ```
 
 PDDL goal 或 SafeSym plan 不会反向传入候选生成和动作排序。探索仍然不是一条固定任务脚本。
-当前最小依赖主路径不向 initial scan 传入 experiment profile；旧兼容路径仍可使用 profile 和
-Visual Delta，因此相关硬编码尚未从代码库删除，但不再代表 active pipeline。
+当前主路径不向候选发现传入 experiment profile 或 action contract；可选的
+`BusinessFlowProfile` 只供本地结构化事实 verifier 和 planner-facing 投影使用。
 
 ## 三类规划状态
 
@@ -89,7 +89,8 @@ order_submitted
 
 当前最小依赖路径只把 initial scan 明确给出的同位置 `requires` 投影为动作前提，并且对应
 前置动作必须真实执行成功。无关完成事实、`supporting_facts` 或全部 active facts 不能自动
-升级成 PDDL 前提。旧兼容路径仍可使用已经验证的 profile/structured facts。
+升级成 PDDL 前提。本地 verifier 可以读取可选 `BusinessFlowProfile` 的结构化事实；独立的
+semantic experiment profile 和 action contract 运行时路径已删除。
 
 ## 位置内动作去重
 
@@ -142,12 +143,13 @@ checkpoint 保存图、候选记忆、累计正式动作预算和 replay 指标�
 
 ## 有界终止
 
-当前实验通过参数化限制避免死循环。Practice Shopping 可行性实验的当前约定是：
+当前实验通过参数化限制避免死循环。真实 Stagehand runner 当前采用候选级重试和步数上限：
 
-- 正式探索动作硬上限：20；
-- 连续无语义进展上限：3；
+- 正式探索动作硬上限由实验参数决定；最近一轮 SauceDemo 实验为 25；
+- 同一候选动作最多尝试 2 次，仍失败则标记为失败并切换候选；
+- 真实 Stagehand runner 不再使用全局连续无进展阈值作为提前终止条件；
 - 单 frontier 重放次数上限：2；
-- 总 replay 次数上限：4，候选动作重试也有独立上限；
+- 总 replay 次数上限：4；
 - 所有可达候选耗尽时正常结束。
 
 这些是实验参数，不属于特定网站的语义规则，可以通过 CLI 或 `ExplorationLimits` 调整。
@@ -203,6 +205,39 @@ checkpoint 保存图、候选记忆、累计正式动作预算和 replay 指标�
 实验默认覆盖 `outputs/experiments/<site>/latest/`，只有明确需要历史对比时才归档，
 避免重复产物无限堆积。
 
+## 2026-08-23 当前执行粒度、终止边界与投影进度
+
+当前 active path 已完成从“高层语义动作直接交给执行器”到“按动作策略展开”的最小改动：
+
+- `single_instance` 表示一个候选只需要一个代表性 UI 操作；backend 只执行 Stagehand
+  `observe` 返回结果中的第一个原子 Action，因此像加购这类动作不会因同一截图中返回多个重复目标而连续执行；
+- `composite` 表示一个高层动作需要多个相关字段或步骤；backend 接受并按顺序执行 `observe` 返回的全部
+  Action，任一步失败则高层动作失败，全部完成后才进入后续 outcome 观察；
+- `execution_policy` 已保存在 `BrowserAction` 和图数据中，并随序列化、恢复和语义投影传递；当前只使用
+  `single_instance` 与 `composite`，暂不启用 batch 语义；
+- initial scan Prompt 已加入上述策略字段，但仍保持站点无关，不把商品页、购物车或固定按钮流程写成候选规则。
+
+最近一轮 SauceDemo 无 profile 开放探索使用 GPT-4o、`observe_act`、25 步上限和每候选 2 次尝试，实际完成
+13 个正式动作后以 `current_state_exhausted` 结束，并非达到最大步数。结果为 9 个语义进展、0 次 replay：
+
+- `enter_credentials` 为组合动作，观察到并执行 2 个原子 Action；
+- `add_to_cart` 被识别出 6 个重复目标，但按 `single_instance` 只执行 1 个；
+- `complete_checkout_information` 为组合动作，观察到并执行 3 个原子 Action；
+- `sort_products`、`filter_products` 的失败或无变化结果没有进入 planner-facing 成功动作集合；
+- 结账概览同时返回 `cancel_checkout` 和 `complete_checkout`，当前调度器按发现顺序先执行了取消，`complete_checkout`
+  仍留在 pending 状态。因此“没有点击 Finish”是候选排序/调度问题，不是 backend 无法执行组合动作。
+
+当前实验没有启用语义 experiment profile 或 action contract，因此不能把 `cart_has_items` 当作本轮
+`view_cart` 候选的前置条件。
+
+重放机制仍是“reset 起始页 + 重执行保存路径 + 检查断点”的语义重放，不是浏览器会话快照恢复。最近一次恢复实验
+尝试 4 次均在重放动作阶段失败，成功 0 次，且当前 trace 没有持久化具体失败的动作 ID；因此重放设计存在，
+但可靠性尚未通过实验验收。
+
+同一轮图已成功完成完整语义投影：包含 9 个成功动作、5 个语义位置，排序和筛选失败边未进入投影；由于没有
+提供显式 goal，只生成了 `domain.pddl` 和语义投影报告，没有 `problem.pddl`。因此目前可以对已探索子图做部分规划，
+例如从登录页规划到结账概览，但尚不能声称已经形成包含 `complete_checkout`/`place_order` 的完整下单计划。
+
 ## 2026-08-13 真实可行性实验结果
 
 Practice Shopping 已完成一轮使用当前主线的真实有界实验，不再只是离线或 fixture 验证：
@@ -250,8 +285,8 @@ Practice Shopping 已完成一轮使用当前主线的真实有界实验，不�
 
 以下站点或领域相关内容仍保留在代码库中，但不等同于当前候选发现被写死：
 
-- `practice_shopping_feasibility` profile、profile registry 以及旧 targeted/supplement scan，属于旧兼容
-  路径；initial scan 不读取这些内容；
+- targeted/supplement scan 仍保留给后续实验；当前 initial scan 不调用它们；semantic experiment
+  profile、profile registry 和 action contract 运行时路径已删除；
 - `cart_count` / `item_count` 到 `cart_has_items` 的结构化映射和 `cart_non_empty` summary，属于旧业务
   事实归一化能力，当前最小动作完成 predicate 不依赖它们；
 - SauceDemo benchmark 的公开测试凭据、结账表单测试数据和起始 URL，属于执行实验输入，不是候选
@@ -282,10 +317,12 @@ SauceDemo 专属动作表、按钮文本分支或固定流程。因此，“移�
   `OPENAI_VISUAL_DELTA_MODEL`、`OPENAI_ACTION_OUTCOME_MODEL` 与 `STAGEHAND_MODEL` 显式覆盖；
 - 稳定的动作完成 predicate 由本地根据成功动作生成，不再要求 VLM 输出；
 - 只有真实执行成功的动作和依赖关系进入 planner-facing graph 与 PDDL；
-- 新路径绕开 profile 驱动的 targeted scan、supplement scan 和当前多职责 Visual Delta 事实结构。
+- 新路径不调用 targeted/supplement scan；这两个机制仍保留给后续实验。semantic experiment
+  profile 和 action contract 已不再是运行时依赖。
 
-这套方案已接入 location-scoped active path，并通过离线回归；去掉答案提示后的 Practice Shopping
-和 SauceDemo 静态 VLM、SafeSym 与规划验收也已完成。详细实现边界和验收标准见
+这套方案已接入 location-scoped active path，并通过离线回归；去掉答案提示后的 SauceDemo 动态 VLM
+实验和语义投影也已完成。SafeSym 仍可对提供显式 goal 的投影产物做离线验收，但本轮没有生成
+`problem.pddl`。详细实现边界和验收标准见
 `docs/superpowers/specs/2026-08-18-location-candidate-dependency-integration-design.zh-CN.md`。
 
 ## 探索执行与语义提取的验收边界
@@ -335,7 +372,7 @@ Action 对象直接交给 `act` 成功执行。`observe` 约 1.24 秒，确定�
 SauceDemo 开放探索实验已显式使用 `observe_act` 模式；通用 CLI 的默认执行模式仍是
 `observed_action`，因此不能把实验脚本选择表述为全局默认切换。跨运行 Action 缓存尚未实现。
 
-### 2026-08-21 VLM Prompt 恢复与执行粒度实验
+### 2026-08-21 VLM Prompt 恢复与执行粒度实验（历史对照）
 
 提交 `fe257bc` 已将 2026-08-20 对齐的完整 initial scan Prompt 接入 active path。当前合同明确
 区分 active surface、稳定位置命名、语义动作粒度、代表性动作合并、可见/阻塞动作、直接依赖、
@@ -362,22 +399,25 @@ password 而把用户名值替换为 `secret_sauce`，密码字段没有填写�
 同时适用于登录凭据、联系信息、地址和支付表单。当前未启用 replay 时，当前位置耗尽会直接终止；
 只有显式启用 frontier replay 后，Controller 才会 reset 并重放已验证路径到其他 pending frontier。
 
+本节记录的是 2026-08-21 的失败基线；组合动作展开、候选级重试和后续实验结果见上方
+“2026-08-23 当前执行粒度、终止边界与投影进度”。
+
 ## 当前阶段判断
 
-截至 2026-08-20：
+截至 2026-08-23：
 
 - location-scoped 开放探索的实现和回归测试已经合并；
-- 可恢复图、候选池、累计预算和 non-mutating replay 已建立；
+- 可恢复图、候选池、累计预算和 non-mutating replay 已建立，候选级两次重试已成为真实 runner 的终止边界；
 - Practice Shopping 真实实验已经跑通探索、业务事实验证、PDDL、SafeSym 和 planner；
-- SauceDemo 无 profile 静态实验已跑通候选、依赖、位置、动作结果、语义投影、PDDL 和 SafeSym；
+- SauceDemo 无 profile 动态实验已验证单动作去重、组合动作展开、候选结果记录和语义投影；
+- 最新 25 步实验在 13 个正式动作后因当前候选耗尽结束，未达到步数上限；
+- 语义投影可以生成部分 `domain.pddl`，但没有显式 goal 时不会生成 `problem.pddl`，当前图也没有探索到
+  `complete_checkout`/`place_order`；
+- 重放仍未通过可靠性验收，最近 4 次重放尝试全部失败；
 - 当前产物证明语义 MVP 可行，但跨位置持续业务状态仍不完整，不能表述为完整网站因果模型；
 - 最小动作依赖闭环的静态验收已通过，候选发现中的站点答案硬编码已从 active path 移除；
-- 主线从静态语义验收转向执行端：验证给定语义动作能否被稳定定位和执行，并把真实下一页面
-  观察交回现有语义链；
-- 执行端验收继续沿用通用语义动作，不新增 SauceDemo 按钮文本分支或固定流程；“去除站点答案
-  硬编码”不再作为下一阶段待解决问题；
-- SauceDemo 实验已显式使用 `observe_act`，但组合语义动作尚不能可靠展开为多个原子执行步骤；
-  通用默认仍为 `observed_action`，跨运行缓存也尚未实现。
+- 主线继续验证给定语义动作能否稳定定位、按策略完成原子执行，并把真实下一页面观察交回现有语义链；
+- 当前剩余重点是调度器对终止动作的优先级、跨位置业务事实，以及重放失败动作的诊断和恢复。
 
 ## 相关文档
 

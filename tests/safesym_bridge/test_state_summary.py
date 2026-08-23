@@ -51,7 +51,7 @@ def test_build_state_summary_uses_business_label_instead_of_stagehand_policy_tex
     )
     interactables = [
         {
-            "semantic_id": "stagehand_business_milestone_001",
+            "semantic_id": "observed_action_001",
             "description": (
                 "Site purpose:\n"
                 "public demo e-commerce shopping site\n\n"
@@ -60,8 +60,8 @@ def test_build_state_summary_uses_business_label_instead_of_stagehand_policy_tex
                 "Memory policy:\n"
                 "Web-KOBE may append exploration memory below."
             ),
-            "action_label": "Advance one business milestone",
-            "canonical_action_name": "advance_business_milestone",
+            "action_label": "Run selected action",
+            "canonical_action_name": "run_selected_action",
             "action_kind": "business_intent",
         }
     ]
@@ -72,7 +72,7 @@ def test_build_state_summary_uses_business_label_instead_of_stagehand_policy_tex
         active_planning_facts=["checkout_started"],
     )
 
-    assert "controls: Advance one business milestone" in summary.text
+    assert "controls: Run selected action" in summary.text
     assert "Action policy" not in summary.text
     assert "Memory policy" not in summary.text
     assert "Choose one useful site-function action" not in summary.text

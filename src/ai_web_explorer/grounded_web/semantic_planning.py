@@ -11,9 +11,6 @@ from ai_web_explorer.grounded_web.semantic_model import (
     SemanticProjectionReport,
     normalize_semantic_id,
 )
-from ai_web_explorer.grounded_web.exploration_semantics import (
-    action_contracts_from_prompt_context,
-)
 
 
 PROJECTABLE_EDGE_STATUSES = frozenset(
@@ -99,9 +96,6 @@ def build_semantic_planning_graph(
     capability_facts: set[str] = set()
     business_facts: set[str] = set()
     nodes = {node.node_id: node for node in graph.nodes}
-    action_contracts = action_contracts_from_prompt_context(
-        graph.meta.get("semantic_profile_context")
-    )
     successful_completion_facts: dict[tuple[str, str], str] = {}
     for edge in graph.edges:
         if (
@@ -169,7 +163,6 @@ def build_semantic_planning_graph(
             continue
 
         source_state = _source_state(graph, edge)
-        action_contract = action_contracts.get(_edge_name(edge))
         active_facts = set(
             _unique_sorted(source_state.active_facts if source_state else [])
         )
@@ -212,12 +205,6 @@ def build_semantic_planning_graph(
                     reason="role_not_guarded",
                 )
 
-        contract_required = (
-            list(action_contract.required_facts)
-            if action_contract is not None
-            else []
-        )
-        required_facts = _unique_sorted(required_facts + contract_required)
         dependency_facts: list[str] = []
         for required_action_id in edge.required_action_ids:
             completion_fact = successful_completion_facts.get(
@@ -229,14 +216,6 @@ def build_semantic_planning_graph(
             if completion_fact is not None:
                 dependency_facts.append(completion_fact)
         required_facts = _unique_sorted(required_facts + dependency_facts)
-        _record_provenance(
-            fact_provenance,
-            edge=edge,
-            facts=contract_required,
-            kind="business_required",
-            source="profile_contract",
-        )
-
         planning_delta = edge.planning_delta
         verified_added = _unique_sorted(
             planning_delta.verified_added_facts if planning_delta else []
@@ -244,15 +223,6 @@ def build_semantic_planning_graph(
         verified_removed = _unique_sorted(
             planning_delta.verified_removed_facts if planning_delta else []
         )
-        if action_contract is not None:
-            verified_added = [
-                fact for fact in verified_added if fact in action_contract.added_facts
-            ]
-            verified_removed = [
-                fact
-                for fact in verified_removed
-                if fact in action_contract.removed_facts
-            ]
         completion_fact = _completion_fact(source_location, _edge_name(edge))
         added_facts = _unique_sorted(verified_added + [completion_fact])
         capability_facts.add(completion_fact)

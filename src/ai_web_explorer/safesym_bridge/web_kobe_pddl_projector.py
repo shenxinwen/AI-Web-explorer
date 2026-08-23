@@ -863,16 +863,6 @@ def _phase_a_action_name(
     return candidate
 
 
-def compile_phase_a_domain(
-    graph: WebKobeGraph,
-    *,
-    options: PddlProjectionOptions | None = None,
-) -> str:
-    """Project only the generalized Location PDDL Phase-A contract."""
-    del options
-    return compile_location_domain(graph).domain
-
-
 def _compile_domain(
     graph: WebKobeGraph,
     *,

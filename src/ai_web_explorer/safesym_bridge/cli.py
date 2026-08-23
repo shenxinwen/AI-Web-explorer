@@ -7,16 +7,12 @@ import shutil
 from pathlib import Path
 
 from ai_web_explorer.safesym_bridge.browser_runner import (
-    SAUCEDEMO_BENCHMARK_START_URL,
-    build_saucedemo_stagehand_benchmark_context,
     build_debug_web_kobe_graph,
-    run_ecommerce_stagehand_step,
     run_stagehand_exploration,
     run_web_kobe_exploration,
     write_web_kobe_graph,
 )
 from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
-    compile_phase_a_domain,
     compile_web_kobe_graph_to_domain,
     compile_web_kobe_graph_to_pddl,
     load_web_kobe_graph_json,
@@ -48,9 +44,7 @@ from ai_web_explorer.safesym_bridge.web_kobe_pddl_smoke import (
 from ai_web_explorer.safesym_bridge.web_kobe_safesym_smoke import (
     write_web_kobe_safesym_smoke,
 )
-from ai_web_explorer.grounded_web.stagehand_prompt import BenchmarkTaskContext
 from ai_web_explorer.grounded_web.exploration_semantics import (
-    resolve_semantic_experiment_profile,
     validate_final_order_authorization,
 )
 from ai_web_explorer.grounded_web.location_exploration import ExplorationLimits
@@ -88,37 +82,6 @@ def _clean_output_dir_for(paths: list[Path | None]) -> Path:
         else:
             child.unlink()
     return output_dir
-
-
-def _build_ecommerce_benchmark_context(args) -> BenchmarkTaskContext:
-    checkout_data = {
-        "first_name": args.checkout_first_name,
-        "last_name": args.checkout_last_name,
-        "postal_code": args.checkout_postal_code,
-    }
-    if args.benchmark == "saucedemo":
-        if not args.test_username or not args.test_password:
-            raise ValueError(
-                "SauceDemo benchmark requires explicit test credentials."
-            )
-        return build_saucedemo_stagehand_benchmark_context(
-            test_username=args.test_username,
-            test_password=args.test_password,
-            checkout_first_name=args.checkout_first_name,
-            checkout_last_name=args.checkout_last_name,
-            checkout_postal_code=args.checkout_postal_code,
-        )
-    test_credentials = {}
-    if args.test_username and args.test_password:
-        test_credentials = {
-            "username": args.test_username,
-            "password": args.test_password,
-        }
-    return BenchmarkTaskContext(
-        site_label="public demo e-commerce site",
-        test_credentials=test_credentials,
-        checkout_data=checkout_data,
-    )
 
 
 def _phase_a_embedding_provider():
@@ -344,123 +307,6 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Optional path to fast-downward.py for base/safe plan solves.",
     )
-    ecommerce_stagehand_parser = subparsers.add_parser(
-        "web-kobe-ecommerce-stagehand-smoke",
-        help=(
-            "Run Stagehand-backed e-commerce Web-KOBE exploration from a "
-            "benchmark config and write graph plus Stagehand trace."
-        ),
-    )
-    ecommerce_stagehand_parser.add_argument(
-        "--benchmark",
-        choices=["saucedemo", "custom"],
-        default="saucedemo",
-        help="Benchmark config to use for start URL and test context.",
-    )
-    ecommerce_stagehand_parser.add_argument(
-        "--start-url",
-        default=None,
-        help="Optional start URL override. Defaults to the benchmark URL.",
-    )
-    ecommerce_stagehand_parser.add_argument(
-        "--app-name",
-        default=None,
-        help="Optional graph app name override. Defaults to the benchmark name.",
-    )
-    ecommerce_stagehand_parser.add_argument(
-        "--output",
-        type=Path,
-        default=Path("outputs/latest/ecommerce_stagehand_graph.json"),
-        help="Path to write the Web-KOBE graph JSON.",
-    )
-    ecommerce_stagehand_parser.add_argument(
-        "--stagehand-trace",
-        type=Path,
-        default=Path("outputs/latest/ecommerce_stagehand_trace.json"),
-        help="Path to write Stagehand execution trace JSON.",
-    )
-    ecommerce_stagehand_parser.add_argument(
-        "--model",
-        default=None,
-        help="Stagehand model name, or set STAGEHAND_MODEL.",
-    )
-    ecommerce_stagehand_parser.add_argument(
-        "--steps",
-        type=int,
-        default=8,
-        help="Maximum number of Stagehand-backed graph steps.",
-    )
-    ecommerce_stagehand_parser.add_argument(
-        "--screenshot-dir",
-        type=Path,
-        default=Path("outputs/latest/screenshots"),
-        help=(
-            "Optional directory for before/after screenshots. This only "
-            "captures local evidence; VLM analysis requires separate config."
-        ),
-    )
-    ecommerce_stagehand_parser.add_argument(
-        "--clean-output-dir",
-        action="store_true",
-        help=(
-            "Delete existing files in the shared output directory before the "
-            "run. Intended for outputs/latest so only the latest experiment "
-            "is retained."
-        ),
-    )
-    ecommerce_stagehand_parser.add_argument(
-        "--openai-visual-delta",
-        action="store_true",
-        help=(
-            "Enable observation-side OpenAI vision comparison over captured "
-            "before/after screenshots. Requires --screenshot-dir."
-        ),
-    )
-    ecommerce_stagehand_parser.add_argument(
-        "--visual-delta-model",
-        default=None,
-        help="Optional OpenAI vision model override for --openai-visual-delta.",
-    )
-    ecommerce_stagehand_parser.add_argument(
-        "--action-outcome-model",
-        default=None,
-        help="Optional OpenAI action-outcome model override.",
-    )
-    ecommerce_stagehand_parser.add_argument(
-        "--allow-final-order",
-        action="store_true",
-        help="Allow explicit test-site final order confirmation.",
-    )
-    ecommerce_stagehand_parser.add_argument(
-        "--test-username",
-        default=None,
-        help="Benchmark test username to expose through Stagehand task context.",
-    )
-    ecommerce_stagehand_parser.add_argument(
-        "--test-password",
-        default=None,
-        help="Benchmark test password to expose through Stagehand task context.",
-    )
-    ecommerce_stagehand_parser.add_argument(
-        "--checkout-first-name",
-        default="Test",
-        help="Benchmark checkout first name for task context.",
-    )
-    ecommerce_stagehand_parser.add_argument(
-        "--checkout-last-name",
-        default="User",
-        help="Benchmark checkout last name for task context.",
-    )
-    ecommerce_stagehand_parser.add_argument(
-        "--checkout-postal-code",
-        default="12345",
-        help="Benchmark checkout postal code for task context.",
-    )
-    ecommerce_stagehand_parser.add_argument(
-        "--headed",
-        action="store_true",
-        help="Show the browser window while running the smoke.",
-    )
     stagehand_explore_parser = subparsers.add_parser(
         "web-kobe-stagehand-explore",
         help="Run generic Stagehand-backed Web-KOBE exploration with graph memory.",
@@ -486,11 +332,6 @@ def main(argv: list[str] | None = None) -> int:
         type=_positive_int,
         default=None,
         help="Maximum VLM business candidates per node.",
-    )
-    stagehand_explore_parser.add_argument(
-        "--semantic-experiment-profile",
-        choices=["practice_shopping_feasibility"],
-        default=None,
     )
     stagehand_explore_parser.add_argument(
         "--max-consecutive-no-progress", type=_positive_int, default=None
@@ -521,9 +362,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     stagehand_explore_parser.add_argument(
         "--allow-test-site-final-order", action="store_true"
-    )
-    stagehand_explore_parser.add_argument(
-        "--test-data-seed", default="practice-v1"
     )
     stagehand_explore_parser.add_argument("--screenshot-dir", type=Path, default=None)
     stagehand_explore_parser.add_argument(
@@ -558,7 +396,7 @@ def main(argv: list[str] | None = None) -> int:
     stagehand_explore_parser.add_argument("--action-outcome-model", default=None)
     stagehand_explore_parser.add_argument(
         "--stagehand-execution-mode",
-        choices=["business_milestone", "observed_action", "observe_act"],
+        choices=["observed_action", "observe_act"],
         default="observed_action",
     )
     stagehand_explore_parser.add_argument(
@@ -854,39 +692,9 @@ def main(argv: list[str] | None = None) -> int:
                 fast_downward=args.fast_downward,
             )
             output_path = result.report_path
-        elif args.mode == "web-kobe-ecommerce-stagehand-smoke":
-            if args.benchmark == "custom" and not args.start_url:
-                raise ValueError("--start-url is required for --benchmark custom.")
-            if args.clean_output_dir:
-                _clean_output_dir_for(
-                    [args.output, args.stagehand_trace, args.screenshot_dir]
-                )
-            benchmark_context = _build_ecommerce_benchmark_context(args)
-            output_path = asyncio.run(
-                run_ecommerce_stagehand_step(
-                    args.output,
-                    start_url=args.start_url or SAUCEDEMO_BENCHMARK_START_URL,
-                    app_name=args.app_name or args.benchmark,
-                    stagehand_trace_path=args.stagehand_trace,
-                    model=args.model,
-                    steps=args.steps,
-                    headless=not args.headed,
-                    screenshot_dir=args.screenshot_dir,
-                    use_openai_visual_delta=args.openai_visual_delta,
-                    visual_delta_model=args.visual_delta_model,
-                    action_outcome_model=args.action_outcome_model,
-                    allow_final_order=args.allow_final_order,
-                    benchmark_context=benchmark_context,
-                )
-            )
         elif args.mode == "web-kobe-stagehand-explore":
-            profile_selected = args.semantic_experiment_profile is not None
-            resolved_semantic_profile = resolve_semantic_experiment_profile(
-                args.semantic_experiment_profile
-            )
             validate_final_order_authorization(
                 start_url=args.url,
-                profile=resolved_semantic_profile,
                 allowed=args.allow_test_site_final_order,
             )
             budget_selected = any(
@@ -901,7 +709,7 @@ def main(argv: list[str] | None = None) -> int:
                     )
                 )
             limits = None
-            if profile_selected or budget_selected:
+            if budget_selected:
                 limits = ExplorationLimits(
                         max_exploration_steps=(
                             args.max_exploration_steps
@@ -932,11 +740,7 @@ def main(argv: list[str] | None = None) -> int:
                         or ExplorationLimits().max_candidates_per_location
                     ),
                 )
-            effective_max_candidates = args.max_candidates or (
-                ExplorationLimits().max_candidates_per_location
-                if profile_selected
-                else 5
-            )
+            effective_max_candidates = args.max_candidates or 5
             resume_graph = None
             resume_policy = None
             if args.resume_retry_action and args.resume_graph is None:
@@ -1004,17 +808,14 @@ def main(argv: list[str] | None = None) -> int:
                 runner_kwargs["viewport_width"] = args.viewport_width
             if args.viewport_height != 1000:
                 runner_kwargs["viewport_height"] = args.viewport_height
-            if profile_selected or budget_selected:
+            if budget_selected:
                 runner_kwargs.update(
                     {
                         "limits": limits,
-                        "semantic_experiment_profile": args.semantic_experiment_profile,
                     }
                 )
             if args.allow_test_site_final_order:
                 runner_kwargs["allow_test_site_final_order"] = True
-            if args.test_data_seed != "practice-v1" or profile_selected:
-                runner_kwargs["test_data_seed"] = args.test_data_seed
             if args.vlm_request_timeout_seconds is not None:
                 runner_kwargs["vlm_request_timeout_seconds"] = (
                     args.vlm_request_timeout_seconds

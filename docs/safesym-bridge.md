@@ -19,7 +19,8 @@ projection lives here.
 
 ## Current Recommended Path
 
-Run a deterministic local fixture first:
+Run a deterministic local fixture first when validating the graph and PDDL
+tooling:
 
 ```bash
 python -m http.server 8000 --directory tests/fixtures/local_checkout
@@ -48,9 +49,26 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-domain-from-graph \
 only `domain.pddl`, so it does not require choosing a concrete start/goal
 planning query.
 
-## Explored Trace PDDL V1
+For the active VLM/Stagehand open-exploration path, use
+`web-kobe-stagehand-explore`. Its `observe_act` mode lets the backend execute
+all atomic actions returned for a composite action, while single-instance
+actions execute only the representative first action. The high-level action is
+observed for outcome only after the composite execution completes.
 
-Trace V1 is the recommended Phase A projection. It consumes the ordered
+```powershell
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-stagehand-explore `
+  --url https://www.saucedemo.com/ `
+  --app-name saucedemo `
+  --output outputs/experiments/saucedemo/latest/stagehand_explore_graph.json `
+  --stagehand-trace outputs/experiments/saucedemo/latest/stagehand_explore_trace.json `
+  --stagehand-execution-mode observe_act `
+  --max-exploration-steps 25
+```
+
+## Explored Trace PDDL V1 Compatibility
+
+Trace V1 is a retained diagnostic projection, not the active semantic
+acceptance path. It consumes the ordered
 successful events in the frozen Raw Graph and emits an untyped, zero-argument
 STRIPS checkpoint machine. A successful action remains eligible when URL and
 Raw/Planning nodes are unchanged; successful same-URL/self-loop actions with a
@@ -214,6 +232,7 @@ Current mainline commands:
 
 ```text
 web-kobe-explore
+web-kobe-stagehand-explore
 web-kobe-domain-from-graph
 web-kobe-pddl-from-graph
 web-kobe-pddl-smoke
@@ -232,70 +251,11 @@ of the default CLI surface. The old `WebObservedGraph` exploration stack has
 been removed from the active source tree; historical notes remain only in
 archival design documents.
 
-### Stagehand-Backed E-Commerce Graph Smoke
-
-```powershell
-$env:STAGEHAND_SERVER = "local"
-$env:STAGEHAND_MODEL = "deepseek/<your-model-name>"
-$env:MODEL_API_KEY = "<your-deepseek-key>"
-python -m ai_web_explorer.safesym_bridge.cli web-kobe-ecommerce-stagehand-smoke `
-  --benchmark saucedemo `
-  --output outputs/latest/ecommerce_stagehand_graph.json `
-  --stagehand-trace outputs/latest/ecommerce_stagehand_trace.json `
-  --steps 10
-```
-
-This command is opt-in because real Stagehand runs require external credentials
-and browser/model access. Default tests use fake providers.
-
-For BYO model-key runs, set the generic `MODEL_API_KEY`, which is the
-recommended Python SDK input. This runner loads `.env`, reads `STAGEHAND_MODEL`,
-and also accepts provider-specific aliases such as `DEEPSEEK_API_KEY` for
-`deepseek/...` models. The recommended runner mode is `STAGEHAND_SERVER=local`,
-which lets Stagehand operate on the same Playwright page that Web-KOBE observes.
-`STAGEHAND_API_URL` may be set for a custom Stagehand service endpoint; it is
-not the DeepSeek/OpenAI-compatible model provider base URL.
-
-The current verified DeepSeek-backed local run reached `checkout_overview` in
-10 low-level Stagehand steps and did not click `Finish`. A follow-up
-`web-kobe-pddl-smoke` over `outputs/saucedemo_stagehand_graph.json` reported
-`planning_ready=True` and no undeclared predicates.
-
-For the SauceDemo test site only, the runner can explicitly continue through
-the final confirmation action:
-
-```powershell
-python -m ai_web_explorer.safesym_bridge.cli web-kobe-ecommerce-stagehand-smoke `
-  --benchmark saucedemo `
-  --output outputs/latest/ecommerce_stagehand_graph.json `
-  --stagehand-trace outputs/latest/ecommerce_stagehand_trace.json `
-  --screenshot-dir outputs/latest/screenshots `
-  --openai-visual-delta `
-  --visual-delta-model gpt-4o `
-  --steps 12 `
-  --allow-final-order
-```
-
-Without `--allow-final-order`, the Stagehand smoke intentionally stops at
-checkout overview, so no final order safety action is expected. With the flag,
-the projected PDDL should contain a SafeSym-facing order confirmation action,
-`order_place_confirm`, even if the low-level Stagehand action description is
-something like `click Finish`.
-
-The current verified final-order run reached `checkout_complete` in 11
-Stagehand-backed transitions. PDDL smoke reported `planning_ready=True`,
-projected `order_place_confirm`, and SafeSym with `constraint_rules.json`
-inserted:
-
-```text
-check_human_confirmation_order_place_confirm
-```
-
 ### Generic Stagehand Exploration
 
 The generic Stagehand runner is the bounded-exploration integration surface. It
-can now reuse the existing profile, visual-delta, embedding, and Stagehand
-candidate-action capabilities:
+can use the optional BusinessFlowProfile for local structured verification,
+visual-delta and embedding providers, and the Stagehand candidate-action path:
 
 Stagehand and screenshot observation retain separate model settings, but all
 three paths now default to GPT-4o. Set `STAGEHAND_MODEL` (or `--model`) only for
@@ -328,19 +288,18 @@ python -m ai_web_explorer.safesym_bridge.cli web-kobe-stagehand-explore `
 `observed_action` is the default mode for generic exploration. In the preferred
 bounded-exploration path, VLM proposes business affordances from screenshots,
 Web-KOBE selects and deduplicates with graph/embedding memory, and Stagehand
-executes the selected business action. `business_milestone` remains available
-as a legacy fallback mode and for checkout benchmark smoke paths, but it should
-not be treated as the main generic exploration path. Visual delta requires
+executes the selected business action. The removed milestone runner and
+semantic experiment profile are not part of the CLI. Visual delta requires
 `--screenshot-dir` because it compares before/after screenshots.
 
 SauceDemo execution experiments may explicitly select `--stagehand-execution-mode
 observe_act` to separate Stagehand observation from deterministic `act(Action)`.
 This is not the generic CLI default. A semantic candidate may describe a grouped
-operation such as `enter_credentials`, while one observed Stagehand Action may
-cover only one field. The current active implementation does not yet expand one
-grouped semantic action into multiple observed atomic Actions; callers must not
-mark the grouped action successful until every required atomic step has executed
-and the screenshot outcome validates the whole semantic operation.
+operation such as `enter_credentials`; the composite execution policy runs all
+observed atomic Actions in order and only then exposes the high-level action to
+the outcome observer. Single-instance candidates use only the representative
+first observed Action to avoid repeated mutations such as multiple add-to-cart
+clicks.
 
 Frontier replay is also opt-in. Without `--frontier-replay`, exhausting all
 eligible candidates at the current semantic location ends the run with

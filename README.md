@@ -41,6 +41,10 @@ src/ai_web_explorer/safesym_bridge/
 It consumes `grounded_web` graph artifacts and writes SafeSym/PDDL-facing
 outputs. It should not own generic exploration policy.
 
+The active open-exploration runner is `web-kobe-stagehand-explore`. The simpler
+`web-kobe-explore` command remains available as a deterministic Playwright
+graph/smoke path; it does not provide the VLM-driven Stagehand exploration loop.
+
 ## CLI
 
 After installing the package, the current mainline CLI is available as:
@@ -55,7 +59,7 @@ You can also run it directly from the repository root:
 python -m ai_web_explorer.safesym_bridge.cli --help
 ```
 
-Recommended flow:
+Deterministic fixture smoke flow:
 
 ```bash
 python -m http.server 8000 --directory tests/fixtures/local_checkout
@@ -72,6 +76,22 @@ web-kobe web-kobe-pddl-smoke \
   --output outputs/local_checkout_pddl_smoke \
   --goal-node <goal_node_id>
 ```
+
+For the active VLM/Stagehand exploration path, use:
+
+```bash
+web-kobe web-kobe-stagehand-explore \
+  --url https://www.saucedemo.com/ \
+  --app-name saucedemo \
+  --output outputs/experiments/saucedemo/latest/stagehand_explore_graph.json \
+  --stagehand-trace outputs/experiments/saucedemo/latest/stagehand_explore_trace.json \
+  --stagehand-execution-mode observe_act \
+  --max-exploration-steps 25
+```
+
+The Stagehand runner uses the generic candidate, execution, observation,
+replay, and bounded-termination pipeline. It does not use the removed
+`business_milestone` runner or semantic experiment profile/action contract.
 
 If SafeSym is checked out locally, validate that SafeSym can parse, inject, and
 optionally solve the generated PDDL:
@@ -100,6 +120,7 @@ not triggering is expected.
 
 ```bash
 web-kobe web-kobe-explore --url <url> --output outputs/web_kobe_graph.json
+web-kobe web-kobe-stagehand-explore --url <url> --output outputs/stagehand_graph.json --stagehand-execution-mode observe_act
 web-kobe web-kobe-pddl-from-graph --graph outputs/web_kobe_graph.json --goal-node <node>
 web-kobe web-kobe-pddl-smoke --graph outputs/web_kobe_graph.json --goal-node <node>
 web-kobe web-kobe-safesym-smoke --task-dir outputs/web_kobe_pddl_smoke --safesym-root <path> --rules <rules.json>

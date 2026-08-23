@@ -37,9 +37,6 @@ from ai_web_explorer.grounded_web.exploration_index import (
     build_exploration_context,
     semantically_matches_action,
 )
-from ai_web_explorer.grounded_web.exploration_semantics import (
-    SemanticExperimentProfile,
-)
 from ai_web_explorer.grounded_web.frontier_replay import ReplayCheckpointResult
 from ai_web_explorer.grounded_web.location_exploration import (
     LOCATION_EXPLORATION_META_KEY,
@@ -50,9 +47,6 @@ from ai_web_explorer.grounded_web.location_exploration import (
 )
 from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.grounded_web.planning_fact_verifier import verify_planning_delta
-from ai_web_explorer.grounded_web.planning_fact_verifier import (
-    verify_experiment_planning_delta,
-)
 from ai_web_explorer.grounded_web.semantic_assistor import SemanticAssistor
 from ai_web_explorer.grounded_web.semantic_model import normalize_semantic_id
 from ai_web_explorer.grounded_web.typed_delta import (
@@ -148,7 +142,9 @@ def _parse_replay_checkpoint_response(
             reason="target_semantic_location_mismatch"
         )
     observed_location = normalize_semantic_id(raw_location)
-    if not observed_location or observed_location not in allowed_locations:
+    if not observed_location or (
+        allowed_locations and observed_location not in allowed_locations
+    ):
         return _checkpoint_response_failure(
             reason="target_semantic_location_not_allowed",
             observed_location=observed_location or None,
@@ -382,8 +378,6 @@ class WebKobeExplorer:
         resume_policy: ResumePolicy | None = None,
         location_exploration_coordinator: LocationExplorationCoordinator | None = None,
         exploration_limits: ExplorationLimits | None = None,
-        semantic_profile_context: dict[str, Any] | None = None,
-        semantic_experiment_profile: SemanticExperimentProfile | None = None,
     ):
         if max_candidates < 1:
             raise ValueError("max_candidates must be at least 1.")
@@ -391,7 +385,6 @@ class WebKobeExplorer:
         self.semantic_assistor = semantic_assistor
         self.goal = goal
         self.business_profile = business_profile
-        self.semantic_experiment_profile = semantic_experiment_profile
         self.max_candidates = max_candidates
         self.capture_screenshots = capture_screenshots
         self.visual_delta_provider = visual_delta_provider
@@ -402,41 +395,18 @@ class WebKobeExplorer:
         self.enable_exploration_memory = enable_exploration_memory
         self.attempt_checkpoint = attempt_checkpoint
         self.resume_policy = resume_policy
-        if (
-            self.semantic_experiment_profile is not None
-            and semantic_profile_context is None
-        ):
-            semantic_profile_context = (
-                self.semantic_experiment_profile.to_prompt_context()
-            )
-        self.semantic_profile_context = semantic_profile_context
         self.location_exploration_coordinator = (
             location_exploration_coordinator
             or LocationExplorationCoordinator(
                 limits=exploration_limits,
-                semantic_profile_context=self.semantic_profile_context,
-                action_contracts=(
-                    self.semantic_experiment_profile.action_contracts
-                    if self.semantic_experiment_profile is not None
-                    else None
-                ),
             )
         )
-        if self.semantic_experiment_profile is not None:
-            self.location_exploration_coordinator.action_contracts = dict(
-                self.semantic_experiment_profile.action_contracts
-            )
         self.location_scoped_exploration = bool(
             location_exploration_coordinator is not None
             or exploration_limits is not None
-            or semantic_profile_context is not None
         )
         self._preferred_resume_action_key: ActionAttemptKey | None = None
         self.manager = WebKobeGraphManager(app=adapter.app_name)
-        if self.semantic_profile_context is not None:
-            self.manager.meta["semantic_profile_context"] = dict(
-                self.semantic_profile_context
-            )
         self._start_node_id: str | None = None
         self._current_node_id: str | None = None
         self._visit_stack: list[str] = []
@@ -455,17 +425,9 @@ class WebKobeExplorer:
             self.location_scoped_exploration = True
             self.location_exploration_coordinator = LocationExplorationCoordinator(
                 memory=LocationExplorationMemory.from_dict(persisted_memory),
-                semantic_profile_context=(
-                    self.location_exploration_coordinator.semantic_profile_context
-                ),
-                action_contracts=self.location_exploration_coordinator.action_contracts,
             )
         else:
             self._seed_location_memory_from_graph(graph)
-        if self.semantic_profile_context is not None:
-            self.manager.meta["semantic_profile_context"] = dict(
-                self.semantic_profile_context
-            )
         self._start_node_id = graph.start_node_id
         self._current_node_id = None
         self._visit_stack = []
@@ -683,12 +645,7 @@ class WebKobeExplorer:
         action_outcome_result = None
         source_location_hint = None if anchor_unresolved else source_anchor
         allowed_location_ids = sorted(
-            set(
-                self.semantic_experiment_profile.allowed_locations
-                if self.semantic_experiment_profile is not None
-                else ()
-            )
-            | {
+            {
                 node.semantic_location_hint
                 for node in self.manager.to_graph().nodes
                 if node.semantic_location_hint
@@ -736,10 +693,6 @@ class WebKobeExplorer:
                     current_location_context=(
                         source_node.state_summary or source_node.page_description
                     ),
-                    semantic_profile_context=(
-                        self.location_exploration_coordinator.semantic_profile_context
-                    ),
-                    semantic_experiment_profile=self.semantic_experiment_profile,
                 ),
                 provider=self.visual_delta_provider,
             )
@@ -778,16 +731,6 @@ class WebKobeExplorer:
                 and action_outcome_result.location_change
             )
         )
-        if self.semantic_experiment_profile is not None:
-            planning_delta = verify_experiment_planning_delta(
-                profile=self.semantic_experiment_profile,
-                observable_change=state_changed,
-                candidate_added_facts=visual_delta_facts[0],
-                candidate_removed_facts=visual_delta_facts[1],
-                evidence=visual_delta_evidence,
-                structured_delta=structured_planning_delta or PlanningDelta(),
-                action_id=selected.canonical_action_name or selected.semantic_id,
-            )
         if self.business_profile is not None:
             planning_transition = self.manager.build_planning_transition(
                 source_id,
@@ -1266,7 +1209,6 @@ class WebKobeExplorer:
         """
         snapshot = await self.adapter.observe_state()
         expected_location = normalize_semantic_id(expected_semantic_location or "")
-        profile = self.semantic_experiment_profile
         required = tuple(
             dict.fromkeys(
                 normalize_semantic_id(fact)
@@ -1274,12 +1216,6 @@ class WebKobeExplorer:
                 if normalize_semantic_id(fact)
             )
         )
-        if profile is not None and set(required) - set(profile.business_fact_ids):
-            return ReplayCheckpointResult(
-                success=False,
-                reason="target_business_facts_unknown",
-            )
-
         verified: list[str] = []
         evidence: list[str] = []
         signature = snapshot.signature
@@ -1309,44 +1245,43 @@ class WebKobeExplorer:
                 evidence.append(f"typed_state_fact:{fact_id}")
 
         observed_location: str | None = None
-        if profile is None:
-            interactables = await self.adapter.list_interactables(snapshot)
-            draft = self.semantic_assistor.describe_state(
-                snapshot=snapshot,
-                interactables=interactables,
+        interactables = await self.adapter.list_interactables(snapshot)
+        draft = self.semantic_assistor.describe_state(
+            snapshot=snapshot,
+            interactables=interactables,
+        )
+        observed_location = normalize_semantic_id(
+            draft.page_frame.page_type or snapshot.page_id
+        )
+        location_mismatch = bool(
+            expected_location and observed_location != expected_location
+        )
+        if location_mismatch and self.visual_delta_provider is None:
+            return ReplayCheckpointResult(
+                success=False,
+                observed_semantic_location=observed_location or None,
+                verified_business_facts=tuple(verified),
+                evidence=tuple(evidence),
+                reason="target_semantic_location_mismatch",
             )
-            observed_location = normalize_semantic_id(
-                draft.page_frame.page_type or snapshot.page_id
+        if not location_mismatch and not any(
+            fact_id not in verified for fact_id in required
+        ):
+            return ReplayCheckpointResult(
+                success=True,
+                observed_semantic_location=observed_location or None,
+                verified_business_facts=tuple(verified),
+                evidence=tuple(evidence),
+                reason="replay_succeeded",
             )
-            if expected_location and observed_location != expected_location:
-                return ReplayCheckpointResult(
-                    success=False,
-                    observed_semantic_location=observed_location or None,
-                    verified_business_facts=tuple(verified),
-                    evidence=tuple(evidence),
-                    reason="target_semantic_location_mismatch",
-                )
-            if not any(fact_id not in verified for fact_id in required):
-                return ReplayCheckpointResult(
-                    success=True,
-                    observed_semantic_location=observed_location or None,
-                    verified_business_facts=tuple(verified),
-                    evidence=tuple(evidence),
-                    reason="replay_succeeded",
-                )
-            allowed_locations = {observed_location}
-            descriptions: dict[str, list[str]] = {}
-        else:
-            allowed_locations = {
-                normalize_semantic_id(location)
-                for location in profile.allowed_locations
-                if normalize_semantic_id(location)
-            }
-            descriptions = {
-                rule.fact_id: list(rule.descriptions)
-                for rule in profile.business_facts
-                if rule.fact_id in required
-            }
+        # Without an experiment profile there is no closed location vocabulary.
+        # The expected endpoint is still checked directly by the checkpoint
+        # parser, while the provider may use any site-specific location label.
+        allowed_locations: set[str] = set()
+        descriptions = {
+            fact_id: ["Visible evidence supports this requested business fact."]
+            for fact_id in required
+        }
 
         if self.visual_delta_provider is None:
             return ReplayCheckpointResult(
@@ -1355,9 +1290,7 @@ class WebKobeExplorer:
                 verified_business_facts=tuple(verified),
                 evidence=tuple(evidence),
                 reason=(
-                    "target_semantic_location_mismatch"
-                    if profile is not None
-                    else "target_business_facts_mismatch"
+                    "target_business_facts_mismatch"
                 ),
             )
         try:
@@ -1371,9 +1304,7 @@ class WebKobeExplorer:
                 verified_business_facts=tuple(verified),
                 evidence=tuple(evidence),
                 reason=(
-                    "target_semantic_location_mismatch"
-                    if profile is not None
-                    else "target_business_facts_mismatch"
+                    "target_business_facts_mismatch"
                 ),
             )
         prompt = json.dumps(
@@ -1935,15 +1866,6 @@ class WebKobeExplorer:
         )
         for affordance in ranked:
             action_id = affordance.action_name
-            contract = (
-                self.semantic_experiment_profile.action_contract_for(action_id)
-                if self.semantic_experiment_profile is not None
-                else None
-            )
-            if contract is not None and not set(contract.required_facts).issubset(
-                self._active_business_facts(node)
-            ):
-                continue
             preferred = self._preferred_resume_action_key
             if preferred is not None and preferred == ActionAttemptKey(
                 exploration_context.current_node_id, action_id
@@ -1980,6 +1902,4 @@ class WebKobeExplorer:
             for fact in node.planning_state.active_facts
             if normalize_semantic_id(fact)
         }
-        if self.semantic_experiment_profile is None:
-            return active
-        return active & set(self.semantic_experiment_profile.business_fact_ids)
+        return active

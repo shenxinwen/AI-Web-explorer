@@ -400,7 +400,7 @@ def test_compile_web_kobe_graph_to_pddl_can_use_profile_fact_goal():
                 action=BrowserAction(
                     "business_intent",
                     None,
-                    "stagehand_business_milestone_001",
+                    "observed_action_001",
                     canonical_action_name="complete_order",
                 ),
                 capability=None,
@@ -410,7 +410,7 @@ def test_compile_web_kobe_graph_to_pddl_can_use_profile_fact_goal():
                 execution_trace=ExecutionTrace(
                     "business_intent",
                     None,
-                    "stagehand_business_milestone_001",
+                    "observed_action_001",
                     {},
                     "review",
                     "complete",
@@ -1119,11 +1119,11 @@ def test_compile_web_kobe_graph_to_pddl_prefers_business_canonical_action_name()
             WebKobeEdge(
                 source_node_id="start",
                 target_node_id="done",
-                instruction="advance one business milestone",
+                instruction="run selected action",
                 action=BrowserAction(
                     "business_intent",
                     None,
-                    "stagehand_business_milestone_001",
+                    "observed_action_001",
                     canonical_action_name="submit_application",
                 ),
                 capability=None,
@@ -1133,7 +1133,7 @@ def test_compile_web_kobe_graph_to_pddl_prefers_business_canonical_action_name()
                 execution_trace=ExecutionTrace(
                     "business_intent",
                     None,
-                    "stagehand_business_milestone_001",
+                    "observed_action_001",
                     {},
                     "start",
                     "done",
@@ -1147,7 +1147,7 @@ def test_compile_web_kobe_graph_to_pddl_prefers_business_canonical_action_name()
     artifacts = compile_web_kobe_graph_to_pddl(graph, goal_node_id="done")
 
     assert "(:action edge_001_submit_application" in artifacts.domain
-    assert "(:action stagehand_business_milestone_001" not in artifacts.domain
+    assert "(:action observed_action_001" not in artifacts.domain
 
 
 def test_compile_web_kobe_graph_to_pddl_ignores_ui_level_canonical_action_name():
@@ -1163,11 +1163,11 @@ def test_compile_web_kobe_graph_to_pddl_ignores_ui_level_canonical_action_name()
             WebKobeEdge(
                 source_node_id="start",
                 target_node_id="done",
-                instruction="advance one business milestone",
+                instruction="run selected action",
                 action=BrowserAction(
                     "business_intent",
                     None,
-                    "stagehand_business_milestone_001",
+                    "observed_action_001",
                     canonical_action_name="click_submit_button",
                 ),
                 capability=None,
@@ -1177,7 +1177,7 @@ def test_compile_web_kobe_graph_to_pddl_ignores_ui_level_canonical_action_name()
                 execution_trace=ExecutionTrace(
                     "business_intent",
                     None,
-                    "stagehand_business_milestone_001",
+                    "observed_action_001",
                     {},
                     "start",
                     "done",
@@ -1190,7 +1190,7 @@ def test_compile_web_kobe_graph_to_pddl_ignores_ui_level_canonical_action_name()
 
     artifacts = compile_web_kobe_graph_to_pddl(graph, goal_node_id="done")
 
-    assert "(:action edge_001_stagehand_business_milestone_001" in artifacts.domain
+    assert "(:action edge_001_observed_action_001" in artifacts.domain
     assert "(:action click_submit_button" not in artifacts.domain
 
 
@@ -1212,8 +1212,8 @@ def test_compile_web_kobe_graph_to_pddl_makes_duplicate_readable_names_unique():
                 action=BrowserAction(
                     "business_intent",
                     None,
-                    "stagehand_business_milestone_001",
-                    canonical_action_name="advance_business_milestone",
+                    "observed_action_001",
+                    canonical_action_name="run_selected_action",
                 ),
                 capability=None,
                 target_observation="cart",
@@ -1222,7 +1222,7 @@ def test_compile_web_kobe_graph_to_pddl_makes_duplicate_readable_names_unique():
                 execution_trace=ExecutionTrace(
                     "business_intent",
                     None,
-                    "stagehand_business_milestone_001",
+                    "observed_action_001",
                     {},
                     "inventory",
                     "cart",
@@ -1237,8 +1237,8 @@ def test_compile_web_kobe_graph_to_pddl_makes_duplicate_readable_names_unique():
                 action=BrowserAction(
                     "business_intent",
                     None,
-                    "stagehand_business_milestone_002",
-                    canonical_action_name="advance_business_milestone",
+                    "observed_action_002",
+                    canonical_action_name="run_selected_action",
                 ),
                 capability=None,
                 target_observation="checkout",
@@ -1247,7 +1247,7 @@ def test_compile_web_kobe_graph_to_pddl_makes_duplicate_readable_names_unique():
                 execution_trace=ExecutionTrace(
                     "business_intent",
                     None,
-                    "stagehand_business_milestone_002",
+                    "observed_action_002",
                     {},
                     "cart",
                     "checkout",
@@ -1260,9 +1260,9 @@ def test_compile_web_kobe_graph_to_pddl_makes_duplicate_readable_names_unique():
 
     artifacts = compile_web_kobe_graph_to_pddl(graph, goal_node_id="checkout")
 
-    assert "(:action edge_001_advance_business_milestone" in artifacts.domain
-    assert "(:action edge_002_advance_business_milestone" in artifacts.domain
-    assert artifacts.domain.count("(:action advance_business_milestone") == 0
+    assert "(:action edge_001_run_selected_action" in artifacts.domain
+    assert "(:action edge_002_run_selected_action" in artifacts.domain
+    assert artifacts.domain.count("(:action run_selected_action") == 0
 
 
 def test_compile_web_kobe_graph_to_pddl_requires_removed_planning_facts():
@@ -1282,7 +1282,7 @@ def test_compile_web_kobe_graph_to_pddl_requires_removed_planning_facts():
                 action=BrowserAction(
                     "business_intent",
                     None,
-                    "stagehand_business_milestone_001",
+                    "observed_action_001",
                     canonical_action_name="open_cart",
                 ),
                 capability=None,
@@ -1292,7 +1292,7 @@ def test_compile_web_kobe_graph_to_pddl_requires_removed_planning_facts():
                 execution_trace=ExecutionTrace(
                     "business_intent",
                     None,
-                    "stagehand_business_milestone_001",
+                    "observed_action_001",
                     {},
                     "inventory",
                     "cart",
@@ -1333,7 +1333,7 @@ def test_compile_web_kobe_graph_to_pddl_prefers_transition_pre_facts():
                 action=BrowserAction(
                     "business_intent",
                     None,
-                    "stagehand_business_milestone_001",
+                    "observed_action_001",
                     canonical_action_name="start_checkout",
                 ),
                 capability=None,
@@ -1350,7 +1350,7 @@ def test_compile_web_kobe_graph_to_pddl_prefers_transition_pre_facts():
                 execution_trace=ExecutionTrace(
                     "business_intent",
                     None,
-                    "stagehand_business_milestone_001",
+                    "observed_action_001",
                     {},
                     "cart",
                     "checkout",
@@ -1400,7 +1400,7 @@ def test_compile_web_kobe_graph_to_pddl_omits_delete_for_inactive_planning_fact(
                 action=BrowserAction(
                     "business_intent",
                     None,
-                    "stagehand_business_milestone_001",
+                    "observed_action_001",
                     canonical_action_name="open_cart",
                 ),
                 capability=None,
@@ -1410,7 +1410,7 @@ def test_compile_web_kobe_graph_to_pddl_omits_delete_for_inactive_planning_fact(
                 execution_trace=ExecutionTrace(
                     "business_intent",
                     None,
-                    "stagehand_business_milestone_001",
+                    "observed_action_001",
                     {},
                     "inventory",
                     "cart",

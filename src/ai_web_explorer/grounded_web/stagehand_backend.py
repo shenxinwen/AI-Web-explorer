@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
-from typing import Callable
 from typing import Literal
 
 from ai_web_explorer.grounded_web.automation_backend import AutomationBackend
@@ -49,30 +48,25 @@ class StagehandAutomationBackend:
         provider: StagehandProvider,
         goal: str,
         execution_mode: Literal[
-            "observed_action", "observe_act", "business_milestone"
+            "observed_action", "observe_act"
         ] = (
             "observed_action"
         ),
-        business_milestone_max_steps: int = 5,
         action_timeout_seconds: float | None = None,
-        goal_provider: Callable[[int], str] | None = None,
-        business_step_metadata_provider: Callable[[int], dict[str, Any]] | None = None,
     ) -> None:
+        if execution_mode not in {"observed_action", "observe_act"}:
+            raise ValueError(
+                f"unsupported_stagehand_execution_mode: {execution_mode}"
+            )
         self.base_backend = base_backend
         self.provider = provider
         self.goal = goal
         self.execution_mode = execution_mode
-        self.business_milestone_max_steps = business_milestone_max_steps
         self.action_timeout_seconds = action_timeout_seconds
-        self.goal_provider = goal_provider
-        self.business_step_metadata_provider = business_step_metadata_provider
         self.app_name = base_backend.app_name
         self.last_execution_error: str | None = None
         self.last_execution_metadata: dict[str, Any] = {}
         self._exploration_context_prompt: str | None = None
-        self._business_goals_by_id: dict[str, str] = {}
-        self._business_metadata_by_id: dict[str, dict[str, Any]] = {}
-        self._business_milestone_counter = 0
 
     def set_exploration_context(self, prompt_block: str | None) -> None:
         self._exploration_context_prompt = prompt_block
@@ -129,52 +123,7 @@ class StagehandAutomationBackend:
         self,
         state: StateSnapshot,
     ) -> list[dict[str, Any]]:
-        if self.execution_mode == "business_milestone":
-            self._business_milestone_counter += 1
-            step_number = self._business_milestone_counter
-            semantic_id = f"stagehand_business_milestone_{step_number:03d}"
-            goal = (
-                self.goal_provider(step_number)
-                if self.goal_provider is not None
-                else self.goal
-            )
-            step_metadata = (
-                dict(self.business_step_metadata_provider(step_number))
-                if self.business_step_metadata_provider is not None
-                else {}
-            )
-            self._business_goals_by_id[semantic_id] = goal
-            self._business_metadata_by_id[semantic_id] = step_metadata
-            experiment_step_id = step_metadata.get("experiment_step_id")
-            canonical_action_name = str(
-                experiment_step_id or "advance_business_milestone"
-            )
-            action_label = (
-                canonical_action_name.replace("_", " ")
-                if experiment_step_id
-                else "Advance one business milestone"
-            )
-            return [
-                {
-                    "semantic_id": semantic_id,
-                    "description": goal,
-                    "locator": None,
-                    "action_kind": "business_intent",
-                    "input_values": {},
-                    "action_label": action_label,
-                    "canonical_action_name": canonical_action_name,
-                    "naming_provenance": {"source": "stagehand_business_milestone"},
-                    "explored": False,
-                    "metadata": {
-                        "action_source": "stagehand",
-                        "stagehand_execution_mode": "business_milestone",
-                        **step_metadata,
-                    },
-                }
-            ]
-
-        if self.execution_mode in {"observed_action", "observe_act"}:
-            return await self.base_backend.list_interactables(state)
+        return await self.base_backend.list_interactables(state)
 
     async def execute(self, action: BrowserAction | dict[str, Any]) -> bool:
         semantic_id = (
@@ -187,12 +136,6 @@ class StagehandAutomationBackend:
             if isinstance(action, BrowserAction)
             else str(action.get("action_kind", ""))
         )
-        if self.execution_mode == "business_milestone" and semantic_id.startswith(
-            "stagehand_business_milestone_"
-        ):
-            goal = self._business_goals_by_id.get(semantic_id, self.goal)
-            metadata = self._business_metadata_by_id.get(semantic_id, {})
-            return await self._execute_business_milestone(goal, metadata)
         if action_kind == "business_intent":
             instruction = (
                 action.description
@@ -226,12 +169,7 @@ class StagehandAutomationBackend:
         self,
         action: BrowserAction | dict[str, Any],
     ) -> bool:
-        original_max_steps = self.business_milestone_max_steps
-        self.business_milestone_max_steps = 1
-        try:
-            return await self.execute(action)
-        finally:
-            self.business_milestone_max_steps = original_max_steps
+        return await self.execute(action)
 
     async def _execute_business_intent(
         self,
@@ -245,18 +183,6 @@ class StagehandAutomationBackend:
             execution_mode="business_intent",
             step_metadata=step_metadata,
             execution_policy=execution_policy,
-        )
-
-    async def _execute_business_milestone(
-        self,
-        goal: str,
-        step_metadata: dict[str, Any],
-    ) -> bool:
-        return await self._execute_instruction(
-            goal,
-            execution_mode="business_milestone",
-            step_metadata=step_metadata,
-            execution_policy="single_instance",
         )
 
     async def _execute_instruction(
@@ -337,7 +263,7 @@ class StagehandAutomationBackend:
                 if execute_instruction is not None:
                     invocation = execute_instruction(
                         instruction,
-                        max_steps=self.business_milestone_max_steps,
+                        max_steps=5,
                     )
                 else:
                     act_instruction = getattr(self.provider, "act_instruction")

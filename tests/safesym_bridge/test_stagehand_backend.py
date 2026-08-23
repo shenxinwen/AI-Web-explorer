@@ -229,85 +229,14 @@ async def test_stagehand_backend_reports_entry_reset_failure():
     assert backend.last_execution_metadata["stagehand_execution_mode"] == "entry_reset"
 
 
-@pytest.mark.anyio
-async def test_stagehand_backend_business_milestone_mode_acts_without_observe():
-    provider = FakeStagehandProvider()
-    backend = StagehandAutomationBackend(
-        base_backend=FakeBaseBackend(),
-        provider=provider,
-        goal="Advance one meaningful checkout milestone.",
-        execution_mode="business_milestone",
-    )
-    state = await backend.observe_state()
-
-    actions = await backend.list_interactables(state)
-    success = await backend.execute(actions[0])
-
-    assert success is True
-    assert provider.acted_instructions == []
-    assert provider.executed_instructions == [
-        ("Advance one meaningful checkout milestone.", 5)
-    ]
-    assert actions[0]["semantic_id"] == "stagehand_business_milestone_001"
-    assert actions[0]["description"] == "Advance one meaningful checkout milestone."
-    assert actions[0]["locator"] is None
-    assert actions[0]["action_kind"] == "business_intent"
-    assert actions[0]["input_values"] == {}
-    assert actions[0]["action_label"] == "Advance one business milestone"
-    assert actions[0]["canonical_action_name"] == "advance_business_milestone"
-    assert actions[0]["naming_provenance"] == {"source": "stagehand_business_milestone"}
-    assert actions[0]["explored"] is False
-    assert actions[0]["metadata"] == {
-        "action_source": "stagehand",
-        "stagehand_execution_mode": "business_milestone",
-    }
-    assert backend.last_execution_metadata["stagehand_observed_action"] is None
-    assert (
-        backend.last_execution_metadata["stagehand_act_result"]["action_description"]
-        == "Logged in and reached a product listing"
-    )
-
-
-@pytest.mark.anyio
-async def test_stagehand_backend_replay_action_forces_one_provider_step():
-    provider = FakeStagehandProvider()
-    backend = StagehandAutomationBackend(
-        base_backend=FakeBaseBackend(),
-        provider=provider,
-        goal="Advance one meaningful checkout milestone.",
-        execution_mode="business_milestone",
-    )
-    state = await backend.observe_state()
-    action = (await backend.list_interactables(state))[0]
-
-    assert await backend.execute_replay_action(action) is True
-    assert provider.executed_instructions == [
-        ("Advance one meaningful checkout milestone.", 1)
-    ]
-
-
-@pytest.mark.anyio
-async def test_stagehand_backend_business_milestone_falls_back_to_act_instruction():
-    class ActOnlyProvider:
-        def __init__(self):
-            self.acted_instructions = []
-
-        async def act_instruction(self, instruction):
-            self.acted_instructions.append(instruction)
-            return StagehandActResult(success=True, message="Acted")
-
-    provider = ActOnlyProvider()
-    backend = StagehandAutomationBackend(
-        base_backend=FakeBaseBackend(),
-        provider=provider,
-        goal="Advance one meaningful checkout milestone.",
-        execution_mode="business_milestone",
-    )
-    state = await backend.observe_state()
-    actions = await backend.list_interactables(state)
-
-    assert await backend.execute(actions[0]) is True
-    assert provider.acted_instructions == ["Advance one meaningful checkout milestone."]
+def test_stagehand_backend_rejects_removed_business_milestone_mode():
+    with pytest.raises(ValueError, match="business_milestone"):
+        StagehandAutomationBackend(
+            base_backend=FakeBaseBackend(),
+            provider=FakeStagehandProvider(),
+            goal="Explore shopping capabilities.",
+            execution_mode="business_milestone",
+        )
 
 
 @pytest.mark.anyio
@@ -516,74 +445,6 @@ async def test_stagehand_backend_observe_act_does_not_append_exploration_memory(
 
 
 @pytest.mark.anyio
-async def test_stagehand_backend_business_milestone_ids_are_runtime_unique():
-    backend = StagehandAutomationBackend(
-        base_backend=FakeBaseBackend(),
-        provider=FakeStagehandProvider(),
-        goal="Advance one meaningful checkout milestone.",
-        execution_mode="business_milestone",
-    )
-    state = await backend.observe_state()
-
-    first = await backend.list_interactables(state)
-    second = await backend.list_interactables(state)
-
-    assert first[0]["semantic_id"] == "stagehand_business_milestone_001"
-    assert second[0]["semantic_id"] == "stagehand_business_milestone_002"
-
-
-@pytest.mark.anyio
-async def test_stagehand_backend_business_milestone_uses_step_specific_goal():
-    provider = FakeStagehandProvider()
-    backend = StagehandAutomationBackend(
-        base_backend=FakeBaseBackend(),
-        provider=provider,
-        goal="Fallback milestone.",
-        execution_mode="business_milestone",
-        goal_provider=lambda step_number: f"Configured step {step_number}.",
-        business_step_metadata_provider=lambda step_number: {
-            "experiment_step_id": f"step_{step_number}",
-            "expected_added_facts": [f"fact_{step_number}"],
-        },
-    )
-    state = await backend.observe_state()
-
-    first = (await backend.list_interactables(state))[0]
-    second = (await backend.list_interactables(state))[0]
-    success = await backend.execute(second)
-
-    assert success is True
-    assert first["description"] == "Configured step 1."
-    assert first["metadata"]["experiment_step_id"] == "step_1"
-    assert first["canonical_action_name"] == "step_1"
-    assert provider.executed_instructions == [("Configured step 2.", 5)]
-    assert backend.last_execution_metadata["experiment_step_id"] == "step_2"
-    assert backend.last_execution_metadata["expected_added_facts"] == ["fact_2"]
-
-
-@pytest.mark.anyio
-async def test_stagehand_business_milestone_appends_exploration_context():
-    provider = FakeStagehandProvider()
-    backend = StagehandAutomationBackend(
-        base_backend=FakeBaseBackend(),
-        provider=provider,
-        goal="Explore one useful action.",
-        execution_mode="business_milestone",
-    )
-    state = await backend.observe_state()
-    actions = await backend.list_interactables(state)
-
-    backend.set_exploration_context("Avoid repeating actions: theme_toggle")
-    success = await backend.execute(actions[0])
-
-    assert success is True
-    assert "Explore one useful action." in provider.executed_instructions[0][0]
-    assert (
-        "Avoid repeating actions: theme_toggle" in provider.executed_instructions[0][0]
-    )
-
-
-@pytest.mark.anyio
 async def test_stagehand_backend_bounds_provider_execution_time():
     class SlowProvider(FakeStagehandProvider):
         async def execute_instruction(self, instruction, *, max_steps):
@@ -594,11 +455,16 @@ async def test_stagehand_backend_bounds_provider_execution_time():
         base_backend=FakeBaseBackend(),
         provider=SlowProvider(),
         goal="Advance one useful milestone.",
-        execution_mode="business_milestone",
+        execution_mode="observed_action",
         action_timeout_seconds=0.001,
     )
     state = await backend.observe_state()
-    action = (await backend.list_interactables(state))[0]
+    action = BrowserAction(
+        action_kind="business_intent",
+        locator=None,
+        semantic_id="advance_one_useful_milestone",
+        description="Advance one useful milestone.",
+    )
 
     assert await backend.execute(action) is False
     assert backend.last_execution_error == "stagehand_action_timeout"

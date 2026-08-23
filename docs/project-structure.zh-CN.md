@@ -34,13 +34,13 @@ planner-facing 主线现在是 `SemanticPlanningGraph -> Minimal Semantic PDDL`�
 `domain.pddl` 和 `problem.pddl`。旧 Planning Graph / Phase A、Location PDDL 和其他 projector
 仍作为兼容或历史路径存在，但不再代表当前语义验收标准。
 
-当前框架并非完全无硬编码。`practice_shopping_feasibility` profile、购物车结构化事实捷径、
-CLI profile 注册和受控下单 URL 仍是显式领域/实验配置。后续优先把
-`cart_count -> cart_has_items` 等映射迁入可配置 profile；PDDL 编译器、候选池、重放和
-controller 本身不按购物动作或位置名称分支。
+当前框架并非完全无硬编码。购物车结构化事实捷径、可选的
+`ecommerce_checkout` BusinessFlowProfile 和受控下单 URL 仍是显式领域/实验配置；PDDL 编译器、
+候选池、重放和 controller 本身不按购物动作或位置名称分支。
 
-旧兼容路径仍可把 profile 传入 Visual Affordance；location-scoped active path 已改用不含
-profile 答案的最小动作依赖响应和最小动作后观察响应。旧 profile/Visual Delta 路径仍保留。
+semantic experiment profile 和 action contract 已不再是运行时路径。候选发现使用不含 profile
+答案的最小动作依赖响应；可选 BusinessFlowProfile 只在本地结构化 verifier 和 planner-facing
+投影中使用，不注入 VLM prompt。
 
 旧 upstream `explore` runtime 和旧 `WebObservedGraph` 探索栈已经不属于 active code path。
 
@@ -121,11 +121,10 @@ Stagehand 不应该决定 graph identity、planning facts 或 PDDL 语义。
 VLM affordance 结果只是候选假设。候选列表本身不等于已验证能力；只有本地验证和动作后
 观察支持的成功边，才确认为已验证转换。
 
-profile facts 位于这一层。旧兼容路径把它们作为实验认可的位置、普通能力和业务事实闭集，并把
-完整 profile context 传给 Visual Affordance 和 Visual Delta。Visual Delta 语义输出必须经过
-`validate_profile_semantic_observation` 闭集校验；候选业务事实还必须由动作后变化与本地 verifier
-确认。原始响应和拒绝原因始终保留在 raw edge trace 中。节点可使用 Visual Affordance 提供的
-技术性 state label，但 label 不决定 graph identity 或 PDDL facts。
+可选 BusinessFlowProfile 在这一层提供本地结构化事实谓词，用于 verifier 和 planner-facing
+投影；它不是 VLM 的闭集词表，也不会注入 Visual Affordance 或 Visual Delta。原始视觉响应仍
+保留在 raw edge trace 中，只有本地确认的结构化事实进入 planning state。节点可使用
+Visual Affordance 提供的技术性 state label，但 label 不决定 graph identity 或 PDDL facts。
 
 当前 location-scoped active path 的边界是：Visual Affordance 自主发现明确动作及同位置 `requires`，
 不接收具体 profile facts、动作示例、契约、预期流程或 PDDL goal；动作后观察只返回
@@ -278,14 +277,13 @@ graph artifact 的布局由 `src/ai_web_explorer/safesym_bridge/graph_artifacts.
 主要模块：
 
 - `src/ai_web_explorer/safesym_bridge/browser_runner.py`
-- `src/ai_web_explorer/grounded_web/experiment_plan.py`
 
 主要职责：
 
 - 启动 Playwright；
 - 配置 Stagehand；
 - 配置 VLM 和 embedding provider；
-- 注入 benchmark/test context；
+- 注入可选的业务 profile/test context；
 - 写出 graph、trace、screenshots、embedding、PDDL、smoke outputs。
 - generic `run_stagehand_exploration` 在每个完成动作后按 embedding、Stagehand trace、graph/evidence 的顺序写入 checkpoint，并在正常结束时写入带 `exploration_summary` 的最终 artifact；graph/evidence 是最后提交的配对标记。
 
@@ -295,16 +293,13 @@ graph artifact 的布局由 `src/ai_web_explorer/safesym_bridge/graph_artifacts.
 
 - `run_web_kobe_exploration`
 - `run_stagehand_exploration`
-- `run_ecommerce_stagehand_step`
 - `write_web_kobe_graph`
-- `ecommerce_checkout_experiment_plan`
 
 ## 当前推荐命令
 
 ```text
-web-kobe-explore
-web-kobe-stagehand-explore
-web-kobe-ecommerce-stagehand-smoke
+web-kobe-stagehand-explore      # 当前 VLM/Stagehand 开放探索主线
+web-kobe-explore                # 确定性 Playwright graph smoke
 web-kobe-domain-from-graph
 web-kobe-pddl-from-graph
 web-kobe-pddl-smoke

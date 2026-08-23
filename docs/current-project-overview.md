@@ -41,9 +41,10 @@ observe the current page
 ```
 
 PDDL goals and SafeSym plans are not fed back into candidate generation or action
-ranking, so exploration is not a fixed task script. The active minimal path does
-not pass experiment-profile context into its initial candidate scan. The older
-profile/Visual Delta route remains in the repository as a compatibility path.
+ranking, so exploration is not a fixed task script. The active path does not pass
+experiment-profile context or action contracts into candidate discovery. The
+optional `BusinessFlowProfile` is used only by the local structured fact verifier
+and planner-facing projection.
 
 ## Planning State
 
@@ -58,9 +59,10 @@ The planner-facing model separates three kinds of state:
 - **Business facts** such as `cart_has_items`, `checkout_info_complete`, and
   `order_submitted`. These may enable or constrain later actions.
 
-The legacy semantic path can still consume verified profile/structured facts;
-the minimal dependency path does not promote supporting or unrelated completion
-facts into PDDL preconditions.
+The local verifier can consume structured facts from an optional
+`BusinessFlowProfile`; there is no separate semantic experiment profile or
+action-contract runtime path. Supporting or unrelated completion facts are not
+promoted into PDDL preconditions.
 
 ## Location-scoped Deduplication and Scanning
 
@@ -91,10 +93,17 @@ continue without clearing prior exploration.
 
 ## Bounded Termination
 
-The current Practice Shopping feasibility defaults use 20 formal actions, three
-consecutive no-progress attempts, two replay attempts per frontier, and four total
-replays. Candidate retries are also bounded. These are parameterized
-`ExplorationLimits`, not website semantics.
+The live Stagehand runner uses bounded candidate retries and a formal-action cap:
+
+- the formal-action cap is experiment-specific; the latest SauceDemo run used 25;
+- each candidate may be attempted at most twice, then it is marked failed and the
+  scheduler moves to another candidate;
+- the live runner does not use a global consecutive-no-progress threshold as an
+  early stop condition;
+- replay is limited to two attempts per frontier and four total attempts;
+- exploration stops normally when all reachable candidates are exhausted.
+
+These are parameterized `ExplorationLimits`, not website semantics.
 
 ## PDDL Acceptance
 
@@ -129,6 +138,49 @@ SemanticPlanningGraph, projection reports, `domain.pddl`, `problem.pddl`, and a
 SafeSym parse/solve report. The default experiment directory is a replaceable
 `outputs/experiments/<site>/latest/`; historical runs are archived only when a
 comparison is intentionally required.
+
+## 2026-08-23 Current Execution, Replay, and Projection Status
+
+The active path now carries an execution policy with two modes:
+
+- `single_instance` executes only the first observed Stagehand action for a
+  representative single-instance candidate, preventing repeated targets such as
+  multiple add-to-cart controls from becoming repeated mutations;
+- `composite` executes all actions returned by `observe` in order. The high-level
+  action is eligible for the next outcome observation only after every required
+  atomic action succeeds; one failure marks the high-level action as failed.
+
+The policy is stored on `BrowserAction` and graph data and survives serialization,
+resume, and semantic projection. The current experiment uses only these two modes;
+batch execution is not active. The prompt describes the policy generically and does
+not encode a SauceDemo-specific workflow.
+
+The latest no-profile SauceDemo open-exploration run used GPT-4o, `observe_act`, a
+25-step cap, and two attempts per candidate. It completed 13 formal actions, made
+9 semantic-progress updates, performed no replay, and stopped with
+`current_state_exhausted` before reaching the step cap. The trace confirmed two
+observed/executed atomic actions for `enter_credentials`, one executed action out of
+six observed add-to-cart targets under `single_instance`, and three observed/executed
+atomic actions for `complete_checkout_information`.
+
+At the checkout overview, the VLM returned both `cancel_checkout` and
+`complete_checkout`; discovery-order scheduling selected cancel first, leaving the
+finish action pending. This is a scheduling/goal-priority gap, not a composite-action
+execution failure. No semantic experiment profile or action contract was enabled
+in this run, so `cart_has_items` should not be treated as an active
+`view_cart` prerequisite.
+
+Replay remains reset-and-replay of the stored semantic path, not browser-session
+snapshot restoration. A resume run made four replay attempts and all four failed
+during action replay; no replay succeeded, and the current trace does not persist the
+exact failed action ID. Replay is therefore implemented but not yet reliability-
+accepted.
+
+The same graph completed semantic projection with nine successful actions and five
+semantic locations. Failed sort/filter edges were excluded. Without an explicit goal,
+the run generated `domain.pddl` and a projection report but no `problem.pddl`; partial
+planning over the explored subgraph is possible, but the graph does not yet contain a
+complete checkout/order path.
 
 ## 2026-08-13 Live Feasibility Result
 
@@ -174,13 +226,11 @@ and the PDDL compiler has no branches for shopping-specific names.
 
 Known hardcoded areas remain:
 
-- the `practice_shopping_feasibility` vocabulary;
 - structured `cart_count` / `item_count` to `cart_has_items` rules;
 - the `cart_non_empty` state-summary marker;
-- profile registration in the CLI/registry;
 - the exact controlled PracticeAutomatedTesting URL used as the final-order
   safety boundary;
-- the separate legacy e-commerce benchmark's guided checkout steps.
+- the optional `ecommerce_checkout` BusinessFlowProfile fact vocabulary.
 
 Fictional data and exact controlled-order URLs remain experiment or safety
 configuration. A layered vocabulary may remain as terminology, but sending the
@@ -205,23 +255,25 @@ VLM-observed action-dependency loop:
   for actions confirmed successful;
 - only successful actions and successful dependency edges enter the
   planner-facing graph and PDDL;
-- the new path bypasses profile-driven targeted scans, supplement scans, and the
-  current multi-purpose Visual Delta fact schema.
+- the new path does not invoke targeted or supplement scans; those mechanisms
+  remain available for later experiments. Semantic experiment profiles and action
+  contracts are no longer runtime dependencies.
 
 This path is connected to the location-scoped runtime and has offline regression
-coverage. A fresh no-answer-hints Practice Shopping VLM run and its SafeSym/
-planner acceptance remain pending. Implementation and acceptance details are in
+coverage. A no-profile SauceDemo VLM run and semantic projection have now been
+completed; a full no-answer-hints Practice Shopping planner acceptance is not yet the
+current evidence. Implementation and acceptance details are in
 `docs/superpowers/specs/2026-08-18-location-candidate-dependency-integration-design.zh-CN.md`.
 
 ## Current Status and Next Step
 
-As of 2026-08-18, the location-scoped implementation, resumable graph and budgets,
-non-mutating replay, live Practice Shopping exploration, Minimal Semantic PDDL,
-and SafeSym solve path are established. The current phase has proven feasibility.
-The next phase should not add a second website-specific answer profile first. It
-should validate the implemented minimal candidate-dependency loop on Practice
-Shopping, then measure whether the explorer still discovers correct capabilities and
-produces causal, solvable PDDL without the answer hints.
+As of 2026-08-23, the location-scoped implementation, bounded candidate retries,
+policy-aware Stagehand execution, resumable graph, and partial semantic projection
+are established. The current phase has also demonstrated that composite actions can
+be expanded while keeping the high-level action as the outcome-observation unit.
+The remaining risks are scheduler priority for terminal actions, cross-location
+business facts, and reliable reset-and-replay diagnostics. The next experiment should
+address those gaps without adding a website-specific candidate script.
 
 ## Related Documents
 

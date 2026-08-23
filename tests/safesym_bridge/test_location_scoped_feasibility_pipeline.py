@@ -8,9 +8,7 @@ def anyio_backend():
     return "asyncio"
 
 from ai_web_explorer.grounded_web.controller import WebKobeExplorationController
-from ai_web_explorer.grounded_web.exploration_semantics import (
-    practice_shopping_feasibility_profile,
-)
+from ai_web_explorer.grounded_web.business_profile import ecommerce_checkout_profile
 from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
 from ai_web_explorer.grounded_web.frontier_replay import (
     FrontierReplayRunner,
@@ -45,20 +43,11 @@ class _FeasibilityFixtureAdapter:
             "cart_has_items": False,
             "checkout_info_complete": False,
             "payment_info_complete": False,
-            "order_submitted": False,
+            "order_completed": False,
         }
 
     async def observe_state(self) -> StateSnapshot:
         signature = dict(self._facts)
-        signature = {
-            key: value
-            for key, value in signature.items()
-            if key not in {
-                "checkout_info_complete",
-                "payment_info_complete",
-                "order_submitted",
-            }
-        }
         signature.update(
             {
                 "cart_count": 1 if self._facts["cart_has_items"] else 0,
@@ -97,7 +86,7 @@ class _FeasibilityFixtureAdapter:
         elif action_id == "complete_payment_information":
             self._facts["payment_info_complete"] = True
         elif action_id == "place_order":
-            self._facts["order_submitted"] = True
+            self._facts["order_completed"] = True
             self.location = "confirmation"
         return True
 
@@ -155,7 +144,7 @@ def _fixture_memory() -> LocationExplorationMemory:
     for fact_id in (
         "checkout_info_complete",
         "payment_info_complete",
-        "order_submitted",
+        "order_completed",
     ):
         memory.mark_targeted_scan_complete(
             "checkout",
@@ -260,7 +249,7 @@ def _visual_delta_provider(prompt: str, **kwargs) -> str:
         "add_to_cart": ["cart_has_items"],
         "complete_checkout_information": ["checkout_info_complete"],
         "complete_payment_information": ["payment_info_complete"],
-        "place_order": ["order_submitted"],
+        "place_order": ["order_completed"],
     }.get(action_id, [])
     target = "checkout" if navigation else "confirmation" if commit else payload[
         "location_context"
@@ -312,24 +301,18 @@ def _action(domain: str, name: str) -> str:
 async def test_location_scoped_pipeline_reaches_confirmation_without_ordinary_dependencies():
     adapter = _FeasibilityFixtureAdapter()
     scan_calls: list[tuple[str, str]] = []
-    profile = practice_shopping_feasibility_profile()
     fixture_provider = _fixture_provider(scan_calls)
     explorer = WebKobeExplorer(
         adapter=adapter,
         semantic_assistor=DeterministicSemanticAssistor(app=adapter.app_name),
         goal="Explore the controlled shopping fixture.",
-        business_profile=profile.to_business_flow_profile(),
+        business_profile=ecommerce_checkout_profile(),
         capture_screenshots=True,
         visual_delta_provider=fixture_provider,
         exploration_limits=ExplorationLimits(),
-        semantic_profile_context=profile.to_prompt_context(),
-        semantic_experiment_profile=profile,
         location_exploration_coordinator=None,
     )
     explorer.location_exploration_coordinator.memory = _fixture_memory()
-    explorer.location_exploration_coordinator.semantic_profile_context = (
-        profile.to_prompt_context()
-    )
     # The pre-seeded pools make this test exercise the same selection path as a
     # completed deterministic scan while the targeted scan remains provider-backed.
     explorer.visual_delta_provider = fixture_provider
@@ -361,7 +344,7 @@ async def test_location_scoped_pipeline_reaches_confirmation_without_ordinary_de
     problem = compile_minimal_semantic_problem(
         semantic,
         goal_location="confirmation",
-        goal_facts=["order_submitted"],
+        goal_facts=["order_completed"],
     ).problem
 
     assert "(products_sorted)" in domain
@@ -370,7 +353,7 @@ async def test_location_scoped_pipeline_reaches_confirmation_without_ordinary_de
     assert "(cart_has_items)" in preconditions
     assert "products_sorted" not in preconditions
     assert "(at_confirmation)" in problem
-    assert "(order_submitted)" in problem
+    assert "(order_completed)" in problem
     assert len(report.excluded_edges) == 1
     assert report.excluded_edges[0]["reason"] == "non_projectable_status"
     assert scan_calls == [

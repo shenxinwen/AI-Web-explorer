@@ -1,5 +1,4 @@
 import json
-from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -255,39 +254,13 @@ def test_main_help_lists_only_web_kobe_mainline_commands(capsys):
     assert "web-kobe-pddl-smoke" in help_output
     assert "web-kobe-safesym-smoke" in help_output
     assert "web-kobe-openai-selector-smoke" not in help_output
-    assert "web-kobe-ecommerce-stagehand-smoke" in help_output
+    assert "web-kobe-ecommerce-stagehand-smoke" not in help_output
     assert "web-kobe-saucedemo-llm-step-smoke" not in help_output
     assert "web-kobe-saucedemo-stagehand-smoke" not in help_output
     assert "capability-graph" not in help_output
     assert "explore-capability-graph" not in help_output
     assert "explore-graph" not in help_output
     assert "explore-pddl" not in help_output
-
-
-@pytest.mark.parametrize(
-    "option",
-    ["--deepseek-semantic-naming", "--semantic-naming-model"],
-)
-def test_cli_no_longer_exposes_standalone_semantic_naming_options(
-    option, monkeypatch
-):
-    async def fake_run(*args, **kwargs):
-        return Path("fake-output.json")
-
-    monkeypatch.setattr(
-        cli,
-        "run_ecommerce_stagehand_step",
-        fake_run,
-        raising=False,
-    )
-    argv = ["web-kobe-ecommerce-stagehand-smoke", option]
-    if option == "--semantic-naming-model":
-        argv.append("legacy-model")
-
-    with pytest.raises(SystemExit) as error:
-        main(argv)
-
-    assert error.value.code == 2
 
 
 @pytest.mark.parametrize("legacy_command", ["graph", "pddl", "capability-graph"])
@@ -813,259 +786,6 @@ def test_main_web_kobe_safesym_smoke_writes_report(monkeypatch, tmp_path):
     assert FakeResult.report_path.exists()
 
 
-def test_main_web_kobe_ecommerce_stagehand_smoke_wires_benchmark_runner(
-    monkeypatch,
-    tmp_path,
-):
-    output = tmp_path / "graph.json"
-    trace = tmp_path / "trace.json"
-    calls = []
-
-    async def fake_run_ecommerce_stagehand_step(
-        output_path,
-        *,
-        start_url,
-        app_name="ecommerce",
-        stagehand_trace_path=None,
-        headless=True,
-        model=None,
-        steps=8,
-        screenshot_dir=None,
-        use_openai_visual_delta=False,
-        visual_delta_model=None,
-        action_outcome_model=None,
-        allow_final_order=False,
-        benchmark_context=None,
-    ):
-        calls.append(
-            (
-                output_path,
-                start_url,
-                app_name,
-                stagehand_trace_path,
-                headless,
-                model,
-                steps,
-                screenshot_dir,
-                use_openai_visual_delta,
-                visual_delta_model,
-                action_outcome_model,
-                allow_final_order,
-                benchmark_context.site_label,
-                benchmark_context.test_credentials,
-                benchmark_context.checkout_data,
-            )
-        )
-        output_path.write_text(
-            json.dumps({"meta": {"app": app_name}}),
-            encoding="utf-8",
-        )
-        return output_path
-
-    monkeypatch.setattr(
-        cli,
-        "run_ecommerce_stagehand_step",
-        fake_run_ecommerce_stagehand_step,
-        raising=False,
-    )
-
-    exit_code = main(
-        [
-            "web-kobe-ecommerce-stagehand-smoke",
-            "--benchmark",
-            "saucedemo",
-            "--output",
-            str(output),
-            "--stagehand-trace",
-            str(trace),
-            "--steps",
-            "6",
-            "--model",
-            "deepseek/test",
-            "--test-username",
-            "fixture_user",
-            "--test-password",
-            "fixture_password",
-            "--checkout-first-name",
-            "Ada",
-            "--checkout-last-name",
-            "Lovelace",
-            "--checkout-postal-code",
-            "42424",
-            "--allow-final-order",
-            "--action-outcome-model",
-            "gpt-4o",
-        ]
-    )
-
-    assert exit_code == 0
-    assert calls == [
-        (
-            output,
-            "https://www.saucedemo.com/",
-            "saucedemo",
-            trace,
-            True,
-            "deepseek/test",
-            6,
-            Path("outputs/latest/screenshots"),
-            False,
-            None,
-            "gpt-4o",
-            True,
-            "public demo e-commerce site",
-            {"username": "fixture_user", "password": "fixture_password"},
-            {
-                "first_name": "Ada",
-                "last_name": "Lovelace",
-                "postal_code": "42424",
-            },
-        )
-    ]
-
-
-def test_main_web_kobe_ecommerce_stagehand_smoke_supports_custom_benchmark(
-    monkeypatch,
-    tmp_path,
-):
-    output = tmp_path / "graph.json"
-    trace = tmp_path / "trace.json"
-    calls = []
-
-    async def fake_run_ecommerce_stagehand_step(
-        output_path,
-        *,
-        start_url,
-        app_name="ecommerce",
-        stagehand_trace_path=None,
-        benchmark_context=None,
-        **kwargs,
-    ):
-        calls.append(
-            (
-                output_path,
-                start_url,
-                app_name,
-                stagehand_trace_path,
-                benchmark_context.site_label,
-                benchmark_context.test_credentials,
-                benchmark_context.checkout_data,
-            )
-        )
-        output_path.write_text("{}", encoding="utf-8")
-        return output_path
-
-    monkeypatch.setattr(
-        cli,
-        "run_ecommerce_stagehand_step",
-        fake_run_ecommerce_stagehand_step,
-        raising=False,
-    )
-
-    exit_code = main(
-        [
-            "web-kobe-ecommerce-stagehand-smoke",
-            "--benchmark",
-            "custom",
-            "--start-url",
-            "https://example.test/shop",
-            "--app-name",
-            "example_shop",
-            "--output",
-            str(output),
-            "--stagehand-trace",
-            str(trace),
-        ]
-    )
-
-    assert exit_code == 0
-    assert calls == [
-        (
-            output,
-            "https://example.test/shop",
-            "example_shop",
-            trace,
-            "public demo e-commerce site",
-            {},
-            {
-                "first_name": "Test",
-                "last_name": "User",
-                "postal_code": "12345",
-            },
-        )
-    ]
-
-
-def test_main_web_kobe_ecommerce_stagehand_smoke_requires_custom_start_url():
-    assert (
-        main(
-            [
-                "web-kobe-ecommerce-stagehand-smoke",
-                "--benchmark",
-                "custom",
-            ]
-        )
-        == 1
-    )
-
-
-def test_main_web_kobe_ecommerce_stagehand_smoke_cleans_latest_output_dir(
-    monkeypatch,
-    tmp_path,
-):
-    output_dir = tmp_path / "latest"
-    output_dir.mkdir()
-    stale_file = output_dir / "stale.json"
-    stale_file.write_text("old", encoding="utf-8")
-    output = output_dir / "graph.json"
-    trace = output_dir / "trace.json"
-    screenshots = output_dir / "screenshots"
-    calls = []
-
-    async def fake_run_ecommerce_stagehand_step(
-        output_path,
-        *,
-        start_url,
-        app_name="ecommerce",
-        stagehand_trace_path=None,
-        screenshot_dir=None,
-        **kwargs,
-    ):
-        calls.append((output_path, stagehand_trace_path, screenshot_dir))
-        assert not stale_file.exists()
-        output_path.write_text("{}", encoding="utf-8")
-        stagehand_trace_path.write_text("[]", encoding="utf-8")
-        screenshot_dir.mkdir(parents=True, exist_ok=True)
-        return output_path
-
-    monkeypatch.setattr(
-        cli,
-        "run_ecommerce_stagehand_step",
-        fake_run_ecommerce_stagehand_step,
-        raising=False,
-    )
-
-    exit_code = main(
-        [
-            "web-kobe-ecommerce-stagehand-smoke",
-            "--output",
-            str(output),
-            "--stagehand-trace",
-            str(trace),
-            "--screenshot-dir",
-            str(screenshots),
-            "--test-username",
-            "fixture_user",
-            "--test-password",
-            "fixture_password",
-            "--clean-output-dir",
-        ]
-    )
-
-    assert exit_code == 0
-    assert calls == [(output, trace, screenshots)]
-
-
 def test_clean_output_dir_requires_shared_parent(tmp_path):
     output = tmp_path / "latest" / "graph.json"
     trace = tmp_path / "other" / "trace.json"
@@ -1099,10 +819,9 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
         use_openai_visual_delta=False,
         visual_delta_model=None,
         action_outcome_model=None,
-            stagehand_execution_mode="business_milestone",
+        stagehand_execution_mode="observed_action",
             max_candidates=5,
             limits=None,
-            semantic_experiment_profile=None,
             frontier_replay=False,
         resume_graph=None,
         resume_policy=None,
@@ -1320,8 +1039,6 @@ def test_main_stagehand_explore_accepts_location_feasibility_parameters(
                 "https://practiceautomatedtesting.com/shopping",
                 "--output",
                 str(tmp_path / "graph.json"),
-                "--semantic-experiment-profile",
-                "practice_shopping_feasibility",
                 "--max-exploration-steps",
                 "20",
                 "--max-consecutive-no-progress",
@@ -1341,8 +1058,6 @@ def test_main_stagehand_explore_accepts_location_feasibility_parameters(
                 "--stagehand-action-timeout-seconds",
                 "240",
                 "--allow-test-site-final-order",
-                "--test-data-seed",
-                "practice-v1",
             ]
         )
         == 0
@@ -1352,9 +1067,6 @@ def test_main_stagehand_explore_accepts_location_feasibility_parameters(
 
     assert captured["limits"] == ExplorationLimits()
     assert captured["allow_test_site_final_order"] is True
-    assert captured["semantic_experiment_profile"] == (
-        "practice_shopping_feasibility"
-    )
     assert captured["vlm_request_timeout_seconds"] == 180
     assert captured["stagehand_action_timeout_seconds"] == 240
 
@@ -1400,40 +1112,12 @@ def test_main_stagehand_explore_rejects_final_order_for_wrong_url(
                 "https://fixture.test/shop",
                 "--output",
                 str(tmp_path / "graph.json"),
-                "--semantic-experiment-profile",
-                "practice_shopping_feasibility",
                 "--allow-test-site-final-order",
             ]
         )
         == 1
     )
     assert "controlled test URL" in capsys.readouterr().out
-
-
-def test_main_stagehand_explore_rejects_final_order_without_profile(
-    monkeypatch, tmp_path, capsys
-):
-    monkeypatch.setattr(
-        cli,
-        "run_stagehand_exploration",
-        lambda *args, **kwargs: pytest.fail("runner should not be called"),
-        raising=False,
-    )
-
-    assert (
-        main(
-            [
-                "web-kobe-stagehand-explore",
-                "--url",
-                "https://practiceautomatedtesting.com/shopping",
-                "--output",
-                str(tmp_path / "graph.json"),
-                "--allow-test-site-final-order",
-            ]
-        )
-        == 1
-    )
-    assert "semantic experiment profile" in capsys.readouterr().out
 
 
 def test_main_web_kobe_stagehand_explore_passes_explicit_resume_defaults(
@@ -1897,15 +1581,3 @@ def test_main_web_kobe_phase_a_failed_problem_query_removes_stale_problem(
     )
     assert not (output_dir / "problem.pddl").exists()
     assert marker.read_text(encoding="utf-8") == "keep"
-def test_saucedemo_benchmark_requires_explicit_credentials():
-    args = SimpleNamespace(
-        benchmark="saucedemo",
-        test_username=None,
-        test_password=None,
-        checkout_first_name="Test",
-        checkout_last_name="User",
-        checkout_postal_code="12345",
-    )
-
-    with pytest.raises(ValueError, match="explicit test credentials"):
-        cli._build_ecommerce_benchmark_context(args)

@@ -6,7 +6,7 @@ from ai_web_explorer.grounded_web.automation_backend import (
     AutomationBackend,
     InteractableRecord,
 )
-from ai_web_explorer.safesym_bridge.web_kobe_playwright_adapter import (
+from ai_web_explorer.grounded_web.playwright_backend import (
     WebKobePlaywrightAdapter,
 )
 
