@@ -1013,11 +1013,10 @@ async def run_stagehand_exploration(
                 replay_metric_baseline = bootstrap_metrics
 
             controller_kwargs = {
-                "max_consecutive_unproductive_steps": (
-                    limits.max_consecutive_no_progress
-                    if location_scoped and limits is not None
-                    else None
-                ),
+                # Candidate retries and location exhaustion now bound the
+                # location-scoped path; a global no-progress counter could
+                # stop it before other candidates or replay frontiers run.
+                "max_consecutive_unproductive_steps": None,
                 "step_checkpoint": checkpoint,
             }
             if location_scoped and limits is not None:

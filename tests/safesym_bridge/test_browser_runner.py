@@ -1228,6 +1228,9 @@ async def test_run_stagehand_exploration_wires_location_feasibility_profile(
     class FakeController:
         def __init__(self, explorer, **kwargs):
             captured["controller_limits"] = kwargs["limits"]
+            captured["max_consecutive_unproductive_steps"] = kwargs[
+                "max_consecutive_unproductive_steps"
+            ]
             self.checkpoint = kwargs["step_checkpoint"]
 
         async def run(self, *, max_steps):
@@ -1274,6 +1277,7 @@ async def test_run_stagehand_exploration_wires_location_feasibility_profile(
 
     assert captured["max_steps"] == 20
     assert captured["controller_limits"] == limits
+    assert captured["max_consecutive_unproductive_steps"] is None
     assert captured["explorer_limits"] == limits
     assert captured["stagehand_timeout"] == 240
     assert "@example.test" in captured["goal"]
