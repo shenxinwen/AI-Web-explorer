@@ -78,6 +78,7 @@ class BrowserAction:
     canonical_action_name: str | None = None
     naming_provenance: dict[str, Any] | None = None
     supporting_facts: list[str] = field(default_factory=list)
+    execution_policy: str = "single_instance"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -94,6 +95,7 @@ class BrowserAction:
                 else None
             ),
             "supporting_facts": list(self.supporting_facts),
+            "execution_policy": self.execution_policy,
         }
 
 

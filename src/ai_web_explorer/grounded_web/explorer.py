@@ -286,6 +286,7 @@ def _business_action_from_affordance(affordance: BusinessAffordance) -> BrowserA
             "confidence": affordance.confidence,
         },
         supporting_facts=list(affordance.supporting_facts),
+        execution_policy=affordance.execution_policy,
     )
 
 

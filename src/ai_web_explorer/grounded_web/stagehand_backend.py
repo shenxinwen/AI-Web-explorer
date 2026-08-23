@@ -28,6 +28,17 @@ def _agent_business_instruction(semantic_id: str, atomic_instruction: str) -> st
     )
 
 
+def _execution_policy(action: BrowserAction | dict[str, Any]) -> str:
+    value = (
+        action.execution_policy
+        if isinstance(action, BrowserAction)
+        else action.get("execution_policy")
+    )
+    return "composite" if str(value or "").strip().lower() == "composite" else (
+        "single_instance"
+    )
+
+
 class StagehandAutomationBackend:
     app_name: str
 
@@ -188,6 +199,7 @@ class StagehandAutomationBackend:
                 if isinstance(action, BrowserAction)
                 else str(action.get("description") or semantic_id)
             )
+            execution_policy = _execution_policy(action)
             if self.execution_mode != "observe_act":
                 instruction = _agent_business_instruction(
                     semantic_id,
@@ -195,7 +207,11 @@ class StagehandAutomationBackend:
                 )
             return await self._execute_business_intent(
                 instruction or semantic_id,
-                {"business_action_id": semantic_id},
+                {
+                    "business_action_id": semantic_id,
+                    "execution_policy": execution_policy,
+                },
+                execution_policy=execution_policy,
             )
 
         self.last_execution_error = "stagehand_business_intent_required"
@@ -221,11 +237,14 @@ class StagehandAutomationBackend:
         self,
         instruction: str,
         step_metadata: dict[str, Any],
+        *,
+        execution_policy: str = "single_instance",
     ) -> bool:
         return await self._execute_instruction(
             instruction,
             execution_mode="business_intent",
             step_metadata=step_metadata,
+            execution_policy=execution_policy,
         )
 
     async def _execute_business_milestone(
@@ -237,6 +256,7 @@ class StagehandAutomationBackend:
             goal,
             execution_mode="business_milestone",
             step_metadata=step_metadata,
+            execution_policy="single_instance",
         )
 
     async def _execute_instruction(
@@ -245,6 +265,7 @@ class StagehandAutomationBackend:
         *,
         execution_mode: str,
         step_metadata: dict[str, Any],
+        execution_policy: str = "single_instance",
     ) -> bool:
         if (
             self.execution_mode != "observe_act"
@@ -260,8 +281,13 @@ class StagehandAutomationBackend:
                     actions = await self.provider.observe_action(instruction)
                     if not actions:
                         raise ValueError("stagehand_observe_returned_no_actions")
+                    actions_to_execute = (
+                        actions
+                        if execution_policy == "composite"
+                        else actions[:1]
+                    )
                     results: list[StagehandActResult] = []
-                    for action in actions:
+                    for action in actions_to_execute:
                         result = await self.provider.act_action(action)
                         results.append(result)
                         if not result.success:
@@ -294,7 +320,9 @@ class StagehandAutomationBackend:
                                         **dict(result.raw),
                                     },
                                 }
-                                for action, result in zip(actions, results)
+                                for action, result in zip(
+                                    actions_to_execute, results
+                                )
                             ]
                         },
                     )
@@ -373,6 +401,7 @@ class StagehandAutomationBackend:
         self.last_execution_metadata["stagehand_execution_mode"] = (
             trace_execution_mode
         )
+        self.last_execution_metadata["execution_policy"] = execution_policy
         self.last_execution_metadata.update(step_metadata)
         self.last_execution_error = None if result.success else result.message
         return result.success

@@ -428,6 +428,7 @@ async def test_stagehand_backend_observe_act_executes_all_observed_actions_in_or
             semantic_id="enter_credentials",
             canonical_action_name="enter_credentials",
             description="Fill in the username and password fields.",
+            execution_policy="composite",
         )
     )
 
@@ -435,6 +436,49 @@ async def test_stagehand_backend_observe_act_executes_all_observed_actions_in_or
     assert [action.description for action in provider.acted_actions] == [
         "Username input",
         "Password input",
+    ]
+
+
+@pytest.mark.anyio
+async def test_stagehand_backend_observe_act_executes_only_first_single_instance_action():
+    class MultiActionProvider(FakeStagehandProvider):
+        async def observe_action(self, instruction):
+            self.observed_instructions.append(instruction)
+            return [
+                StagehandObservedAction(
+                    description="First matching control",
+                    selector="#first",
+                    method="click",
+                ),
+                StagehandObservedAction(
+                    description="Second matching control",
+                    selector="#second",
+                    method="click",
+                ),
+            ]
+
+    provider = MultiActionProvider()
+    backend = StagehandAutomationBackend(
+        base_backend=FakeBaseBackend(),
+        provider=provider,
+        goal="Explore visible functionality.",
+        execution_mode="observe_act",
+    )
+
+    success = await backend.execute(
+        BrowserAction(
+            action_kind="business_intent",
+            locator=None,
+            semantic_id="add_to_cart",
+            canonical_action_name="add_to_cart",
+            description="Add one visible item to the cart.",
+            execution_policy="single_instance",
+        )
+    )
+
+    assert success is True
+    assert [action.description for action in provider.acted_actions] == [
+        "First matching control"
     ]
 
 

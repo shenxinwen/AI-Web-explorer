@@ -2168,11 +2168,13 @@ def test_business_action_snapshots_supporting_facts_without_expected_effect_text
             action_name="search_items",
             label="Search",
             target_hint="search input",
+            execution_policy="composite",
             supporting_facts=["search_input_visible"],
         )
     )
 
     assert action.supporting_facts == ["search_input_visible"]
+    assert action.execution_policy == "composite"
     assert "search input" in action.description
     assert "Expected visible change:" not in action.description
 

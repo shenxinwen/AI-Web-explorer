@@ -161,6 +161,7 @@ def _action_from_dict(data: dict[str, Any]) -> BrowserAction:
             for fact in supporting_facts
             if str(fact).strip()
         ],
+        execution_policy=str(data.get("execution_policy") or "single_instance"),
     )
 
 
