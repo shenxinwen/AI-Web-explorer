@@ -108,6 +108,7 @@ def test_initial_scan_parses_minimal_action_dependencies_without_planning_inputs
                     "action_id": "stable_snake_case_action",
                     "description": "one precise visible semantic operation",
                     "target": "visible target",
+                    "execution_policy": "single_instance | composite",
                     "requires": ["other_action_id"],
                 }
             ]
@@ -184,6 +185,9 @@ def test_initial_prompt_contains_validated_domain_neutral_few_shots():
         "few_shot_examples",
     }
     assert set(payload["output_schema"]) == {"location_id", "actions"}
+    assert payload["output_schema"]["actions"][0]["execution_policy"] == (
+        "single_instance | composite"
+    )
     assert "active surface" in payload["instruction"]
     assert "item counts" in payload["instruction"]
     assert len(payload["few_shot_examples"]) == 5
@@ -192,6 +196,12 @@ def test_initial_prompt_contains_validated_domain_neutral_few_shots():
     assert "independently" in payload["instruction"]
     assert "grouping is mandatory" in payload["instruction"].lower()
     assert "execution parameter" in payload["instruction"].lower()
+    assert "exactly one instance" in payload["instruction"].lower()
+    assert "batch" not in payload["instruction"].lower()
+    assert "execution_policy" in payload["instruction"]
+    assert "single_instance" in payload["instruction"]
+    assert "composite" in payload["instruction"]
+    assert "distinct atomic steps" in payload["instruction"]
     assert "selectable value" in payload["instruction"].lower()
     assert "result subset" in payload["instruction"].lower()
     assert "sort field or direction" in payload["instruction"].lower()
@@ -228,7 +238,49 @@ def test_initial_prompt_contains_validated_domain_neutral_few_shots():
         "sort_newest",
     ):
         assert token in examples
+    for token in (
+        "Add to cart",
+        "shopping cart",
+        "enter_credentials",
+        "Username and Password fields",
+    ):
+        assert token not in examples
+    for example in payload["few_shot_examples"]:
+        action_items = example.get("actions") or example.get("correct_actions") or []
+        for item in action_items:
+            if isinstance(item, dict):
+                assert item["execution_policy"] in {
+                    "single_instance",
+                    "composite",
+                }
     assert result.trace.status == "summarized"
+
+
+def test_initial_scan_parses_execution_policy_into_affordance():
+    request = VisualAffordanceRequest(
+        goal="Explore visible business capabilities.",
+        current_screenshot_path="current.png",
+    )
+
+    def provider(prompt, *, current_screenshot_path):
+        return json.dumps(
+            {
+                "actions": [
+                    {
+                        "action_id": "enter_credentials",
+                        "description": "Fill in the username and password fields.",
+                        "target": "Username and Password fields",
+                        "execution_policy": "composite",
+                        "requires": [],
+                    }
+                ]
+            }
+        )
+
+    result = summarize_visual_affordances(request, provider=provider)
+
+    assert result.trace.status == "summarized"
+    assert result.business_affordances[0].execution_policy == "composite"
 
 
 @pytest.mark.parametrize(
@@ -284,6 +336,7 @@ def test_visual_affordance_prompt_prioritizes_breadth_without_external_task_goal
             "action_id",
             "description",
             "target",
+            "execution_policy",
             "requires",
         }
 

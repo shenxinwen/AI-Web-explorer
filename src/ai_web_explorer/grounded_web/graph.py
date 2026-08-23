@@ -119,6 +119,7 @@ class BusinessAffordance:
     label: str | None = None
     relevance_hint: str = "unknown"
     target_hint: str | None = None
+    execution_policy: str = "single_instance"
     source: str = "vlm"
     confidence: float | None = None
     supporting_facts: list[str] = field(default_factory=list)
@@ -129,6 +130,7 @@ class BusinessAffordance:
             "label": self.label,
             "relevance_hint": self.relevance_hint,
             "target_hint": self.target_hint,
+            "execution_policy": self.execution_policy,
             "source": self.source,
             "confidence": self.confidence,
             "supporting_facts": list(self.supporting_facts),

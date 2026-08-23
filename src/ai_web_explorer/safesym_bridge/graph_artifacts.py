@@ -55,6 +55,7 @@ def _compact_business_affordance(affordance: dict[str, Any]) -> dict[str, Any]:
         "label",
         "relevance_hint",
         "target_hint",
+        "execution_policy",
         "source",
         "confidence",
         "supporting_facts",

@@ -205,9 +205,10 @@ def test_web_kobe_graph_serializes_node_edge_and_evidence():
         {
             "action_name": "submit_login_form",
             "label": None,
-            "relevance_hint": "core",
-            "target_hint": "button labeled Login",
-            "source": "vlm",
+                "relevance_hint": "core",
+                "target_hint": "button labeled Login",
+                "execution_policy": "single_instance",
+                "source": "vlm",
             "confidence": 0.9,
             "supporting_facts": ["login_form_visible"],
         }

@@ -102,6 +102,7 @@ def _business_affordance_from_dict(data: dict[str, Any]) -> BusinessAffordance:
         label=data.get("label"),
         relevance_hint=str(data.get("relevance_hint", "unknown")),
         target_hint=data.get("target_hint"),
+        execution_policy=str(data.get("execution_policy", "single_instance")),
         source=str(data.get("source", "json")),
         confidence=confidence,
         supporting_facts=[
