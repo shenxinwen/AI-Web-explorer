@@ -12,6 +12,7 @@ from ai_web_explorer.grounded_web.explorer import (
     _semantic_location_anchor,
     _business_action_from_affordance,
 )
+from ai_web_explorer.grounded_web.frontier_replay import FrontierReplayRunner
 from ai_web_explorer.grounded_web.graph import (
     BusinessAffordance,
     BrowserAction,
@@ -539,6 +540,147 @@ async def test_real_location_change_same_page_type_uses_one_new_location_anchor(
     await explorer.explore_one_step()
     assert adapter.executed[1].semantic_id == "target_location_action"
     assert candidate_locations == ["checkout", target_location]
+
+
+class ReplayHandoffUrlAdapter:
+    app_name = "replay_handoff_fixture"
+
+    def __init__(self):
+        self.executed = []
+        self.states = [
+            StateSnapshot(
+                page_id="cart",
+                url="https://example.test/cart.html",
+                title="Cart",
+                signature={"surface": "cart"},
+            ),
+            StateSnapshot(
+                page_id="listing_changed",
+                url="https://example.test/inventory.html?sort=price",
+                title="Products",
+                signature={"surface": "filtered_listing"},
+            ),
+        ]
+
+    async def reset_to(self, url):
+        return True
+
+    async def observe_state(self):
+        return self.states[min(len(self.executed), 1)]
+
+    async def list_interactables(self, state):
+        return []
+
+    async def execute(self, action):
+        self.executed.append(action)
+        return True
+
+    async def capture_screenshot(self, label):
+        return f"{label}.png"
+
+
+@pytest.mark.anyio
+async def test_replay_handoff_reuses_unique_url_location_without_rescanning():
+    adapter = ReplayHandoffUrlAdapter()
+    memory = LocationExplorationMemory()
+    memory.merge_scan(
+        "cart_page",
+        [BusinessAffordance("continue_shopping")],
+    )
+    memory.merge_scan(
+        "product_catalog",
+        [BusinessAffordance("view_cart")],
+    )
+    memory.pool_for("product_catalog").candidates["view_cart"].status = "success"
+    coordinator = LocationExplorationCoordinator(memory=memory)
+    scan_calls = []
+
+    def candidate_provider(prompt, **kwargs):
+        scan_calls.append(json.loads(prompt))
+        return json.dumps(
+            {
+                "location_id": "product_listing_page",
+                "actions": [
+                    {
+                        "action_id": "view_cart",
+                        "description": "Open the cart.",
+                        "target": "Cart button",
+                        "requires": [],
+                    }
+                ],
+            }
+        )
+
+    explorer = WebKobeExplorer(
+        adapter=adapter,
+        semantic_assistor=DeterministicSemanticAssistor(app=adapter.app_name),
+        business_profile=None,
+        capture_screenshots=True,
+        visual_delta_provider=candidate_provider,
+        action_outcome_provider=lambda prompt, **kwargs: json.dumps(
+            {
+                "outcome": "success",
+                "location_change": True,
+                "evidence": ["The cart returned to the product listing."],
+            }
+        ),
+        location_exploration_coordinator=coordinator,
+    )
+    login = replace(
+        _selection_node("login"),
+        semantic_location_hint="login_form",
+    )
+    cart = replace(
+        _selection_node(
+            "cart",
+            business_affordances=[BusinessAffordance("continue_shopping")],
+        ),
+        page_frame=replace(
+            _selection_node("cart").page_frame,
+            url="https://example.test/cart.html",
+            url_pattern="https://example.test/cart.html",
+        ),
+        semantic_location_hint="cart_page",
+    )
+    product = replace(
+        _selection_node(
+            "product_old",
+            business_affordances=[BusinessAffordance("view_cart")],
+        ),
+        page_frame=replace(
+            _selection_node("product_old").page_frame,
+            url="https://example.test/inventory.html",
+            url_pattern="https://example.test/inventory.html",
+        ),
+        semantic_location_hint="product_catalog",
+    )
+    graph = WebKobeGraph(
+        app=adapter.app_name,
+        start_node_id="login",
+        total_steps_completed=0,
+        nodes=[login, cart, product],
+        edges=[],
+    )
+    memory.sync_graph_meta(graph)
+    explorer.restore_graph(graph)
+    target = type(
+        "Target",
+        (),
+        {"node_id": "cart", "path": (), "semantic_location": "cart_page"},
+    )()
+
+    replay_result = await FrontierReplayRunner(explorer).replay(
+        target,
+        start_url="https://example.test/",
+    )
+    result = await explorer.explore_one_step()
+
+    assert replay_result.success is True
+    assert adapter.executed[0].semantic_id == "continue_shopping"
+    assert scan_calls == []
+    assert "product_listing_page" not in memory.locations
+    edge = result.execution_events[-1]
+    assert edge.semantic_observation.target_location == "product_catalog"
 
 
 class OutcomeTargetChangeAdapter:

@@ -218,7 +218,10 @@ def test_build_graph_artifact_payload_moves_verbose_evidence_out_of_graph():
     assert "observed_delta" not in edge
     assert "metadata" not in edge["execution_trace"]
     assert "instruction" not in edge
-    assert "description" not in edge["action"]
+    assert edge["action"]["description"] == (
+        "A verbose action description duplicated by the affordance."
+    )
+    assert edge["action"]["execution_policy"] == "single_instance"
     assert (
         edge["evidence_ref"]
         == "edge-evidence:product_list__search_items__search_results"
@@ -227,6 +230,23 @@ def test_build_graph_artifact_payload_moves_verbose_evidence_out_of_graph():
     evidence = payload.evidence_sidecar["edges"][edge["evidence_ref"]]
     assert evidence["observed_delta"]
     assert evidence["execution_trace"]["metadata"]["visual_delta_trace"]
+
+
+def test_compact_payload_preserves_action_fields_required_for_replay():
+    graph = _verbose_graph_fixture()
+    graph.edges[0] = replace(
+        graph.edges[0],
+        action=replace(
+            graph.edges[0].action,
+            description="Fill the username and password fields.",
+            execution_policy="composite",
+        ),
+    )
+
+    action = build_graph_artifact_payload(graph).compact_graph["edges"][0]["action"]
+
+    assert action["description"] == "Fill the username and password fields."
+    assert action["execution_policy"] == "composite"
 
 
 def test_compact_payload_omits_empty_values_and_resolves_every_reference():

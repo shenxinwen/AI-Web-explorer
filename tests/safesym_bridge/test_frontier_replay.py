@@ -7,6 +7,7 @@ from ai_web_explorer.grounded_web.explorer import WebKobeExplorer
 from ai_web_explorer.grounded_web.frontier_replay import (
     FrontierReplayRunner,
     ReplayStep,
+    reachable_frontier_for_node,
     select_frontier,
 )
 from ai_web_explorer.grounded_web.graph import (
@@ -19,6 +20,7 @@ from ai_web_explorer.grounded_web.graph import (
 from ai_web_explorer.grounded_web.business_profile import PlanningState
 from ai_web_explorer.grounded_web.location_exploration import (
     LOCATION_EXPLORATION_META_KEY,
+    LocationExplorationMemory,
 )
 from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.grounded_web.semantic_assistor import DeterministicSemanticAssistor
@@ -97,6 +99,112 @@ def test_select_frontier_uses_shortest_reachable_path_deterministically():
     assert target.untried_action_ids == ("inspect_b",)
 
 
+def test_select_frontier_replay_path_includes_completed_same_location_requirements():
+    login = replace(
+        _node("login", "enter_credentials", "submit_login"),
+        semantic_location_hint="login_form",
+    )
+    login_observation = replace(
+        _node("login_observation"),
+        semantic_location_hint="login_form",
+    )
+    product = replace(
+        _node("product", "inspect_product"),
+        semantic_location_hint="product_catalog",
+    )
+    graph = WebKobeGraph(
+        app="fixture",
+        start_node_id="login",
+        total_steps_completed=2,
+        nodes=[login, login_observation, product],
+        edges=[
+            _edge("login", "login_observation", "enter_credentials"),
+            # The semantic-location anchor makes the navigation edge start at
+            # the original login node, so raw BFS alone sees a false shortcut.
+            _edge("login", "product", "submit_login"),
+        ],
+    )
+    memory = LocationExplorationMemory()
+    memory.merge_scan(
+        "login_form",
+        [
+            BusinessAffordance(
+                "enter_credentials",
+                label="Fill in the username and password fields.",
+                target_hint="Username and Password fields",
+                execution_policy="composite",
+            ),
+            BusinessAffordance("submit_login"),
+        ],
+        requires_by_action_id={"submit_login": ["enter_credentials"]},
+    )
+    memory.pool_for("login_form").candidates["enter_credentials"].status = "success"
+    memory.pool_for("login_form").candidates["submit_login"].status = "success"
+    memory.merge_scan(
+        "product_catalog",
+        [BusinessAffordance("inspect_product")],
+    )
+    memory.sync_graph_meta(graph)
+
+    target = select_frontier(graph)
+
+    assert target is not None
+    assert target.node_id == "product"
+    assert [step.edge.action.semantic_id for step in target.path] == [
+        "enter_credentials",
+        "submit_login",
+    ]
+    assert target.path[0].edge.action.description == (
+        "Fill in the username and password fields. "
+        "Target: Username and Password fields."
+    )
+    assert target.path[0].edge.action.execution_policy == "composite"
+
+
+def test_select_frontier_replay_path_omits_same_location_non_requirement():
+    login = replace(_node("login"), semantic_location_hint="login_form")
+    product = replace(
+        _node("product"), semantic_location_hint="product_catalog"
+    )
+    product_after_add = replace(
+        _node("product_after_add"), semantic_location_hint="product_catalog"
+    )
+    cart = replace(
+        _node("cart", "continue_shopping"), semantic_location_hint="cart_page"
+    )
+    graph = WebKobeGraph(
+        app="fixture",
+        start_node_id="login",
+        total_steps_completed=3,
+        nodes=[login, product, product_after_add, cart],
+        edges=[
+            _edge("login", "product", "submit_login"),
+            _edge("product", "product_after_add", "add_to_cart"),
+            _edge("product_after_add", "cart", "view_cart"),
+        ],
+    )
+    memory = LocationExplorationMemory()
+    memory.merge_scan("login_form", [BusinessAffordance("submit_login")])
+    memory.pool_for("login_form").candidates["submit_login"].status = "success"
+    memory.merge_scan(
+        "product_catalog",
+        [BusinessAffordance("add_to_cart"), BusinessAffordance("view_cart")],
+    )
+    memory.pool_for("product_catalog").candidates["add_to_cart"].status = "success"
+    memory.pool_for("product_catalog").candidates["view_cart"].status = "success"
+    memory.merge_scan("cart_page", [BusinessAffordance("continue_shopping")])
+    memory.sync_graph_meta(graph)
+
+    target = select_frontier(graph)
+
+    assert target is not None
+    assert target.node_id == "cart"
+    assert [step.edge.action.semantic_id for step in target.path] == [
+        "submit_login",
+        "view_cart",
+    ]
+
+
 def test_select_frontier_required_facts_use_verified_target_planning_state_only():
     target_node = replace(
         _node("target", "inspect_target"),
@@ -165,6 +273,37 @@ def test_select_frontier_returns_none_when_all_candidates_are_exhausted():
     )
 
     assert select_frontier(graph) is None
+
+
+def test_reachable_resume_frontier_respects_terminal_location_candidate_pool():
+    target = replace(
+        _node("product", "sort_products"),
+        semantic_location_hint="product_catalog",
+    )
+    graph = WebKobeGraph(
+        app="fixture",
+        start_node_id="start",
+        total_steps_completed=1,
+        nodes=[_node("start", "open_product"), target],
+        edges=[_edge("start", "product", "open_product")],
+    )
+    memory = LocationExplorationMemory()
+    memory.merge_scan(
+        "product_catalog",
+        [BusinessAffordance("sort_products")],
+    )
+    record = memory.pool_for("product_catalog").candidates["sort_products"]
+    record.status = "failed_retry_exhausted"
+    record.attempts = memory.limits.max_action_attempts_per_candidate
+    memory.sync_graph_meta(graph)
+
+    result = reachable_frontier_for_node(
+        graph,
+        "product",
+        action_eligible=lambda node_id, action_id: True,
+    )
+
+    assert result is None
 
 
 def test_select_frontier_does_not_select_start_by_default():
@@ -316,6 +455,8 @@ def _replay_explorer(adapter):
     explorer.manager.identify_or_add_node(_replay_node("target", "target"))
     explorer._start_node_id = "start"
     explorer._current_node_id = "start"
+    # Keep focused coverage of the optional legacy checkpoint validator.
+    explorer.replay_checkpoint_validation_enabled = True
     return explorer
 
 
@@ -409,7 +550,7 @@ async def test_frontier_replay_does_not_require_intermediate_raw_nodes_to_match(
 
 
 @pytest.mark.anyio
-async def test_frontier_replay_checkpoint_rejects_wrong_semantic_location():
+async def test_frontier_replay_accepts_successful_actions_without_checkpoint_validation():
     adapter = _ReplayAdapter(
         [
             StateSnapshot("start", "https://fixture.test/shop", "start", {"surface": "start"}),
@@ -417,6 +558,7 @@ async def test_frontier_replay_checkpoint_rejects_wrong_semantic_location():
         ]
     )
     explorer = _replay_explorer(adapter)
+    explorer.replay_checkpoint_validation_enabled = False
     target = type(
         "Target",
         (),
@@ -433,8 +575,10 @@ async def test_frontier_replay_checkpoint_rejects_wrong_semantic_location():
         start_url="https://fixture.test/shop",
     )
 
-    assert result.success is False
-    assert result.reason == "target_semantic_location_mismatch"
+    assert result.success is True
+    assert result.reached_node_id == "target"
+    assert result.reason == "replay_succeeded"
+    assert result.checkpoint is None
 
 
 @pytest.mark.anyio

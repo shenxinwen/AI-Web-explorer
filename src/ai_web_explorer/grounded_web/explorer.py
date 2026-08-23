@@ -409,6 +409,7 @@ class WebKobeExplorer:
         self.manager = WebKobeGraphManager(app=adapter.app_name)
         self._start_node_id: str | None = None
         self._current_node_id: str | None = None
+        self._replay_handoff_pending = False
         self._visit_stack: list[str] = []
         self._visual_affordance_observed_node_ids: set[str] = set()
 
@@ -430,6 +431,7 @@ class WebKobeExplorer:
             self._seed_location_memory_from_graph(graph)
         self._start_node_id = graph.start_node_id
         self._current_node_id = None
+        self._replay_handoff_pending = False
         self._visit_stack = []
         self._visual_affordance_observed_node_ids = {
             node.node_id for node in graph.nodes if node.business_affordances
@@ -564,6 +566,8 @@ class WebKobeExplorer:
                 self.manager.meta["last_step_semantic_progress"] = False
                 return self.manager.to_graph(start_node_id=self._start_node_id)
 
+        replay_handoff_active = self._replay_handoff_pending
+        self._replay_handoff_pending = False
         attempt_id = self._begin_action_attempt(
             source_id=source_id,
             action=selected,
@@ -809,10 +813,34 @@ class WebKobeExplorer:
         target_id = self.manager.identify_or_add_node(target_node)
         node_was_new = target_id not in known_node_ids
 
+        replay_handoff_location = None
+        if replay_handoff_active and outcome_location_change_accepted:
+            replay_handoff_location = self._unique_location_for_url_pattern(
+                after_draft.page_frame.url_pattern
+            )
+            if replay_handoff_location:
+                outcome_location_hint = replay_handoff_location
+                semantic_observation = semantic_observation_from_action_outcome(
+                    action_outcome_result,
+                    source_location=source_location_hint or source_id,
+                    target_location_hint=replay_handoff_location,
+                    target_node_id=target_id,
+                )
+                self.manager.identify_or_add_node(
+                    replace(
+                        self.manager.node_for_id(target_id),
+                        semantic_location_hint=replay_handoff_location,
+                    )
+                )
+                self._sync_location_affordance_snapshots(
+                    replay_handoff_location
+                )
+
         location_scan_novel = False
         if (
             self.location_scoped_exploration
             and outcome_location_change_accepted
+            and replay_handoff_location is None
             and after_screenshot_path is not None
             and self.visual_delta_provider is not None
         ):
@@ -1185,6 +1213,26 @@ class WebKobeExplorer:
     def _set_current_node(self, node_id: str) -> None:
         self._current_node_id = node_id
         self._record_visit_node(node_id)
+
+    def restore_replay_context(self, node_id: str) -> None:
+        """Restore a frontier and enable one URL-based handoff lookup."""
+
+        self._set_current_node(node_id)
+        self._replay_handoff_pending = True
+
+    def _unique_location_for_url_pattern(
+        self, url_pattern: str
+    ) -> str | None:
+        locations: set[str] = set()
+        for node in self.manager.to_graph().nodes:
+            if node.page_frame.url_pattern != url_pattern:
+                continue
+            location_id, unresolved = _semantic_location_anchor(node)
+            if location_id and not unresolved:
+                locations.add(location_id)
+        if len(locations) != 1:
+            return None
+        return next(iter(locations))
 
     async def execute_replay_action(self, action: BrowserAction) -> bool:
         """Execute one stored action without recording a new exploration edge."""

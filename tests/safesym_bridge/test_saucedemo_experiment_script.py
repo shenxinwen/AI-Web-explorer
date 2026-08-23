@@ -1,6 +1,10 @@
 import pytest
+from types import MethodType
 
+from ai_web_explorer.grounded_web.graph import BrowserAction
 from ai_web_explorer.grounded_web.stagehand_actions import StagehandObservedAction
+from ai_web_explorer.grounded_web.stagehand_actions import StagehandActResult
+from ai_web_explorer.grounded_web.stagehand_backend import StagehandAutomationBackend
 from scripts import run_saucedemo_open_exploration_observe_act as experiment
 
 
@@ -216,3 +220,65 @@ async def test_saucedemo_provider_factory_binds_site_overrides(monkeypatch):
     actions = await result.observe_action("Input the password field.")
 
     assert actions[0].arguments == ("secret_sauce",)
+
+
+@pytest.mark.anyio
+async def test_saucedemo_replay_uses_public_credentials_for_composite_login(
+    monkeypatch,
+):
+    class Provider:
+        def __init__(self):
+            self.acted = []
+
+        async def act_action(self, action):
+            self.acted.append(action)
+            return StagehandActResult(success=True)
+
+    async def observe_returns_placeholders(provider, instruction):
+        return [
+            StagehandObservedAction(
+                description="Username field",
+                selector='[data-test="username"]',
+                method="fill",
+                arguments=("UsernamePlaceholder",),
+            ),
+            StagehandObservedAction(
+                description="Password field",
+                selector='[data-test="password"]',
+                method="fill",
+                arguments=("Password",),
+            ),
+        ]
+
+    monkeypatch.setattr(
+        experiment,
+        "_original_observe_action",
+        observe_returns_placeholders,
+    )
+    provider = Provider()
+    provider.observe_action = MethodType(
+        experiment._observe_action_with_saucedemo_overrides,
+        provider,
+    )
+    backend = StagehandAutomationBackend(
+        base_backend=type("Base", (), {"app_name": "saucedemo"})(),
+        provider=provider,
+        goal="Explore SauceDemo.",
+        execution_mode="observe_act",
+    )
+
+    success = await backend.execute_replay_action(
+        BrowserAction(
+            action_kind="business_intent",
+            locator=None,
+            semantic_id="enter_credentials",
+            description="Fill the username and password fields.",
+            execution_policy="composite",
+        )
+    )
+
+    assert success is True
+    assert [action.arguments for action in provider.acted] == [
+        ("standard_user",),
+        ("secret_sauce",),
+    ]

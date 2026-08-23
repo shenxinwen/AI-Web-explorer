@@ -119,7 +119,13 @@ def _compact_action(action: dict[str, Any]) -> dict[str, Any]:
         "action_kind": action.get("action_kind"),
         "semantic_id": semantic_id,
     }
-    for key in ("input_values", "action_label", "supporting_facts"):
+    for key in (
+        "input_values",
+        "description",
+        "action_label",
+        "supporting_facts",
+        "execution_policy",
+    ):
         if action.get(key):
             compact[key] = action[key]
     canonical = action.get("canonical_action_name")

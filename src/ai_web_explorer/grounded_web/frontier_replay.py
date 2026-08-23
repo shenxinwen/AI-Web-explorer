@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Callable, Iterable, TYPE_CHECKING
 
-from ai_web_explorer.grounded_web.graph import WebKobeEdge, WebKobeGraph
+from ai_web_explorer.grounded_web.graph import BrowserAction, WebKobeEdge, WebKobeGraph
 from ai_web_explorer.grounded_web.location_exploration import (
     LOCATION_EXPLORATION_META_KEY,
     LocationExplorationMemory,
@@ -114,41 +114,65 @@ class FrontierReplayRunner:
                 )
             completed_steps += 1
 
-        checkpoint_validator = getattr(
-            self.explorer, "validate_replay_checkpoint", None
+        checkpoint = None
+        if getattr(
+            self.explorer, "replay_checkpoint_validation_enabled", False
+        ):
+            checkpoint_validator = getattr(
+                self.explorer, "validate_replay_checkpoint", None
+            )
+            if checkpoint_validator is None:
+                checkpoint_ok = await self.explorer.validate_current_node(
+                    target.node_id,
+                    expected_semantic_location=getattr(
+                        target, "semantic_location", None
+                    ),
+                    expected_business_facts=getattr(
+                        target, "required_business_facts", ()
+                    ),
+                )
+                checkpoint = ReplayCheckpointResult(
+                    success=checkpoint_ok,
+                    reason=(
+                        "replay_succeeded"
+                        if checkpoint_ok
+                        else "target_state_mismatch"
+                    ),
+                )
+            else:
+                checkpoint = await checkpoint_validator(
+                    expected_semantic_location=getattr(
+                        target, "semantic_location", None
+                    ),
+                    expected_business_facts=getattr(
+                        target, "required_business_facts", ()
+                    ),
+                )
+            if not checkpoint.success:
+                return ReplayResult(
+                    False,
+                    None,
+                    None,
+                    checkpoint.reason
+                    or (
+                        "target_business_facts_mismatch"
+                        if getattr(target, "required_business_facts", ())
+                        else "target_state_mismatch"
+                    ),
+                    completed_steps,
+                    checkpoint,
+                )
+
+        # By default replay assumes that a fully successful semantic-location
+        # action path has restored the target frontier.  The legacy checkpoint
+        # validator remains available through the explicit explorer flag.
+        restore_context = getattr(
+            self.explorer, "restore_replay_context", None
         )
-        if checkpoint_validator is None:
-            checkpoint_ok = await self.explorer.validate_current_node(
-                target.node_id,
-                expected_semantic_location=getattr(target, "semantic_location", None),
-                expected_business_facts=getattr(target, "required_business_facts", ()),
-            )
-            checkpoint = ReplayCheckpointResult(
-                success=checkpoint_ok,
-                reason="replay_succeeded" if checkpoint_ok else "target_state_mismatch",
-            )
+        if restore_context is not None:
+            restore_context(target.node_id)
         else:
-            checkpoint = await checkpoint_validator(
-                expected_semantic_location=getattr(target, "semantic_location", None),
-                expected_business_facts=getattr(target, "required_business_facts", ()),
-            )
-        if not checkpoint.success:
-            return ReplayResult(
-                False,
-                None,
-                None,
-                checkpoint.reason
-                or (
-                    "target_business_facts_mismatch"
-                    if getattr(target, "required_business_facts", ())
-                    else "target_state_mismatch"
-                ),
-                completed_steps,
-                checkpoint,
-            )
-        # The checkpoint is semantic rather than a raw-node restoration, but
-        # the next exploration step must still start from the replay target.
-        self.explorer._set_current_node(target.node_id)
+            self.explorer._set_current_node(target.node_id)
         return ReplayResult(
             True,
             target.node_id,
@@ -227,7 +251,11 @@ def select_frontier(
             if untried:
                 return FrontierTarget(
                     node_id=node_id,
-                    path=_path_to(node_id, parent),
+                    path=_replay_path_with_requirements(
+                        _path_to(node_id, parent),
+                        graph=graph,
+                        memory=location_memory,
+                    ),
                     untried_action_ids=untried,
                     semantic_location=_node_semantic_location(node),
                     required_business_facts=_required_facts_for_candidates(
@@ -253,6 +281,7 @@ def reachable_frontier_for_node(
     if target_node is None:
         return None
     nodes_by_id = {node.node_id: node for node in graph.nodes}
+    location_memory = _location_memory(graph)
     adjacency: dict[str, list[WebKobeEdge]] = {}
     for edge in graph.edges:
         if (
@@ -272,18 +301,24 @@ def reachable_frontier_for_node(
         if current == node_id:
             tried = {_edge_action_id(edge) for edge in graph.edges if edge.source_node_id == node_id}
             candidates = tuple(
-                action.action_name
-                for action in target_node.business_affordances
-                if (
-                    action.action_name not in tried
-                    or action_eligible(node_id, action.action_name)
+                action_id
+                for action_id in _location_candidate_action_ids(
+                    target_node, location_memory
                 )
-                and action_eligible(node_id, action.action_name)
+                if (
+                    action_id not in tried
+                    or action_eligible(node_id, action_id)
+                )
+                and action_eligible(node_id, action_id)
             )
             if candidates:
                 return FrontierTarget(
                     node_id,
-                    _path_to(node_id, parent),
+                    _replay_path_with_requirements(
+                        _path_to(node_id, parent),
+                        graph=graph,
+                        memory=location_memory,
+                    ),
                     candidates,
                     semantic_location=_node_semantic_location(target_node),
                     required_business_facts=_required_facts_for_candidates(
@@ -317,6 +352,141 @@ def _path_to(
         current = source_node_id
     steps.reverse()
     return tuple(steps)
+
+
+def _replay_path_with_requirements(
+    path: tuple[ReplayStep, ...],
+    *,
+    graph: WebKobeGraph,
+    memory: LocationExplorationMemory | None,
+) -> tuple[ReplayStep, ...]:
+    """Insert completed same-location requirements before replay actions."""
+
+    if memory is None:
+        return path
+    nodes_by_id = {node.node_id: node for node in graph.nodes}
+    successful_edges_by_location_action: dict[
+        tuple[str, str], list[WebKobeEdge]
+    ] = {}
+    for edge in graph.edges:
+        source = nodes_by_id.get(edge.source_node_id)
+        location_id = normalize_semantic_id(
+            getattr(source, "semantic_location_hint", "") or ""
+        )
+        action_id = normalize_semantic_id(_edge_action_id(edge))
+        if (
+            not location_id
+            or not action_id
+            or edge.status not in REPLAYABLE_EDGE_STATUSES
+            or not edge.execution_trace.success
+            or edge.execution_trace.metadata.get("replay_validation_status")
+            == "unstable"
+        ):
+            continue
+        successful_edges_by_location_action.setdefault(
+            (location_id, action_id), []
+        ).append(edge)
+    for edges in successful_edges_by_location_action.values():
+        edges.sort(key=lambda edge: edge.edge_id)
+
+    expanded: list[ReplayStep] = []
+    emitted: set[tuple[str, str]] = set()
+    expanding: set[tuple[str, str]] = set()
+
+    def append_action(location_id: str, action_id: str, edge: WebKobeEdge) -> None:
+        key = (location_id, action_id)
+        if key in emitted or key in expanding:
+            return
+        expanding.add(key)
+        pool = memory.locations.get(location_id)
+        record = pool.candidates.get(action_id) if pool is not None else None
+        for requirement in record.requires if record is not None else ():
+            requirement_id = normalize_semantic_id(requirement)
+            requirement_record = (
+                pool.candidates.get(requirement_id) if pool is not None else None
+            )
+            requirement_edges = successful_edges_by_location_action.get(
+                (location_id, requirement_id), []
+            )
+            if (
+                requirement_record is not None
+                and requirement_record.status == "success"
+                and requirement_edges
+            ):
+                append_action(
+                    location_id,
+                    requirement_id,
+                    requirement_edges[0],
+                )
+        expanding.remove(key)
+        if key in emitted:
+            return
+        replay_edge = _edge_with_memory_action(edge, record)
+        expanded.append(
+            ReplayStep(
+                edge_id=replay_edge.edge_id,
+                source_node_id=replay_edge.source_node_id,
+                target_node_id=replay_edge.target_node_id,
+                edge=replay_edge,
+            )
+        )
+        emitted.add(key)
+
+    for step in path:
+        source = nodes_by_id.get(step.source_node_id)
+        target = nodes_by_id.get(step.target_node_id)
+        location_id = normalize_semantic_id(
+            getattr(source, "semantic_location_hint", "") or ""
+        )
+        target_location_id = normalize_semantic_id(
+            getattr(target, "semantic_location_hint", "") or ""
+        )
+        action_id = normalize_semantic_id(_edge_action_id(step.edge))
+        if not location_id or not action_id:
+            expanded.append(step)
+            continue
+        if target_location_id and target_location_id == location_id:
+            continue
+        append_action(location_id, action_id, step.edge)
+    return tuple(expanded)
+
+
+def _edge_with_memory_action(edge: WebKobeEdge, record) -> WebKobeEdge:
+    if record is None:
+        return edge
+    affordance = record.affordance
+    label = (
+        affordance.label
+        or affordance.action_name.replace("_", " ").capitalize()
+    ).strip()
+    if label and label[-1] not in ".!?":
+        label += "."
+    details = [label]
+    if affordance.target_hint:
+        target = affordance.target_hint.strip().rstrip(".")
+        details.append(f"Target: {target}.")
+    return replace(
+        edge,
+        action=BrowserAction(
+            action_kind="business_intent",
+            locator=None,
+            semantic_id=affordance.action_name,
+            input_values={},
+            description=" ".join(details),
+            action_label=(
+                affordance.label
+                or affordance.action_name.replace("_", " ").title()
+            ),
+            canonical_action_name=affordance.action_name,
+            naming_provenance={
+                "source": "business_affordance",
+                "affordance_source": affordance.source,
+                "confidence": affordance.confidence,
+            },
+            supporting_facts=list(affordance.supporting_facts),
+            execution_policy=affordance.execution_policy,
+        ),
+    )
 
 
 def _candidate_action_ids(node) -> tuple[str, ...]:
