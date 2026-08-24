@@ -59,31 +59,12 @@ class FrontierTarget:
 
 
 @dataclass(frozen=True)
-class ReplayCheckpointResult:
-    success: bool
-    observed_semantic_location: str | None = None
-    verified_business_facts: tuple[str, ...] = ()
-    evidence: tuple[str, ...] = ()
-    reason: str = ""
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "success": self.success,
-            "observed_semantic_location": self.observed_semantic_location,
-            "verified_business_facts": list(self.verified_business_facts),
-            "evidence": list(self.evidence),
-            "reason": self.reason,
-        }
-
-
-@dataclass(frozen=True)
 class ReplayResult:
     success: bool
     reached_node_id: str | None
     failed_edge_id: str | None
     reason: str
     completed_steps: int
-    checkpoint: ReplayCheckpointResult | None = None
 
 
 class FrontierReplayRunner:
@@ -114,58 +95,8 @@ class FrontierReplayRunner:
                 )
             completed_steps += 1
 
-        checkpoint = None
-        if getattr(
-            self.explorer, "replay_checkpoint_validation_enabled", False
-        ):
-            checkpoint_validator = getattr(
-                self.explorer, "validate_replay_checkpoint", None
-            )
-            if checkpoint_validator is None:
-                checkpoint_ok = await self.explorer.validate_current_node(
-                    target.node_id,
-                    expected_semantic_location=getattr(
-                        target, "semantic_location", None
-                    ),
-                    expected_business_facts=getattr(
-                        target, "required_business_facts", ()
-                    ),
-                )
-                checkpoint = ReplayCheckpointResult(
-                    success=checkpoint_ok,
-                    reason=(
-                        "replay_succeeded"
-                        if checkpoint_ok
-                        else "target_state_mismatch"
-                    ),
-                )
-            else:
-                checkpoint = await checkpoint_validator(
-                    expected_semantic_location=getattr(
-                        target, "semantic_location", None
-                    ),
-                    expected_business_facts=getattr(
-                        target, "required_business_facts", ()
-                    ),
-                )
-            if not checkpoint.success:
-                return ReplayResult(
-                    False,
-                    None,
-                    None,
-                    checkpoint.reason
-                    or (
-                        "target_business_facts_mismatch"
-                        if getattr(target, "required_business_facts", ())
-                        else "target_state_mismatch"
-                    ),
-                    completed_steps,
-                    checkpoint,
-                )
-
-        # By default replay assumes that a fully successful semantic-location
-        # action path has restored the target frontier.  The legacy checkpoint
-        # validator remains available through the explicit explorer flag.
+        # A fully successful semantic-location action path restores context;
+        # replay does not perform a second observation or semantic validation.
         restore_context = getattr(
             self.explorer, "restore_replay_context", None
         )
@@ -179,7 +110,6 @@ class FrontierReplayRunner:
             None,
             "replay_succeeded",
             completed_steps,
-            checkpoint,
         )
 
 def select_frontier(

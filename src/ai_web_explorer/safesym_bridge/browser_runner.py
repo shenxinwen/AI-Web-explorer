@@ -332,44 +332,6 @@ def _read_cdp_websocket_url(port: int, *, timeout_seconds: float = 5.0) -> str:
     ) from last_error
 
 
-async def run_web_kobe_exploration(
-    url: str,
-    output_path: Path,
-    *,
-    app_name: str = "web",
-    page_id: str | None = None,
-    steps: int = 1,
-    headless: bool = True,
-    goal: str = "Explore the web task.",
-    screenshot_dir: Path | None = None,
-) -> Path:
-    from playwright.async_api import async_playwright
-
-    async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=headless)
-        page = await browser.new_page()
-        try:
-            await page.goto(url)
-            adapter = WebKobePlaywrightAdapter(
-                page,
-                app_name=app_name,
-                page_id=page_id,
-                screenshot_dir=screenshot_dir,
-            )
-            explorer = WebKobeExplorer(
-                adapter=adapter,
-                semantic_assistor=DeterministicSemanticAssistor(app=app_name),
-                goal=goal,
-                capture_screenshots=screenshot_dir is not None,
-            )
-            controller = WebKobeExplorationController(explorer)
-            result = await controller.run(max_steps=max(steps, 1))
-            write_web_kobe_graph(result.graph, output_path)
-            return output_path
-        finally:
-            await browser.close()
-
-
 async def run_stagehand_exploration(
     output_path: Path,
     *,
@@ -415,7 +377,9 @@ async def run_stagehand_exploration(
         persisted_memory = resume_graph.meta.get(LOCATION_EXPLORATION_META_KEY)
         if isinstance(persisted_memory, dict):
             limits = ExplorationLimits.from_dict(persisted_memory.get("limits"))
-    location_scoped = limits is not None
+    if limits is None:
+        limits = ExplorationLimits(max_candidates_per_location=max_candidates)
+    location_scoped = True
 
     if (
         visual_delta_provider is not None

@@ -26,26 +26,6 @@ def test_exploration_and_prompts_do_not_consume_trace_planning_inputs():
         assert "problem.pddl" not in source
 
 
-def test_trace_compiler_does_not_consume_non_trace_graph_fields():
-    module = __import__(
-        "ai_web_explorer.safesym_bridge.trace_pddl",
-        fromlist=["__file__"],
-    )
-    source = Path(module.__file__).read_text(encoding="utf-8")
-
-    for token in (
-        "observed_delta",
-        "schema_delta",
-        "visual_change_kind",
-        "planning_delta",
-        "planning_transition",
-        "node_label",
-        "page_frame",
-        "business_affordance",
-    ):
-        assert token not in source
-
-
 def test_summarize_visual_affordances_maps_provider_json():
     request = VisualAffordanceRequest(
         goal="Explore shopping capabilities.",

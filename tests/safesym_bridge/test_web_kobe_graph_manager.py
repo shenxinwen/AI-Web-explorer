@@ -19,9 +19,7 @@ from ai_web_explorer.grounded_web.graph import (
 )
 from ai_web_explorer.grounded_web.semantic_model import SemanticObservation
 from ai_web_explorer.grounded_web.graph_manager import WebKobeGraphManager
-from ai_web_explorer.safesym_bridge.trace_pddl import compile_trace_domain
-from ai_web_explorer.safesym_bridge.surface_pddl import compile_surface_domain
-from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
+from ai_web_explorer.safesym_bridge.graph_loader import (
     load_web_kobe_graph_json,
 )
 
@@ -217,65 +215,6 @@ def _trace_edge(action_name: str, *, success: bool, status: str) -> WebKobeEdge:
         ),
         status=status,
     )
-
-
-def test_execution_events_preserve_a_b_a_through_json_and_trace_compiler(
-    tmp_path,
-):
-    manager = WebKobeGraphManager(app="example")
-    manager.identify_or_add_node(_node("page", {}))
-    for action_name in ("action_a", "action_b", "action_a"):
-        manager.add_edge(
-            _trace_edge(action_name, success=True, status="no_observed_change")
-        )
-
-    frozen = manager.to_graph(start_node_id="page")
-    graph_path = tmp_path / "graph.json"
-    graph_path.write_text(json.dumps(frozen.to_dict()), encoding="utf-8")
-    loaded = load_web_kobe_graph_json(graph_path)
-    result = compile_trace_domain(loaded)
-
-    assert len(frozen.edges) == 2
-    assert len(frozen.execution_events) == 3
-    assert len(loaded.execution_events) == 3
-    assert [item["original_action_identity"] for item in result.report["actions"]] == [
-        "action_a",
-        "action_b",
-        "action_a",
-    ]
-    assert len(result.report["checkpoints"]) == 4
-
-    legacy_data = frozen.to_dict()
-    legacy_data.pop("execution_events")
-    legacy_path = tmp_path / "legacy-graph.json"
-    legacy_path.write_text(json.dumps(legacy_data), encoding="utf-8")
-    legacy_loaded = load_web_kobe_graph_json(legacy_path)
-    legacy_result = compile_trace_domain(legacy_loaded)
-
-    assert legacy_loaded.execution_events == []
-    assert [
-        item["original_action_identity"] for item in legacy_result.report["actions"]
-    ] == ["action_a", "action_b"]
-
-
-def test_execution_events_preserve_failed_then_successful_retry():
-    manager = WebKobeGraphManager(app="example")
-    manager.identify_or_add_node(_node("page", {}))
-    manager.add_edge(
-        _trace_edge("action_a", success=False, status="failed_execution")
-    )
-    manager.add_edge(
-        _trace_edge("action_a", success=True, status="no_observed_change")
-    )
-
-    graph = manager.to_graph(start_node_id="page")
-    result = compile_trace_domain(graph)
-
-    assert len(graph.edges) == 1
-    assert len(graph.execution_events) == 2
-    assert [item["reason"] for item in result.report["excluded_edges"]] == [
-        "failed_execution"
-    ]
 
 
 def _semantic_observation(
@@ -718,38 +657,6 @@ def test_propagate_planning_state_omits_already_active_added_facts():
     assert updated_edge.planning_transition.pre_facts == ["cart_has_items"]
     assert updated_edge.planning_transition.added_facts == []
     assert updated_edge.planning_transition.post_facts == ["cart_has_items"]
-
-
-def test_duplicate_edge_cannot_clear_unstable_replay_validation_after_roundtrip(
-    tmp_path,
-):
-    manager = WebKobeGraphManager(app="example")
-    manager.identify_or_add_node(_node("page", {}))
-    edge = _trace_edge("action_a", success=True, status="no_observed_change")
-    manager.add_edge(edge)
-    manager.update_edge_replay_validation(edge.edge_id, "unstable")
-
-    duplicate = replace(
-        edge,
-        execution_trace=replace(
-            edge.execution_trace,
-            metadata={"latest_observation": "new"},
-        ),
-    )
-    manager.add_edge(duplicate)
-
-    frozen = manager.to_graph(start_node_id="page")
-    merged_edge = frozen.edges[0]
-    assert merged_edge.execution_trace.metadata == {
-        "latest_observation": "new",
-        "replay_validation_status": "unstable",
-    }
-
-    graph_path = tmp_path / "graph.json"
-    graph_path.write_text(json.dumps(frozen.to_dict()), encoding="utf-8")
-    loaded = load_web_kobe_graph_json(graph_path)
-    assert "action_a" not in compile_surface_domain(loaded).domain
-    assert "action_a" in compile_trace_domain(loaded).domain
 
 
 def test_duplicate_edge_preserves_verified_replay_validation():

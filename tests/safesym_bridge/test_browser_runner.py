@@ -6,9 +6,6 @@ from pathlib import Path
 import pytest
 
 from ai_web_explorer.safesym_bridge import browser_runner
-from ai_web_explorer.safesym_bridge.browser_runner import (
-    run_web_kobe_exploration,
-)
 from ai_web_explorer.grounded_web.controller import (
     WebKobeExplorationResult,
     WebKobeExplorationSummary,
@@ -34,10 +31,6 @@ from ai_web_explorer.grounded_web.resume import ResumePolicy
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
-
-
-def test_run_web_kobe_exploration_is_async_callable():
-    assert callable(run_web_kobe_exploration)
 
 
 def test_run_stagehand_exploration_removes_semantic_experiment_profile_argument():
@@ -452,180 +445,6 @@ def test_write_web_kobe_graph_failed_overwrite_preserves_old_pair(
 
 
 @pytest.mark.anyio
-async def test_run_web_kobe_exploration_uses_controller(tmp_path, monkeypatch):
-    import playwright.async_api as playwright_async_api
-
-    output_path = tmp_path / "web_kobe_graph.json"
-    calls = []
-
-    class FakePage:
-        async def goto(self, url):
-            calls.append(("goto", url))
-
-    class FakeBrowser:
-        async def new_page(self):
-            calls.append(("new_page", None))
-            return FakePage()
-
-        async def close(self):
-            calls.append(("close", None))
-
-    class FakeChromium:
-        async def launch(self, *, headless=True):
-            calls.append(("launch", headless))
-            return FakeBrowser()
-
-    class FakePlaywright:
-        chromium = FakeChromium()
-
-    class FakePlaywrightContext:
-        async def __aenter__(self):
-            return FakePlaywright()
-
-        async def __aexit__(self, exc_type, exc, traceback):
-            return None
-
-    class FakeController:
-        def __init__(self, explorer):
-            calls.append(("controller", explorer.adapter.app_name))
-
-        async def run(self, *, max_steps=1):
-            calls.append(("run", max_steps))
-            graph = WebKobeGraph(
-                app="fixture",
-                start_node_id="fixture_shop",
-                total_steps_completed=max_steps,
-            )
-            return WebKobeExplorationResult(
-                graph=graph,
-                summary=WebKobeExplorationSummary(
-                    requested_steps=max_steps,
-                    steps_completed=max_steps,
-                    stop_reason="max_steps",
-                    node_count=0,
-                    edge_count=0,
-                    failed_edge_count=0,
-                ),
-            )
-
-    monkeypatch.setattr(
-        playwright_async_api,
-        "async_playwright",
-        lambda: FakePlaywrightContext(),
-    )
-    monkeypatch.setattr(
-        browser_runner,
-        "WebKobeExplorationController",
-        FakeController,
-        raising=False,
-    )
-
-    result_path = await run_web_kobe_exploration(
-        "https://example.test/shop",
-        output_path,
-        app_name="fixture",
-        steps=3,
-    )
-
-    assert result_path == output_path
-    assert calls == [
-        ("launch", True),
-        ("new_page", None),
-        ("goto", "https://example.test/shop"),
-        ("controller", "fixture"),
-        ("run", 3),
-        ("close", None),
-    ]
-    data = json.loads(output_path.read_text(encoding="utf-8"))
-    assert data["meta"]["total_steps_completed"] == 3
-
-
-@pytest.mark.anyio
-async def test_run_web_kobe_exploration_wires_screenshot_capture(tmp_path, monkeypatch):
-    import playwright.async_api as playwright_async_api
-
-    output_path = tmp_path / "web_kobe_graph.json"
-    screenshot_dir = tmp_path / "screenshots"
-    calls = []
-
-    class FakePage:
-        async def goto(self, url):
-            pass
-
-    class FakeBrowser:
-        async def new_page(self):
-            return FakePage()
-
-        async def close(self):
-            pass
-
-    class FakeChromium:
-        async def launch(self, *, headless=True):
-            return FakeBrowser()
-
-    class FakePlaywright:
-        chromium = FakeChromium()
-
-    class FakePlaywrightContext:
-        async def __aenter__(self):
-            return FakePlaywright()
-
-        async def __aexit__(self, exc_type, exc, traceback):
-            return None
-
-    class FakeAdapter:
-        def __init__(self, page, *, app_name, page_id=None, screenshot_dir=None):
-            calls.append(("adapter", app_name, page_id, screenshot_dir))
-            self.app_name = app_name
-
-    class FakeController:
-        def __init__(self, explorer):
-            calls.append(("capture", explorer.capture_screenshots))
-
-        async def run(self, *, max_steps=1):
-            return WebKobeExplorationResult(
-                graph=WebKobeGraph(
-                    app="fixture",
-                    start_node_id="fixture_shop",
-                    total_steps_completed=max_steps,
-                ),
-                summary=WebKobeExplorationSummary(
-                    requested_steps=max_steps,
-                    steps_completed=max_steps,
-                    stop_reason="max_steps",
-                    node_count=0,
-                    edge_count=0,
-                    failed_edge_count=0,
-                ),
-            )
-
-    monkeypatch.setattr(
-        playwright_async_api,
-        "async_playwright",
-        lambda: FakePlaywrightContext(),
-    )
-    monkeypatch.setattr(browser_runner, "WebKobePlaywrightAdapter", FakeAdapter)
-    monkeypatch.setattr(browser_runner, "WebKobeExplorationController", FakeController)
-
-    await run_web_kobe_exploration(
-        "https://example.test/shop",
-        output_path,
-        app_name="fixture",
-        page_id="fixture_shop",
-        screenshot_dir=screenshot_dir,
-    )
-
-    assert calls == [
-        ("adapter", "fixture", "fixture_shop", screenshot_dir),
-        ("capture", True),
-    ]
-
-
-
-
-
-
-@pytest.mark.anyio
 async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
     tmp_path,
     monkeypatch,
@@ -686,6 +505,7 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
             *,
             max_consecutive_unproductive_steps=3,
             step_checkpoint=None,
+            limits=None,
         ):
             assert explorer.enable_exploration_memory is True
             assert explorer.max_candidates == 2
@@ -695,6 +515,7 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
             assert explorer.business_profile.site_type == "ecommerce_checkout"
             assert explorer.visual_delta_provider("prompt") == '{"visible_change_summary":"changed","candidate_added_facts":[],"candidate_removed_facts":[],"evidence":[],"confidence":0.5}'
             assert explorer.action_outcome_provider is outcome_provider
+            assert isinstance(limits, ExplorationLimits)
             captured["limit"] = max_consecutive_unproductive_steps
             captured["checkpoint"] = step_checkpoint
 
@@ -757,11 +578,11 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
     assert embedding_path.exists()
     assert trace_path.exists()
     graph_data = json.loads(output_path.read_text(encoding="utf-8"))
-    assert graph_data["meta"]["exploration_summary"] == {
-        "requested_steps": 3,
-        "steps_completed": 3,
-        "stop_reason": "max_steps",
-    }
+    summary = graph_data["meta"]["exploration_summary"]
+    assert summary["requested_steps"] == 3
+    assert summary["steps_completed"] == 3
+    assert summary["stop_reason"] == "max_steps"
+    assert summary["limits"]["max_candidates_per_location"] == 2
 
 
 @pytest.mark.anyio
@@ -1136,7 +957,7 @@ async def test_runner_resume_uses_cumulative_runtime_state_for_zero_formal_actio
         meta={"exploration_runtime_state": dict(runtime_state)},
     )
     browser_runner.write_web_kobe_graph(resume_graph, checkpoint_path)
-    from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
+    from ai_web_explorer.safesym_bridge.graph_loader import (
         load_web_kobe_graph_json,
     )
 
@@ -1478,7 +1299,7 @@ async def test_run_stagehand_exploration_bootstraps_resume_without_spending_new_
 
 
 @pytest.mark.anyio
-async def test_resume_bootstrap_blocks_failed_target_and_replays_fallback_frontier(
+async def test_resume_bootstrap_replays_fallback_frontier_after_action_failure(
     tmp_path, monkeypatch
 ):
     import playwright.async_api as playwright_async_api
@@ -1551,7 +1372,7 @@ async def test_resume_bootstrap_blocks_failed_target_and_replays_fallback_fronti
                     False,
                     None,
                     "first-edge",
-                    "target_business_facts_mismatch",
+                    "action_execution_failed",
                     0,
                 )
             return ReplayResult(True, "second", None, "replay_succeeded", 0)
@@ -1603,15 +1424,15 @@ async def test_resume_bootstrap_blocks_failed_target_and_replays_fallback_fronti
     )
 
     assert replayed == ["first", "second"]
-    assert selected == [(), ("first",)]
+    assert selected == [(), ()]
     assert len(captured_checkpoints) == 1
-    assert captured_checkpoints[0].meta["blocked_replay_node_ids"] == ["first"]
-    assert captured_checkpoints[0].meta["replay_mismatch_count"] == 1
+    assert captured_checkpoints[0].meta["blocked_replay_node_ids"] == []
+    assert captured_checkpoints[0].meta["replay_mismatch_count"] == 0
     assert (
         captured_checkpoints[0].meta["exploration_runtime_state"][
             "replay_mismatch_count"
         ]
-        == 1
+        == 0
     )
 
 

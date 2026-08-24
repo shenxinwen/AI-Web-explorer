@@ -18,7 +18,7 @@ from ai_web_explorer.grounded_web.location_exploration import (
     LocationExplorationMemory,
 )
 from ai_web_explorer.safesym_bridge.browser_runner import write_web_kobe_graph
-from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
+from ai_web_explorer.safesym_bridge.graph_loader import (
     load_web_kobe_graph_json,
 )
 
@@ -383,73 +383,6 @@ def test_stale_preflight_consumes_zero_formal_action_attempts():
     assert memory.pool_for("shopping").candidates["sort_products"].status == (
         "stale/disabled"
     )
-
-
-def test_scoped_explorer_inherits_pool_and_runs_one_targeted_scan():
-    calls = []
-
-    def provider(prompt, **kwargs):
-        payload = json.loads(prompt)
-        if kwargs.get("current_screenshot_path") is not None:
-            calls.append(payload.get("scan_kind", "initial"))
-        if kwargs.get("current_screenshot_path") is not None:
-            if payload.get("scan_kind") == "targeted":
-                return json.dumps(
-                    {
-                        "location_id": "shopping",
-                        "newly_enabled": [
-                            {"intent": "open_checkout", "confidence": 0.9}
-                        ],
-                    }
-                )
-            return json.dumps(
-                {
-                    "location_id": "shopping",
-                    "actions": [
-                        {
-                            "action_id": "sort_products",
-                            "description": "Sort visible products",
-                            "target": "sort control",
-                            "requires": [],
-                        },
-                        {
-                            "action_id": "filter_products",
-                            "description": "Filter visible products",
-                            "target": "filter control",
-                            "requires": [],
-                        },
-                    ],
-                }
-            )
-        return json.dumps(
-            {
-                "observable_change": True,
-                "visual_change_kind": "state_indicator",
-                "semantic_evidence": ["The cart count changed from zero to one."],
-            }
-        )
-
-    adapter = _ScopedAdapter()
-    explorer = WebKobeExplorer(
-        adapter=adapter,
-        semantic_assistor=DeterministicSemanticAssistor(app="scoped"),
-        business_profile=ecommerce_checkout_profile(),
-        capture_screenshots=True,
-        visual_delta_provider=provider,
-        exploration_limits=ExplorationLimits(),
-    )
-
-    asyncio.run(explorer.explore_one_step())
-    second = asyncio.run(explorer.explore_one_step())
-
-    assert calls.count("initial") == 1
-    assert calls.count("targeted") == 1
-    assert [action.semantic_id for action in adapter.executed] == [
-        "sort_products",
-        "open_checkout",
-    ]
-    memory = LocationExplorationMemory.from_graph(second)
-    assert "open_checkout" in memory.pool_for("shopping").candidates
 
 
 def test_frontier_uses_pending_action_from_shared_location_memory():

@@ -1,384 +1,57 @@
 # SafeSym Bridge
 
-The SafeSym bridge consumes Web-KOBE graph artifacts and turns them into
-planner-facing files. Its current job is to prove that browser-grounded web
-exploration can produce a compact model that SafeSym can later reason over.
+SafeSym Bridge 将动态网页探索结果投影为最小、可验证的语义 PDDL。当前只保留一条生产路径：
 
 ```text
-webpage
-  -> grounded_web exploration
-  -> WebKobeGraph
-  -> Web-KOBE PDDL projection
-  -> domain.pddl / problem.pddl
-  -> SafeSym / planner
+WebKobeGraph
+  -> semantic planning graph
+  -> domain.pddl + optional problem.pddl
+  -> SafeSym smoke / planner
 ```
 
-This project is not trying to become a complete web agent. Browser operation,
-state recording, and graph construction live in `grounded_web`; SafeSym/PDDL
-projection lives here.
-
-## Current Recommended Path
-
-Run a deterministic local fixture first when validating the graph and PDDL
-tooling:
-
-```bash
-python -m http.server 8000 --directory tests/fixtures/local_checkout
-```
-
-Explore the page and write a WebKobeGraph:
-
-```bash
-python -m ai_web_explorer.safesym_bridge.cli web-kobe-explore \
-  --url http://127.0.0.1:8000/index.html \
-  --output outputs/local_checkout_web_kobe.json \
-  --app-name local_checkout \
-  --page-id local_checkout \
-  --steps 6
-```
-
-Then check whether the graph can produce planner-facing artifacts:
-
-```bash
-python -m ai_web_explorer.safesym_bridge.cli web-kobe-domain-from-graph \
-  --graph outputs/local_checkout_web_kobe.json \
-  --output outputs/local_checkout_domain
-```
-
-`web-kobe-domain-from-graph` is the exploration-stage projection path. It writes
-only `domain.pddl`, so it does not require choosing a concrete start/goal
-planning query.
-
-For the active VLM/Stagehand open-exploration path, use
-`web-kobe-stagehand-explore`. Its `observe_act` mode lets the backend execute
-all atomic actions returned for a composite action, while single-instance
-actions execute only the representative first action. The high-level action is
-observed for outcome only after the composite execution completes.
+## 1. 生成探索图
 
 ```powershell
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-stagehand-explore `
   --url https://www.saucedemo.com/ `
   --app-name saucedemo `
-  --output outputs/experiments/saucedemo/latest/stagehand_explore_graph.json `
-  --stagehand-trace outputs/experiments/saucedemo/latest/stagehand_explore_trace.json `
-  --stagehand-execution-mode observe_act `
-  --max-exploration-steps 25
+  --goal "explore the shopping and checkout flow" `
+  --output artifacts/saucedemo/web_kobe_graph.json
 ```
 
-## Explored Trace PDDL V1 Compatibility
+Explorer 使用 semantic location 候选池进行正常探索。当前位置候选耗尽而其他 frontier 仍有未完成候选时，controller 可触发 replay。replay 只恢复上下文，随后仍由 Explorer 发现和执行后续动作。
 
-Trace V1 is a retained diagnostic projection, not the active semantic
-acceptance path. It consumes the ordered
-successful events in the frozen Raw Graph and emits an untyped, zero-argument
-STRIPS checkpoint machine. A successful action remains eligible when URL and
-Raw/Planning nodes are unchanged; successful same-URL/self-loop actions with a
-completed `after_observation_id` therefore become trace transitions. Failed
-actions and structurally incomplete events remain in `projection_report.json`
-with exclusion reasons but do not become checkpoints or actions. DOM and Visual
-Delta differences are diagnostic only.
-
-Generate the domain-only trace artifacts:
+## 2. 投影 Minimal Semantic PDDL
 
 ```powershell
-python -m ai_web_explorer.safesym_bridge.cli web-kobe-phase-a `
-  --projection trace `
-  --graph outputs/experiments/site/graph.json `
-  --output outputs/experiments/site/trace_pddl_v1
+python -m ai_web_explorer.safesym_bridge.cli web-kobe-semantic-pddl `
+  --graph artifacts/saucedemo/web_kobe_graph.json `
+  --output artifacts/saucedemo/pddl `
+  --goal-location checkout_complete
 ```
 
-Read the first and last `checkpoint_id` values from
-`outputs/experiments/site/trace_pddl_v1/projection_report.json`, then rerun with
-both explicit checkpoint flags to create `problem.pddl`:
+输出：
 
-```powershell
-python -m ai_web_explorer.safesym_bridge.cli web-kobe-phase-a `
-  --projection trace `
-  --graph outputs/experiments/site/graph.json `
-  --output outputs/experiments/site/trace_pddl_v1 `
-  --start-checkpoint <start_checkpoint_id> `
-  --goal-checkpoint <goal_checkpoint_id>
-```
+- `semantic_planning_graph.json`
+- `semantic_projection_report.json`
+- `domain.pddl`
+- `problem.pddl`（提供目标时）
 
-The checkpoint query is retrospective and never flows back into exploration,
-candidate generation, ranking, or Stagehand prompts. Then run the unchanged
-SafeSym smoke over the generated `domain.pddl` and `problem.pddl`:
+投影只接收具有可用 semantic location、动作语义和结果证据的内容；没有可用语义动作时 fail closed，不回退到旧的页面节点或 trace PDDL。
+
+## 3. SafeSym smoke
 
 ```powershell
 python -m ai_web_explorer.safesym_bridge.cli web-kobe-safesym-smoke `
-  --task-dir outputs/experiments/site/trace_pddl_v1 `
-  --safesym-root C:\Users\moon\Desktop\Projects\SafeSym `
-  --rules C:\Users\moon\Desktop\Projects\SafeSym\configs\constraint_rules.json `
-  --fast-downward C:\Users\moon\Desktop\Projects\AutoWebWorld\downward\fast-downward.py
+  --task-dir artifacts/saucedemo/pddl `
+  --safesym-root D:/path/to/SafeSym
 ```
 
-Trace V1 describes only the recorded exploration path. It does not claim full
-site coverage, branch completeness, semantic state equality, or an optimal
-business workflow.
+Smoke 用于检查 PDDL 解析、SafeSym 注入兼容性，并在配置 planner 时验证 base/safe planning。
 
-## Location PDDL V1 Compatibility
+## 设计边界
 
-Use `--projection location` to retain the page-level Planning Graph model. It
-uses the frozen Planning Graph as its only planner-facing input and
-deterministically emits the generalized schema
-`location + (at ?location - location)` and excludes unverified, missing-target,
-self-loop, and invalid-action transitions. Visual Delta, profile/supporting
-facts, `PlanningState`, embeddings, and the evidence sidecar are not PDDL
-inputs. The resulting `projection_report.json` records location/action maps,
-Raw edge provenance, and excluded-edge reasons.
-
-```powershell
-python -m ai_web_explorer.safesym_bridge.cli web-kobe-phase-a `
-  --projection location `
-  --graph outputs/experiments/site/graph.json `
-  --output outputs/experiments/site/location_pddl_v1
-```
-
-By default `web-kobe-phase-a` writes `raw_graph.json`,
-`planning_graph.json`, `planning_abstraction_report.json`,
-`projection_report.json`, and `domain.pddl`. It does not write a problem.
-After the Planning Graph is frozen, an explicit query may add both parameters:
-
-```powershell
-python -m ai_web_explorer.safesym_bridge.cli web-kobe-phase-a `
-  --projection location `
-  --graph outputs/experiments/site/graph.json `
-  --output outputs/experiments/site/location_pddl_v1 `
-  --start-node <planning_node_id> `
-  --goal-node <planning_node_id>
-```
-
-This writes `problem.pddl` only when the goal is reachable through the same
-projectable transitions used for the domain. Start/goal are retrospective
-planning-query inputs; they are never passed back to Explorer, candidate
-selection, or Stagehand prompts. The legacy fact-rich
-`web-kobe-pddl-from-graph` path remains available for diagnostics.
-
-When a diagnostic planning query is needed, generate both `domain.pddl` and
-`problem.pddl` with an explicit goal node:
-
-```bash
-python -m ai_web_explorer.safesym_bridge.cli web-kobe-pddl-smoke \
-  --graph outputs/local_checkout_web_kobe.json \
-  --output outputs/local_checkout_pddl_smoke \
-  --goal-node <goal_node_id>
-```
-
-Then, when a local SafeSym checkout and optional Fast Downward executable are
-available, run the real SafeSym consumption smoke:
-
-```bash
-python -m ai_web_explorer.safesym_bridge.cli web-kobe-safesym-smoke \
-  --task-dir outputs/local_checkout_pddl_smoke \
-  --safesym-root C:\Users\moon\Desktop\Projects\SafeSym \
-  --rules C:\Users\moon\Desktop\Projects\SafeSym\configs\constraint_rules.json \
-  --fast-downward C:\Users\moon\Desktop\Projects\AutoWebWorld\downward\fast-downward.py
-```
-
-The smoke command writes:
-
-```text
-domain.pddl
-problem.pddl
-smoke_report.json
-```
-
-### Graph artifacts and evidence sidecar
-
-The exploration writer emits a compact `graph.json` plus a sibling
-`graph_evidence.json`. The compact graph keeps topology, URLs and compact state
-signatures, frozen business affordances, action/status/visit data, execution
-outcomes, and non-empty planning transitions. Repeated page/node evidence,
-verbose instruction and action details, observed/schema deltas, and full
-Stagehand/Visual Delta traces remain in the sidecar. A compact node or edge
-resolves its `evidence_ref` through `node-evidence:<node_id>` or
-`edge-evidence:<edge_id>` in the sidecar.
-
-Historical full graph JSON remains load-compatible, and a compact graph can be
-loaded without the sidecar. Phase A reads only `graph.json`; it does not
-hydrate or require `graph_evidence.json`, and its `raw_graph.json` preserves the
-input JSON shape instead of expanding compact input. Sidecar visual evidence is
-diagnostic only and does not enter graph planning state or PDDL. This artifact
-layout does not change state naming or exploration semantics; candidate
-generation failure/empty distinction remains a separate follow-up.
-
-It validates planning readiness only. The report checks graph reachability,
-projected action/predicate counts, and basic static PDDL consistency. In
-particular, `pddl_static_consistency_ready` must be true and
-`undeclared_predicates` should be empty; otherwise `planning_ready` becomes
-false because the generated domain uses predicates that were not declared.
-
-Missing SafeSym safety injection is not a failure unless the graph contains a
-safety-relevant action and rule model that should trigger it.
-
-Use `configs/constraint_rules.json` when the goal is to inject check actions
-into PDDL. `configs/safety_rules.json` is useful for risk labeling, but it does
-not contain the injection configuration used by the SafeSym smoke.
-
-The SafeSym smoke writes `safesym_smoke_report.json`. For the current
-`local_checkout` fixture, SafeSym parsing, safety injection, and base/safe
-planning can succeed while `safety_actions_inserted` remains false. That is
-expected until projected action names become semantic enough to match SafeSym
-rules.
-
-`local_checkout` is the current golden-path fixture. It is a deterministic
-mini-shopping flow with product, cart, checkout form, and order-complete states.
-It avoids login, third-party scripts, random content, and network noise while
-still exercising click, fill, state-delta recording, state-specific graph nodes,
-and PDDL smoke generation.
-
-## CLI Commands
-
-Current mainline commands:
-
-```text
-web-kobe-explore
-web-kobe-stagehand-explore
-web-kobe-domain-from-graph
-web-kobe-pddl-from-graph
-web-kobe-pddl-smoke
-web-kobe-safesym-smoke
-```
-
-Debug helpers:
-
-```text
-web-kobe-graph
-web-kobe-pddl
-```
-
-Older fixed `WebObservedGraph` and capability-graph commands are no longer part
-of the default CLI surface. The old `WebObservedGraph` exploration stack has
-been removed from the active source tree; historical notes remain only in
-archival design documents.
-
-### Generic Stagehand Exploration
-
-The generic Stagehand runner is the bounded-exploration integration surface. It
-can use the optional BusinessFlowProfile for local structured verification,
-visual-delta and embedding providers, and the Stagehand candidate-action path:
-
-Stagehand and screenshot observation retain separate model settings, but all
-three paths now default to GPT-4o. Set `STAGEHAND_MODEL` (or `--model`) only for
-Stagehand action execution. Candidate observation defaults to `gpt-4o` and uses
-`OPENAI_VISUAL_DELTA_MODEL` (or `--visual-delta-model`); action-outcome observation defaults to `gpt-4o` and
-uses `OPENAI_ACTION_OUTCOME_MODEL` (or `--action-outcome-model`). These OpenAI
-providers are independent, and explicit provider injection remains supported.
-Never copy the Stagehand model name into either observation option unless that
-separate OpenAI-compatible endpoint explicitly exposes the same model ID.
-Embeddings use `EMBEDDING_MODEL` independently.
-
-```powershell
-python -m ai_web_explorer.safesym_bridge.cli web-kobe-stagehand-explore `
-  --url https://www.saucedemo.com/ `
-  --app-name saucedemo `
-  --output outputs/experiments/saucedemo/latest/stagehand_explore_graph.json `
-  --stagehand-trace outputs/experiments/saucedemo/latest/stagehand_explore_trace.json `
-  --screenshot-dir outputs/experiments/saucedemo/latest/screenshots `
-  --business-profile ecommerce_checkout `
-  --openai-visual-delta `
-  --visual-delta-model gpt-4o `
-  --action-outcome-model gpt-4o `
-  --state-embeddings `
-  --embedding-model text-embedding-v4 `
-  --embedding-dimension 1024 `
-  --model openai/gpt-4o `
-  --max-exploration-steps 8
-```
-
-`observed_action` is the default mode for generic exploration. In the preferred
-bounded-exploration path, VLM proposes business affordances from screenshots,
-Web-KOBE selects and deduplicates with graph/embedding memory, and Stagehand
-executes the selected business action. The removed milestone runner and
-semantic experiment profile are not part of the CLI. Visual delta requires
-`--screenshot-dir` because it compares before/after screenshots.
-
-SauceDemo execution experiments may explicitly select `--stagehand-execution-mode
-observe_act` to separate Stagehand observation from deterministic `act(Action)`.
-This is not the generic CLI default. A semantic candidate may describe a grouped
-operation such as `enter_credentials`; the composite execution policy runs all
-observed atomic Actions in order and only then exposes the high-level action to
-the outcome observer. Single-instance candidates use only the representative
-first observed Action to avoid repeated mutations such as multiple add-to-cart
-clicks.
-
-Frontier replay is also opt-in. Without `--frontier-replay`, exhausting all
-eligible candidates at the current semantic location ends the run with
-`current_state_exhausted`. With replay enabled, the controller may reset to the
-start URL and replay a verified path to another reachable location that still
-has pending candidates. The path is contracted by semantic location: it keeps
-location-changing actions and any completed same-location actions explicitly
-required by them, but omits unrelated same-location history. Successful replay
-restores the saved node, semantic location, and candidate pool; it does not scan,
-discover actions, mutate the graph, or consume candidate attempts.
-
-The default endpoint policy trusts a fully successful saved action path and does
-not call the VLM or require raw-node equality. A legacy checkpoint validator is
-available behind `explorer.replay_checkpoint_validation_enabled`. After the first
-formal exploration action following replay, a unique historical URL pattern may
-perform a one-shot handoff back to an existing semantic location. URL matching is
-therefore recovery-only and does not replace semantic-location discovery during
-normal exploration.
-
-## SauceDemo Role
-
-SauceDemo remains useful as an app-specific regression target, especially for
-future safety-trigger scenarios such as checkout confirmation:
-
-```text
-login -> inventory -> cart -> checkout_info -> checkout_overview -> checkout_complete
-```
-
-The safety-relevant action in that flow is:
-
-```text
-order_place_confirm
-```
-
-SafeSym can only inject checks for actions and predicates represented in the
-exported model. If a WebKobeGraph does not contain a safety-relevant action, the
-planner not triggering a safety rule is expected.
-
-The PDDL projection layer may translate low-level browser action names into
-planning-level action names when the transition evidence supports it. For
-example, an edge that creates `order_created` is projected as
-`order_place_confirm` so SafeSym rules can match the business action rather
-than a tool-specific click label.
-
-## Run Tests
-
-Default bridge tests:
-
-```bash
-pytest tests/safesym_bridge -q
-```
-
-Some tests launch Playwright Chromium. In restricted sandboxes they may need to
-be run with local browser execution permission.
-
-## Current Boundaries
-
-The location-scoped active path now has a minimal dependency-driven contract:
-one strict initial screenshot response supplies `actions` with same-location
-`requires`; each execution is followed by only `outcome`, `location_change`,
-and visible `evidence`. Local memory schedules satisfied dependencies and
-creates location-scoped completion predicates for successful actions. Missing,
-invalid, cyclic, or over-limit dependency responses fail closed, and
-failed/uncertain outcomes do not create planner-facing state or locations.
-Offline bridge regression covers this path; a fresh Practice Shopping VLM run
-and the latest SauceDemo resume graph have both completed SafeSym/planner
-acceptance. The SauceDemo `resume_url_handoff_v1` projection includes 13
-successful edges and excludes the failed/non-projectable sort and filter edges.
-With `login_form` as start and `checkout_complete_page` as goal, SafeSym parsing,
-safety injection, base planning, and safe planning all succeed. The safe plan
-adds an information-verification check before checkout-information submission.
-The remaining model-quality gap is persistent cross-location business state:
-without `cart_has_items`, the shortest plan can omit `add_to_cart` even though the
-PDDL is syntactically valid and solvable.
-
-- `grounded_web` owns browser observation, operation, state deltas, and graph
-  construction.
-- `safesym_bridge` consumes graph artifacts and writes PDDL/smoke outputs.
-- SauceDemo-specific helpers are regression scaffolding, not the generic
-  exploration architecture.
-- Legacy original-explorer and WebObservedGraph designs are archival reference
-  material only. Active code should use `WebKobeGraph`.
+- `BusinessFlowProfile` 只参与本地结构化事实验证和 planner projection。
+- replay 不生成候选、不更新图、不验证业务目标，也不承担规划。
+- 正常探索以 semantic location 为主；replay 可使用规范化 URL identity 辅助选择已知 frontier，但不会把 URL 规则扩散到探索逻辑。
+- 旧 Trace/Location/Surface PDDL 及对应 CLI 已移除，不再作为兼容回退路径。

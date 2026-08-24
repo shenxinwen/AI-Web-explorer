@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import os
 import uuid
 from dataclasses import replace
 from typing import Any, Callable
@@ -28,22 +27,16 @@ from ai_web_explorer.grounded_web.graph import (
 from ai_web_explorer.grounded_web.graph_manager import WebKobeGraphManager
 from ai_web_explorer.grounded_web.business_profile import BusinessFlowProfile
 from ai_web_explorer.grounded_web.business_profile import PlanningDelta, PlanningTransition
-from ai_web_explorer.grounded_web.business_affordance import (
-    VisualAffordanceRequest,
-    summarize_visual_affordances,
-)
 from ai_web_explorer.grounded_web.exploration_index import (
     ExplorationContext,
     build_exploration_context,
     semantically_matches_action,
 )
-from ai_web_explorer.grounded_web.frontier_replay import ReplayCheckpointResult
 from ai_web_explorer.grounded_web.location_exploration import (
     LOCATION_EXPLORATION_META_KEY,
     ExplorationLimits,
     LocationExplorationCoordinator,
     LocationExplorationMemory,
-    OutcomeUpdate,
 )
 from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.grounded_web.planning_fact_verifier import verify_planning_delta
@@ -81,109 +74,6 @@ OBSERVATION_WAIT_TIMEOUT_MS = 1200
 OBSERVATION_WAIT_INTERVAL_MS = 200
 CURRENT_NODE_MATCH_THRESHOLD = 0.88
 TARGET_NODE_MATCH_THRESHOLD = 0.90
-
-
-def _checkpoint_value_is_true(value: object) -> bool:
-    return value is True or (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and value > 0
-    )
-
-
-def _nonempty_screenshot_path(value: object) -> str | None:
-    if value is None:
-        return None
-    try:
-        path = os.fspath(value)
-    except TypeError:
-        return None
-    if isinstance(path, bytes):
-        path = os.fsdecode(path)
-    path = path.strip()
-    return path or None
-
-
-def _checkpoint_response_failure(
-    *,
-    reason: str,
-    observed_location: str | None = None,
-) -> tuple[str | None, dict[str, list[str]], str]:
-    return observed_location, {}, reason
-
-
-def _parse_replay_checkpoint_response(
-    raw_response: object,
-    *,
-    allowed_locations: set[str],
-    expected_location: str,
-    required_facts: tuple[str, ...],
-) -> tuple[str | None, dict[str, list[str]], str | None]:
-    try:
-        parsed = json.loads(raw_response)
-    except (TypeError, json.JSONDecodeError):
-        return _checkpoint_response_failure(
-            reason="target_semantic_location_mismatch"
-        )
-    if not isinstance(parsed, dict):
-        return _checkpoint_response_failure(
-            reason="target_semantic_location_mismatch"
-        )
-    if set(parsed) - {
-        "observed_semantic_location",
-        "verified_business_facts",
-    }:
-        return _checkpoint_response_failure(
-            reason="target_semantic_location_mismatch"
-        )
-    raw_location = parsed.get("observed_semantic_location")
-    if not isinstance(raw_location, str) or not raw_location.strip():
-        return _checkpoint_response_failure(
-            reason="target_semantic_location_mismatch"
-        )
-    observed_location = normalize_semantic_id(raw_location)
-    if not observed_location or (
-        allowed_locations and observed_location not in allowed_locations
-    ):
-        return _checkpoint_response_failure(
-            reason="target_semantic_location_not_allowed",
-            observed_location=observed_location or None,
-        )
-    if expected_location and observed_location != expected_location:
-        return _checkpoint_response_failure(
-            reason="target_semantic_location_mismatch",
-            observed_location=observed_location,
-        )
-
-    provider_facts = parsed.get("verified_business_facts", {})
-    if not isinstance(provider_facts, dict):
-        return _checkpoint_response_failure(
-            reason="target_business_facts_mismatch",
-            observed_location=observed_location,
-        )
-    provider_evidence: dict[str, list[str]] = {}
-    for raw_fact_id, raw_evidence in provider_facts.items():
-        fact_id = normalize_semantic_id(raw_fact_id)
-        if fact_id not in required_facts:
-            return _checkpoint_response_failure(
-                reason="target_business_facts_unknown",
-                observed_location=observed_location,
-            )
-        if isinstance(raw_evidence, str):
-            values = [raw_evidence.strip()] if raw_evidence.strip() else []
-        elif isinstance(raw_evidence, list) and all(
-            isinstance(item, str) and item.strip() for item in raw_evidence
-        ):
-            values = [item.strip() for item in raw_evidence]
-        else:
-            values = []
-        if not values:
-            return _checkpoint_response_failure(
-                reason="target_business_facts_mismatch",
-                observed_location=observed_location,
-            )
-        provider_evidence[fact_id] = values
-    return observed_location, provider_evidence, None
 
 
 def _url_path(url: str) -> str:
@@ -401,10 +291,6 @@ class WebKobeExplorer:
                 limits=exploration_limits,
             )
         )
-        self.location_scoped_exploration = bool(
-            location_exploration_coordinator is not None
-            or exploration_limits is not None
-        )
         self._preferred_resume_action_key: ActionAttemptKey | None = None
         self.manager = WebKobeGraphManager(app=adapter.app_name)
         self._start_node_id: str | None = None
@@ -423,7 +309,6 @@ class WebKobeExplorer:
         self.manager = WebKobeGraphManager.from_graph(graph)
         persisted_memory = graph.meta.get(LOCATION_EXPLORATION_META_KEY)
         if persisted_memory is not None:
-            self.location_scoped_exploration = True
             self.location_exploration_coordinator = LocationExplorationCoordinator(
                 memory=LocationExplorationMemory.from_dict(persisted_memory),
             )
@@ -549,22 +434,20 @@ class WebKobeExplorer:
             current_interactables=before_interactables,
         )
         if selected is None:
-            if self.location_scoped_exploration:
-                self.manager.meta.setdefault("formal_action_attempts", 0)
+            self.manager.meta.setdefault("formal_action_attempts", 0)
             self.manager.meta["last_step_kind"] = "current_state_exhausted"
             self.manager.meta["last_step_status"] = "unproductive"
             self.manager.meta["last_step_graph_changed"] = False
             return self.manager.to_graph(start_node_id=self._start_node_id)
 
-        if self.location_scoped_exploration:
-            formal_attempts = int(self.manager.meta.get("formal_action_attempts", 0))
-            max_attempts = self.location_exploration_coordinator.memory.limits.max_exploration_steps
-            if formal_attempts >= max_attempts:
-                self.manager.meta["last_step_kind"] = "formal_action_budget_exhausted"
-                self.manager.meta["last_step_status"] = "unproductive"
-                self.manager.meta["last_step_graph_changed"] = False
-                self.manager.meta["last_step_semantic_progress"] = False
-                return self.manager.to_graph(start_node_id=self._start_node_id)
+        formal_attempts = int(self.manager.meta.get("formal_action_attempts", 0))
+        max_attempts = self.location_exploration_coordinator.memory.limits.max_exploration_steps
+        if formal_attempts >= max_attempts:
+            self.manager.meta["last_step_kind"] = "formal_action_budget_exhausted"
+            self.manager.meta["last_step_status"] = "unproductive"
+            self.manager.meta["last_step_graph_changed"] = False
+            self.manager.meta["last_step_semantic_progress"] = False
+            return self.manager.to_graph(start_node_id=self._start_node_id)
 
         replay_handoff_active = self._replay_handoff_pending
         self._replay_handoff_pending = False
@@ -838,8 +721,7 @@ class WebKobeExplorer:
 
         location_scan_novel = False
         if (
-            self.location_scoped_exploration
-            and outcome_location_change_accepted
+            outcome_location_change_accepted
             and replay_handoff_location is None
             and after_screenshot_path is not None
             and self.visual_delta_provider is not None
@@ -931,8 +813,7 @@ class WebKobeExplorer:
             if planning_delta is not None
             else []
         )
-        if self.location_scoped_exploration:
-            outcome = self.location_exploration_coordinator.record_action_outcome(
+        outcome = self.location_exploration_coordinator.record_action_outcome(
                 location_before=location_before,
                 location_after=location_after,
                 action_id=selected.canonical_action_name or selected.semantic_id,
@@ -959,27 +840,18 @@ class WebKobeExplorer:
                     )
                 ),
             )
-        else:
-            outcome = OutcomeUpdate(
-                attempt=None,
-                new_location=location_after != location_before,
-                targeted_scan_required=False,
-                has_progress=False,
-                step_kind="legacy_business_edge",
-            )
         required_action_ids: list[str] = []
-        if self.location_scoped_exploration:
-            candidate_record = (
-                self.location_exploration_coordinator.memory.pool_for(
-                    location_before
-                ).candidates.get(
-                    normalize_semantic_id(
-                        selected.canonical_action_name or selected.semantic_id
-                    )
+        candidate_record = (
+            self.location_exploration_coordinator.memory.pool_for(
+                location_before
+            ).candidates.get(
+                normalize_semantic_id(
+                    selected.canonical_action_name or selected.semantic_id
                 )
             )
-            if candidate_record is not None:
-                required_action_ids = list(candidate_record.requires)
+        )
+        if candidate_record is not None:
+            required_action_ids = list(candidate_record.requires)
         edge = WebKobeEdge(
             source_node_id=source_id,
             target_node_id=target_id,
@@ -1016,10 +888,8 @@ class WebKobeExplorer:
         }
         edge_was_new = _edge_novelty_key(edge) not in known_edge_keys
         self.manager.add_edge(edge)
-        targeted_scan_novel = False
         if (
-            self.location_scoped_exploration
-            and action_outcome_result is not None
+            action_outcome_result is not None
             and outcome.new_location
             and after_screenshot_path is not None
             and self.visual_delta_provider is not None
@@ -1037,49 +907,20 @@ class WebKobeExplorer:
             )
             location_scan_novel = location_scan_novel or bool(target_added)
             self._sync_location_affordance_snapshots(location_after)
-        elif (
-            self.location_scoped_exploration
-            and action_outcome_result is None
-            and
-            outcome.targeted_scan_required
-            and after_screenshot_path is not None
-            and self.visual_delta_provider is not None
-        ):
-            _targeted_location, _targeted_result, targeted_added = (
-                self.location_exploration_coordinator.ensure_candidates(
-                    location_before,
-                    goal=self.goal,
-                    screenshot_path=after_screenshot_path,
-                    current_signature=after.signature,
-                    provider=self.visual_delta_provider,
-                    max_actions=self.max_candidates,
-                    scan_kind="targeted",
-                    added_business_facts=business_added,
-                    removed_business_facts=business_removed,
-                )
-            )
-            targeted_scan_novel = bool(targeted_added)
-            self._sync_location_affordance_snapshots(location_before)
         self.manager.meta.pop("inflight_action", None)
         graph_changed = node_was_new or edge_was_new
         self.manager.meta["last_step_kind"] = "business_edge"
         self.manager.meta["last_step_graph_changed"] = graph_changed
-        if self.location_scoped_exploration:
-            self.manager.meta["last_step_semantic_progress"] = bool(
-                outcome.has_progress or targeted_scan_novel or location_scan_novel
-            )
-            self.manager.meta["last_step_kind"] = (
-                "initial_location_scan"
-                if location_scan_novel
-                else "targeted_scan"
-                if targeted_scan_novel
-                else outcome.step_kind
-            )
+        self.manager.meta["last_step_semantic_progress"] = bool(
+            outcome.has_progress or location_scan_novel
+        )
+        self.manager.meta["last_step_kind"] = (
+            "initial_location_scan" if location_scan_novel else outcome.step_kind
+        )
         self.manager.meta["last_step_status"] = (
             "productive" if graph_changed else "unproductive"
         )
-        if self.location_scoped_exploration:
-            self.location_exploration_coordinator.sync_graph_meta(self.manager)
+        self.location_exploration_coordinator.sync_graph_meta(self.manager)
         if _should_advance_current_node(
             source_id=source_id,
             target_id=target_id,
@@ -1109,10 +950,9 @@ class WebKobeExplorer:
 
     def _begin_action_attempt(self, *, source_id: str, action: BrowserAction) -> str:
         attempt_id = uuid.uuid4().hex
-        if self.location_scoped_exploration:
-            self.manager.meta["formal_action_attempts"] = int(
-                self.manager.meta.get("formal_action_attempts", 0)
-            ) + 1
+        self.manager.meta["formal_action_attempts"] = int(
+            self.manager.meta.get("formal_action_attempts", 0)
+        ) + 1
         self.manager.meta["inflight_action"] = {
             "attempt_id": attempt_id,
             "source_node_id": source_id,
@@ -1244,233 +1084,6 @@ class WebKobeExplorer:
     def mark_replay_edge_validation(self, edge_id: str, status: str) -> None:
         self.manager.update_edge_replay_validation(edge_id, status)
 
-    async def validate_replay_checkpoint(
-        self,
-        *,
-        expected_semantic_location: str | None = None,
-        expected_business_facts: tuple[str, ...] = (),
-    ) -> ReplayCheckpointResult:
-        """Verify only the semantic endpoint of a replayed path.
-
-        This method is deliberately observation-only.  It does not identify a
-        node, record a visit, synchronize candidates, or update graph facts.
-        """
-        snapshot = await self.adapter.observe_state()
-        expected_location = normalize_semantic_id(expected_semantic_location or "")
-        required = tuple(
-            dict.fromkeys(
-                normalize_semantic_id(fact)
-                for fact in expected_business_facts
-                if normalize_semantic_id(fact)
-            )
-        )
-        verified: list[str] = []
-        evidence: list[str] = []
-        signature = snapshot.signature
-        typed_facts = getattr(self.adapter, "last_state_facts", None) or ()
-        typed_by_id = {
-            normalize_semantic_id(getattr(fact, "fact_id", "")): fact
-            for fact in typed_facts
-            if normalize_semantic_id(getattr(fact, "fact_id", ""))
-        }
-        for fact_id in required:
-            if _checkpoint_value_is_true(signature.get(fact_id)):
-                verified.append(fact_id)
-                evidence.append(f"signature:{fact_id}")
-                continue
-            if fact_id == "cart_has_items" and any(
-                _checkpoint_value_is_true(signature.get(key))
-                for key in ("cart_count", "item_count", "cart_items_count")
-            ):
-                verified.append(fact_id)
-                evidence.append("signature:cart_count")
-                continue
-            fact = typed_by_id.get(fact_id)
-            if fact is not None and _checkpoint_value_is_true(
-                getattr(fact, "value", None)
-            ):
-                verified.append(fact_id)
-                evidence.append(f"typed_state_fact:{fact_id}")
-
-        observed_location: str | None = None
-        interactables = await self.adapter.list_interactables(snapshot)
-        draft = self.semantic_assistor.describe_state(
-            snapshot=snapshot,
-            interactables=interactables,
-        )
-        observed_location = normalize_semantic_id(
-            draft.page_frame.page_type or snapshot.page_id
-        )
-        location_mismatch = bool(
-            expected_location and observed_location != expected_location
-        )
-        if location_mismatch and self.visual_delta_provider is None:
-            return ReplayCheckpointResult(
-                success=False,
-                observed_semantic_location=observed_location or None,
-                verified_business_facts=tuple(verified),
-                evidence=tuple(evidence),
-                reason="target_semantic_location_mismatch",
-            )
-        if not location_mismatch and not any(
-            fact_id not in verified for fact_id in required
-        ):
-            return ReplayCheckpointResult(
-                success=True,
-                observed_semantic_location=observed_location or None,
-                verified_business_facts=tuple(verified),
-                evidence=tuple(evidence),
-                reason="replay_succeeded",
-            )
-        # Without an experiment profile there is no closed location vocabulary.
-        # The expected endpoint is still checked directly by the checkpoint
-        # parser, while the provider may use any site-specific location label.
-        allowed_locations: set[str] = set()
-        descriptions = {
-            fact_id: ["Visible evidence supports this requested business fact."]
-            for fact_id in required
-        }
-
-        if self.visual_delta_provider is None:
-            return ReplayCheckpointResult(
-                success=False,
-                observed_semantic_location=observed_location,
-                verified_business_facts=tuple(verified),
-                evidence=tuple(evidence),
-                reason=(
-                    "target_business_facts_mismatch"
-                ),
-            )
-        try:
-            screenshot = await self._capture_replay_checkpoint_screenshot()
-        except Exception:
-            screenshot = None
-        if not screenshot:
-            return ReplayCheckpointResult(
-                success=False,
-                observed_semantic_location=observed_location,
-                verified_business_facts=tuple(verified),
-                evidence=tuple(evidence),
-                reason=(
-                    "target_business_facts_mismatch"
-                ),
-            )
-        prompt = json.dumps(
-            {
-                "expected_semantic_location": expected_location or None,
-                "allowed_semantic_locations": sorted(allowed_locations),
-                "requested_business_facts": descriptions,
-                "current_screenshot_path": screenshot,
-                "current_signature": dict(signature),
-                "current_page_context": {
-                    "page_id": snapshot.page_id,
-                    "url": snapshot.url,
-                    "url_path": _url_path(snapshot.url),
-                    "title": snapshot.title,
-                },
-            },
-            ensure_ascii=False,
-            sort_keys=True,
-        )
-        try:
-            raw_response = self.visual_delta_provider(
-                prompt,
-                current_screenshot_path=screenshot,
-                before_screenshot_path=screenshot,
-                after_screenshot_path=screenshot,
-            )
-        except Exception:
-            raw_response = None
-        provider_location, provider_evidence, failure_reason = (
-            _parse_replay_checkpoint_response(
-                raw_response,
-                allowed_locations=allowed_locations,
-                expected_location=expected_location or (observed_location or ""),
-                required_facts=required,
-            )
-        )
-        if failure_reason is not None:
-            return ReplayCheckpointResult(
-                success=False,
-                observed_semantic_location=provider_location or observed_location,
-                verified_business_facts=tuple(verified),
-                evidence=tuple(evidence),
-                reason=failure_reason,
-            )
-        for fact_id, fact_evidence in provider_evidence.items():
-            if fact_id not in verified:
-                verified.append(fact_id)
-                evidence.extend(fact_evidence)
-        if any(fact_id not in verified for fact_id in required):
-            return ReplayCheckpointResult(
-                success=False,
-                observed_semantic_location=provider_location or observed_location,
-                verified_business_facts=tuple(verified),
-                evidence=tuple(evidence),
-                reason="target_business_facts_mismatch",
-            )
-        return ReplayCheckpointResult(
-            success=True,
-            observed_semantic_location=provider_location or observed_location,
-            verified_business_facts=tuple(verified),
-            evidence=tuple(evidence),
-            reason="replay_succeeded",
-        )
-
-    async def validate_current_node(
-        self,
-        expected_node_id: str,
-        *,
-        expected_semantic_location: str | None = None,
-        expected_business_facts: tuple[str, ...] = (),
-    ) -> bool:
-        """Check the observed surface against an existing graph node."""
-        try:
-            expected = self.manager.node_for_id(expected_node_id)
-        except KeyError:
-            return False
-        snapshot = await self.adapter.observe_state()
-        interactables = await self.adapter.list_interactables(snapshot)
-        draft = self.semantic_assistor.describe_state(
-            snapshot=snapshot,
-            interactables=interactables,
-        )
-        if draft.node_id != expected_node_id:
-            if draft.last_state_snapshot != expected.last_state_snapshot:
-                return False
-            if _url_path(snapshot.url) != _url_path(expected.page_frame.url):
-                return False
-            expected_actions = {
-                item.get("semantic_id")
-                or item.get("canonical_action_name")
-                for item in expected.interactable_elements
-                if item.get("semantic_id") or item.get("canonical_action_name")
-            }
-            actual_actions = {
-                item.get("semantic_id")
-                or item.get("canonical_action_name")
-                for item in interactables
-                if item.get("semantic_id") or item.get("canonical_action_name")
-            }
-            if expected_actions and expected_actions != actual_actions:
-                return False
-        if expected_semantic_location:
-            observed_location = normalize_semantic_id(
-                draft.page_frame.page_type or snapshot.page_id
-            )
-            if observed_location != normalize_semantic_id(expected_semantic_location):
-                return False
-        for fact_id in expected_business_facts:
-            value = snapshot.signature.get(fact_id)
-            if value is not True and not (
-                isinstance(value, (int, float))
-                and not isinstance(value, bool)
-                and value > 0
-            ):
-                return False
-        self._set_current_node(expected_node_id)
-        return True
-
     def _record_visit_node(self, node_id: str) -> None:
         if not self._visit_stack:
             self._visit_stack.append(node_id)
@@ -1493,51 +1106,6 @@ class WebKobeExplorer:
         if self.visual_delta_provider is None:
             return
         source_node = self.manager.node_for_id(source_id)
-        if not self.location_scoped_exploration:
-            if (
-                source_node.business_affordances
-                or source_id in self._visual_affordance_observed_node_ids
-            ):
-                return
-            result = summarize_visual_affordances(
-                VisualAffordanceRequest(
-                    goal=self.goal,
-                    current_screenshot_path=before_screenshot_path,
-                    current_signature=before.signature,
-                    max_actions=self.max_candidates,
-                    scan_kind="supplement",
-                ),
-                provider=self.visual_delta_provider,
-            )
-            if result.trace.status != "summarized":
-                return
-            self._visual_affordance_observed_node_ids.add(source_id)
-            fallback_label = (
-                source_node.node_label
-                or source_node.page_frame.page_type
-                or source_node.node_id
-            )
-            accepted_vlm_label = bool(
-                result.state_label
-                and slug_identifier(result.state_label, fallback="")
-            )
-            self.manager.identify_or_add_node(
-                replace(
-                    source_node,
-                    business_affordances=result.business_affordances,
-                    state_summary=result.state_summary or source_node.state_summary,
-                    node_label=_safe_vlm_state_label(
-                        result.state_label,
-                        fallback=fallback_label,
-                    ),
-                    naming_provenance=(
-                        {"source": "visual_affordance_vlm"}
-                        if accepted_vlm_label
-                        else source_node.naming_provenance
-                    ),
-                )
-            )
-            return
         source_anchor, anchor_unresolved = _semantic_location_anchor(source_node)
         if anchor_unresolved:
             return
@@ -1550,14 +1118,7 @@ class WebKobeExplorer:
                 source_node.business_affordances,
                 kind="initial",
             )
-        supplement_needed = (
-            self.action_outcome_provider is None
-            and
-            pool.initial_scan_complete
-            and not pool.supplement_scan_complete
-            and (not pool.candidates or pool.exhausted)
-        )
-        if pool.initial_scan_complete and not supplement_needed:
+        if pool.initial_scan_complete:
             affordances = coordinator.affordances_for(scan_anchor)
             if affordances and affordances != source_node.business_affordances:
                 self.manager.identify_or_add_node(
@@ -1572,7 +1133,7 @@ class WebKobeExplorer:
             current_signature=before.signature,
             provider=self.visual_delta_provider,
             max_actions=self.max_candidates,
-            scan_kind="supplement" if supplement_needed else "initial",
+            scan_kind="initial",
         )
         if result is None or result.trace.status != "summarized":
             return
@@ -1618,17 +1179,6 @@ class WebKobeExplorer:
             return None
         label = f"{phase}_{self.manager.total_steps_completed + 1:04d}"
         return await capture(label)
-
-    async def _capture_replay_checkpoint_screenshot(self) -> str | None:
-        screenshot = _nonempty_screenshot_path(
-            await self._capture_screenshot("replay_checkpoint")
-        )
-        if screenshot is not None:
-            return screenshot
-        capture = getattr(self.adapter, "capture_screenshot", None)
-        if capture is None:
-            return None
-        return _nonempty_screenshot_path(await capture("replay_checkpoint"))
 
     async def _observe_after_action(
         self,
@@ -1874,7 +1424,7 @@ class WebKobeExplorer:
 
         location_id, unresolved = _semantic_location_anchor(node)
         memory_candidate = None
-        if self.location_scoped_exploration and location_id and not unresolved:
+        if location_id and not unresolved:
             pool = self.location_exploration_coordinator.memory.pool_for(location_id)
             if pool.candidates:
                 memory_candidate, _preflight = (

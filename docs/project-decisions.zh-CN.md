@@ -17,6 +17,24 @@
 - ...
 ```
 
+## 2026-08-24 - 收敛为唯一 location-scoped / Minimal Semantic PDDL 主线
+
+更改：
+- 删除旧 Trace、Location、Surface PDDL 投影器及对应 CLI、测试和 debug graph 入口。
+- 公开 CLI 收敛为 Stagehand 探索、Minimal Semantic PDDL 投影和 SafeSym smoke 三个命令。
+- Explorer 默认且仅运行 location-scoped 候选池流程；active path 不再触发 targeted/supplement scan。
+- replay 路径动作成功即完成上下文恢复，删除旧 VLM/raw-node checkpoint validator。
+- 删除静态固定序列实验脚本，只保留当前动态 SauceDemo 探索脚本。
+- 历史 checkpoint 中尚有用的数据字段可继续读取，但不再作为新的运行时分支或公开接口。
+
+原因：
+- 多套探索与 PDDL 结构同时存在会掩盖真实主线，使测试通过不能证明当前实验链路有效。
+- replay 的职责只是恢复上下文；页面再识别、候选发现和图更新都应由正常 Explorer 负责。
+
+影响：
+- 当前生产流固定为 VLM 候选观察、semantic-location 候选池、本地依赖选择、Stagehand 执行、VLM outcome、WebKobeGraph、frontier replay 和 Minimal Semantic PDDL。
+- 旧命令和旧投影产物不再兼容；历史设计和实验文档只用于追溯，不代表当前接口。
+
 ## 2026-08-23 - Replay 只恢复上下文，并完成 SauceDemo 验收
 
 更改：

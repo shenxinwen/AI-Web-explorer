@@ -12,7 +12,7 @@ from ai_web_explorer.grounded_web.graph import (
 )
 from ai_web_explorer.grounded_web.semantic_model import SemanticObservation
 from ai_web_explorer.grounded_web.semantic_model import semantic_planning_graph_from_dict
-from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
+from ai_web_explorer.safesym_bridge.graph_loader import (
     load_web_kobe_graph_json,
 )
 

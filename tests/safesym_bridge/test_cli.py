@@ -17,6 +17,7 @@ from ai_web_explorer.grounded_web.graph import (
 )
 from ai_web_explorer.grounded_web.business_profile import PlanningDelta
 from ai_web_explorer.grounded_web.semantic_model import SemanticObservation
+from ai_web_explorer.grounded_web.location_exploration import ExplorationLimits
 from ai_web_explorer.safesym_bridge import cli
 from ai_web_explorer.safesym_bridge.cli import main
 
@@ -114,7 +115,7 @@ def _write_semantic_projection_graph(path: Path, *, with_semantics: bool = True)
     )
 
 
-def test_phase_a_semantic_projection_writes_semantic_artifacts(tmp_path):
+def test_semantic_pddl_writes_only_current_projection_artifacts(tmp_path):
     graph_path = tmp_path / "semantic_graph.json"
     output_dir = tmp_path / "semantic"
     _write_semantic_projection_graph(graph_path)
@@ -122,11 +123,9 @@ def test_phase_a_semantic_projection_writes_semantic_artifacts(tmp_path):
     assert (
         main(
             [
-                "web-kobe-phase-a",
+                "web-kobe-semantic-pddl",
                 "--graph",
                 str(graph_path),
-                "--projection",
-                "semantic",
                 "--goal-location",
                 "checkout",
                 "--output",
@@ -137,62 +136,11 @@ def test_phase_a_semantic_projection_writes_semantic_artifacts(tmp_path):
     )
     assert (output_dir / "semantic_planning_graph.json").exists()
     assert (output_dir / "semantic_projection_report.json").exists()
+    assert not (output_dir / "planning_graph.json").exists()
+    assert not (output_dir / "planning_abstraction_report.json").exists()
+    assert not (output_dir / "raw_graph.json").exists()
     assert "(cart_has_items)" in (output_dir / "domain.pddl").read_text()
     assert "(:goal (and (at_checkout)))" in (output_dir / "problem.pddl").read_text()
-
-
-def test_semantic_projection_falls_back_without_semantic_observations(tmp_path):
-    graph_path = tmp_path / "historical_graph.json"
-    output_dir = tmp_path / "fallback"
-    _write_semantic_projection_graph(graph_path, with_semantics=False)
-
-    assert (
-        main(
-            [
-                "web-kobe-phase-a",
-                "--graph",
-                str(graph_path),
-                "--projection",
-                "semantic",
-                "--output",
-                str(output_dir),
-            ]
-        )
-        == 0
-    )
-    report = json.loads(
-        (output_dir / "semantic_projection_report.json").read_text(encoding="utf-8")
-    )
-    assert report["fallback_projection"] == "location"
-    assert report["fallback_reason"] == "no_usable_semantic_actions"
-    assert (output_dir / "domain.pddl").exists()
-
-
-def test_semantic_fallback_does_not_silently_ignore_explicit_goal(tmp_path):
-    graph_path = tmp_path / "historical_graph.json"
-    output_dir = tmp_path / "fallback_goal"
-    _write_semantic_projection_graph(graph_path, with_semantics=False)
-
-    assert (
-        main(
-            [
-                "web-kobe-phase-a",
-                "--graph",
-                str(graph_path),
-                "--projection",
-                "semantic",
-                "--goal-location",
-                "checkout",
-                "--output",
-                str(output_dir),
-            ]
-        )
-        == 1
-    )
-    report = json.loads(
-        (output_dir / "semantic_projection_report.json").read_text(encoding="utf-8")
-    )
-    assert report["fallback_goal_handled"] is False
 
 
 def _write_resume_graph(path: Path, *, app: str = "demo", failed: bool = True) -> None:
@@ -248,490 +196,43 @@ def test_main_help_lists_only_web_kobe_mainline_commands(capsys):
     assert main([]) == 2
 
     help_output = capsys.readouterr().out
-    assert "web-kobe-explore" in help_output
-    assert "web-kobe-domain-from-graph" in help_output
-    assert "web-kobe-pddl-from-graph" in help_output
-    assert "web-kobe-pddl-smoke" in help_output
+    assert "web-kobe-stagehand-explore" in help_output
+    assert "web-kobe-semantic-pddl" in help_output
     assert "web-kobe-safesym-smoke" in help_output
-    assert "web-kobe-openai-selector-smoke" not in help_output
-    assert "web-kobe-ecommerce-stagehand-smoke" not in help_output
-    assert "web-kobe-saucedemo-llm-step-smoke" not in help_output
-    assert "web-kobe-saucedemo-stagehand-smoke" not in help_output
-    assert "capability-graph" not in help_output
-    assert "explore-capability-graph" not in help_output
-    assert "explore-graph" not in help_output
-    assert "explore-pddl" not in help_output
+    for legacy_command in (
+        "web-kobe-graph",
+        "web-kobe-explore",
+        "web-kobe-pddl",
+        "web-kobe-pddl-from-graph",
+        "web-kobe-domain-from-graph",
+        "web-kobe-phase-a",
+        "web-kobe-consolidate",
+        "web-kobe-pddl-smoke",
+    ):
+        assert legacy_command not in help_output
 
 
-@pytest.mark.parametrize("legacy_command", ["graph", "pddl", "capability-graph"])
+@pytest.mark.parametrize(
+    "legacy_command",
+    [
+        "graph",
+        "pddl",
+        "capability-graph",
+        "web-kobe-graph",
+        "web-kobe-explore",
+        "web-kobe-pddl",
+        "web-kobe-pddl-from-graph",
+        "web-kobe-domain-from-graph",
+        "web-kobe-phase-a",
+        "web-kobe-consolidate",
+        "web-kobe-pddl-smoke",
+    ],
+)
 def test_main_rejects_legacy_fixed_graph_commands(legacy_command, tmp_path):
     with pytest.raises(SystemExit) as error:
         main([legacy_command, "--output", str(tmp_path / "out")])
 
     assert error.value.code == 2
-
-
-def test_main_web_kobe_graph_subcommand_writes_graph(monkeypatch, tmp_path):
-    output = tmp_path / "web_kobe_graph.json"
-
-    from ai_web_explorer.grounded_web.graph import WebKobeGraph
-
-    def fake_build_debug_web_kobe_graph():
-        return WebKobeGraph(
-            app="debug",
-            start_node_id="start",
-            total_steps_completed=0,
-            nodes=[],
-            edges=[],
-        )
-
-    monkeypatch.setattr(
-        cli, "build_debug_web_kobe_graph", fake_build_debug_web_kobe_graph
-    )
-
-    assert main(["web-kobe-graph", "--output", str(output)]) == 0
-    assert output.exists()
-    assert "web-kobe-graph-v1" in output.read_text(encoding="utf-8")
-
-
-def test_main_web_kobe_pddl_subcommand_writes_domain_and_problem(
-    monkeypatch,
-    tmp_path,
-):
-    output = tmp_path / "web_kobe_pddl"
-
-    from ai_web_explorer.grounded_web.graph import WebKobeGraph
-
-    def fake_build_debug_web_kobe_graph():
-        return WebKobeGraph(
-            app="debug",
-            start_node_id="start",
-            total_steps_completed=0,
-            nodes=[],
-            edges=[],
-        )
-
-    class FakeArtifacts:
-        domain = "(define (domain web-kobe))"
-        problem = "(define (problem web-kobe-problem))"
-
-    monkeypatch.setattr(
-        cli, "build_debug_web_kobe_graph", fake_build_debug_web_kobe_graph
-    )
-    monkeypatch.setattr(
-        cli,
-        "compile_web_kobe_graph_to_pddl",
-        lambda graph, goal_node_id, goal_fact=None: FakeArtifacts(),
-    )
-
-    assert main(["web-kobe-pddl", "--output", str(output), "--goal-node", "start"]) == 0
-    assert (output / "domain.pddl").read_text(encoding="utf-8") == FakeArtifacts.domain
-    assert (output / "problem.pddl").read_text(
-        encoding="utf-8"
-    ) == FakeArtifacts.problem
-
-
-def test_main_web_kobe_explore_subcommand_runs_playwright_runner(
-    tmp_path,
-    monkeypatch,
-):
-    output_path = tmp_path / "web_kobe_explored_graph.json"
-    calls = []
-
-    async def fake_run_web_kobe_exploration(
-        url,
-        output_path_arg,
-        *,
-        app_name="web",
-        page_id=None,
-        steps=1,
-        headless=True,
-        screenshot_dir=None,
-    ):
-        calls.append(
-            (
-                url,
-                output_path_arg,
-                app_name,
-                page_id,
-                steps,
-                headless,
-                screenshot_dir,
-            )
-        )
-        output_path_arg.write_text(
-            '{"meta": {"schema_version": "web-kobe-graph-v1"}}',
-            encoding="utf-8",
-        )
-        return output_path_arg
-
-    monkeypatch.setattr(
-        cli,
-        "run_web_kobe_exploration",
-        fake_run_web_kobe_exploration,
-    )
-
-    exit_code = main(
-        [
-            "web-kobe-explore",
-            "--url",
-            "http://127.0.0.1:8000/index.html",
-            "--output",
-            str(output_path),
-            "--app-name",
-            "fixture",
-            "--page-id",
-            "fixture_shop",
-            "--steps",
-            "2",
-            "--screenshot-dir",
-            str(tmp_path / "screenshots"),
-            "--headed",
-        ]
-    )
-
-    assert exit_code == 0
-    assert calls == [
-        (
-            "http://127.0.0.1:8000/index.html",
-            output_path,
-            "fixture",
-            "fixture_shop",
-            2,
-            False,
-            tmp_path / "screenshots",
-        )
-    ]
-
-
-def test_main_web_kobe_pddl_from_graph_writes_domain_and_problem(tmp_path):
-    graph_path = tmp_path / "web_kobe_graph.json"
-    output_dir = tmp_path / "web_kobe_pddl"
-    graph = WebKobeGraph(
-        app="example",
-        start_node_id="empty",
-        total_steps_completed=1,
-        nodes=[
-            WebKobeNode(
-                node_id="empty",
-                page_description="empty page",
-                page_frame=PageFrame(
-                    page_id="empty",
-                    page_type="listing",
-                    url="https://example.test",
-                    url_pattern="https://example.test",
-                    title="empty",
-                ),
-                state_schema={"cart_count": [0]},
-                last_state_snapshot={"cart_count": 0},
-            ),
-            WebKobeNode(
-                node_id="filled",
-                page_description="filled page",
-                page_frame=PageFrame(
-                    page_id="filled",
-                    page_type="listing",
-                    url="https://example.test",
-                    url_pattern="https://example.test",
-                    title="filled",
-                ),
-                state_schema={"cart_count": [1]},
-                last_state_snapshot={"cart_count": 1},
-            ),
-        ],
-        edges=[
-            WebKobeEdge(
-                source_node_id="empty",
-                target_node_id="filled",
-                instruction="add to cart",
-                action=BrowserAction("click", "button.add", "add_to_cart"),
-                capability=None,
-                target_observation="filled cart",
-                observed_delta=[
-                    ObservedDelta("cart_count", 0, 1, "state_indicator_change")
-                ],
-                schema_delta={"cart_count": {"before": 0, "after": 1}},
-                execution_trace=ExecutionTrace(
-                    "click",
-                    "button.add",
-                    "add",
-                    {},
-                    "empty",
-                    "filled",
-                    True,
-                ),
-            )
-        ],
-    )
-    graph_path.write_text(json.dumps(graph.to_dict()), encoding="utf-8")
-
-    exit_code = main(
-        [
-            "web-kobe-pddl-from-graph",
-            "--graph",
-            str(graph_path),
-            "--output",
-            str(output_dir),
-            "--goal-node",
-            "filled",
-        ]
-    )
-
-    assert exit_code == 0
-    assert "(:action edge_001_add_to_cart" in (output_dir / "domain.pddl").read_text(
-        encoding="utf-8"
-    )
-    assert "(:goal (and (at_filled)))" in (output_dir / "problem.pddl").read_text(
-        encoding="utf-8"
-    )
-
-
-def test_main_web_kobe_domain_from_graph_writes_only_domain(tmp_path):
-    graph_path = tmp_path / "web_kobe_graph.json"
-    output_dir = tmp_path / "web_kobe_domain"
-    graph = WebKobeGraph(
-        app="example",
-        start_node_id="empty",
-        total_steps_completed=1,
-        nodes=[
-            WebKobeNode(
-                node_id="empty",
-                page_description="empty page",
-                page_frame=PageFrame(
-                    page_id="empty",
-                    page_type="listing",
-                    url="https://example.test",
-                    url_pattern="https://example.test",
-                    title="empty",
-                ),
-                state_schema={},
-                last_state_snapshot={},
-            ),
-            WebKobeNode(
-                node_id="filled",
-                page_description="filled page",
-                page_frame=PageFrame(
-                    page_id="filled",
-                    page_type="listing",
-                    url="https://example.test",
-                    url_pattern="https://example.test",
-                    title="filled",
-                ),
-                state_schema={},
-                last_state_snapshot={},
-            ),
-        ],
-        edges=[
-            WebKobeEdge(
-                source_node_id="empty",
-                target_node_id="filled",
-                instruction="add to cart",
-                action=BrowserAction("click", "button.add", "add_to_cart"),
-                capability=None,
-                target_observation="filled cart",
-                observed_delta=[],
-                schema_delta={},
-                execution_trace=ExecutionTrace(
-                    "click",
-                    "button.add",
-                    "add",
-                    {},
-                    "empty",
-                    "filled",
-                    True,
-                ),
-                status="succeeded_with_navigation",
-            )
-        ],
-    )
-    graph_path.write_text(json.dumps(graph.to_dict()), encoding="utf-8")
-
-    exit_code = main(
-        [
-            "web-kobe-domain-from-graph",
-            "--graph",
-            str(graph_path),
-            "--output",
-            str(output_dir),
-        ]
-    )
-
-    assert exit_code == 0
-    assert "(:action edge_001_add_to_cart" in (output_dir / "domain.pddl").read_text(
-        encoding="utf-8"
-    )
-    assert not (output_dir / "problem.pddl").exists()
-
-
-def test_main_web_kobe_pddl_from_graph_accepts_goal_fact(tmp_path):
-    graph_path = tmp_path / "web_kobe_graph.json"
-    output_dir = tmp_path / "web_kobe_pddl"
-    graph = WebKobeGraph(
-        app="example",
-        start_node_id="review",
-        total_steps_completed=1,
-        nodes=[
-            WebKobeNode(
-                node_id="review",
-                page_description="review page",
-                page_frame=PageFrame(
-                    page_id="review",
-                    page_type="review",
-                    url="https://example.test/review",
-                    url_pattern="https://example.test/review",
-                    title="review",
-                ),
-                state_schema={},
-                last_state_snapshot={},
-            ),
-            WebKobeNode(
-                node_id="complete",
-                page_description="complete page",
-                page_frame=PageFrame(
-                    page_id="complete",
-                    page_type="complete",
-                    url="https://example.test/complete",
-                    url_pattern="https://example.test/complete",
-                    title="complete",
-                ),
-                state_schema={},
-                last_state_snapshot={},
-            ),
-        ],
-        edges=[
-            WebKobeEdge(
-                source_node_id="review",
-                target_node_id="complete",
-                instruction="complete order",
-                action=BrowserAction(
-                    "business_intent",
-                    None,
-                    "complete_order",
-                    canonical_action_name="complete_order",
-                ),
-                capability=None,
-                target_observation="complete",
-                observed_delta=[],
-                schema_delta={},
-                execution_trace=ExecutionTrace(
-                    "business_intent",
-                    None,
-                    "complete_order",
-                    {},
-                    "review",
-                    "complete",
-                    True,
-                ),
-                planning_delta=PlanningDelta(
-                    candidate_added_facts=["order_completed"],
-                    evidence=["confirmation page displayed"],
-                ),
-                status="succeeded_with_observed_change",
-            )
-        ],
-    )
-    graph_path.write_text(json.dumps(graph.to_dict()), encoding="utf-8")
-
-    exit_code = main(
-        [
-            "web-kobe-pddl-from-graph",
-            "--graph",
-            str(graph_path),
-            "--output",
-            str(output_dir),
-            "--goal-node",
-            "complete",
-            "--goal-fact",
-            "order_completed",
-        ]
-    )
-
-    assert exit_code == 0
-    assert "(:goal (and (order_completed)))" in (output_dir / "problem.pddl").read_text(
-        encoding="utf-8"
-    )
-
-
-def test_main_web_kobe_pddl_smoke_writes_report(tmp_path):
-    graph_path = tmp_path / "web_kobe_graph.json"
-    output_dir = tmp_path / "web_kobe_smoke"
-    graph = WebKobeGraph(
-        app="example",
-        start_node_id="empty",
-        total_steps_completed=1,
-        nodes=[
-            WebKobeNode(
-                node_id="empty",
-                page_description="empty page",
-                page_frame=PageFrame(
-                    page_id="empty",
-                    page_type="listing",
-                    url="https://example.test",
-                    url_pattern="https://example.test",
-                    title="empty",
-                ),
-                state_schema={"cart_count": [0]},
-                last_state_snapshot={"cart_count": 0},
-            ),
-            WebKobeNode(
-                node_id="filled",
-                page_description="filled page",
-                page_frame=PageFrame(
-                    page_id="filled",
-                    page_type="listing",
-                    url="https://example.test",
-                    url_pattern="https://example.test",
-                    title="filled",
-                ),
-                state_schema={"cart_count": [1]},
-                last_state_snapshot={"cart_count": 1},
-            ),
-        ],
-        edges=[
-            WebKobeEdge(
-                source_node_id="empty",
-                target_node_id="filled",
-                instruction="add to cart",
-                action=BrowserAction("click", "button.add", "add_to_cart"),
-                capability=None,
-                target_observation="filled cart",
-                observed_delta=[
-                    ObservedDelta("cart_count", 0, 1, "state_indicator_change")
-                ],
-                schema_delta={"cart_count": {"before": 0, "after": 1}},
-                execution_trace=ExecutionTrace(
-                    "click",
-                    "button.add",
-                    "add",
-                    {},
-                    "empty",
-                    "filled",
-                    True,
-                ),
-                status="succeeded_with_observed_change",
-            )
-        ],
-    )
-    graph_path.write_text(json.dumps(graph.to_dict()), encoding="utf-8")
-
-    exit_code = main(
-        [
-            "web-kobe-pddl-smoke",
-            "--graph",
-            str(graph_path),
-            "--output",
-            str(output_dir),
-            "--goal-node",
-            "filled",
-        ]
-    )
-
-    assert exit_code == 0
-    assert (output_dir / "domain.pddl").exists()
-    assert (output_dir / "problem.pddl").exists()
-    report = json.loads((output_dir / "smoke_report.json").read_text(encoding="utf-8"))
-    assert report["planning_ready"] is True
-    assert report["safety_trigger_expected"] is False
 
 
 def test_main_web_kobe_safesym_smoke_writes_report(monkeypatch, tmp_path):
@@ -1017,6 +518,8 @@ def test_main_web_kobe_stagehand_explore_accepts_frontier_replay(monkeypatch, tm
     assert calls[0]["use_openai_visual_delta"] is True
     assert calls[0]["screenshot_dir"] == tmp_path / "screenshots"
     assert calls[0]["stagehand_execution_mode"] == "observed_action"
+    assert isinstance(calls[0]["limits"], ExplorationLimits)
+    assert calls[0]["limits"].max_candidates_per_location == 5
 
 
 def test_main_stagehand_explore_accepts_location_feasibility_parameters(
@@ -1041,8 +544,6 @@ def test_main_stagehand_explore_accepts_location_feasibility_parameters(
                 str(tmp_path / "graph.json"),
                 "--max-exploration-steps",
                 "20",
-                "--max-consecutive-no-progress",
-                "3",
                 "--max-action-attempts-per-candidate",
                 "2",
                 "--max-replay-attempts-per-frontier",
@@ -1062,8 +563,6 @@ def test_main_stagehand_explore_accepts_location_feasibility_parameters(
         )
         == 0
     )
-
-    from ai_web_explorer.grounded_web.location_exploration import ExplorationLimits
 
     assert captured["limits"] == ExplorationLimits()
     assert captured["allow_test_site_final_order"] is True
@@ -1404,180 +903,3 @@ def test_main_web_kobe_stagehand_explore_cleans_latest_output_dir(
 
     assert exit_code == 0
     assert calls == [(output, trace, stale_screenshot_dir, embeddings)]
-
-
-def test_main_web_kobe_phase_a_surface_projection_writes_problem(tmp_path):
-    graph_path = tmp_path / "graph.json"
-    output_dir = tmp_path / "surface"
-    node = WebKobeNode(
-        node_id="shopping",
-        page_description="shopping",
-        page_frame=PageFrame(
-            page_id="shopping",
-            page_type="shopping",
-            url="https://fixture.test/shop",
-            url_pattern="https://fixture.test/shop",
-            title="shopping",
-        ),
-        state_schema={},
-        last_state_snapshot={},
-        node_label="shopping",
-    )
-    edge = WebKobeEdge(
-        source_node_id="shopping",
-        target_node_id="shopping",
-        instruction="filter",
-        action=BrowserAction("click", "#filter", "filter"),
-        capability=None,
-        target_observation="shopping",
-        observed_delta=[],
-        schema_delta={},
-        execution_trace=ExecutionTrace(
-            "click", "#filter", "filter", {}, "shopping", "shopping", True
-        ),
-        status="succeeded_with_observed_change",
-    )
-    graph_path.write_text(
-        json.dumps(
-            WebKobeGraph(
-                app="fixture",
-                start_node_id="shopping",
-                total_steps_completed=1,
-                nodes=[node],
-                edges=[edge],
-            ).to_dict()
-        ),
-        encoding="utf-8",
-    )
-
-    assert (
-        main(
-            [
-                "web-kobe-phase-a",
-                "--graph",
-                str(graph_path),
-                "--output",
-                str(output_dir),
-                "--projection",
-                "surface",
-                "--goal-node",
-                "shopping",
-            ]
-        )
-        == 0
-    )
-    domain = (output_dir / "domain.pddl").read_text(encoding="utf-8")
-    problem = (output_dir / "problem.pddl").read_text(encoding="utf-8")
-    assert "(executed transition_filter_on_shopping)" in domain
-    assert "(:domain web_kobe_surface)" in problem
-    assert "checkpoint" not in domain
-
-
-def _write_surface_graph(path: Path, *, include_isolated: bool = False) -> None:
-    nodes = [
-        WebKobeNode(
-            node_id="start",
-            page_description="start",
-            page_frame=PageFrame(
-                page_id="start",
-                page_type="listing",
-                url="https://fixture.test/",
-                url_pattern="https://fixture.test/",
-                title="start",
-            ),
-            state_schema={},
-            last_state_snapshot={},
-            node_label="start",
-        )
-    ]
-    if include_isolated:
-        nodes.append(
-            WebKobeNode(
-                node_id="isolated",
-                page_description="isolated",
-                page_frame=PageFrame(
-                    page_id="isolated",
-                    page_type="listing",
-                    url="https://fixture.test/isolated",
-                    url_pattern="https://fixture.test/isolated",
-                    title="isolated",
-                ),
-                state_schema={},
-                last_state_snapshot={},
-                node_label="isolated",
-            )
-        )
-    path.write_text(
-        json.dumps(
-            WebKobeGraph(
-                app="fixture",
-                start_node_id="start",
-                total_steps_completed=0,
-                nodes=nodes,
-                edges=[],
-            ).to_dict()
-        ),
-        encoding="utf-8",
-    )
-
-
-def test_main_web_kobe_phase_a_without_problem_query_removes_stale_problem(
-    tmp_path,
-):
-    graph_path = tmp_path / "graph.json"
-    output_dir = tmp_path / "surface"
-    _write_surface_graph(graph_path)
-    output_dir.mkdir()
-    (output_dir / "problem.pddl").write_text("stale", encoding="utf-8")
-    marker = output_dir / "unrelated.txt"
-    marker.write_text("keep", encoding="utf-8")
-
-    assert (
-        main(
-            [
-                "web-kobe-phase-a",
-                "--graph",
-                str(graph_path),
-                "--output",
-                str(output_dir),
-                "--projection",
-                "surface",
-            ]
-        )
-        == 0
-    )
-    assert not (output_dir / "problem.pddl").exists()
-    assert marker.read_text(encoding="utf-8") == "keep"
-
-
-@pytest.mark.parametrize("goal_node", ["missing", "isolated"])
-def test_main_web_kobe_phase_a_failed_problem_query_removes_stale_problem(
-    tmp_path,
-    goal_node,
-):
-    graph_path = tmp_path / "graph.json"
-    output_dir = tmp_path / "surface"
-    _write_surface_graph(graph_path, include_isolated=True)
-    output_dir.mkdir()
-    (output_dir / "problem.pddl").write_text("stale", encoding="utf-8")
-    marker = output_dir / "unrelated.txt"
-    marker.write_text("keep", encoding="utf-8")
-
-    assert (
-        main(
-            [
-                "web-kobe-phase-a",
-                "--graph",
-                str(graph_path),
-                "--output",
-                str(output_dir),
-                "--projection",
-                "surface",
-                "--goal-node",
-                goal_node,
-            ]
-        )
-        == 1
-    )
-    assert not (output_dir / "problem.pddl").exists()
-    assert marker.read_text(encoding="utf-8") == "keep"

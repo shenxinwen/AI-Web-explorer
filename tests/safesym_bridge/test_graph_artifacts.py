@@ -30,7 +30,7 @@ from ai_web_explorer.safesym_bridge.graph_artifacts import (
 from ai_web_explorer.safesym_bridge.minimal_semantic_pddl import (
     compile_minimal_semantic_domain,
 )
-from ai_web_explorer.safesym_bridge.web_kobe_pddl_projector import (
+from ai_web_explorer.safesym_bridge.graph_loader import (
     load_web_kobe_graph_json,
 )
 

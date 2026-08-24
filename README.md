@@ -1,145 +1,65 @@
 # AI Web Explorer
 
-This repository is being shaped into a SafeSym-oriented web environment
-explorer. Its current mainline is not a general-purpose web agent; it is a
-pipeline for observing webpages, recording state-changing browser actions, and
-projecting the resulting graph into planner-facing artifacts.
+AI Web Explorer observes real webpages, discovers semantic business actions, executes them through Stagehand, records the results in a `WebKobeGraph`, and projects the graph to Minimal Semantic PDDL for SafeSym.
 
 ```text
-real webpage
-  -> DOM-grounded observation and browser action execution
-  -> WebKobeGraph
-  -> Web-KOBE PDDL projection
-  -> SafeSym/planner-facing artifacts
+VLM screenshot observation
+  -> semantic-location candidate pool + requires
+  -> dependency-aware local selection
+  -> Stagehand execution
+  -> VLM outcome observation
+  -> WebKobeGraph update
+  -> frontier replay when context recovery is needed
+  -> Minimal Semantic PDDL
+  -> SafeSym
 ```
 
-The old upstream `explore` runtime has been removed from the active package.
-New work should use the Web-KOBE/SafeSym path.
-
-## Current Mainline
-
-The active generic exploration package is:
-
-```text
-src/ai_web_explorer/grounded_web/
-```
-
-It owns:
-
-- DOM-grounded page observation;
-- action candidate extraction;
-- browser action execution through a replaceable automation backend;
-- state facts and typed deltas;
-- WebKobeGraph construction.
-
-The SafeSym bridge package is:
-
-```text
-src/ai_web_explorer/safesym_bridge/
-```
-
-It consumes `grounded_web` graph artifacts and writes SafeSym/PDDL-facing
-outputs. It should not own generic exploration policy.
-
-The active open-exploration runner is `web-kobe-stagehand-explore`. The simpler
-`web-kobe-explore` command remains available as a deterministic Playwright
-graph/smoke path; it does not provide the VLM-driven Stagehand exploration loop.
+Replay only restores a previously explored context by resetting the start URL and replaying a saved semantic-action path. It never discovers candidates or mutates exploration state; normal exploration resumes after replay succeeds.
 
 ## CLI
-
-After installing the package, the current mainline CLI is available as:
-
-```bash
-web-kobe --help
-```
-
-You can also run it directly from the repository root:
 
 ```bash
 python -m ai_web_explorer.safesym_bridge.cli --help
 ```
 
-Deterministic fixture smoke flow:
+The three public commands are:
 
-```bash
-python -m http.server 8000 --directory tests/fixtures/local_checkout
-
-web-kobe web-kobe-explore \
-  --url http://127.0.0.1:8000/index.html \
-  --output outputs/local_checkout_web_kobe.json \
-  --app-name local_checkout \
-  --page-id local_checkout \
-  --steps 6
-
-web-kobe web-kobe-pddl-smoke \
-  --graph outputs/local_checkout_web_kobe.json \
-  --output outputs/local_checkout_pddl_smoke \
-  --goal-node <goal_node_id>
+```text
+web-kobe-stagehand-explore
+web-kobe-semantic-pddl
+web-kobe-safesym-smoke
 ```
 
-For the active VLM/Stagehand exploration path, use:
+Example:
 
 ```bash
 web-kobe web-kobe-stagehand-explore \
   --url https://www.saucedemo.com/ \
   --app-name saucedemo \
-  --output outputs/experiments/saucedemo/latest/stagehand_explore_graph.json \
-  --stagehand-trace outputs/experiments/saucedemo/latest/stagehand_explore_trace.json \
-  --stagehand-execution-mode observe_act \
-  --max-exploration-steps 25
-```
+  --goal "explore the shopping and checkout flow" \
+  --output outputs/saucedemo/web_kobe_graph.json
 
-The Stagehand runner uses the generic candidate, execution, observation,
-replay, and bounded-termination pipeline. It does not use the removed
-`business_milestone` runner or semantic experiment profile/action contract.
+web-kobe web-kobe-semantic-pddl \
+  --graph outputs/saucedemo/web_kobe_graph.json \
+  --output outputs/saucedemo/pddl \
+  --goal-location checkout_complete
 
-If SafeSym is checked out locally, validate that SafeSym can parse, inject, and
-optionally solve the generated PDDL:
-
-```bash
 web-kobe web-kobe-safesym-smoke \
-  --task-dir outputs/local_checkout_pddl_smoke \
-  --safesym-root C:\Users\moon\Desktop\Projects\SafeSym \
-  --rules C:\Users\moon\Desktop\Projects\SafeSym\configs\constraint_rules.json \
-  --fast-downward C:\Users\moon\Desktop\Projects\AutoWebWorld\downward\fast-downward.py
+  --task-dir outputs/saucedemo/pddl \
+  --safesym-root <path-to-SafeSym>
 ```
 
-The smoke command writes:
+## Documentation
 
-```text
-domain.pddl
-problem.pddl
-smoke_report.json
-```
-
-This validates planning readiness only. If the explored graph does not contain a
-safety-relevant action such as `order_place_confirm`, SafeSym safety injection
-not triggering is expected.
-
-## Useful Commands
-
-```bash
-web-kobe web-kobe-explore --url <url> --output outputs/web_kobe_graph.json
-web-kobe web-kobe-stagehand-explore --url <url> --output outputs/stagehand_graph.json --stagehand-execution-mode observe_act
-web-kobe web-kobe-pddl-from-graph --graph outputs/web_kobe_graph.json --goal-node <node>
-web-kobe web-kobe-pddl-smoke --graph outputs/web_kobe_graph.json --goal-node <node>
-web-kobe web-kobe-safesym-smoke --task-dir outputs/web_kobe_pddl_smoke --safesym-root <path> --rules <rules.json>
-```
-
-Debug-only helpers are still available:
-
-```bash
-web-kobe web-kobe-graph --output outputs/debug_web_kobe_graph.json
-web-kobe web-kobe-pddl --output outputs/debug_web_kobe_pddl --goal-node start
-```
+- [Current overview](docs/current-project-overview.zh-CN.md)
+- [Project structure](docs/project-structure.zh-CN.md)
+- [SafeSym bridge](docs/safesym-bridge.md)
+- [Project decisions](docs/project-decisions.zh-CN.md)
 
 ## Tests
-
-Run the retained mainline bridge suite:
 
 ```bash
 pytest tests/safesym_bridge -q
 ```
 
-Some browser tests launch Playwright Chromium and may require local execution
-permissions outside restricted sandboxes.
+Browser integration tests that launch Playwright Chromium may require local process-launch permission.
