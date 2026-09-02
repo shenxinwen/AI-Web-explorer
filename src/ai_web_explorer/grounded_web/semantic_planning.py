@@ -34,8 +34,15 @@ def _edge_name(edge: WebKobeEdge) -> str:
     return normalize_semantic_id(edge.action.canonical_action_name or edge.action.semantic_id)
 
 
-def _completion_fact(location: str, action_name: str) -> str:
-    return normalize_semantic_id(f"completed_{location}_{action_name}")
+def _completion_fact(
+    location: str,
+    action_name: str,
+    *,
+    disambiguate_location: bool = False,
+) -> str:
+    if disambiguate_location:
+        return normalize_semantic_id(f"{action_name}_{location}_succeeded")
+    return normalize_semantic_id(f"{action_name}_succeeded")
 
 
 def _source_state(graph: WebKobeGraph, edge: WebKobeEdge):
@@ -96,7 +103,7 @@ def build_semantic_planning_graph(
     capability_facts: set[str] = set()
     business_facts: set[str] = set()
     nodes = {node.node_id: node for node in graph.nodes}
-    successful_completion_facts: dict[tuple[str, str], str] = {}
+    successful_action_locations: dict[str, set[str]] = {}
     for edge in graph.edges:
         if (
             edge.execution_trace.success
@@ -107,9 +114,18 @@ def build_semantic_planning_graph(
             observation = edge.semantic_observation
             source_location = normalize_semantic_id(observation.source_location)
             if source_location and action_name:
-                successful_completion_facts[(source_location, action_name)] = (
-                    _completion_fact(source_location, action_name)
+                successful_action_locations.setdefault(action_name, set()).add(
+                    source_location
                 )
+    successful_completion_facts = {
+        (location, action_name): _completion_fact(
+            location,
+            action_name,
+            disambiguate_location=len(successful_action_locations[action_name]) > 1,
+        )
+        for action_name, locations_for_action in successful_action_locations.items()
+        for location in locations_for_action
+    }
 
     for edge in graph.edges:
         observation = edge.semantic_observation
@@ -223,7 +239,8 @@ def build_semantic_planning_graph(
         verified_removed = _unique_sorted(
             planning_delta.verified_removed_facts if planning_delta else []
         )
-        completion_fact = _completion_fact(source_location, _edge_name(edge))
+        action_name = _edge_name(edge)
+        completion_fact = successful_completion_facts[(source_location, action_name)]
         added_facts = _unique_sorted(verified_added + [completion_fact])
         capability_facts.add(completion_fact)
         _record_provenance(

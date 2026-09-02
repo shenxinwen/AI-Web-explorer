@@ -129,10 +129,26 @@ def test_sort_stays_at_location_and_adds_completion_fact():
     action = semantic.actions[0]
     assert action.required_facts == []
     assert action.added_facts == [
-        "completed_shopping_sort_products",
         "products_sorted",
+        "sort_products_succeeded",
     ]
     assert action.source_location == action.target_location == "shopping"
+
+
+def test_success_fact_uses_the_readable_action_succeeded_name():
+    graph = _graph_with_edge(
+        _edge(
+            action_name="submit_login",
+            role="navigation",
+            source_location="login_form",
+            target_location="product_catalog",
+        )
+    )
+
+    semantic, _ = build_semantic_planning_graph(graph)
+
+    assert semantic.actions[0].added_facts == ["submit_login_succeeded"]
+    assert "submit_login_succeeded" in semantic.capability_facts
 
 
 def test_successful_action_dependencies_become_completion_preconditions():
@@ -169,12 +185,12 @@ def test_successful_action_dependencies_become_completion_preconditions():
     dependent_action = next(
         action for action in semantic.actions if action.action_name == "place_order"
     )
-    assert "completed_shopping_fill_billing" in prerequisite_action.added_facts
-    assert "completed_shopping_fill_billing" in dependent_action.required_facts
+    assert "fill_billing_succeeded" in prerequisite_action.added_facts
+    assert "fill_billing_succeeded" in dependent_action.required_facts
     domain = compile_minimal_semantic_domain(semantic).domain
-    assert "(completed_shopping_fill_billing)" in domain
+    assert "(fill_billing_succeeded)" in domain
     place_order = domain.index("(:action place_order")
-    completion_fact = domain.index("(completed_shopping_fill_billing)", place_order)
+    completion_fact = domain.index("(fill_billing_succeeded)", place_order)
     assert completion_fact < domain.index(":effect", place_order)
 
 
@@ -220,8 +236,8 @@ def test_same_action_id_dependency_is_scoped_to_dependent_source_location():
         action for action in semantic.actions if action.action_name == "submit_form"
     )
 
-    assert submit.required_facts == ["completed_checkout_fill_form"]
-    assert "completed_shopping_fill_form" not in submit.required_facts
+    assert submit.required_facts == ["fill_form_checkout_succeeded"]
+    assert "fill_form_shopping_succeeded" not in submit.required_facts
 
 
 @pytest.mark.parametrize("prerequisite_state", ["absent", "failed", "non_projectable"])
@@ -290,9 +306,9 @@ def test_every_successful_action_gets_a_location_qualified_completion_fact():
     action = semantic.actions[0]
     domain = compile_minimal_semantic_domain(semantic).domain
 
-    assert action.added_facts == ["completed_shopping_filter_products"]
-    assert "completed_shopping_filter_products" in semantic.capability_facts
-    assert "(completed_shopping_filter_products)" in domain
+    assert action.added_facts == ["filter_products_succeeded"]
+    assert "filter_products_succeeded" in semantic.capability_facts
+    assert "(filter_products_succeeded)" in domain
 
 
 def test_add_to_cart_changes_fact_without_creating_combination_location():
@@ -306,8 +322,8 @@ def test_add_to_cart_changes_fact_without_creating_combination_location():
     semantic, _ = build_semantic_planning_graph(graph)
     assert semantic.locations == ["shopping"]
     assert semantic.actions[0].added_facts == [
+        "add_to_cart_from_shopping_succeeded",
         "cart_has_items",
-        "completed_shopping_add_to_cart_from_shopping",
     ]
 
 
