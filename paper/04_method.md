@@ -6,7 +6,7 @@
 
 > observation → GUI interaction → new observation
 
-系统不给定具体任务或完整功能清单，目标是在风险约束下持续归纳应用级功能模型，而不是恢复完整、不可观察的内部业务状态。
+系统不依赖用户预定义任务，而是根据当前环境自动提出候选功能并持续归纳应用级功能模型。目标不是恢复完整、不可观察的内部业务状态。
 
 模型中的论文级概念如下：
 
@@ -19,6 +19,7 @@
 | Functional outcome | 功能结果状态与界面转移类型 | Executor Success 不等于 Functional Success |
 | Verification state | 功能结论当前获得的支持程度 | 与运行时调度状态分离 |
 | Interaction evidence | 支持结论的来源、轨迹、前后观察与结果判断 | 可追溯不等于形式化正确性保证 |
+| Risk annotation | 候选功能的风险类型、严重程度、可逆性和页面证据 | 风险识别不等于阻止危险行为 |
 
 功能结果使用两个独立维度：
 
@@ -41,38 +42,34 @@ pending、retryable、stale、blocked 等只作为实现层子状态。
 
 VLM 根据当前 GUI 和已有模型提出 semantic location、high-level function 与可能的直接动作依赖。所有新内容先保存为 Proposed 假设，不直接写成环境事实。VLM 是可替换的候选生成与观察工具。
 
-### 2. Execution and Outcome Observation
+### 2. Pre-Execution Risk Awareness
+
+系统在候选 high-level function 执行前进行轻量风险判断：
+
+1. 预定义风险知识根据功能语义召回候选风险类别；
+2. VLM 结合当前 GUI、候选功能和目标对象复核风险；
+3. 输出 risk type、severity、reversibility 和 supporting evidence；
+4. 将风险标记与功能假设关联，供过程追踪、事后审查和下游使用。
+
+风险知识库提供稳定、可检查的类别定义，VLM 负责处理动态页面上下文。当前风险标记不强制改变执行；人工确认、停止和拦截是可扩展执行策略。
+
+### 3. Execution and Outcome Observation
 
 浏览器执行器尝试执行被选中的 high-level function。系统记录动作前后观察，并分别判断执行器是否完成动作以及预期功能结果是否发生。浏览器执行器是可替换工具。
 
-### 3. Evidence-Driven Model Update
+### 4. Evidence-Driven Model Update
 
 系统依据执行记录和结果观察更新 outcome 与 verification state。失败、不确定和未完成结果分别保留；只有达到证据要求的知识才能供下游使用。每项结论应支持如下追溯：
 
 > hypothesis source → execution trace → before/after observations → outcome judgment
 
-### 4. Persistent Frontier
+### 5. Persistent Frontier
 
 当前位置尚待验证或未完成的假设被持久保存，系统可以重访已访问位置继续建模。该机制服务于持续探索，不作为独立概念贡献。
 
-### 5. Risk-Aware Functional Verification
-
-执行前根据候选功能的影响程度与可恢复性确定验证深度。普通可恢复操作允许完整执行；潜在不可逆操作可在最终 commit 前停止，并将已获得证据记录为 Partially Supported 或 Incomplete（两者的判定规则待机制设计时明确）。
-
-示例：
-
-```text
-Delete Project
-→ Confirmation Dialog
-→ [Commit Boundary]
-→ Confirm Deletion
-```
-
-确认界面可为“存在删除功能”提供部分语义证据，但不能证明删除结果已经发生。
-
 ### 6. Conservative Downstream Projection
 
-完整模型保留提议、部分支持、失败、不确定、未完成、证据和风险信息；下游可执行模型仅使用达到证据阈值的知识：
+完整模型保留提议、部分支持、失败、不确定、未完成、证据和风险信息；下游模型可以同时依据证据阈值和风险信息选择知识：
 
 ```text
 Evidence-Grounded Functional Model
@@ -92,5 +89,5 @@ PDDL-compatible projection 可以将 semantic locations 映射为 predicates，�
 | GUI 执行与前后观察 | 待代码核查后填写 | 执行轨迹、before/after observation、执行器状态 |
 | 结果判断与模型更新 | 待代码核查后填写 | outcome/verification state 更新案例与标注评测 |
 | Persistent frontier | 待代码核查后填写 | 未完成候选持久化、重访与恢复测试 |
-| 风险判断与 commit boundary | 待机制收紧并完成代码核查后填写 | 风险案例、停止点、不可逆行为计数与覆盖率 |
+| 执行前风险感知 | 待实现 | 风险知识库、VLM 上下文判断、结构化风险标记与人工标签 |
 | 保守下游投影 | SafeSym / PDDL 相关代码位置待核查 | 投影一致性、规划可执行性与行为验证 |

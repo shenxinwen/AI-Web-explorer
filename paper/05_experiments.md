@@ -8,7 +8,7 @@
 
 ### RQ2：Risk-Aware Exploration
 
-风险感知验证能否减少高影响或不可逆行为，同时维持有效的功能模型覆盖？具体对比需要在风险机制确定后冻结。
+风险感知模块能否准确识别自动探索生成的候选功能可能带来的风险，并给出有 GUI 上下文证据支持的风险分类？
 
 ### RQ3：Downstream Planning and Behavior Verification
 
@@ -27,7 +27,9 @@
 - 直接采用 VLM 提议、缺少真实 outcome verification 的模型。
 - 普通探索记录或与本文最接近的环境建模方法（需在相关工作核实后选定）。
 - 完整方法与三项核心消融。
-- 风险实验的对比策略待风险判断与停止机制收紧后确定。
+- 风险知识库规则匹配。
+- VLM 上下文判断。
+- 风险知识库召回 + VLM 上下文复核。
 
 ## 指标与统计规则
 
@@ -41,10 +43,12 @@
 
 ### 风险与副作用
 
-- 高影响或不可逆操作的触发数量/比例；
-- commit boundary 前安全停止的数量/正确性；
-- 风险控制下的有效功能覆盖损失；
-- 风险误判与过早停止案例。
+- 风险识别 precision、recall 和 F1；
+- 高严重度风险 recall；
+- risk type、severity 和 reversibility 分类准确率；
+- 风险判断证据与 GUI 上下文的一致性；
+- 相似动作在不同页面上下文中的判断差异；
+- 误报、漏报和错误分类案例。
 
 ### 下游效用
 
@@ -62,7 +66,7 @@
 
 1. w/o evidence-based outcome verification；
 2. w/o persistent frontier；
-3. w/o risk-aware verification。
+3. rule-only / VLM-only risk detection。
 
 待考虑的稳健性检查：
 
@@ -70,7 +74,9 @@
 - 不同执行预算与网站动态性；
 - executor failure 与环境不支持的混淆；
 - verification threshold 对覆盖率和可靠性的影响；
-- 风险阈值对副作用与覆盖率的影响。
+- 风险类别定义和判断阈值对识别结果的影响。
+
+当前不以真实确认、拦截或危险行为减少作为必要实验结论。
 
 “减少错误尝试”和“减少重复探索”只在相应指标与实验结果支持后报告。
 

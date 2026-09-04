@@ -9,8 +9,8 @@ Building Evidence-Grounded Functional Models of Web Applications through Risk-Aw
 ## 摘要结构（待撰写）
 
 1. 背景：任务导向 Web Agent 的交互经验难以沉淀为应用级知识。
-2. 问题：开放探索产生的功能提议并不天然等于可靠知识，主动验证还可能造成真实副作用。
-3. 方法：维护 evidence-grounded functional model，通过真实执行、前后观察和风险约束持续更新验证状态与证据链。
+2. 问题：自动探索产生的功能提议并不天然等于可靠知识，自主生成并执行验证目标还可能造成真实副作用。
+3. 方法：维护 evidence-grounded functional model，通过执行前风险识别、真实执行和前后观察持续更新验证状态、证据链与风险信息。
 4. 评价：功能模型质量、风险感知探索、下游规划与行为验证。
 5. 结果：待实验完成后填写，不能提前作效果性陈述。
 
@@ -18,7 +18,7 @@ Building Evidence-Grounded Functional Models of Web Applications through Risk-Aw
 
 ### 1.1 Background and Problem
 
-任务导向 Web/GUI Agent 主要围绕当前任务和观察即时决策；任务无关探索虽能主动发现页面、功能和转移，但“探索到信息”不等于“获得可靠知识”。
+自主 Web/GUI 探索能够自动提出目标并发现页面、功能和转移，但“探索到信息”不等于“获得可靠知识”；自动化程度越高，越需要识别和记录系统主动行为的潜在副作用。
 
 ### 1.2 Two Core Challenges
 
@@ -27,11 +27,11 @@ Building Evidence-Grounded Functional Models of Web Applications through Risk-Aw
 
 ### 1.3 Approach
 
-将问题表述为 evidence-grounded and risk-aware functional model induction，通过功能假设、真实 GUI 执行、动作前后观察、证据判断和风险约束持续维护模型。
+将问题表述为 evidence-grounded and risk-aware functional model induction，通过功能假设、执行前风险识别、真实 GUI 执行、动作前后观察和证据判断持续维护模型。
 
 ### 1.4 Contributions
 
-概述三项贡献：evidence-grounded functional modeling、execution-grounded open-ended model induction、risk-aware functional verification。
+概述三项贡献：evidence-grounded functional modeling、execution-grounded open-ended model induction、risk-aware open-ended exploration。
 
 ## 2. Related Work
 
@@ -41,7 +41,7 @@ Building Evidence-Grounded Functional Models of Web Applications through Risk-Aw
 
 ### 2.2 Safe and Reliable GUI Agents
 
-讨论任务执行阶段的危险动作识别与后果预测，并区分本文“为理解未知 GUI 而主动探索时如何约束功能验证”的场景。
+讨论给定用户任务下的危险动作识别与后果预测，并区分本文“自动探索系统自主生成并执行功能验证目标时如何识别风险”的场景。
 
 ## 3. Method
 
@@ -63,9 +63,9 @@ Building Evidence-Grounded Functional Models of Web Applications through Risk-Aw
 - Evidence-Driven Model Update
 - Persistent Frontier
 
-### 3.4 Risk-Aware Functional Verification
+### 3.4 Risk-Aware Open-Ended Exploration
 
-定义影响程度、可恢复性、commit boundary 与部分支持状态；具体机制仍待收紧。
+定义预定义风险知识召回、VLM GUI 上下文复核和结构化风险标注；确认与拦截不是当前必要机制。
 
 ### 3.5 Conservative Downstream Projection
 
@@ -79,13 +79,13 @@ Building Evidence-Grounded Functional Models of Web Applications through Risk-Aw
 
 ### 4.2 Risk-Aware Exploration
 
-评价高影响或不可逆行为与有效模型覆盖之间的权衡。
+评价自动探索候选功能的风险识别、分类和上下文敏感性。
 
 ### 4.3 Downstream Planning and Behavior Verification
 
 评价保守投影是否能支持新目标的路径规划，并减少使用未经证据支持的功能知识。
 
-核心消融：w/o evidence-based outcome verification、w/o persistent frontier、w/o risk-aware verification。
+核心消融：w/o evidence-based outcome verification、w/o persistent frontier、rule-only / VLM-only risk detection。
 
 ## 5. Limitations and Ethics Statement
 
@@ -93,7 +93,7 @@ Building Evidence-Grounded Functional Models of Web Applications through Risk-Aw
 
 ## 6. Conclusion
 
-总结从 function hypothesis 经 execution、observation 到 evidence-based model update 的主线，以及风险约束和保守下游投影。
+总结从 function hypothesis 经 risk detection、execution、observation 到 evidence-based model update 的主线，以及风险信息和保守下游投影。
 
 ## 7. Reproducibility Statement
 
