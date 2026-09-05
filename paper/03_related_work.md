@@ -14,7 +14,7 @@
 3. 是否显式保存 Proposed、Partially Supported、Interaction-Supported、Failed、Incomplete 等知识状态；
 4. 是否能从结论回溯 hypothesis、execution trace、before/after observations 和 outcome judgment；
 5. 是否在自动探索阶段识别候选功能的潜在风险；
-6. 是否将风险类型、严重程度、可逆性和判断证据写入长期环境模型。
+6. 是否将二元风险判断、主要风险类型和判断证据写入长期环境模型。
 
 ## 写作约束
 

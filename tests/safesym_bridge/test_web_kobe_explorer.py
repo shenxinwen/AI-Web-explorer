@@ -31,6 +31,7 @@ from ai_web_explorer.grounded_web.location_exploration import (
     LocationExplorationMemory,
 )
 from ai_web_explorer.grounded_web.resume import ResumePolicy
+from ai_web_explorer.grounded_web.risk_detection import RiskAssessment
 from ai_web_explorer.grounded_web.semantic_assistor import (
     DeterministicSemanticAssistor,
 )
@@ -132,7 +133,7 @@ def _default_visual_provider(
                             "target": target_hint,
                             "requires": [],
                         }
-                    ]
+                    ],
                 }
             )
         added = added_facts if added_facts is not None else ["cart_has_items"]
@@ -180,6 +181,7 @@ def _business_explorer(
     enable_exploration_memory: bool = False,
     goal: str = "Explore the web task.",
     attempt_checkpoint=None,
+    risk_detection_provider=None,
 ):
     if not hasattr(adapter, "capture_screenshot"):
         captured_labels = []
@@ -204,6 +206,7 @@ def _business_explorer(
         state_embedding_records=state_embedding_records,
         enable_exploration_memory=enable_exploration_memory,
         attempt_checkpoint=attempt_checkpoint,
+        risk_detection_provider=risk_detection_provider,
     )
 
 
@@ -215,6 +218,52 @@ class ScreenshotAdapter(FakeAdapter):
     async def capture_screenshot(self, label: str):
         self.captured_labels.append(label)
         return f"outputs/{label}.png"
+
+
+@pytest.mark.anyio
+async def test_shadow_risk_detection_records_assessment_before_execution():
+    adapter = ScreenshotAdapter()
+    requests = []
+
+    def risk_provider(request):
+        assert adapter.executed == []
+        requests.append(request)
+        return RiskAssessment(
+            False, None, "The action is an ordinary interface operation."
+        )
+
+    graph = await _business_explorer(
+        adapter, risk_detection_provider=risk_provider
+    ).explore_one_step()
+
+    assert len(requests) == 1
+    assert requests[0].screenshot_path == "outputs/before_0001.png"
+    assert requests[0].candidate_label
+    assert adapter.executed
+    assert graph.execution_events[-1].execution_trace.metadata["risk_assessment"] == {
+        "potential_risk": False,
+        "risk_type": None,
+        "evidence": "The action is an ordinary interface operation.",
+    }
+
+
+@pytest.mark.anyio
+async def test_shadow_risk_detection_failure_does_not_block_execution():
+    adapter = ScreenshotAdapter()
+
+    def failing_provider(request):
+        raise RuntimeError("temporary provider failure")
+
+    graph = await _business_explorer(
+        adapter, risk_detection_provider=failing_provider
+    ).explore_one_step()
+
+    assert adapter.executed
+    metadata = graph.execution_events[-1].execution_trace.metadata
+    assert metadata["risk_detection_error"] == {
+        "type": "RuntimeError",
+        "message": "temporary provider failure",
+    }
 
 
 class SamePageBusinessChangeAdapter(ScreenshotAdapter):
@@ -257,7 +306,7 @@ async def test_minimal_active_path_uses_outcome_without_targeted_or_supplement_s
                         "target": "Add to cart control",
                         "requires": [],
                     }
-                ]
+                ],
             }
         )
 
@@ -341,7 +390,7 @@ async def test_minimal_active_path_scans_new_location_with_initial_contract():
                         "target": f"{action_id} control",
                         "requires": [],
                     }
-                ]
+                ],
             }
         )
 
@@ -430,7 +479,7 @@ def _checkout_dependency_candidate_provider(prompt, **kwargs):
                     "target": "Submit control",
                     "requires": ["fill_billing"],
                 },
-            ]
+            ],
         }
     )
 
@@ -461,15 +510,13 @@ async def test_real_outcome_path_projects_dependency_actions_to_semantic_pddl():
 
     actions = {action.action_name: action for action in semantic.actions}
     assert report.excluded_edges == []
-    assert actions["fill_billing"].added_facts == [
-        "completed_checkout_fill_billing"
-    ]
-    assert actions["place_order"].required_facts == [
-        "completed_checkout_fill_billing"
-    ]
+    assert actions["fill_billing"].added_facts == ["completed_checkout_fill_billing"]
+    assert actions["place_order"].required_facts == ["completed_checkout_fill_billing"]
     domain = compile_minimal_semantic_domain(semantic).domain
     assert "(completed_checkout_fill_billing)" in domain
-    assert ":precondition (and (at_checkout) (completed_checkout_fill_billing))" in domain
+    assert (
+        ":precondition (and (at_checkout) (completed_checkout_fill_billing))" in domain
+    )
 
 
 @pytest.mark.anyio
@@ -526,7 +573,7 @@ async def test_real_location_change_same_page_type_uses_one_new_location_anchor(
                         "target": "New location control",
                         "requires": [],
                     }
-                ]
+                ],
             }
         )
 
@@ -553,7 +600,9 @@ async def test_real_location_change_same_page_type_uses_one_new_location_anchor(
     graph = await explorer.explore_one_step()
     semantic, _ = build_semantic_planning_graph(graph)
     edge = graph.edges[0]
-    target_node = next(node for node in graph.nodes if node.node_id == edge.target_node_id)
+    target_node = next(
+        node for node in graph.nodes if node.node_id == edge.target_node_id
+    )
     target_location = semantic.actions[0].target_location
     anchored_location, unresolved = _semantic_location_anchor(target_node)
 
@@ -759,9 +808,7 @@ class OutcomeTargetChangeAdapter:
 @pytest.mark.parametrize("outcome", ["failed", "uncertain"])
 async def test_failed_or_uncertain_outcome_cannot_be_promoted_to_navigation(outcome):
     adapter = OutcomeTargetChangeAdapter()
-    coordinator = LocationExplorationCoordinator(
-        memory=LocationExplorationMemory()
-    )
+    coordinator = LocationExplorationCoordinator(memory=LocationExplorationMemory())
 
     scan_locations = []
 
@@ -778,7 +825,7 @@ async def test_failed_or_uncertain_outcome_cannot_be_promoted_to_navigation(outc
                         "target": f"{action_id} control",
                         "requires": [],
                     }
-                ]
+                ],
             }
         )
 
@@ -805,7 +852,10 @@ async def test_failed_or_uncertain_outcome_cannot_be_promoted_to_navigation(outc
     assert edge.status == (
         "failed_execution" if outcome == "failed" else "no_observed_change"
     )
-    assert edge.status not in {"succeeded_with_navigation", "succeeded_with_observed_change"}
+    assert edge.status not in {
+        "succeeded_with_navigation",
+        "succeeded_with_observed_change",
+    }
     assert semantic.actions == []
     assert report.excluded_edges
     assert set(coordinator.memory.locations) == {"listing"}
@@ -1083,7 +1133,5 @@ async def test_multi_step_graph_nodes_have_embedding_records():
     graph = await explorer.explore_one_step()
 
     graph_node_ids = {node.node_id for node in graph.nodes}
-    embedding_node_ids = {
-        record.node_id for record in explorer.state_embedding_records
-    }
+    embedding_node_ids = {record.node_id for record in explorer.state_embedding_records}
     assert graph_node_ids <= embedding_node_ids

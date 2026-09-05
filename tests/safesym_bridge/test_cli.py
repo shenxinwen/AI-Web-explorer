@@ -22,7 +22,9 @@ from ai_web_explorer.safesym_bridge import cli
 from ai_web_explorer.safesym_bridge.cli import main
 
 
-def _write_semantic_projection_graph(path: Path, *, with_semantics: bool = True) -> None:
+def _write_semantic_projection_graph(
+    path: Path, *, with_semantics: bool = True
+) -> None:
     nodes = [
         WebKobeNode(
             node_id="shopping",
@@ -156,7 +158,9 @@ def _write_resume_graph(path: Path, *, app: str = "demo", failed: bool = True) -
         ),
         state_schema={},
         last_state_snapshot={},
-        business_affordances=[BusinessAffordance("retry_me" if failed else "new_action")],
+        business_affordances=[
+            BusinessAffordance("retry_me" if failed else "new_action")
+        ],
     )
     edges = []
     if failed:
@@ -171,7 +175,13 @@ def _write_resume_graph(path: Path, *, app: str = "demo", failed: bool = True) -
                 observed_delta=[],
                 schema_delta={},
                 execution_trace=ExecutionTrace(
-                    "click", "#retry", "retry_me", {}, "start", "start", False,
+                    "click",
+                    "#retry",
+                    "retry_me",
+                    {},
+                    "start",
+                    "start",
+                    False,
                     error="failed",
                 ),
                 status="failed_execution",
@@ -320,10 +330,12 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
         use_openai_visual_delta=False,
         visual_delta_model=None,
         action_outcome_model=None,
+        use_openai_risk_detection=False,
+        risk_detection_model=None,
         stagehand_execution_mode="observed_action",
-            max_candidates=5,
-            limits=None,
-            frontier_replay=False,
+        max_candidates=5,
+        limits=None,
+        frontier_replay=False,
         resume_graph=None,
         resume_policy=None,
     ):
@@ -346,6 +358,8 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
                 use_openai_visual_delta,
                 visual_delta_model,
                 action_outcome_model,
+                use_openai_risk_detection,
+                risk_detection_model,
                 stagehand_execution_mode,
                 max_candidates,
             )
@@ -393,6 +407,9 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
             "gpt-4o",
             "--action-outcome-model",
             "gpt-4o",
+            "--openai-risk-detection",
+            "--risk-detection-model",
+            "gpt-4o-mini",
             "--stagehand-execution-mode",
             "observe_act",
             "--max-candidates",
@@ -421,6 +438,8 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
             True,
             "gpt-4o",
             "gpt-4o",
+            True,
+            "gpt-4o-mini",
             "observe_act",
             2,
         )
@@ -570,9 +589,7 @@ def test_main_stagehand_explore_accepts_location_feasibility_parameters(
     assert captured["stagehand_action_timeout_seconds"] == 240
 
 
-def test_main_stagehand_explore_rejects_legacy_steps(
-    monkeypatch, capsys
-):
+def test_main_stagehand_explore_rejects_legacy_steps(monkeypatch, capsys):
     monkeypatch.setattr(
         cli,
         "run_stagehand_exploration",
@@ -684,9 +701,10 @@ def test_main_web_kobe_stagehand_explore_loads_resume_and_resolves_retry(
     assert calls[0]["resume_graph"].app == "demo"
     assert calls[0]["frontier_replay"] is True
     assert calls[0]["resume_policy"].max_attempts == 3
-    assert {(key.source_node_id, key.action_id) for key in calls[0]["resume_policy"].retry_keys} == {
-        ("start", "retry_me")
-    }
+    assert {
+        (key.source_node_id, key.action_id)
+        for key in calls[0]["resume_policy"].retry_keys
+    } == {("start", "retry_me")}
 
 
 def test_main_web_kobe_stagehand_explore_copies_baseline_to_different_output(
@@ -728,9 +746,19 @@ def test_main_web_kobe_stagehand_explore_copies_baseline_to_different_output(
 @pytest.mark.parametrize(
     "extra_args, expected_error",
     [
-        (["--resume-retry-action", "retry_me"], "resume retry action requires --resume-graph"),
         (
-            ["--resume-graph", "graph.json", "--resume-retry-action", "retry_me", "--resume-action-max-attempts", "1"],
+            ["--resume-retry-action", "retry_me"],
+            "resume retry action requires --resume-graph",
+        ),
+        (
+            [
+                "--resume-graph",
+                "graph.json",
+                "--resume-retry-action",
+                "retry_me",
+                "--resume-action-max-attempts",
+                "1",
+            ],
             "resume action max attempts must be at least 2",
         ),
     ],
@@ -794,7 +822,11 @@ def test_main_web_kobe_stagehand_explore_rejects_clean_with_resume_before_deleti
 @pytest.mark.parametrize(
     "mutation, expected_error, retry_action",
     [
-        (lambda data: data["meta"].update({"app": "other"}), "resume_app_mismatch", None),
+        (
+            lambda data: data["meta"].update({"app": "other"}),
+            "resume_app_mismatch",
+            None,
+        ),
         (
             lambda data: data["meta"].update({"start_node_id": "missing"}),
             "resume_start_node_missing",

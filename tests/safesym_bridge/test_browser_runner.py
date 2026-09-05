@@ -34,9 +34,10 @@ def anyio_backend():
 
 
 def test_run_stagehand_exploration_removes_semantic_experiment_profile_argument():
-    assert "semantic_experiment_profile" not in inspect.signature(
-        browser_runner.run_stagehand_exploration
-    ).parameters
+    assert (
+        "semantic_experiment_profile"
+        not in inspect.signature(browser_runner.run_stagehand_exploration).parameters
+    )
 
 
 def test_browser_runner_default_adapter_is_generic_grounded_web_adapter():
@@ -166,9 +167,7 @@ def test_write_web_kobe_graph_adds_frontier_metrics(tmp_path):
     assert product_list["failed_action_ids"] == []
 
 
-def test_stagehand_checkpoint_writes_embedding_trace_then_graph(
-    tmp_path, monkeypatch
-):
+def test_stagehand_checkpoint_writes_embedding_trace_then_graph(tmp_path, monkeypatch):
     graph = _transactional_graph("stagehand_action")
     graph.edges[0].execution_trace.metadata["action_source"] = "stagehand"
     calls = []
@@ -196,9 +195,7 @@ def test_stagehand_checkpoint_writes_embedding_trace_then_graph(
         graph,
         output_path=output_path,
         embedding_path=embedding_path,
-        embedding_records=[
-            StateEmbeddingRecord("source", "source", [1.0, 0.0])
-        ],
+        embedding_records=[StateEmbeddingRecord("source", "source", [1.0, 0.0])],
         stagehand_trace_path=trace_path,
     )
 
@@ -206,7 +203,9 @@ def test_stagehand_checkpoint_writes_embedding_trace_then_graph(
     assert calls == ["embedding", "trace", "graph"]
 
 
-def test_stagehand_checkpoint_trace_uses_ordered_execution_events(tmp_path, monkeypatch):
+def test_stagehand_checkpoint_trace_uses_ordered_execution_events(
+    tmp_path, monkeypatch
+):
     graph = _transactional_graph("duplicate_action")
     failed = replace(
         graph.edges[0],
@@ -417,9 +416,7 @@ def test_write_web_kobe_graph_failed_overwrite_preserves_old_pair(
 ):
     output_path = tmp_path / "graph.json"
     evidence_path = tmp_path / "graph_evidence.json"
-    browser_runner.write_web_kobe_graph(
-        _transactional_graph("action_a"), output_path
-    )
+    browser_runner.write_web_kobe_graph(_transactional_graph("action_a"), output_path)
     old_graph = output_path.read_bytes()
     old_evidence = evidence_path.read_bytes()
     _assert_graph_evidence_refs_resolve(output_path, evidence_path)
@@ -513,7 +510,10 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
             assert explorer.action_embedding_provider("x") == [1.0, 0.0]
             assert explorer.business_profile is not None
             assert explorer.business_profile.site_type == "ecommerce_checkout"
-            assert explorer.visual_delta_provider("prompt") == '{"visible_change_summary":"changed","candidate_added_facts":[],"candidate_removed_facts":[],"evidence":[],"confidence":0.5}'
+            assert (
+                explorer.visual_delta_provider("prompt")
+                == '{"visible_change_summary":"changed","candidate_added_facts":[],"candidate_removed_facts":[],"evidence":[],"confidence":0.5}'
+            )
             assert explorer.action_outcome_provider is outcome_provider
             assert isinstance(limits, ExplorationLimits)
             captured["limit"] = max_consecutive_unproductive_steps
@@ -544,7 +544,9 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
         lambda: FakePlaywrightContext(),
     )
     monkeypatch.setattr(browser_runner, "WebKobePlaywrightAdapter", FakeBaseAdapter)
-    monkeypatch.setattr(browser_runner, "StagehandAutomationBackend", FakeStagehandBackend)
+    monkeypatch.setattr(
+        browser_runner, "StagehandAutomationBackend", FakeStagehandBackend
+    )
     monkeypatch.setattr(browser_runner, "WebKobeExplorationController", FakeController)
 
     result = await browser_runner.run_stagehand_exploration(
@@ -570,8 +572,7 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
     assert ("new_page", {"width": 1440, "height": 1000}) in calls
     assert ("goto", "https://shop.test/") in calls
     assert any(
-        call[0] == "stagehand" and call[2] == "observed_action"
-        for call in calls
+        call[0] == "stagehand" and call[2] == "observed_action" for call in calls
     )
     assert output_path.exists()
     assert output_path.with_name("graph_evidence.json").exists()
@@ -586,9 +587,7 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
 
 
 @pytest.mark.anyio
-async def test_run_stagehand_exploration_wires_location_limits(
-    tmp_path, monkeypatch
-):
+async def test_run_stagehand_exploration_wires_location_limits(tmp_path, monkeypatch):
     import playwright.async_api as playwright_async_api
     from ai_web_explorer.grounded_web.location_exploration import ExplorationLimits
 
@@ -668,7 +667,9 @@ async def test_run_stagehand_exploration_wires_location_limits(
     limits = ExplorationLimits()
     monkeypatch.setattr(playwright_async_api, "async_playwright", lambda: FakeContext())
     monkeypatch.setattr(browser_runner, "WebKobePlaywrightAdapter", FakeBaseAdapter)
-    monkeypatch.setattr(browser_runner, "StagehandAutomationBackend", FakeStagehandBackend)
+    monkeypatch.setattr(
+        browser_runner, "StagehandAutomationBackend", FakeStagehandBackend
+    )
     monkeypatch.setattr(browser_runner, "WebKobeExplorer", FakeExplorer)
     monkeypatch.setattr(browser_runner, "WebKobeExplorationController", FakeController)
 
@@ -788,7 +789,9 @@ async def test_run_stagehand_exploration_resolves_separate_openai_observation_pr
 
     monkeypatch.setattr(playwright_async_api, "async_playwright", lambda: FakeContext())
     monkeypatch.setattr(browser_runner, "WebKobePlaywrightAdapter", FakeBaseAdapter)
-    monkeypatch.setattr(browser_runner, "StagehandAutomationBackend", FakeStagehandBackend)
+    monkeypatch.setattr(
+        browser_runner, "StagehandAutomationBackend", FakeStagehandBackend
+    )
     monkeypatch.setattr(browser_runner, "WebKobeExplorer", FakeExplorer)
     monkeypatch.setattr(browser_runner, "WebKobeExplorationController", FakeController)
     monkeypatch.setattr(
@@ -910,7 +913,9 @@ async def test_runner_preserves_cumulative_runtime_state(tmp_path, monkeypatch):
 
     monkeypatch.setattr(playwright_async_api, "async_playwright", lambda: FakeContext())
     monkeypatch.setattr(browser_runner, "WebKobePlaywrightAdapter", FakeBaseAdapter)
-    monkeypatch.setattr(browser_runner, "StagehandAutomationBackend", FakeStagehandBackend)
+    monkeypatch.setattr(
+        browser_runner, "StagehandAutomationBackend", FakeStagehandBackend
+    )
     monkeypatch.setattr(browser_runner, "WebKobeExplorer", FakeExplorer)
     monkeypatch.setattr(browser_runner, "WebKobeExplorationController", FakeController)
 
@@ -1018,7 +1023,9 @@ async def test_runner_resume_uses_cumulative_runtime_state_for_zero_formal_actio
 
     monkeypatch.setattr(playwright_async_api, "async_playwright", lambda: FakeContext())
     monkeypatch.setattr(browser_runner, "WebKobePlaywrightAdapter", FakeBaseAdapter)
-    monkeypatch.setattr(browser_runner, "StagehandAutomationBackend", FakeStagehandBackend)
+    monkeypatch.setattr(
+        browser_runner, "StagehandAutomationBackend", FakeStagehandBackend
+    )
     monkeypatch.setattr(browser_runner, "WebKobeExplorer", FakeExplorer)
     monkeypatch.setattr(browser_runner, "WebKobeExplorationController", FakeController)
 
@@ -1146,7 +1153,9 @@ async def test_run_stagehand_exploration_opt_in_wires_frontier_replay(
         lambda: FakeContext(),
     )
     monkeypatch.setattr(browser_runner, "WebKobePlaywrightAdapter", FakeBaseAdapter)
-    monkeypatch.setattr(browser_runner, "StagehandAutomationBackend", FakeStagehandBackend)
+    monkeypatch.setattr(
+        browser_runner, "StagehandAutomationBackend", FakeStagehandBackend
+    )
     monkeypatch.setattr(browser_runner, "FrontierReplayRunner", FakeReplayRunner)
     monkeypatch.setattr(browser_runner, "WebKobeExplorationController", FakeController)
 
@@ -1240,7 +1249,9 @@ async def test_run_stagehand_exploration_bootstraps_resume_without_spending_new_
             calls.append("replay_runner")
 
         async def replay(self, target, *, start_url):
-            calls.append(("replay", target.node_id, target.path, target.untried_action_ids))
+            calls.append(
+                ("replay", target.node_id, target.path, target.untried_action_ids)
+            )
             from ai_web_explorer.grounded_web.frontier_replay import ReplayResult
 
             return ReplayResult(True, target.node_id, None, "replay_succeeded", 0)
@@ -1270,7 +1281,9 @@ async def test_run_stagehand_exploration_bootstraps_resume_without_spending_new_
 
     monkeypatch.setattr(playwright_async_api, "async_playwright", lambda: FakeContext())
     monkeypatch.setattr(browser_runner, "WebKobePlaywrightAdapter", FakeBaseAdapter)
-    monkeypatch.setattr(browser_runner, "StagehandAutomationBackend", FakeStagehandBackend)
+    monkeypatch.setattr(
+        browser_runner, "StagehandAutomationBackend", FakeStagehandBackend
+    )
     monkeypatch.setattr(browser_runner, "WebKobeExplorer", FakeExplorer)
     monkeypatch.setattr(browser_runner, "FrontierReplayRunner", FakeReplayRunner)
     monkeypatch.setattr(browser_runner, "WebKobeExplorationController", FakeController)
@@ -1310,7 +1323,9 @@ async def test_resume_bootstrap_replays_fallback_frontier_after_action_failure(
     resume_graph = browser_runner.build_debug_web_kobe_graph()
     targets = [
         SimpleNamespace(node_id="first", path=(), untried_action_ids=("first_action",)),
-        SimpleNamespace(node_id="second", path=(), untried_action_ids=("second_action",)),
+        SimpleNamespace(
+            node_id="second", path=(), untried_action_ids=("second_action",)
+        ),
     ]
     selected = []
     replayed = []
@@ -1353,7 +1368,9 @@ async def test_resume_bootstrap_replays_fallback_frontier_after_action_failure(
         def __init__(self, **kwargs):
             self.state_embedding_records = []
             self.start_node_id = "start"
-            self.manager = SimpleNamespace(to_graph=lambda start_node_id=None: resume_graph)
+            self.manager = SimpleNamespace(
+                to_graph=lambda start_node_id=None: resume_graph
+            )
 
         def restore_graph(self, graph):
             self.restored = graph
@@ -1402,7 +1419,9 @@ async def test_resume_bootstrap_replays_fallback_frontier_after_action_failure(
 
     monkeypatch.setattr(playwright_async_api, "async_playwright", lambda: FakeContext())
     monkeypatch.setattr(browser_runner, "WebKobePlaywrightAdapter", FakeBaseAdapter)
-    monkeypatch.setattr(browser_runner, "StagehandAutomationBackend", FakeStagehandBackend)
+    monkeypatch.setattr(
+        browser_runner, "StagehandAutomationBackend", FakeStagehandBackend
+    )
     monkeypatch.setattr(browser_runner, "WebKobeExplorer", FakeExplorer)
     monkeypatch.setattr(browser_runner, "FrontierReplayRunner", FakeReplayRunner)
     monkeypatch.setattr(browser_runner, "WebKobeExplorationController", FakeController)
@@ -1501,7 +1520,9 @@ async def test_run_stagehand_exploration_preserves_checkpoint_when_step_raises(
         lambda: FakePlaywrightContext(),
     )
     monkeypatch.setattr(browser_runner, "WebKobePlaywrightAdapter", FakeBaseAdapter)
-    monkeypatch.setattr(browser_runner, "StagehandAutomationBackend", FakeStagehandBackend)
+    monkeypatch.setattr(
+        browser_runner, "StagehandAutomationBackend", FakeStagehandBackend
+    )
     monkeypatch.setattr(browser_runner, "WebKobeExplorationController", FakeController)
 
     with pytest.raises(RuntimeError, match="experiment interrupted"):
@@ -1538,4 +1559,17 @@ async def test_run_stagehand_exploration_requires_screenshots_for_visual_delta(
             start_url="https://shop.test/",
             provider=object(),
             visual_delta_provider=lambda prompt, **kwargs: "{}",
+        )
+
+
+@pytest.mark.anyio
+async def test_run_stagehand_exploration_requires_screenshots_for_risk_detection(
+    tmp_path,
+):
+    with pytest.raises(ValueError, match="screenshot_dir"):
+        await browser_runner.run_stagehand_exploration(
+            tmp_path / "graph.json",
+            start_url="https://shop.test/",
+            provider=object(),
+            use_openai_risk_detection=True,
         )

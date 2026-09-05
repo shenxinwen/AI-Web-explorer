@@ -1,0 +1,65 @@
+{
+  "schema_version": "risk-taxonomy-v1",
+  "categories": [
+    {
+      "risk_type": "destructive_change",
+      "description": "Entering, preparing, or performing deletion or another change that may be difficult or impossible to reverse.",
+      "positive_examples": [
+        "Initiate or confirm deletion of persistent user data.",
+        "Prepare to irreversibly overwrite or reset stored data."
+      ],
+      "non_examples": [
+        "Browse or search existing records without modifying them.",
+        "Dismiss an informational dialog without changing stored data."
+      ]
+    },
+    {
+      "risk_type": "financial_transaction",
+      "description": "Entering, preparing, or performing a transaction that may commit money or change a paid financial obligation.",
+      "positive_examples": [
+        "Enter or advance through a checkout or payment workflow.",
+        "Prepare or confirm a purchase, payment, or paid subscription."
+      ],
+      "non_examples": [
+        "Browse items or compare their publicly displayed prices.",
+        "Read general information about available payment methods."
+      ]
+    },
+    {
+      "risk_type": "external_communication",
+      "description": "Preparing, sending, publishing, or otherwise exposing content to another person or an external audience.",
+      "positive_examples": [
+        "Compose, prepare, or send content intended for another party.",
+        "Prepare or publish content to an external audience."
+      ],
+      "non_examples": [
+        "Read existing public content without responding to it.",
+        "Navigate through informational communication settings."
+      ]
+    },
+    {
+      "risk_type": "account_and_permission",
+      "description": "Entering, preparing, or performing a change to identity, authentication, account security, membership, authorization, or access control.",
+      "positive_examples": [
+        "Enter or prepare a workflow for changing credentials or security settings.",
+        "Prepare, grant, or revoke permissions for another party."
+      ],
+      "non_examples": [
+        "View public profile information without editing it.",
+        "Read general documentation about permission levels."
+      ]
+    },
+    {
+      "risk_type": "sensitive_data",
+      "description": "Preparing to enter, upload, reveal, or transmit credentials, personal data, or other sensitive information.",
+      "positive_examples": [
+        "Begin entering private identity, financial, or authentication data.",
+        "Prepare or upload a document containing confidential information."
+      ],
+      "non_examples": [
+        "Search or filter using non-sensitive terms.",
+        "Read information that is already publicly available."
+      ]
+    }
+  ]
+}

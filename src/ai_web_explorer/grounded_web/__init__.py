@@ -40,6 +40,22 @@ from ai_web_explorer.grounded_web.openai_visual_delta import (
 )
 from ai_web_explorer.grounded_web.planning_fact_verifier import verify_planning_delta
 from ai_web_explorer.grounded_web.playwright_backend import WebKobePlaywrightAdapter
+from ai_web_explorer.grounded_web.risk_detection import (
+    DEFAULT_RISK_TAXONOMY_PATH,
+    RISK_ASSESSMENT_SYSTEM_PROMPT,
+    RiskAssessment,
+    RiskCategory,
+    RiskDetectionRequest,
+    RiskTaxonomy,
+    load_risk_taxonomy,
+    render_risk_assessment_user_prompt,
+    summarize_risk_assessments,
+)
+from ai_web_explorer.grounded_web.openai_risk_detection import (
+    DEFAULT_OPENAI_RISK_DETECTION_MODEL,
+    OpenAIRiskDetectionProvider,
+    create_openai_risk_detection_provider_from_env,
+)
 from ai_web_explorer.grounded_web.visual_delta import (
     VisualDeltaProvider,
     VisualDeltaRequest,
@@ -52,11 +68,19 @@ __all__ = [
     "BusinessAffordance",
     "BusinessFlowProfile",
     "DEFAULT_OPENAI_ACTION_OUTCOME_MODEL",
+    "DEFAULT_OPENAI_RISK_DETECTION_MODEL",
     "DEFAULT_OPENAI_VISUAL_DELTA_MODEL",
     "OpenAIVisualDeltaProvider",
+    "OpenAIRiskDetectionProvider",
     "PlanningDelta",
     "PlanningState",
     "PlanningTransition",
+    "DEFAULT_RISK_TAXONOMY_PATH",
+    "RISK_ASSESSMENT_SYSTEM_PROMPT",
+    "RiskAssessment",
+    "RiskCategory",
+    "RiskDetectionRequest",
+    "RiskTaxonomy",
     "VisualAffordanceProvider",
     "VisualAffordanceRequest",
     "VisualDeltaProvider",
@@ -69,8 +93,12 @@ __all__ = [
     "WebKobePlaywrightAdapter",
     "create_openai_visual_delta_provider_from_env",
     "create_openai_action_outcome_provider_from_env",
+    "create_openai_risk_detection_provider_from_env",
     "ecommerce_checkout_profile",
+    "load_risk_taxonomy",
+    "render_risk_assessment_user_prompt",
     "summarize_visual_affordances",
     "summarize_visual_delta",
+    "summarize_risk_assessments",
     "verify_planning_delta",
 ]

@@ -19,7 +19,7 @@
 | Functional outcome | 功能结果状态与界面转移类型 | Executor Success 不等于 Functional Success |
 | Verification state | 功能结论当前获得的支持程度 | 与运行时调度状态分离 |
 | Interaction evidence | 支持结论的来源、轨迹、前后观察与结果判断 | 可追溯不等于形式化正确性保证 |
-| Risk annotation | 候选功能的风险类型、严重程度、可逆性和页面证据 | 风险识别不等于阻止危险行为 |
+| Risk annotation | 已选动作的二元风险判断、一个主要风险类型和页面证据 | 风险识别不等于阻止危险行为 |
 
 功能结果使用两个独立维度：
 
@@ -46,12 +46,12 @@ VLM 根据当前 GUI 和已有模型提出 semantic location、high-level functi
 
 系统在候选 high-level function 执行前进行轻量风险判断：
 
-1. 预定义风险知识根据功能语义召回候选风险类别；
-2. VLM 结合当前 GUI、候选功能和目标对象复核风险；
-3. 输出 risk type、severity、reversibility 和 supporting evidence；
-4. 将风险标记与功能假设关联，供过程追踪、事后审查和下游使用。
+1. 截取动作执行前的当前 GUI；
+2. 将截图、已选 high-level action label 和完整的版本化风险库输入独立 VLM 判断；
+3. 输出 `potential_risk`、一个主要 `risk_type`（无风险时为 null）和简短 `evidence`；
+4. 普通探索将判断写入动作元数据，replay 将判断写入独立审计记录。
 
-风险知识库提供稳定、可检查的类别定义，VLM 负责处理动态页面上下文。当前风险标记不强制改变执行；人工确认、停止和拦截是可扩展执行策略。
+风险知识库提供稳定、可检查的类别定义、正例和明确低风险反例，VLM 负责结合动态页面上下文作二元判断。当前采用 shadow mode，风险标记不改变执行；检测异常 fail-open 并留存错误。人工确认、停止和拦截是可扩展执行策略。
 
 ### 3. Execution and Outcome Observation
 
@@ -89,5 +89,5 @@ PDDL-compatible projection 可以将 semantic locations 映射为 predicates，�
 | GUI 执行与前后观察 | 待代码核查后填写 | 执行轨迹、before/after observation、执行器状态 |
 | 结果判断与模型更新 | 待代码核查后填写 | outcome/verification state 更新案例与标注评测 |
 | Persistent frontier | 待代码核查后填写 | 未完成候选持久化、重访与恢复测试 |
-| 执行前风险感知 | 待实现 | 风险知识库、VLM 上下文判断、结构化风险标记与人工标签 |
+| 执行前风险感知 | `grounded_web/risk_detection.py`、`grounded_web/openai_risk_detection.py`、`grounded_web/web_kobe_explorer.py`、`grounded_web/risk_taxonomy_v1.json` | schema/prompt/provider 单测；普通探索与 replay 集成测试；真实 VLM 冒烟 |
 | 保守下游投影 | SafeSym / PDDL 相关代码位置待核查 | 投影一致性、规划可执行性与行为验证 |

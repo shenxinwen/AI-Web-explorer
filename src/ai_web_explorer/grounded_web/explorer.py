@@ -26,7 +26,10 @@ from ai_web_explorer.grounded_web.graph import (
 )
 from ai_web_explorer.grounded_web.graph_manager import WebKobeGraphManager
 from ai_web_explorer.grounded_web.business_profile import BusinessFlowProfile
-from ai_web_explorer.grounded_web.business_profile import PlanningDelta, PlanningTransition
+from ai_web_explorer.grounded_web.business_profile import (
+    PlanningDelta,
+    PlanningTransition,
+)
 from ai_web_explorer.grounded_web.exploration_index import (
     ExplorationContext,
     build_exploration_context,
@@ -67,6 +70,13 @@ from ai_web_explorer.grounded_web.resume import (
     ActionAttemptKey,
     ResumePolicy,
     is_action_eligible,
+)
+from ai_web_explorer.grounded_web.risk_detection import (
+    DEFAULT_RISK_TAXONOMY_PATH,
+    RiskAssessment,
+    RiskDetectionRequest,
+    RiskTaxonomy,
+    load_risk_taxonomy,
 )
 
 
@@ -148,8 +158,7 @@ def _node_from_draft(draft) -> WebKobeNode:
 
 def _business_action_from_affordance(affordance: BusinessAffordance) -> BrowserAction:
     label = (
-        affordance.label
-        or affordance.action_name.replace("_", " ").capitalize()
+        affordance.label or affordance.action_name.replace("_", " ").capitalize()
     ).strip()
     if label and label[-1] not in ".!?":
         label += "."
@@ -268,6 +277,10 @@ class WebKobeExplorer:
         resume_policy: ResumePolicy | None = None,
         location_exploration_coordinator: LocationExplorationCoordinator | None = None,
         exploration_limits: ExplorationLimits | None = None,
+        risk_detection_provider: (
+            Callable[[RiskDetectionRequest], RiskAssessment] | None
+        ) = None,
+        risk_taxonomy: RiskTaxonomy | None = None,
     ):
         if max_candidates < 1:
             raise ValueError("max_candidates must be at least 1.")
@@ -279,6 +292,16 @@ class WebKobeExplorer:
         self.capture_screenshots = capture_screenshots
         self.visual_delta_provider = visual_delta_provider
         self.action_outcome_provider = action_outcome_provider
+        self.risk_detection_provider = risk_detection_provider
+        self.risk_taxonomy = (
+            risk_taxonomy
+            if risk_taxonomy is not None
+            else (
+                load_risk_taxonomy(DEFAULT_RISK_TAXONOMY_PATH)
+                if risk_detection_provider is not None
+                else None
+            )
+        )
         self.state_embedding_provider = state_embedding_provider
         self.action_embedding_provider = action_embedding_provider
         self.state_embedding_records = list(state_embedding_records or [])
@@ -402,7 +425,11 @@ class WebKobeExplorer:
             )
         source_node = self.manager.node_for_id(source_id)
         source_anchor, anchor_unresolved = _semantic_location_anchor(source_node)
-        if source_anchor and not anchor_unresolved and source_node.semantic_location_hint != source_anchor:
+        if (
+            source_anchor
+            and not anchor_unresolved
+            and source_node.semantic_location_hint != source_anchor
+        ):
             self.manager.identify_or_add_node(
                 replace(source_node, semantic_location_hint=source_anchor)
             )
@@ -441,7 +468,9 @@ class WebKobeExplorer:
             return self.manager.to_graph(start_node_id=self._start_node_id)
 
         formal_attempts = int(self.manager.meta.get("formal_action_attempts", 0))
-        max_attempts = self.location_exploration_coordinator.memory.limits.max_exploration_steps
+        max_attempts = (
+            self.location_exploration_coordinator.memory.limits.max_exploration_steps
+        )
         if formal_attempts >= max_attempts:
             self.manager.meta["last_step_kind"] = "formal_action_budget_exhausted"
             self.manager.meta["last_step_status"] = "unproductive"
@@ -455,10 +484,15 @@ class WebKobeExplorer:
             source_id=source_id,
             action=selected,
         )
+        risk_detection_metadata = self._assess_action_risk(
+            action=selected,
+            screenshot_path=before_screenshot_path,
+        )
         execution_success = await self.adapter.execute(selected)
         execution_error = getattr(self.adapter, "last_execution_error", None)
-        observation_allowed = execution_success or _is_ignorable_stagehand_tool_choice_error(
-            execution_error
+        observation_allowed = (
+            execution_success
+            or _is_ignorable_stagehand_tool_choice_error(execution_error)
         )
         if observation_allowed:
             after = await self._observe_after_action(
@@ -503,6 +537,7 @@ class WebKobeExplorer:
         )
         execution_metadata["backend_reported_success"] = execution_success
         execution_metadata["attempt_id"] = attempt_id
+        execution_metadata.update(risk_detection_metadata)
         if source_match is not None:
             execution_metadata["source_state_match"] = {
                 "status": source_match.status,
@@ -690,9 +725,7 @@ class WebKobeExplorer:
                 "blocked_reason": target_match.blocked_reason,
                 "accepted": target_node.node_id == target_match.node_id,
             }
-        known_node_ids = {
-            node.node_id for node in self.manager.to_graph().nodes
-        }
+        known_node_ids = {node.node_id for node in self.manager.to_graph().nodes}
         target_id = self.manager.identify_or_add_node(target_node)
         node_was_new = target_id not in known_node_ids
 
@@ -715,9 +748,7 @@ class WebKobeExplorer:
                         semantic_location_hint=replay_handoff_location,
                     )
                 )
-                self._sync_location_affordance_snapshots(
-                    replay_handoff_location
-                )
+                self._sync_location_affordance_snapshots(replay_handoff_location)
 
         location_scan_novel = False
         if (
@@ -769,8 +800,7 @@ class WebKobeExplorer:
             ):
                 edge_status = "succeeded"
         allow_outcome_navigation = (
-            action_outcome_result is None
-            or outcome_location_change_accepted
+            action_outcome_result is None or outcome_location_change_accepted
         )
         if (
             allow_outcome_navigation
@@ -814,40 +844,38 @@ class WebKobeExplorer:
             else []
         )
         outcome = self.location_exploration_coordinator.record_action_outcome(
-                location_before=location_before,
-                location_after=location_after,
-                action_id=selected.canonical_action_name or selected.semantic_id,
-                observable_change=(
-                    False
-                    if outcome_is_non_success
-                    else bool(
-                        observed_delta
-                        or state_changed
-                        or (
-                            action_outcome_result is not None
-                            and action_outcome_result.outcome == "success"
-                        )
-                    )
-                ),
-                completion_facts=completion_facts,
-                business_added=business_added,
-                business_removed=business_removed,
-                failed=(
-                    edge_status == "failed_execution"
+            location_before=location_before,
+            location_after=location_after,
+            action_id=selected.canonical_action_name or selected.semantic_id,
+            observable_change=(
+                False
+                if outcome_is_non_success
+                else bool(
+                    observed_delta
+                    or state_changed
                     or (
                         action_outcome_result is not None
-                        and action_outcome_result.outcome == "failed"
+                        and action_outcome_result.outcome == "success"
                     )
-                ),
-            )
-        required_action_ids: list[str] = []
-        candidate_record = (
-            self.location_exploration_coordinator.memory.pool_for(
-                location_before
-            ).candidates.get(
-                normalize_semantic_id(
-                    selected.canonical_action_name or selected.semantic_id
                 )
+            ),
+            completion_facts=completion_facts,
+            business_added=business_added,
+            business_removed=business_removed,
+            failed=(
+                edge_status == "failed_execution"
+                or (
+                    action_outcome_result is not None
+                    and action_outcome_result.outcome == "failed"
+                )
+            ),
+        )
+        required_action_ids: list[str] = []
+        candidate_record = self.location_exploration_coordinator.memory.pool_for(
+            location_before
+        ).candidates.get(
+            normalize_semantic_id(
+                selected.canonical_action_name or selected.semantic_id
             )
         )
         if candidate_record is not None:
@@ -929,9 +957,7 @@ class WebKobeExplorer:
             self._set_current_node(target_id)
         elif self._current_node_id is None:
             self._set_current_node(source_id)
-        self.manager.meta["resume_cursor_node_id"] = (
-            self._current_node_id or source_id
-        )
+        self.manager.meta["resume_cursor_node_id"] = self._current_node_id or source_id
         return self.manager.to_graph(start_node_id=self._start_node_id)
 
     def _sync_location_affordance_snapshots(self, location_id: str) -> None:
@@ -950,9 +976,9 @@ class WebKobeExplorer:
 
     def _begin_action_attempt(self, *, source_id: str, action: BrowserAction) -> str:
         attempt_id = uuid.uuid4().hex
-        self.manager.meta["formal_action_attempts"] = int(
-            self.manager.meta.get("formal_action_attempts", 0)
-        ) + 1
+        self.manager.meta["formal_action_attempts"] = (
+            int(self.manager.meta.get("formal_action_attempts", 0)) + 1
+        )
         self.manager.meta["inflight_action"] = {
             "attempt_id": attempt_id,
             "source_node_id": source_id,
@@ -1060,9 +1086,7 @@ class WebKobeExplorer:
         self._set_current_node(node_id)
         self._replay_handoff_pending = True
 
-    def _unique_location_for_url_pattern(
-        self, url_pattern: str
-    ) -> str | None:
+    def _unique_location_for_url_pattern(self, url_pattern: str) -> str | None:
         locations: set[str] = set()
         for node in self.manager.to_graph().nodes:
             if node.page_frame.url_pattern != url_pattern:
@@ -1076,10 +1100,65 @@ class WebKobeExplorer:
 
     async def execute_replay_action(self, action: BrowserAction) -> bool:
         """Execute one stored action without recording a new exploration edge."""
+        if self.risk_detection_provider is not None:
+            audits = self.manager.meta.setdefault("replay_risk_assessments", [])
+            screenshot_path = None
+            capture = getattr(self.adapter, "capture_screenshot", None)
+            if self.capture_screenshots and capture is not None:
+                screenshot_path = await capture(f"replay_before_{len(audits) + 1:04d}")
+            candidate_label = self._risk_candidate_label(action)
+            audit = {
+                "action_id": action.canonical_action_name or action.semantic_id,
+                "candidate_label": candidate_label,
+                "screenshot_path": screenshot_path,
+            }
+            audit.update(
+                self._assess_action_risk(
+                    action=action,
+                    screenshot_path=screenshot_path,
+                )
+            )
+            audits.append(audit)
         replay_execute = getattr(self.adapter, "execute_replay_action", None)
         if replay_execute is not None:
             return await replay_execute(action)
         return await self.adapter.execute(action)
+
+    @staticmethod
+    def _risk_candidate_label(action: BrowserAction) -> str:
+        return action.action_label or action.description or action.semantic_id
+
+    def _assess_action_risk(
+        self,
+        *,
+        action: BrowserAction,
+        screenshot_path: str | None,
+    ) -> dict[str, Any]:
+        if self.risk_detection_provider is None or self.risk_taxonomy is None:
+            return {}
+        if screenshot_path is None:
+            return {
+                "risk_detection_error": {
+                    "type": "ScreenshotUnavailable",
+                    "message": "A screenshot is required for risk detection.",
+                }
+            }
+        try:
+            assessment = self.risk_detection_provider(
+                RiskDetectionRequest(
+                    screenshot_path=screenshot_path,
+                    candidate_label=self._risk_candidate_label(action),
+                    taxonomy=self.risk_taxonomy,
+                )
+            )
+            return {"risk_assessment": assessment.to_dict()}
+        except Exception as error:
+            return {
+                "risk_detection_error": {
+                    "type": type(error).__name__,
+                    "message": str(error),
+                }
+            }
 
     def mark_replay_edge_validation(self, edge_id: str, status: str) -> None:
         self.manager.update_edge_replay_validation(edge_id, status)
@@ -1151,8 +1230,7 @@ class WebKobeExplorer:
             or source_node.node_id
         )
         accepted_vlm_label = bool(
-            result.state_label
-            and slug_identifier(result.state_label, fallback="")
+            result.state_label and slug_identifier(result.state_label, fallback="")
         )
         self.manager.identify_or_add_node(
             replace(

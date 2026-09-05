@@ -6,6 +6,7 @@ AI Web Explorer observes real webpages, discovers semantic business actions, exe
 VLM screenshot observation
   -> semantic-location candidate pool + requires
   -> dependency-aware local selection
+  -> pre-execution VLM risk annotation (shadow mode)
   -> Stagehand execution
   -> VLM outcome observation
   -> WebKobeGraph update
@@ -15,6 +16,8 @@ VLM screenshot observation
 ```
 
 Replay only restores a previously explored context by resetting the start URL and replaying a saved semantic-action path. It never discovers candidates or mutates exploration state; normal exploration resumes after replay succeeds.
+
+Optional risk detection assesses every selected normal-exploration and replay action from the current screenshot, its high-level label, and a versioned taxonomy. It records a binary risk decision without blocking execution.
 
 ## CLI
 
@@ -36,7 +39,8 @@ Example:
 web-kobe web-kobe-stagehand-explore \
   --url https://www.saucedemo.com/ \
   --app-name saucedemo \
-  --goal "explore the shopping and checkout flow" \
+  --openai-risk-detection \
+  --risk-detection-model gpt-4o \
   --output outputs/saucedemo/web_kobe_graph.json
 
 web-kobe web-kobe-semantic-pddl \

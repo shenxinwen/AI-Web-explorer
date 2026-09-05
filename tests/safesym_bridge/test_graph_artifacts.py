@@ -141,9 +141,7 @@ def _verbose_graph_fixture() -> WebKobeGraph:
                     "aria_snapshot": "large diagnostic tree",
                 },
                 "visual_delta_trace": {
-                    "candidate_added_facts": [
-                        "wireless_mouse_is_first_in_list"
-                    ],
+                    "candidate_added_facts": ["wireless_mouse_is_first_in_list"],
                     "raw_response": "verbose visual response",
                 },
             },
@@ -204,6 +202,38 @@ def _empty_values(value, path=()):
                 found.extend(_empty_values(child, path + (index,)))
         return found
     return []
+
+
+def test_compact_graph_preserves_shadow_risk_detection_metadata():
+    graph = _verbose_graph_fixture()
+    edge = graph.edges[0]
+    risk_assessment = {
+        "potential_risk": True,
+        "risk_type": "sensitive_data",
+        "evidence": "The action prepares sensitive information for submission.",
+    }
+    edge = replace(
+        edge,
+        execution_trace=replace(
+            edge.execution_trace,
+            metadata={
+                **edge.execution_trace.metadata,
+                "risk_assessment": risk_assessment,
+            },
+        ),
+    )
+    graph = replace(graph, edges=[edge], execution_events=[edge])
+
+    compact = build_graph_artifact_payload(graph).compact_graph
+
+    assert (
+        compact["edges"][0]["execution_trace"]["metadata"]["risk_assessment"]
+        == risk_assessment
+    )
+    assert (
+        compact["execution_events"][0]["execution_trace"]["metadata"]["risk_assessment"]
+        == risk_assessment
+    )
 
 
 def test_build_graph_artifact_payload_moves_verbose_evidence_out_of_graph():
@@ -382,9 +412,12 @@ def test_compact_payload_preserves_audited_location_hint_conflict():
     )
     payload = build_graph_artifact_payload(graph)
     assert payload.compact_graph["nodes"][0]["semantic_location_hint"] == "shopping"
-    assert payload.compact_graph["nodes"][0]["naming_provenance"][
-        "semantic_location_hint_conflict"
-    ]["selected"] == "shopping"
+    assert (
+        payload.compact_graph["nodes"][0]["naming_provenance"][
+            "semantic_location_hint_conflict"
+        ]["selected"]
+        == "shopping"
+    )
 
 
 def test_compact_location_hint_survives_save_load(tmp_path):
@@ -420,15 +453,23 @@ def test_compact_checkpoint_roundtrip_preserves_semantic_conflict_audit(tmp_path
     manager = WebKobeGraphManager(app="example")
     manager.identify_or_add_node(_node("page", {}))
     edge = _trace_edge("sort_products", success=True, status="succeeded")
-    manager.add_edge(replace(edge, semantic_observation=_semantic_observation("z_surface")))
-    manager.add_edge(replace(edge, semantic_observation=_semantic_observation("a_surface")))
-    compact = build_graph_artifact_payload(manager.to_graph(start_node_id="page")).compact_graph
+    manager.add_edge(
+        replace(edge, semantic_observation=_semantic_observation("z_surface"))
+    )
+    manager.add_edge(
+        replace(edge, semantic_observation=_semantic_observation("a_surface"))
+    )
+    compact = build_graph_artifact_payload(
+        manager.to_graph(start_node_id="page")
+    ).compact_graph
     path = tmp_path / "compact-checkpoint.json"
     path.write_text(json.dumps(compact), encoding="utf-8")
     loaded = load_web_kobe_graph_json(path)
     metadata = loaded.edges[0].execution_trace.metadata
     assert loaded.edges[0].semantic_observation is None
-    assert metadata["semantic_observation_conflict"]["policy"] == "unresolved_fail_closed"
+    assert (
+        metadata["semantic_observation_conflict"]["policy"] == "unresolved_fail_closed"
+    )
     assert len(metadata["semantic_observation_conflict"]["candidates"]) == 2
     assert metadata["semantic_observation_conflict"]["selected"] is None
     resumed = WebKobeGraphManager.from_graph(loaded)
@@ -440,6 +481,9 @@ def test_compact_checkpoint_roundtrip_preserves_semantic_conflict_audit(tmp_path
     )
     resumed_edge = resumed.to_graph().edges[0]
     assert resumed_edge.semantic_observation is None
-    assert resumed_edge.execution_trace.metadata["semantic_observation_conflict"][
-        "selected"
-    ] is None
+    assert (
+        resumed_edge.execution_trace.metadata["semantic_observation_conflict"][
+            "selected"
+        ]
+        is None
+    )

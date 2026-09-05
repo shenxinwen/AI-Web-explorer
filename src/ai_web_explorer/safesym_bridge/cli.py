@@ -197,6 +197,10 @@ def main(argv: list[str] | None = None) -> int:
     stagehand_explore_parser.add_argument("--visual-delta-model", default=None)
     stagehand_explore_parser.add_argument("--action-outcome-model", default=None)
     stagehand_explore_parser.add_argument(
+        "--openai-risk-detection", action="store_true"
+    )
+    stagehand_explore_parser.add_argument("--risk-detection-model", default=None)
+    stagehand_explore_parser.add_argument(
         "--stagehand-execution-mode",
         choices=["observed_action", "observe_act"],
         default="observed_action",
@@ -239,9 +243,7 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError("no_usable_semantic_actions")
             args.output.mkdir(parents=True, exist_ok=True)
             (args.output / "semantic_planning_graph.json").write_text(
-                json.dumps(
-                    semantic_graph.to_dict(), indent=2, ensure_ascii=False
-                ),
+                json.dumps(semantic_graph.to_dict(), indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )
             (args.output / "semantic_projection_report.json").write_text(
@@ -254,9 +256,7 @@ def main(argv: list[str] | None = None) -> int:
                 encoding="utf-8",
             )
             domain = compile_minimal_semantic_domain(semantic_graph)
-            (args.output / "domain.pddl").write_text(
-                domain.domain, encoding="utf-8"
-            )
+            (args.output / "domain.pddl").write_text(domain.domain, encoding="utf-8")
             if args.goal_location is not None or args.goal_fact:
                 problem = compile_minimal_semantic_problem(
                     semantic_graph,
@@ -315,9 +315,7 @@ def main(argv: list[str] | None = None) -> int:
                     "--clean-output-dir cannot be combined with --resume-graph"
                 )
             if args.resume_retry_action and args.resume_action_max_attempts < 2:
-                raise ValueError(
-                    "resume action max attempts must be at least 2"
-                )
+                raise ValueError("resume action max attempts must be at least 2")
             if args.resume_graph is not None:
                 resume_graph = load_web_kobe_graph_json(args.resume_graph)
                 validate_resume_graph(resume_graph, app_name=args.app_name)
@@ -363,6 +361,8 @@ def main(argv: list[str] | None = None) -> int:
                 "use_openai_visual_delta": args.openai_visual_delta,
                 "visual_delta_model": args.visual_delta_model,
                 "action_outcome_model": args.action_outcome_model,
+                "use_openai_risk_detection": args.openai_risk_detection,
+                "risk_detection_model": args.risk_detection_model,
                 "stagehand_execution_mode": args.stagehand_execution_mode,
                 "max_candidates": effective_max_candidates,
                 "limits": limits,
