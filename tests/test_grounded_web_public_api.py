@@ -7,6 +7,9 @@ from ai_web_explorer.grounded_web import (
     PlanningDelta,
     PlanningState,
     PlanningTransition,
+    RiskAssessment,
+    RiskDetectionRequest,
+    RiskTaxonomy,
     VisualAffordanceProvider,
     VisualAffordanceRequest,
     VisualDeltaProvider,
@@ -38,6 +41,9 @@ def test_grounded_web_package_exposes_mainline_api():
     assert PlanningDelta.__name__ == "PlanningDelta"
     assert PlanningState.__name__ == "PlanningState"
     assert PlanningTransition.__name__ == "PlanningTransition"
+    assert RiskAssessment.__name__ == "RiskAssessment"
+    assert RiskDetectionRequest.__name__ == "RiskDetectionRequest"
+    assert RiskTaxonomy.__name__ == "RiskTaxonomy"
     assert VisualAffordanceProvider is not None
     assert VisualAffordanceRequest.__name__ == "VisualAffordanceRequest"
     assert VisualDeltaProvider is not None

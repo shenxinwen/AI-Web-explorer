@@ -102,9 +102,7 @@ def _compact_node(node: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]
 
     page_frame = node.get("page_frame", {})
     removed_fields = {
-        key: deepcopy(value)
-        for key, value in node.items()
-        if key not in compact
+        key: deepcopy(value) for key, value in node.items() if key not in compact
     }
     page_frame_evidence = page_frame.get("evidence")
     if page_frame_evidence:
@@ -153,14 +151,18 @@ def _compact_execution_trace(trace: dict[str, Any]) -> dict[str, Any]:
         compact["metadata"] = {
             "replay_validation_status": replay_validation_status,
         }
+    trace_metadata = trace.get("metadata") or {}
+    for key in ("risk_assessment", "risk_detection_error"):
+        if key in trace_metadata:
+            compact.setdefault("metadata", {})[key] = deepcopy(trace_metadata[key])
     semantic_conflict = (trace.get("metadata") or {}).get(
         "semantic_observation_conflict"
     )
     compact = _without_empty_optional_values(compact)
     if semantic_conflict is not None:
-        compact.setdefault("metadata", {})[
-            "semantic_observation_conflict"
-        ] = deepcopy(semantic_conflict)
+        compact.setdefault("metadata", {})["semantic_observation_conflict"] = deepcopy(
+            semantic_conflict
+        )
     return compact
 
 
@@ -223,7 +225,11 @@ def _compact_edge(edge: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]
 
 def build_graph_artifact_payload(graph: WebKobeGraph) -> GraphArtifactPayload:
     full_graph = graph.to_dict()
-    compact_graph = {"meta": deepcopy(full_graph.get("meta", {})), "nodes": [], "edges": []}
+    compact_graph = {
+        "meta": deepcopy(full_graph.get("meta", {})),
+        "nodes": [],
+        "edges": [],
+    }
     evidence_sidecar: dict[str, Any] = {
         "schema_version": GRAPH_EVIDENCE_SCHEMA_VERSION,
         "nodes": {},
@@ -248,8 +254,7 @@ def build_graph_artifact_payload(graph: WebKobeGraph) -> GraphArtifactPayload:
 
     if full_graph.get("execution_events"):
         compact_graph["execution_events"] = [
-            _compact_edge(event)[0]
-            for event in full_graph["execution_events"]
+            _compact_edge(event)[0] for event in full_graph["execution_events"]
         ]
 
     if not evidence_sidecar["nodes"]:

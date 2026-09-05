@@ -15,13 +15,15 @@
 - semantic location、function hypothesis 与 risk judgment 仍依赖 VLM，可能发生误判。
 - executor failure 与环境不支持仍可能混淆。
 - 风险标记不等于阻止危险行为，也不构成自动探索的安全保证。
+- 当前只判断即将执行的已选动作，不扫描所有可见候选；二元判断和单一主要类别也会压缩复合风险。
+- shadow mode 不拦截动作，检测异常采用 fail-open，因此本实现是感知与审计机制而非安全边界。
 - 动态网站可能使已有知识失效，需要知识更新和重新验证机制。
 - 证据可追溯提升可审查性，但不构成形式化正确性或完整安全审计保证。
 
 ## 缓解措施
 
 - 优先在受控、可重置、获得授权的测试环境和隔离账号中开展实验。
-- 在执行前记录风险类型、严重程度、可逆性和页面证据，为人工确认、停止或拦截等后续策略提供依据。
+- 在执行前记录二元风险判断、主要风险类型和页面证据，为人工确认、停止或拦截等后续策略提供依据。
 - 显式区分 Proposed、Partially Supported、Interaction-Supported、Failed 和 Incomplete，保守限制下游可用知识。
 - 保存 hypothesis source、execution trace、before/after observations 和 outcome judgment，支持人工检查。
 - 对敏感数据进行最小化收集、脱敏、受限保存与投稿前清理。

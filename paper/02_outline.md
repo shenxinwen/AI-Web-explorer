@@ -65,7 +65,7 @@ Building Evidence-Grounded Functional Models of Web Applications through Risk-Aw
 
 ### 3.4 Risk-Aware Open-Ended Exploration
 
-定义预定义风险知识召回、VLM GUI 上下文复核和结构化风险标注；确认与拦截不是当前必要机制。
+定义截图、已选动作 label 与版本化风险库共同驱动的 VLM 二元风险判断；确认与拦截不是当前必要机制。
 
 ### 3.5 Conservative Downstream Projection
 
@@ -79,13 +79,13 @@ Building Evidence-Grounded Functional Models of Web Applications through Risk-Aw
 
 ### 4.2 Risk-Aware Exploration
 
-评价自动探索候选功能的风险识别、分类和上下文敏感性。
+评价自动探索中已选执行动作的风险识别、分类和上下文敏感性。
 
 ### 4.3 Downstream Planning and Behavior Verification
 
 评价保守投影是否能支持新目标的路径规划，并减少使用未经证据支持的功能知识。
 
-核心消融：w/o evidence-based outcome verification、w/o persistent frontier、rule-only / VLM-only risk detection。
+核心消融：w/o evidence-based outcome verification、w/o persistent frontier、w/o visual context / w/o taxonomy risk detection。
 
 ## 5. Limitations and Ethics Statement
 

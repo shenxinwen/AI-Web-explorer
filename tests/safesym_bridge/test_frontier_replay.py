@@ -24,6 +24,7 @@ from ai_web_explorer.grounded_web.location_exploration import (
 )
 from ai_web_explorer.grounded_web.models import StateSnapshot
 from ai_web_explorer.grounded_web.semantic_assistor import DeterministicSemanticAssistor
+from ai_web_explorer.grounded_web.risk_detection import RiskAssessment
 
 
 @pytest.fixture
@@ -48,7 +49,9 @@ def _node(node_id: str, *actions: str) -> WebKobeNode:
     )
 
 
-def _edge(source: str, target: str, action_id: str, *, success: bool = True) -> WebKobeEdge:
+def _edge(
+    source: str, target: str, action_id: str, *, success: bool = True
+) -> WebKobeEdge:
     return WebKobeEdge(
         source_node_id=source,
         target_node_id=target,
@@ -163,9 +166,7 @@ def test_select_frontier_replay_path_includes_completed_same_location_requiremen
 
 def test_select_frontier_replay_path_omits_same_location_non_requirement():
     login = replace(_node("login"), semantic_location_hint="login_form")
-    product = replace(
-        _node("product"), semantic_location_hint="product_catalog"
-    )
+    product = replace(_node("product"), semantic_location_hint="product_catalog")
     product_after_add = replace(
         _node("product_after_add"), semantic_location_hint="product_catalog"
     )
@@ -445,11 +446,13 @@ def _replay_step(source: str, target: str, action_id: str) -> ReplayStep:
     )
 
 
-def _replay_explorer(adapter):
+def _replay_explorer(adapter, *, risk_detection_provider=None):
     explorer = WebKobeExplorer(
         adapter=adapter,
         semantic_assistor=DeterministicSemanticAssistor(app="fixture"),
         business_profile=None,
+        capture_screenshots=risk_detection_provider is not None,
+        risk_detection_provider=risk_detection_provider,
     )
     explorer.manager.identify_or_add_node(_replay_node("start", "start"))
     explorer.manager.identify_or_add_node(_replay_node("target", "target"))
@@ -459,11 +462,98 @@ def _replay_explorer(adapter):
 
 
 @pytest.mark.anyio
+async def test_frontier_replay_runs_shadow_risk_detection_before_each_action():
+    adapter = _ReplayAdapter(
+        [
+            StateSnapshot("start", "https://fixture.test/shop", "start", {}),
+            StateSnapshot("target", "https://fixture.test/shop", "target", {}),
+        ]
+    )
+    requests = []
+
+    def risk_provider(request):
+        assert adapter.executed == []
+        requests.append(request)
+        return RiskAssessment(
+            True, "financial_transaction", "The action enters checkout."
+        )
+
+    explorer = _replay_explorer(adapter, risk_detection_provider=risk_provider)
+    target = type(
+        "Target",
+        (),
+        {
+            "node_id": "target",
+            "path": (_replay_step("start", "target", "open_checkout"),),
+        },
+    )()
+
+    result = await FrontierReplayRunner(explorer).replay(
+        target, start_url="https://fixture.test/shop"
+    )
+
+    assert result.success is True
+    assert requests[0].candidate_label == "open_checkout"
+    assert requests[0].screenshot_path.endswith("replay_before_0001.png")
+    assert explorer.manager.meta["replay_risk_assessments"] == [
+        {
+            "action_id": "open_checkout",
+            "candidate_label": "open_checkout",
+            "screenshot_path": "/tmp/replay_before_0001.png",
+            "risk_assessment": {
+                "potential_risk": True,
+                "risk_type": "financial_transaction",
+                "evidence": "The action enters checkout.",
+            },
+        }
+    ]
+
+
+@pytest.mark.anyio
+async def test_frontier_replay_risk_detection_failure_is_fail_open():
+    adapter = _ReplayAdapter(
+        [
+            StateSnapshot("start", "https://fixture.test/shop", "start", {}),
+            StateSnapshot("target", "https://fixture.test/shop", "target", {}),
+        ]
+    )
+
+    def failing_provider(request):
+        raise RuntimeError("risk service unavailable")
+
+    explorer = _replay_explorer(adapter, risk_detection_provider=failing_provider)
+    target = type(
+        "Target",
+        (),
+        {
+            "node_id": "target",
+            "path": (_replay_step("start", "target", "open_target"),),
+        },
+    )()
+
+    result = await FrontierReplayRunner(explorer).replay(
+        target, start_url="https://fixture.test/shop"
+    )
+
+    assert result.success is True
+    assert adapter.executed == ["open_target"]
+    audit = explorer.manager.meta["replay_risk_assessments"][0]
+    assert audit["risk_detection_error"] == {
+        "type": "RuntimeError",
+        "message": "risk service unavailable",
+    }
+
+
+@pytest.mark.anyio
 async def test_frontier_replay_resets_executes_and_validates_without_graph_edges():
     adapter = _ReplayAdapter(
         [
-            StateSnapshot("start", "https://fixture.test/shop", "start", {"surface": "start"}),
-            StateSnapshot("target", "https://fixture.test/shop", "target", {"surface": "target"}),
+            StateSnapshot(
+                "start", "https://fixture.test/shop", "start", {"surface": "start"}
+            ),
+            StateSnapshot(
+                "target", "https://fixture.test/shop", "target", {"surface": "target"}
+            ),
         ]
     )
     explorer = _replay_explorer(adapter)
@@ -489,19 +579,27 @@ async def test_frontier_replay_resets_executes_and_validates_without_graph_edges
     assert adapter.executed == ["open_target"]
     assert explorer.manager.to_graph().to_dict() == before_graph
 
+
 @pytest.mark.anyio
 async def test_frontier_replay_does_not_mutate_edge_metadata_on_success_or_failure():
     adapter = _ReplayAdapter(
         [
-            StateSnapshot("start", "https://fixture.test/shop", "start", {"surface": "start"}),
-            StateSnapshot("target", "https://fixture.test/shop", "target", {"surface": "target"}),
+            StateSnapshot(
+                "start", "https://fixture.test/shop", "start", {"surface": "start"}
+            ),
+            StateSnapshot(
+                "target", "https://fixture.test/shop", "target", {"surface": "target"}
+            ),
         ]
     )
     explorer = _replay_explorer(adapter)
     target = type(
         "Target",
         (),
-        {"node_id": "target", "path": (_replay_step("start", "target", "open_target"),)},
+        {
+            "node_id": "target",
+            "path": (_replay_step("start", "target", "open_target"),),
+        },
     )()
     before = explorer.manager.to_graph().to_dict()
 
@@ -518,9 +616,18 @@ async def test_frontier_replay_does_not_mutate_edge_metadata_on_success_or_failu
 async def test_frontier_replay_does_not_require_intermediate_raw_nodes_to_match():
     adapter = _ReplayAdapter(
         [
-            StateSnapshot("start", "https://fixture.test/shop", "start", {"surface": "start"}),
-            StateSnapshot("intermediate", "https://fixture.test/shop", "intermediate", {"surface": "intermediate"}),
-            StateSnapshot("target", "https://fixture.test/shop", "target", {"surface": "target"}),
+            StateSnapshot(
+                "start", "https://fixture.test/shop", "start", {"surface": "start"}
+            ),
+            StateSnapshot(
+                "intermediate",
+                "https://fixture.test/shop",
+                "intermediate",
+                {"surface": "intermediate"},
+            ),
+            StateSnapshot(
+                "target", "https://fixture.test/shop", "target", {"surface": "target"}
+            ),
         ]
     )
     explorer = _replay_explorer(adapter)
@@ -551,8 +658,12 @@ async def test_frontier_replay_does_not_require_intermediate_raw_nodes_to_match(
 async def test_frontier_replay_accepts_successful_actions_without_checkpoint_validation():
     adapter = _ReplayAdapter(
         [
-            StateSnapshot("start", "https://fixture.test/shop", "start", {"surface": "start"}),
-            StateSnapshot("wrong", "https://fixture.test/shop", "wrong", {"surface": "wrong"}),
+            StateSnapshot(
+                "start", "https://fixture.test/shop", "start", {"surface": "start"}
+            ),
+            StateSnapshot(
+                "wrong", "https://fixture.test/shop", "wrong", {"surface": "wrong"}
+            ),
         ]
     )
     explorer = _replay_explorer(adapter)
@@ -580,7 +691,11 @@ async def test_frontier_replay_accepts_successful_actions_without_checkpoint_val
 @pytest.mark.anyio
 async def test_frontier_replay_stops_on_action_failure_without_observation():
     adapter = _ReplayAdapter(
-        [StateSnapshot("start", "https://fixture.test/shop", "start", {"surface": "start"})],
+        [
+            StateSnapshot(
+                "start", "https://fixture.test/shop", "start", {"surface": "start"}
+            )
+        ],
         failing_actions={"open_target"},
     )
     explorer = _replay_explorer(adapter)

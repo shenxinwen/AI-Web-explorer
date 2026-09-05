@@ -48,6 +48,9 @@ from ai_web_explorer.grounded_web.openai_visual_delta import (
     create_openai_action_outcome_provider_from_env,
     create_openai_visual_delta_provider_from_env,
 )
+from ai_web_explorer.grounded_web.openai_risk_detection import (
+    create_openai_risk_detection_provider_from_env,
+)
 from ai_web_explorer.grounded_web.embedding_provider import (
     create_embedding_provider_from_env,
 )
@@ -90,11 +93,7 @@ def _runtime_state_from_graph(graph: WebKobeGraph) -> dict[str, Any]:
     payload = graph.meta.get(RUNTIME_BUDGET_META_KEY)
     if isinstance(payload, dict):
         return dict(payload)
-    return {
-        key: graph.meta[key]
-        for key in _RUNTIME_STATE_KEYS
-        if key in graph.meta
-    }
+    return {key: graph.meta[key] for key in _RUNTIME_STATE_KEYS if key in graph.meta}
 
 
 def _mirror_runtime_state(graph: WebKobeGraph, state: dict[str, Any]) -> None:
@@ -154,13 +153,11 @@ def write_web_kobe_graph(
     evidence_path.parent.mkdir(parents=True, exist_ok=True)
 
     payload = build_graph_artifact_payload(graph)
-    payload.compact_graph.setdefault("meta", {})[
-        "frontier_metrics"
-    ] = _frontier_metrics_for_graph(graph)
-
-    evidence_text = json.dumps(
-        payload.evidence_sidecar, indent=2, ensure_ascii=False
+    payload.compact_graph.setdefault("meta", {})["frontier_metrics"] = (
+        _frontier_metrics_for_graph(graph)
     )
+
+    evidence_text = json.dumps(payload.evidence_sidecar, indent=2, ensure_ascii=False)
     graph_text = json.dumps(payload.compact_graph, indent=2, ensure_ascii=False)
     evidence_temp = _write_json_temp(evidence_path, evidence_text)
     graph_temp = None
@@ -345,9 +342,12 @@ async def run_stagehand_exploration(
     screenshot_dir: Path | None = None,
     visual_delta_provider=None,
     action_outcome_provider=None,
+    risk_detection_provider=None,
     use_openai_visual_delta: bool = False,
+    use_openai_risk_detection: bool = False,
     visual_delta_model: str | None = None,
     action_outcome_model: str | None = None,
+    risk_detection_model: str | None = None,
     state_embedding_provider=None,
     embedding_path: Path | None = None,
     use_state_embeddings: bool = False,
@@ -384,10 +384,10 @@ async def run_stagehand_exploration(
     if (
         visual_delta_provider is not None
         or action_outcome_provider is not None
+        or risk_detection_provider is not None
         or use_openai_visual_delta
-    ) and (
-        screenshot_dir is None
-    ):
+        or use_openai_risk_detection
+    ) and (screenshot_dir is None):
         raise ValueError("screenshot_dir is required for visual delta analysis.")
     resolved_visual_delta_provider = visual_delta_provider
     if resolved_visual_delta_provider is None and use_openai_visual_delta:
@@ -399,12 +399,22 @@ async def run_stagehand_exploration(
     if resolved_action_outcome_provider is None and (
         use_openai_visual_delta or action_outcome_model is not None
     ):
-        resolved_action_outcome_provider = create_openai_action_outcome_provider_from_env(
-            model=action_outcome_model,
-            request_timeout_seconds=vlm_request_timeout_seconds,
+        resolved_action_outcome_provider = (
+            create_openai_action_outcome_provider_from_env(
+                model=action_outcome_model,
+                request_timeout_seconds=vlm_request_timeout_seconds,
+            )
         )
     if resolved_action_outcome_provider is None:
         resolved_action_outcome_provider = resolved_visual_delta_provider
+    resolved_risk_detection_provider = risk_detection_provider
+    if resolved_risk_detection_provider is None and use_openai_risk_detection:
+        resolved_risk_detection_provider = (
+            create_openai_risk_detection_provider_from_env(
+                model=risk_detection_model,
+                request_timeout_seconds=vlm_request_timeout_seconds,
+            )
+        )
     resolved_embedding_provider = state_embedding_provider
     if resolved_embedding_provider is None and use_state_embeddings:
         resolved_embedding_provider = create_embedding_provider_from_env(
@@ -484,6 +494,7 @@ async def run_stagehand_exploration(
                 business_profile=resolved_business_profile,
                 visual_delta_provider=resolved_visual_delta_provider,
                 action_outcome_provider=resolved_action_outcome_provider,
+                risk_detection_provider=resolved_risk_detection_provider,
                 enable_exploration_memory=resolved_embedding_provider is not None,
                 state_embedding_provider=resolved_embedding_provider,
                 action_embedding_provider=resolved_embedding_provider,
@@ -492,6 +503,7 @@ async def run_stagehand_exploration(
                 resume_policy=resume_policy,
                 exploration_limits=limits,
             )
+
             def checkpoint(graph: WebKobeGraph) -> None:
                 if location_scoped and limits is not None:
                     graph.meta["exploration_limits"] = limits.to_dict()
@@ -549,11 +561,11 @@ async def run_stagehand_exploration(
                         (replay_metric_baseline or {}).get("replay_mismatch_count", 0)
                     ),
                     "last_replay_reason": None,
-                    "blocked_replay_node_ids": list(
-                        resume_runtime_state.get("blocked_replay_node_ids", [])
-                    )
-                    if location_scoped
-                    else [],
+                    "blocked_replay_node_ids": (
+                        list(resume_runtime_state.get("blocked_replay_node_ids", []))
+                        if location_scoped
+                        else []
+                    ),
                 }
                 policy = resume_policy or ResumePolicy()
                 resume_replay_runner = FrontierReplayRunner(explorer)
@@ -585,9 +597,7 @@ async def run_stagehand_exploration(
                     state["frontier_replay_attempts"] = dict(
                         sorted(bootstrap_frontier_attempts.items())
                     )
-                    state["blocked_replay_node_ids"] = sorted(
-                        blocked_resume_node_ids
-                    )
+                    state["blocked_replay_node_ids"] = sorted(blocked_resume_node_ids)
                     _mirror_runtime_state(graph, state)
                     graph.meta.update(bootstrap_metrics)
                     return state
@@ -705,15 +715,10 @@ async def run_stagehand_exploration(
                         bootstrap_metrics["replay_failure_count"] += 1
                         if is_replay_mismatch_reason(replay_result.reason):
                             bootstrap_metrics["replay_mismatch_count"] += 1
-                        if (
-                            not location_scoped
-                            or (
-                                limits is not None
-                                and bootstrap_frontier_attempts[
-                                    str(resume_target.node_id)
-                                ]
-                                >= limits.max_replay_attempts_per_frontier
-                            )
+                        if not location_scoped or (
+                            limits is not None
+                            and bootstrap_frontier_attempts[str(resume_target.node_id)]
+                            >= limits.max_replay_attempts_per_frontier
                         ):
                             blocked_resume_node_ids.add(resume_target.node_id)
                         continue

@@ -15,10 +15,10 @@
 | 探索配置、提示词与冻结运行参数 | `experiments/`（待登记） | 待定 | 未开始 |
 | 原始执行轨迹与 before/after observations | 待定 | 待定 | 未开始 |
 | 结果判断、证据链与人工标注 | 待定 | 待定 | 未开始 |
-| 风险类别定义、风险知识库与版本 | 待定 | 待定 | 未开始 |
-| VLM 风险判断提示词与结构化输出 | 待定 | 待定 | 未开始 |
+| 风险类别定义、风险知识库与版本 | `../src/ai_web_explorer/grounded_web/risk_taxonomy_v1.json` | 随代码版本冻结 | 已有 v1 |
+| VLM 风险判断提示词与结构化输出 | `../src/ai_web_explorer/grounded_web/risk_detection.py` | 单元测试校验 | 已实现 |
 | 候选功能、GUI 上下文与人工风险标签 | 待定 | 待定 | 未开始 |
-| 风险识别评测脚本与原始输出 | 待定 | 待定 | 未开始 |
+| 风险识别评测脚本与原始输出 | `experiments/`（正式实验待登记） | CLI 支持 `--openai-risk-detection` 与 `--risk-detection-model` | 冒烟完成，正式实验未开始 |
 | 保守投影及下游规划/验证输入 | 待定 | 待定 | 未开始 |
 | 投稿图表与汇总数据 | `figures/`、`experiments/results/` | 待定 | 未开始 |
 

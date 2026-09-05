@@ -27,9 +27,9 @@
 - 直接采用 VLM 提议、缺少真实 outcome verification 的模型。
 - 普通探索记录或与本文最接近的环境建模方法（需在相关工作核实后选定）。
 - 完整方法与三项核心消融。
-- 风险知识库规则匹配。
-- VLM 上下文判断。
-- 风险知识库召回 + VLM 上下文复核。
+- 完整方法：截图 + 动作 label + 风险库。
+- w/o visual context：动作 label + 风险库。
+- w/o taxonomy：截图 + 动作 label。
 
 ## 指标与统计规则
 
@@ -44,8 +44,7 @@
 ### 风险与副作用
 
 - 风险识别 precision、recall 和 F1；
-- 高严重度风险 recall；
-- risk type、severity 和 reversibility 分类准确率；
+- 在风险样本上的 risk type 准确率；
 - 风险判断证据与 GUI 上下文的一致性；
 - 相似动作在不同页面上下文中的判断差异；
 - 误报、漏报和错误分类案例。
@@ -66,7 +65,7 @@
 
 1. w/o evidence-based outcome verification；
 2. w/o persistent frontier；
-3. rule-only / VLM-only risk detection。
+3. w/o visual context / w/o taxonomy risk detection。
 
 待考虑的稳健性检查：
 
