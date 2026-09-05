@@ -32,7 +32,7 @@
 - **Partially Supported**：已有部分证据，不足以完整确认；
 - **Interaction-Supported**：真实交互与结果观察提供充分支持；
 - **Failed**：执行或结果观察明确不支持该假设；
-- **Incomplete**：因中断、风险停止或其他原因未完成验证。
+- **Incomplete**：因人工中断、执行异常、预算结束或其他原因未完成验证。
 
 pending、retryable、stale、blocked 等只作为实现层子状态。
 
@@ -89,5 +89,5 @@ PDDL-compatible projection 可以将 semantic locations 映射为 predicates，�
 | GUI 执行与前后观察 | 待代码核查后填写 | 执行轨迹、before/after observation、执行器状态 |
 | 结果判断与模型更新 | 待代码核查后填写 | outcome/verification state 更新案例与标注评测 |
 | Persistent frontier | 待代码核查后填写 | 未完成候选持久化、重访与恢复测试 |
-| 执行前风险感知 | `grounded_web/risk_detection.py`、`grounded_web/openai_risk_detection.py`、`grounded_web/web_kobe_explorer.py`、`grounded_web/risk_taxonomy_v1.json` | schema/prompt/provider 单测；普通探索与 replay 集成测试；真实 VLM 冒烟 |
+| 执行前风险感知 | `grounded_web/risk_detection.py`、`grounded_web/openai_risk_detection.py`、`grounded_web/explorer.py`、`grounded_web/risk_taxonomy_v1.json` | schema/prompt/provider 单测；普通探索与 replay 集成测试；真实 VLM 冒烟 |
 | 保守下游投影 | SafeSym / PDDL 相关代码位置待核查 | 投影一致性、规划可执行性与行为验证 |

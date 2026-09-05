@@ -79,7 +79,7 @@ Building Evidence-Grounded Functional Models of Web Applications through Risk-Aw
 
 ### 4.2 Risk-Aware Exploration
 
-评价自动探索候选功能的风险识别、分类和上下文敏感性。
+评价自动探索中已选执行动作的风险识别、分类和上下文敏感性。
 
 ### 4.3 Downstream Planning and Behavior Verification
 
