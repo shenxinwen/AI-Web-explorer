@@ -5,6 +5,6 @@
 | 实验 ID | 假设/目的 | 配置 | 输出位置 | 状态 | 对应主张 |
 | --- | --- | --- | --- | --- | --- |
 | E001 | 验证风险检测能接入普通探索并持久化结果 | SauceDemo；10 步真实 VLM smoke + 1 步持久化 smoke；非冻结配置 | 本地忽略目录 `outputs/risk_smoke/`、`outputs/risk_persistence_smoke/` | 工程冒烟完成，不作为论文结果 | C3 可实现性 |
-| E002 | RQ3：评估动作条件风险识别的准确性与上下文敏感性 | 数据、标注、基线与预算待冻结 | 待定 | 计划中 | C3 |
-| E003 | RQ1：在冻结候选与交互轨迹上评估功能知识判定、准入和证据链质量 | 数据、标注、基线与预算待冻结 | 待定 | 计划中 | C1 |
-| E004 | RQ2：在固定应用、起点与交互预算下评估证据获取、知识增长和 frontier 恢复 | 数据、标注、基线与预算待冻结 | 待定 | 计划中 | C2 |
+| E002 | RQ3：评估动作条件风险识别的准确性与上下文敏感性 | `protocol_v1.md`；两网站探索样本 + 必要的离线上下文配对；4 个输入条件；≥100 样本 | `results/E002/`（待生成） | 协议已冻结，待 pilot | C3 |
+| E003 | RQ1：在冻结候选与交互轨迹上评估功能知识判定、准入、证据链质量和核心功能覆盖 | `protocol_v1.md`；相同轨迹上的 proposal-as-fact、executor-success-as-fact、完整方法；冻结 core-function inventory | `results/E003/`（待生成） | 协议与 core inventory v1 已冻结，待 pilot | C1 |
+| E004 | RQ2：在固定应用、起点与交互预算下评估证据获取、知识增长和 frontier 恢复 | `protocol_v1.md`；SauceDemo + Practice Shopping；linear/no replay vs full；pilot 10、正式 25 attempts；3 runs | `results/E004/`（待生成） | 协议已冻结，待 pilot | C2 |

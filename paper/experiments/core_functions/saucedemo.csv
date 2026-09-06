@@ -1,0 +1,14 @@
+﻿core_id,semantic_location,function_label,accepted_aliases,notes
+SD01,login_form,enter credentials,fill login fields;fill username and password,填写登录凭据，不包含提交
+SD02,login_form,submit login,login;submit login form,提交已填写的登录表单
+SD03,product_catalog,add one product to cart,add to cart;add product,同类商品按钮按一个参数化功能计数
+SD04,product_catalog,sort products,change product order;sort catalog,不同排序值不拆分
+SD05,product_catalog,view cart,open cart;shopping cart,
+SD06,cart_page,remove one cart item,remove item;remove from cart,同类商品按参数化功能计数
+SD07,cart_page,continue shopping,return to products;back to catalog,
+SD08,cart_page,start checkout,checkout;proceed to checkout,
+SD09,checkout_information_form,complete checkout information,fill checkout information;fill customer information,将姓名和邮编字段视为一个复合高层功能
+SD10,checkout_information_form,submit checkout information,continue checkout;submit customer information,
+SD11,checkout_information_form,cancel checkout,cancel;return to cart,
+SD12,checkout_overview,complete checkout,finish;place order,
+SD13,checkout_overview,cancel checkout,cancel;return to products,与信息页的取消按不同语义位置分别计数

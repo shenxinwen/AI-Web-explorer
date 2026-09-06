@@ -1,6 +1,6 @@
 # 论文大纲
 
-本文件同步仓库根目录的当前工作大纲 [`大纲v3.md`](../大纲v3.md)，作为 `paper/` 工作区中的章节级状态。根目录文件仍是 v3 的完整论述来源；后续发生结构变更时应同时更新本文件与 `STATUS.md`。
+本文件是当前正式论文大纲。早期中文工作大纲已归档为 [`archive/大纲v3.md`](archive/大纲v3.md)，仅用于追溯，不再要求与本文件同步更新。
 
 ## 暂定题目
 
@@ -37,11 +37,11 @@ Building Evidence-Grounded Functional Models of Web Applications through Risk-Aw
 
 ### 2.1 Autonomous GUI Exploration and Environment Modeling
 
-讨论 GUI-explorer、UIExplore、UI-KOBE、GraphPilot、EAM 等方向，重点界定本文在“假设如何经真实执行与结果观察转化为有状态、可追溯知识”上的差异。
+讨论 GUI-explorer、UIExplore-Bench、UI-KOBE、GraphPilot、EAM、ActionEngine 等方向。明确 Web 探索、知识图、状态机记忆和 frontier 均已有研究，重点界定本文在“交互证据如何转化为具有验证状态、可追溯且受准入控制的功能知识”上的差异。
 
 ### 2.2 Safe and Reliable GUI Agents
 
-讨论给定用户任务下的危险动作识别与后果预测，并区分本文“自动探索系统自主生成并执行功能验证目标时如何识别风险”的场景。
+讨论 Guided Exploration of User-Sensitive Screens、OS-Sentinel、OSGuard、SeerGuard 等敏感状态发现、危险动作识别与后果预测工作。不主张首次考虑自动探索安全；区分本文把 task-free 探索中已选动作的风险判断与功能假设及证据链关联保存的场景。
 
 ## 3. Method
 

@@ -8,7 +8,7 @@
 
 - 目标会议：ICLR 2027
 - 暂定题目：Building Evidence-Grounded Functional Models of Web Applications through Risk-Aware Open-Ended Exploration
-- 当前阶段：最小风险感知链路已实现并完成工程冒烟，论文级实验协议待设计
+- 当前阶段：最小风险感知链路已实现并完成工程冒烟，最小可投稿实验协议 v1 已冻结，待 pilot
 
 ## 当前有效结论
 
@@ -20,12 +20,14 @@
 - 风险机制在每个普通探索或 replay 动作执行前，将当前截图、已选 high-level action label 和完整风险库交给独立 VLM 判断，保存二元风险标记、一个主要风险类型和页面证据。
 - 风险检测以 shadow mode 运行：判断不拦截动作；检测失败时 fail-open 并记录错误，保证探索链路可继续。
 - 当前风险贡献聚焦检测、记录和可审查性，不主张已经拦截危险动作或保证探索安全。
+- 已核实 Web 开放探索、Web 状态机记忆和自动探索安全均有直接相关工作，因此不将“Web 环境”或“首次考虑探索安全”作为创新主张。
+- C3 的差异化定位收紧为：在 task-free/open-ended 功能归纳中，将已选动作的风险判断与功能假设、执行轨迹和结果证据关联保存。
 - 下游规划与行为验证用于检验模型价值；PDDL、SafeSym、VLM、浏览器执行器和 persistent frontier 均不作为独立创新。
 - 尚无论文级实验结果；所有效果性陈述仍是待验证研究问题。
 
 ## 已有资产
 
-- 项目大纲：`../大纲v3.md`
+- 早期项目大纲（归档）：`archive/大纲v3.md`
 - 项目实验记录：`../docs/experiments/`
 - 项目设计与实现记录：`../docs/`
 
@@ -35,15 +37,16 @@
 - 验证五类风险在多网站、多动作上的覆盖，并单独评估 replay 链路。
 - 设计风险识别标注规范，以及完整方法、w/o visual context、w/o taxonomy 的对比实验。
 - 核实相关工作及正式引用，明确最接近方法和可比实验设定。
-- 确定 Web 应用/数据、探索预算、人工标注规范、基线、指标、统计规则及实验矩阵。
+- 逐字段人工标注指南已建立；论文级 verification state 使用冻结规则从实现字段离线派生，不新增运行时功能。
+- Pilot 后补齐指标计算脚本和协议中暴露的必要修正。
 - 核查论文方法与当前代码的逐模块映射。
 - 冻结可复现环境、模型版本、配置、轨迹与结果工件格式。
 - 建立 ICLR LaTex 主稿。
 
 ## 下一步
 
-1. 核实最接近相关工作，并冻结 RQ1–RQ3 的基线与可比设置。
-2. 分别设计 C1 的冻结轨迹标注协议、C2 的固定预算探索协议和 C3 的动作级风险标注协议。
-3. 在 `experiments/registry.md` 登记 RQ1–RQ3 的正式实验协议。
-4. 补全其余论文模块与代码的实现映射。
-5. 建立与 `02_outline.md` 对齐的 ICLR LaTex 主稿。
+1. 从历史工件导出少量样本，按 `experiments/annotation_guide_v1.md` 完成格式试标；安排第二标注者后完成 20 个样本的一致性试标。
+2. 通过现有测试确认 `max_total_replays=0` 与 full 条件可区分，并检查截图路径/attempt metadata 完整性。
+3. 运行两网站的 10-attempt pilot；只修复影响指标计算的阻塞问题。
+4. Pilot 通过后运行正式实验，并将结果归档到 `experiments/results/`。
+5. 并行建立与 `02_outline.md` 对齐的 ICLR LaTex 主稿。

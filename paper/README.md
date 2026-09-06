@@ -14,7 +14,7 @@
 
 - `00_scope.md`：研究范围与投稿定位。
 - `01_contributions.md`：可检验的核心贡献和证据链。
-- `02_outline.md`：论文大纲；当前参考仓库根目录的 `大纲v3.md`。
+- `02_outline.md`：当前正式论文大纲；早期中文大纲归档于 `archive/大纲v3.md`。
 - `03_related_work.md`：相关工作与差异化定位。
 - `04_method.md`：方法、算法及其代码映射。
 - `05_experiments.md`：实验协议。

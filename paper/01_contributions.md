@@ -6,7 +6,7 @@
 | --- | --- | --- | --- |
 | C1 | **Evidence-Grounded Functional Modeling：** 给定功能假设及其交互证据，通过 functional outcome、verification state 和 evidence provenance 显式区分功能假设、动作执行与证据支持的知识，并控制哪些知识可供下游使用。 | 在相同候选与冻结交互轨迹下，评价功能结论、结果判断、直接依赖、错误知识准入和证据链完整性；与直接采用 VLM 提议或 executor success 的模型对比。 | 主张已确定，证据待实验 |
 | C2 | **Execution-Grounded Open-Ended Model Induction：** 在固定探索预算下，通过“功能假设选择 → GUI 执行 → 前后观察 → 交互证据采集”持续产生 C1 所需的证据，并通过 persistent frontier 保留和重访未验证或未完成假设。 | 多轮开放探索协议；经交互支持的功能覆盖率与知识增长曲线；单位预算有效证据；移除 persistent frontier 的消融。 | 主张已确定，证据待实验 |
-| C3 | **Risk-Aware Open-Ended Exploration：** 在自动探索与上下文恢复的每个已选动作执行前，结合当前截图、动作语义和预定义风险知识识别潜在副作用，并记录二元判断、主要风险类型和界面证据。 | 风险识别 precision/recall/F1；风险类型准确率；动作语义与视觉上下文消融；上下文敏感案例；普通探索与 replay 覆盖。 | 最小机制已实现，效果证据待实验 |
+| C3 | **Risk-Aware Open-Ended Exploration：** 将已选动作的执行前风险判断纳入 task-free/open-ended functional model induction，并把二元判断、主要风险类型和界面证据与相应功能假设及交互轨迹关联保存，以支持过程监督和事后审查。 | 风险识别 precision/recall/F1；风险类型准确率；动作语义与视觉上下文消融；上下文敏感案例；风险记录与功能/轨迹的关联完整率；普通探索与 replay 覆盖。 | 最小机制已实现，效果证据待实验 |
 
 ## 贡献之间的证据链
 
@@ -21,4 +21,6 @@
 
 - “减少错误尝试”与“减少重复探索”只有在实验支持后才能报告。
 - 风险检测不等于实际拦截，也不能直接证明探索过程已经更加安全。
+- Web 环境本身不是创新点；已有工作已研究 Web UI 开放探索与 Web GUI 状态机记忆。
+- 不主张本文首次考虑自动探索安全；本文的差异是将已选动作风险判断与开放式功能归纳及其证据链结合。
 - PDDL 与 SafeSym 仅是保守投影和下游验证的实例，不是核心方法贡献。

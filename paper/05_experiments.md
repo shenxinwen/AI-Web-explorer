@@ -20,16 +20,21 @@
 
 ## 任务与数据
 
-- Web 应用与探索起点：待确定。
-- 每个应用的探索预算、重启策略和账号/数据隔离策略：待确定。
-- 功能、结果、直接动作依赖、风险与证据链的人工标注规范：待设计。
+- 主实验使用已有运行经验的 SauceDemo 与 Practice Shopping，从入口 URL 和干净浏览器会话开始。
+- Pilot 为每网站、每条件 1 次、最多 10 个 action attempts；正式实验为每网站、每条件 3 次、每次最多 25 个 attempts。
+- RQ1/RQ3 以 action attempt 为单位，RQ2 以独立 run 为单位。
+- 全部样本单人标注，至少 25% 双人独立复标并仲裁；正式标注前试标 20 个样本。
+- 完整冻结协议见 [`experiments/protocol_v1.md`](experiments/protocol_v1.md)。
+- 逐字段定义与论文级 verification state 的离线派生规则见 [`experiments/annotation_guide_v1.md`](experiments/annotation_guide_v1.md)；工件核查见 [`experiments/pilot_readiness_audit.md`](experiments/pilot_readiness_audit.md)。
 - 下游任务包括：给定新目标或 PDDL problem 的规划，以及规划动作与模型约束/观察结果的一致性验证。
 - 若资源允许，可加入规划结果驱动真实浏览器执行，但不作为当前必要贡献。
 
 ## 对比方法
 
 - 直接采用 VLM 提议、缺少真实 outcome verification 的模型。
-- 普通探索记录或与本文最接近的环境建模方法（需在相关工作核实后选定）。
+- C1：executor-success-as-fact、w/o outcome verification，以及 GUI-explorer 风格的 transition knowledge；VeriGUI 用于 outcome-verification 定位比较。
+- C2：linear/no replay 与完整 persistent-frontier 方法；UIExplore-AlGo、GUI-explorer 作为非阻塞追加对照。
+- C3：通用 VLM zero-shot、OS-Sentinel/SeerGuard 类执行前判断，以及完整方法的输入消融；OSGuard 可作为补充外部数据，但需处理其依赖用户指令的标签差异。
 - 完整方法与三项核心消融。
 - 完整方法：截图 + 动作 label + 风险库。
 - w/o visual context：动作 label + 风险库。
@@ -69,7 +74,7 @@
 
 ### 统计规则
 
-随机种子、重复次数、置信区间、显著性检验和人工标注一致性指标均待实验协议冻结；不得仅报告最优运行。
+正式实验每条件运行 3 次，报告逐网站结果和网站 macro-average；主要比例指标报告 bootstrap 95% confidence interval。二元人工标签报告 Cohen's kappa。小样本不强制显著性检验，不得仅报告最优运行。
 
 ## 消融与稳健性检查
 

@@ -1,0 +1,11 @@
+﻿core_id,semantic_location,function_label,accepted_aliases,notes
+PS01,shopping,search products,"search items;product search",""
+PS02,shopping,filter products,"apply filters;filter catalog","类别、价格、评分、库存和优惠属于同一参数化功能"
+PS03,shopping,sort products,"sort by name;sort by price;change product order","不同排序字段与方向不拆分"
+PS04,shopping,add one product to cart,"add to cart;add product","同类商品按一个参数化功能计数"
+PS05,shopping,view cart,"open cart;shopping cart",""
+PS06,checkout,complete billing information,"fill billing information;fill address",""
+PS07,checkout,select payment method,"choose credit card;choose paypal;choose ideal","不同付款方式不拆分"
+PS08,checkout,complete payment information,"fill payment information;enter card details",""
+PS09,checkout,place order,"submit order;confirm purchase",""
+PS10,confirmation,download invoice,"download invoice pdf;save invoice","成功提示文本本身不是动作"
