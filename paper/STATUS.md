@@ -1,6 +1,6 @@
 # 论文状态
 
-> 最后更新：2026-09-05
+> 最后更新：2026-09-06
 >
 > 维护规则：只记录当前有效结论、证据缺口和下一步；详细内容写入对应专题文件。
 
@@ -16,6 +16,7 @@
 - 核心模型统一表达 semantic location、high-level function、location constraint、observed direct action dependency、functional outcome、verification state 和 interaction evidence。
 - 论文显式区分功能假设、执行器动作完成和由真实交互结果支持的功能知识。
 - 三项核心贡献已确定：evidence-grounded functional modeling、execution-grounded open-ended model induction、risk-aware open-ended exploration。
+- C1 与 C2 的边界已明确：C2 通过开放探索产生交互轨迹和前后观察，C1 将这些证据转化为具有验证状态、可追溯且可供下游使用的功能知识。
 - 风险机制在每个普通探索或 replay 动作执行前，将当前截图、已选 high-level action label 和完整风险库交给独立 VLM 判断，保存二元风险标记、一个主要风险类型和页面证据。
 - 风险检测以 shadow mode 运行：判断不拦截动作；检测失败时 fail-open 并记录错误，保证探索链路可继续。
 - 当前风险贡献聚焦检测、记录和可审查性，不主张已经拦截危险动作或保证探索安全。
@@ -41,8 +42,8 @@
 
 ## 下一步
 
-1. 冻结 RQ2 的数据采样、标注协议、基线、指标和运行预算。
-2. 完成相关工作检索和对比矩阵，基于最接近工作确定实验基线。
+1. 核实最接近相关工作，并冻结 RQ1–RQ3 的基线与可比设置。
+2. 分别设计 C1 的冻结轨迹标注协议、C2 的固定预算探索协议和 C3 的动作级风险标注协议。
 3. 在 `experiments/registry.md` 登记 RQ1–RQ3 的正式实验协议。
 4. 补全其余论文模块与代码的实现映射。
 5. 建立与 `02_outline.md` 对齐的 ICLR LaTex 主稿。

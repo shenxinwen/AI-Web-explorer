@@ -75,15 +75,19 @@ Building Evidence-Grounded Functional Models of Web Applications through Risk-Aw
 
 ### 4.1 Functional Model Quality
 
-评价功能、结果、直接动作依赖和证据可追溯性。
+在固定候选和交互轨迹下，评价功能、结果、直接动作依赖、知识准入和证据可追溯性，对应 C1。
 
-### 4.2 Risk-Aware Exploration
+### 4.2 Execution-Grounded Model Induction
 
-评价自动探索中已选执行动作的风险识别、分类和上下文敏感性。
+在固定应用、起点和交互预算下，评价经支持功能覆盖、有效证据获取、知识增长和 persistent frontier 恢复，对应 C2。
 
-### 4.3 Downstream Planning and Behavior Verification
+### 4.3 Risk-Aware Exploration
 
-评价保守投影是否能支持新目标的路径规划，并减少使用未经证据支持的功能知识。
+评价自动探索中已选执行动作的风险识别、分类、上下文敏感性和记录完整性，对应 C3。
+
+### 4.4 Downstream Planning and Behavior Verification
+
+作为辅助效用实验，评价保守投影是否能支持新目标的路径规划，并减少使用未经证据支持的功能知识。
 
 核心消融：w/o evidence-based outcome verification、w/o persistent frontier、w/o visual context / w/o taxonomy risk detection。
 

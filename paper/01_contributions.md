@@ -4,16 +4,18 @@
 
 | ID | 主张 | 所需证据 | 当前状态 |
 | --- | --- | --- | --- |
-| C1 | **Evidence-Grounded Functional Modeling：** 将 semantic location、high-level function、location constraint、observed direct action dependency、functional outcome、verification state 与 interaction evidence 统一表示，并显式区分功能假设、动作执行和证据支持的知识。 | 功能结论、结果判断和直接依赖的标注准确性；证据链完整性；与直接采用 VLM 提议或普通探索记录的对比。 | 主张已确定，证据待实验 |
-| C2 | **Execution-Grounded Open-Ended Model Induction：** 通过“功能假设提出 → GUI 执行 → 前后观察 → 结果判断 → 模型更新”持续维护功能模型，并保留失败、不确定、未完成假设及 persistent frontier。 | 开放探索协议；模型更新案例；功能覆盖和知识可靠性；移除 outcome verification / persistent frontier 的消融。 | 主张已确定，证据待实验 |
+| C1 | **Evidence-Grounded Functional Modeling：** 给定功能假设及其交互证据，通过 functional outcome、verification state 和 evidence provenance 显式区分功能假设、动作执行与证据支持的知识，并控制哪些知识可供下游使用。 | 在相同候选与冻结交互轨迹下，评价功能结论、结果判断、直接依赖、错误知识准入和证据链完整性；与直接采用 VLM 提议或 executor success 的模型对比。 | 主张已确定，证据待实验 |
+| C2 | **Execution-Grounded Open-Ended Model Induction：** 在固定探索预算下，通过“功能假设选择 → GUI 执行 → 前后观察 → 交互证据采集”持续产生 C1 所需的证据，并通过 persistent frontier 保留和重访未验证或未完成假设。 | 多轮开放探索协议；经交互支持的功能覆盖率与知识增长曲线；单位预算有效证据；移除 persistent frontier 的消融。 | 主张已确定，证据待实验 |
 | C3 | **Risk-Aware Open-Ended Exploration：** 在自动探索与上下文恢复的每个已选动作执行前，结合当前截图、动作语义和预定义风险知识识别潜在副作用，并记录二元判断、主要风险类型和界面证据。 | 风险识别 precision/recall/F1；风险类型准确率；动作语义与视觉上下文消融；上下文敏感案例；普通探索与 replay 覆盖。 | 最小机制已实现，效果证据待实验 |
 
 ## 贡献之间的证据链
 
-1. C1 定义最终要维护的功能知识及其可信状态。
-2. C2 说明这些知识如何由开放式真实交互持续产生和更新。
+1. C1 定义交互证据如何转化为具有验证状态、可追溯且可供下游使用的功能知识。
+2. C2 通过开放式真实交互持续产生 C1 所需的证据。
 3. C3 为 C2 自主生成的功能验证目标提供执行前风险感知，并使探索过程可追踪、可审查。
 4. 下游规划与行为验证用于检验 C1–C3 产生的模型是否具有应用价值，但不作为第四项独立贡献。
+
+概念接口为：**C2 输出交互轨迹与前后观察，C1 消费这些证据并输出功能结果、验证状态、证据链和可用知识。** 工程实现可以将两者放在同一循环中，但论文定义和实验控制变量必须分开。
 
 ## 当前不应提前写入的效果性结论
 

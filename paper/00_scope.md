@@ -26,6 +26,8 @@
 - 支持结论的 interaction evidence；
 - 功能验证动作的二元 potential-risk 判断、主要 risk type 和 supporting evidence。
 
+论文在概念上区分证据生产与知识判定：开放探索过程负责产生执行轨迹和前后观察，功能模型负责将这些证据转化为 functional outcome、verification state、证据链和可供下游使用的知识。
+
 系统在候选功能执行前进行风险识别，并将风险信息与功能证据共同记录，为探索监督、事后审查和下游风险决策提供基础。
 
 ## 目标读者与 ICLR 契合点

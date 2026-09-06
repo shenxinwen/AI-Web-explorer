@@ -4,15 +4,19 @@
 
 ### RQ1：Functional Model Quality
 
-通过真实执行和结果观察维护的模型，是否比直接采用 VLM 提议或普通探索记录具有更可靠的功能、结果与直接动作依赖知识？
+在给定相同候选功能和交互证据时，evidence-grounded functional model 是否比直接采用 VLM 提议或 executor success 具有更可靠的功能、结果与直接动作依赖知识？
 
-### RQ2：Risk-Aware Exploration
+### RQ2：Execution-Grounded Model Induction
 
-风险感知模块能否准确识别自动探索生成的候选功能可能带来的风险，并给出有 GUI 上下文证据支持的风险分类？
+在相同 Web 应用、探索起点和交互预算下，执行驱动的探索循环与 persistent frontier 是否能够获得更多经交互支持的功能知识，并正确保留和恢复未完成假设？
 
-### RQ3：Downstream Planning and Behavior Verification
+### RQ3：Risk-Aware Exploration
 
-经过保守投影的功能模型能否支持新目标下的路径规划，并减少规划或验证过程中使用未经证据支持的功能知识？
+风险感知模块能否准确识别自动探索生成的已选动作可能带来的风险，并给出有 GUI 上下文证据支持的风险分类？
+
+### Auxiliary Evaluation：Downstream Planning and Behavior Verification
+
+经过保守投影的功能模型能否支持新目标下的路径规划，并减少规划或验证过程中使用未经证据支持的功能知识？该实验用于评价 C1 与 C2 产物的外部效用，不作为独立贡献或替代 C2 的过程评测。
 
 ## 任务与数据
 
@@ -38,8 +42,16 @@
 - 功能结论准确性；
 - functional outcome 判断准确性；
 - observed direct action dependency 准确性；
+- 未经证据支持知识的错误准入率；
 - 证据可追溯性/证据链完整率；
 - 有效功能模型覆盖率。
+
+### 执行驱动归纳
+
+- 固定预算下 interaction-supported function coverage；
+- 随交互预算变化的知识增长曲线；
+- 单位交互获得的有效证据数；
+- 未完成假设的保留、重访与完成率。
 
 ### 风险与副作用
 
@@ -63,8 +75,8 @@
 
 核心消融：
 
-1. w/o evidence-based outcome verification；
-2. w/o persistent frontier；
+1. w/o evidence-based outcome verification（主要对应 C1）；
+2. w/o persistent frontier（主要对应 C2）；
 3. w/o visual context / w/o taxonomy risk detection。
 
 待考虑的稳健性检查：

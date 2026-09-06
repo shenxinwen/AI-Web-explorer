@@ -53,9 +53,9 @@ VLM 根据当前 GUI 和已有模型提出 semantic location、high-level functi
 
 风险知识库提供稳定、可检查的类别定义、正例和明确低风险反例，VLM 负责结合动态页面上下文作二元判断。当前采用 shadow mode，风险标记不改变执行；检测异常 fail-open 并留存错误。人工确认、停止和拦截是可扩展执行策略。
 
-### 3. Execution and Outcome Observation
+### 3. Execution and Evidence Observation
 
-浏览器执行器尝试执行被选中的 high-level function。系统记录动作前后观察，并分别判断执行器是否完成动作以及预期功能结果是否发生。浏览器执行器是可替换工具。
+浏览器执行器尝试执行被选中的 high-level function。系统记录执行轨迹与动作前后观察，形成供功能知识判定使用的交互证据。浏览器执行器是可替换工具。
 
 ### 4. Evidence-Driven Model Update
 
@@ -66,6 +66,8 @@ VLM 根据当前 GUI 和已有模型提出 semantic location、high-level functi
 ### 5. Persistent Frontier
 
 当前位置尚待验证或未完成的假设被持久保存，系统可以重访已访问位置继续建模。该机制服务于持续探索，不作为独立概念贡献。
+
+在论文概念上，开放探索循环（C2）负责产生交互轨迹和前后观察；证据驱动模型（C1）负责根据这些输入判断 functional outcome、更新 verification state，并决定哪些知识可供下游使用。二者可以共享工程循环，但实验中分别控制证据输入与探索过程。
 
 ### 6. Conservative Downstream Projection
 
