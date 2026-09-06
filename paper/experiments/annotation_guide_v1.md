@@ -13,60 +13,39 @@
 ### 2.1 Function Exists at Location
 
 - `yes`：before screenshot 中存在足以完成该高层功能的入口或控件；
-- `no`：界面没有该功能，或候选明显误读界面；
-- `uncertain`：截图不足、遮挡或必须依赖截图外信息。
+- `no`：界面没有该功能，或候选明显误读界面。
 
 不要因为 executor 后来失败就自动标为 `no`。功能存在性和单次执行成功是两个变量。
 
-### 2.2 Executor Completion
+如果截图不足、遮挡或必须依赖截图外信息，不增加 `uncertain` 类别，而是将 `sample_valid=false` 并记录 `invalid_reason`。
 
-- `success`：执行器完成了其报告的具体交互；
-- `failed`：执行器明确报错或没有完成交互；
-- `uncertain`：日志不足以判断。
+### 2.2 Functional Outcome
 
-该标签不等同于 functional outcome。
+- `success`：after screenshot 存在直接、可见且与动作一致的预期功能结果；
+- `failure`：动作没有产生预期功能结果、被拒绝、只完成部分操作，或产生了相反结果。
 
-### 2.3 Functional Outcome
+页面跳转本身不自动等于 success；只有跳转确实是该功能的预期结果时才算成功。无法形成可靠结果判断时，将样本标为无效，不用 `uncertain` 代替判断。
 
-- `success`：after screenshot 存在直接、可见且与动作一致的业务结果证据；
-- `failure`：界面明确显示动作未产生预期结果、被拒绝或发生相反结果；
-- `uncertain`：executor 可能完成，但截图不足以确认预期业务结果。
+### 2.3 系统记录字段
 
-页面跳转本身不自动等于 success；只有跳转确实是该功能的预期结果时才算成功。
+下列字段由冻结运行工件自动读取，不要求人工重复标注：
 
-### 2.4 Location Transition
+- `executor_reported_success`：执行器是否报告完成具体交互；
+- `evidence_complete`：before/after screenshot、executor record 和必要引用是否齐全；
+- `predicted_outcome`：系统根据动作前后证据作出的结果判断。
 
-- `preserving`：核心业务位置不变，仅列表、字段、筛选、排序、选择或展示状态变化；
-- `transition`：进入新的稳定业务位置，或新 modal/dialog 成为主要交互面；
-- `uncertain`：无法可靠判断。
+其中 `executor_reported_success` 不等同于人工确认的 `functional_outcome`。核心错误类型是 executor 报告成功，但人工确认预期功能结果失败。
 
-### 2.5 Direct Dependency
+### 2.4 知识准入派生
 
-对系统声明的每个 `required_action_id` 分别标注：
+论文级准入结果由人工 gold 与冻结系统记录离线计算，不作为额外人工标签：
 
-- `supported`：当前成功轨迹直接显示该动作需要先在同一局部流程中完成；
-- `unsupported`：轨迹不支持该直接顺序关系；
-- `uncertain`：只能看到顺序共现，无法判断是否为直接依赖。
+- `Proposed`：候选已保存且尚无有效 action attempt；
+- `Interaction-Supported`：候选真实存在、functional outcome 为 success，且 evidence complete；
+- `Failed`：候选不存在，或 functional outcome 为 failure；
+- `Incomplete`：预算结束、人工中断或关键工件缺失，无法完成验证。
 
-不要把一般登录状态、购物车非空等隐藏业务条件标成 direct action dependency。
-
-### 2.6 Evidence Sufficiency
-
-- `sufficient`：before/after、执行记录和文字 evidence 能定位并支持系统结论；
-- `insufficient`：材料存在但不能支持结论；
-- `missing`：关键截图、执行记录或 evidence reference 缺失。
-
-### 2.7 论文级 Verification State 派生规则
-
-论文状态不要求新增运行时字段，按冻结工件离线派生：
-
-- `Proposed`：候选已保存且尚无 action attempt；
-- `Interaction-Supported`：executor completion 为 success，functional outcome 为 success，且 evidence sufficient；
-- `Partially Supported`：executor completion 为 success，但 functional outcome 为 uncertain，或 evidence insufficient；
-- `Failed`：executor 明确失败且重试耗尽，或 functional outcome 为 failure；
-- `Incomplete`：预算结束或人工中断时仍为 pending/retryable，或关键执行/观察未完成。
-
-异常样本的判定优先级为 `Incomplete > Failed > Interaction-Supported > Partially Supported > Proposed`。实现层 `pending`、`retryable_*`、`no_observable_change`、`stale/disabled` 等原值必须保留在派生表中，不能覆盖。
+实现内部可以保留更细的状态，但 C1 的核心比较只检验三种知识准入标准：proposal-as-fact、executor-success-as-fact 和 evidence-grounded admission。
 
 ## 3. C3 风险标注
 
@@ -100,7 +79,7 @@
 
 ## 4. 标注流程
 
-1. 使用 20 个样本试标，尽量包含成功、失败、不确定、风险和非风险案例。
+1. 使用 20 个样本试标，尽量包含成功、失败、无效工件、风险和非风险案例。
 2. 两名标注者独立完成，不讨论个别样本。
 3. 汇总分歧，优先修改指南中的歧义定义，而不是只修改标签。
 4. 指南冻结后，由主标注者完成全部样本，第二标注者随机复标至少 25%。
@@ -112,18 +91,14 @@
 sample_id
 sample_valid, invalid_reason
 function_exists
-executor_completion
 functional_outcome
-location_transition
-dependency_labels
-evidence_sufficiency
-derived_verification_state
 potential_risk
 primary_risk_type
 risk_evidence_grounding
-annotator_id
 notes
 ```
+
+`executor_reported_success`、`evidence_complete`、`predicted_outcome` 和派生准入状态保存在系统结果或分析表中，不作为人工标注字段。
 
 对外标注表使用 `S001` 形式的短编号；原始 attempt ID 必须保存在独立映射文件中，以保证可追溯性。
 

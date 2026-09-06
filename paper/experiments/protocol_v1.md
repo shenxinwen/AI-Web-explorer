@@ -15,23 +15,23 @@
 - 重置：每次运行使用新浏览器上下文；能够重置的站点状态在运行前恢复。无法保证的动态变化写入异常日志。
 - 统计单位：RQ1/RQ3 以 action attempt 为基本单位；RQ2 以独立 run 为基本单位，避免把同一轨迹内动作误当作独立重复。
 
-## 2. RQ1 / C1：功能知识质量
+## 2. RQ1 / C1：功能结果验证与知识准入
 
 ### 数据
 
-使用完整方法正式运行得到的冻结轨迹。每个样本包含候选功能、执行器记录、before/after observation、outcome judgment、由冻结规则离线派生的 verification state 和 evidence reference。派生规则见 `annotation_guide_v1.md`，不要求为实验新增运行时状态字段。
+使用完整方法正式运行得到的冻结轨迹。每个样本包含候选功能、executor-reported status、before/after observation、系统 outcome judgment 和 evidence reference。RQ1 明确区分候选发现、交互执行完成和获得可观察结果支持的功能知识。
 
 ### 对比
 
 1. **Proposal-as-fact：** 所有 VLM 候选直接作为有效功能知识。
 2. **Executor-success-as-fact：** executor 报告完成即作为成功功能知识。
-3. **Evidence-grounded model：** 依据 outcome、verification state 和 evidence 准入知识。
+3. **Evidence-grounded admission：** 仅在动作前后证据支持预期 functional outcome 时准入知识。
 
 三种条件消费完全相同的候选和冻结轨迹，隔离知识判定方式；不把重新探索产生的差异混入 RQ1。
 
 ### 人工标注
 
-每个 action attempt 标注：功能是否在该位置真实存在、executor 是否完成动作、observable functional outcome（Success/Failure/Uncertain）、location transition、声明的直接依赖是否被该轨迹支持、现有 evidence 是否足以支持结论。
+每个有效 action attempt 的人工判断聚焦于：候选功能是否真实存在，以及动作是否产生了预期 observable functional outcome。Executor-reported status 和证据工件完整性直接从运行记录读取，不作为人工重复判断的核心标签。无法形成结果判断的缺失工件作为无效样本单独报告，不把模糊判断强行写成成功或失败。
 
 ### 主要指标
 
@@ -99,7 +99,7 @@ SeerGuard、OS-Sentinel 和 OSGuard 用于相关工作及协议参照，不作�
 
 Pilot 通过需同时满足：
 
-1. 两个网站均能产生可解析的 action、before/after observation、outcome、派生 verification state 所需实现字段和 risk record；
+1. 两个网站均能产生可解析的 action、executor-reported status、before/after observation、outcome judgment、证据完整性检查所需字段和 risk record；
 2. RQ1 三种准入条件能从同一轨迹离线计算；
 3. no-replay 与 full 条件能够被明确配置或从运行行为中区分；
 4. 两名标注者能使用指南完成 20 个样本，且主要标签没有系统性歧义；

@@ -2,9 +2,9 @@
 
 ## 实验问题
 
-### RQ1：Functional Model Quality
+### RQ1：Evidence-Grounded Knowledge Admission
 
-在给定相同候选功能和交互证据时，evidence-grounded functional model 是否比直接采用 VLM 提议或 executor success 具有更可靠的功能、结果与直接动作依赖知识？
+在给定相同候选功能和冻结交互轨迹时，相比将候选发现或 executor-reported success 直接视为事实，基于动作前后证据的 functional outcome 验证能否减少未经支持的功能知识准入？
 
 ### RQ2：Execution-Grounded Model Induction
 

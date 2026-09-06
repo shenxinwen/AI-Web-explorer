@@ -69,14 +69,14 @@ VLM 根据当前 GUI 和已有模型提出 semantic location、high-level functi
 
 当前位置尚待验证或未完成的假设被持久保存，系统可以重访已访问位置继续建模。该机制服务于持续探索，不作为独立概念贡献。
 
-在论文概念上，开放探索循环（C2）负责产生交互轨迹和前后观察；证据驱动模型（C1）负责根据这些输入判断 functional outcome、更新 verification state，并决定哪些知识可供下游使用。二者可以共享工程循环，但实验中分别控制证据输入与探索过程。
+在论文概念上，开放探索循环（C2）负责发现候选并产生交互轨迹和前后观察；证据驱动模型（C1）负责判断预期 functional outcome 是否得到可观察证据支持，并据此作出知识准入决定。Executor-reported success 只是交互执行状态，不等同于 verified functional outcome。二者可以共享工程循环，但实验中分别控制证据输入与探索过程。
 
 ### 6. Conservative Downstream Projection
 
 完整模型保留提议、部分支持、失败、不确定、未完成、证据和风险信息；下游模型可以同时依据证据阈值和风险信息选择知识：
 
 ```text
-Evidence-Grounded Functional Model
+Evidence-Grounded Functional Verification and Knowledge Admission
                 ↓
        Conservative Projection
                 ↓

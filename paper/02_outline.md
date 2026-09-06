@@ -22,7 +22,7 @@ Building Evidence-Grounded Functional Models of Web Applications through Risk-Aw
 
 ### 1.2 Two Core Challenges
 
-1. 功能提议、执行器成功和预期功能结果之间存在 grounding 缺口。
+1. 候选动作被发现、executor 报告执行成功，都不能直接证明预期功能结果真实发生，因而不能直接作为功能知识准入依据。
 2. 验证未知功能可能触发删除、发送、授权、交易等高影响或不可逆行为。
 
 ### 1.3 Approach
@@ -37,7 +37,7 @@ Building Evidence-Grounded Functional Models of Web Applications through Risk-Aw
 
 ### 2.1 Autonomous GUI Exploration and Environment Modeling
 
-讨论 GUI-explorer、UIExplore-Bench、UI-KOBE、GraphPilot、EAM、ActionEngine 等方向。明确 Web 探索、知识图、状态机记忆和 frontier 均已有研究，重点界定本文在“交互证据如何转化为具有验证状态、可追溯且受准入控制的功能知识”上的差异。
+讨论 GUI-explorer、UIExplore-Bench、UI-KOBE、GraphPilot、EAM、ActionEngine 等方向。明确 Web 探索、知识图、状态机记忆和 frontier 均已有研究，重点界定本文在“如何用动作前后证据验证预期功能结果，并避免把候选发现或执行器成功直接当作功能知识”上的差异。
 
 ### 2.2 Safe and Reliable GUI Agents
 
@@ -50,6 +50,8 @@ Building Evidence-Grounded Functional Models of Web Applications through Risk-Aw
 定义未知 Web GUI、任务无关开放探索、交互轨迹、应用级功能模型及风险约束。
 
 ### 3.2 Evidence-Grounded Functional Model
+
+定义候选、executor-reported success 与 verified functional outcome 三个不同层次。系统仅在动作前后可观察证据支持预期结果时准入对应功能知识；该机制旨在减少未经支持的知识准入，不构成绝对正确性保证。
 
 - Semantic Location and High-Level Function
 - Location Constraint and Observed Direct Action Dependency
@@ -75,7 +77,7 @@ Building Evidence-Grounded Functional Models of Web Applications through Risk-Aw
 
 ### 4.1 Functional Model Quality
 
-在固定候选和交互轨迹下，评价功能、结果、直接动作依赖、知识准入和证据可追溯性，对应 C1。
+在固定候选和交互轨迹下，比较“候选即事实”“executor success 即事实”和基于可观察结果验证的知识准入，对应 C1。
 
 ### 4.2 Execution-Grounded Model Induction
 
