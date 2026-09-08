@@ -362,11 +362,11 @@ def test_compact_roundtrip_preserves_action_dependencies_in_semantic_pddl(tmp_pa
     submit_effect = domain.index(":effect", submit_start)
 
     assert (
-        domain.index("(completed_login_page_enter_username)", submit_start)
+        domain.index("(enter_username_succeeded)", submit_start)
         < submit_effect
     )
     assert (
-        domain.index("(completed_login_page_enter_password)", submit_start)
+        domain.index("(enter_password_succeeded)", submit_start)
         < submit_effect
     )
 

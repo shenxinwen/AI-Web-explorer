@@ -510,12 +510,12 @@ async def test_real_outcome_path_projects_dependency_actions_to_semantic_pddl():
 
     actions = {action.action_name: action for action in semantic.actions}
     assert report.excluded_edges == []
-    assert actions["fill_billing"].added_facts == ["completed_checkout_fill_billing"]
-    assert actions["place_order"].required_facts == ["completed_checkout_fill_billing"]
+    assert actions["fill_billing"].added_facts == ["fill_billing_succeeded"]
+    assert actions["place_order"].required_facts == ["fill_billing_succeeded"]
     domain = compile_minimal_semantic_domain(semantic).domain
-    assert "(completed_checkout_fill_billing)" in domain
+    assert "(fill_billing_succeeded)" in domain
     assert (
-        ":precondition (and (at_checkout) (completed_checkout_fill_billing))" in domain
+        ":precondition (and (at_checkout) (fill_billing_succeeded))" in domain
     )
 
 
