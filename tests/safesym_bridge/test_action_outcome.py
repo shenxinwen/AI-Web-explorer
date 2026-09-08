@@ -63,7 +63,10 @@ def test_action_outcome_parser_rejects_invalid_or_planner_fields(payload):
 
 
 def test_action_outcome_prompt_has_exactly_three_response_fields():
-    prompt = build_action_outcome_prompt("Fill the visible form.")
+    prompt = build_action_outcome_prompt(
+        "Fill the visible form.",
+        "The visible form fields contain the entered values.",
+    )
     payload = json.loads(prompt)
 
     assert set(payload["output_schema"]) == {
@@ -79,14 +82,23 @@ def test_action_outcome_prompt_has_exactly_three_response_fields():
     assert "brief toast" in payload["instruction"].lower()
     assert "completion_facts" not in prompt
     assert "semantic_profile_context" not in prompt
+    assert payload["expected_outcome"] == (
+        "The visible form fields contain the entered values."
+    )
 
 
 def test_action_outcome_prompt_contains_domain_neutral_few_shots():
-    payload = json.loads(build_action_outcome_prompt("Apply a visible filter"))
+    payload = json.loads(
+        build_action_outcome_prompt(
+            "Apply a visible filter",
+            "The visible results are restricted according to the selected filter.",
+        )
+    )
 
     assert set(payload) == {
         "instruction",
         "action_description",
+        "expected_outcome",
         "output_schema",
         "few_shot_examples",
     }
@@ -105,6 +117,7 @@ def test_action_outcome_prompt_contains_domain_neutral_few_shots():
     ]
     assert payload["few_shot_examples"][2] == {
         "action_description": "Open the export dialog",
+        "expected_outcome": "A stable export dialog becomes visible.",
         "before": "The report editor is active.",
         "after": "A stable Export Report modal is active over the editor.",
         "answer": {
@@ -128,6 +141,7 @@ def test_action_outcome_summary_preserves_raw_trace_and_errors():
         before_screenshot_path="before.png",
         after_screenshot_path="after.png",
         action_description="Fill the visible form.",
+        expected_outcome="The visible form fields contain the entered values.",
         provider=lambda prompt, **kwargs: (
             '{"outcome":"success","location_change":false,"evidence":[]}'
         ),

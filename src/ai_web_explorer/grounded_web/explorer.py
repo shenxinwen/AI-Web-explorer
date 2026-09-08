@@ -180,6 +180,7 @@ def _business_action_from_affordance(affordance: BusinessAffordance) -> BrowserA
             "affordance_source": affordance.source,
             "confidence": affordance.confidence,
         },
+        expected_outcome=affordance.expected_outcome,
         supporting_facts=list(affordance.supporting_facts),
         execution_policy=affordance.execution_policy,
     )
@@ -583,6 +584,11 @@ class WebKobeExplorer:
                 before_screenshot_path=before_screenshot_path,
                 after_screenshot_path=after_screenshot_path,
                 action_description=selected.description or selected.semantic_id,
+                expected_outcome=(
+                    selected.expected_outcome
+                    or selected.description
+                    or selected.semantic_id
+                ),
                 provider=self.action_outcome_provider,
             )
             if action_outcome_result.trace is not None:

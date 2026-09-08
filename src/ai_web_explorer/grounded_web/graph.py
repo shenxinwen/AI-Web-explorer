@@ -79,9 +79,10 @@ class BrowserAction:
     naming_provenance: dict[str, Any] | None = None
     supporting_facts: list[str] = field(default_factory=list)
     execution_policy: str = "single_instance"
+    expected_outcome: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data = {
             "action_kind": self.action_kind,
             "locator": self.locator,
             "semantic_id": self.semantic_id,
@@ -97,6 +98,9 @@ class BrowserAction:
             "supporting_facts": list(self.supporting_facts),
             "execution_policy": self.execution_policy,
         }
+        if self.expected_outcome is not None:
+            data["expected_outcome"] = self.expected_outcome
+        return data
 
 
 @dataclass(frozen=True)
@@ -125,9 +129,10 @@ class BusinessAffordance:
     source: str = "vlm"
     confidence: float | None = None
     supporting_facts: list[str] = field(default_factory=list)
+    expected_outcome: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data = {
             "action_name": self.action_name,
             "label": self.label,
             "relevance_hint": self.relevance_hint,
@@ -137,6 +142,9 @@ class BusinessAffordance:
             "confidence": self.confidence,
             "supporting_facts": list(self.supporting_facts),
         }
+        if self.expected_outcome is not None:
+            data["expected_outcome"] = self.expected_outcome
+        return data
 
 
 @dataclass(frozen=True)

@@ -143,6 +143,7 @@ def _action_from_dict(data: dict[str, Any]) -> BrowserAction:
             if str(fact).strip()
         ],
         execution_policy=str(data.get("execution_policy") or "single_instance"),
+        expected_outcome=data.get("expected_outcome"),
     )
 
 
@@ -287,4 +288,3 @@ def read_web_kobe_graph_json_data(path: Path) -> dict[str, Any]:
 def load_web_kobe_graph_json(path: Path) -> WebKobeGraph:
     data = read_web_kobe_graph_json_data(path)
     return _web_kobe_graph_from_dict(data)
-

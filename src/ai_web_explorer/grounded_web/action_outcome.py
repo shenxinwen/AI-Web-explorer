@@ -76,12 +76,17 @@ def semantic_observation_from_action_outcome(
     )
 
 
-def build_action_outcome_prompt(action_description: str) -> str:
+def build_action_outcome_prompt(
+    action_description: str, expected_outcome: str
+) -> str:
     return json.dumps(
         {
             "instruction": (
                 "Compare the before and after screenshots for this one executed "
-                "action. Prefer a definite success or failed judgment when the "
+                "action. Decide whether the visible evidence supports the expected "
+                "outcome that was fixed before execution. Do not replace it with a "
+                "different success criterion. Prefer a definite success or failed "
+                "judgment when the "
                 "screenshots provide visible evidence; use uncertain only when "
                 "the images are missing, not comparable, or conflicting. Decide "
                 "whether the before and after show the same active interaction "
@@ -97,6 +102,7 @@ def build_action_outcome_prompt(action_description: str) -> str:
                 "confidence, or planning data."
             ),
             "action_description": str(action_description).strip(),
+            "expected_outcome": str(expected_outcome).strip(),
             "output_schema": {
                 "outcome": "success | failed | uncertain",
                 "location_change": True,
@@ -105,6 +111,7 @@ def build_action_outcome_prompt(action_description: str) -> str:
             "few_shot_examples": [
                 {
                     "action_description": "Filter the records by status",
+                    "expected_outcome": "The visible record set reflects the selected status filter.",
                     "before": "A record list is visible with several rows.",
                     "after": "The same list remains visible with fewer rows after filtering.",
                     "answer": {
@@ -115,6 +122,7 @@ def build_action_outcome_prompt(action_description: str) -> str:
                 },
                 {
                     "action_description": "Change the table sort order",
+                    "expected_outcome": "The visible table rows appear in a different order.",
                     "before": "A table is visible with its current row order.",
                     "after": "The same table remains visible with rows in a new order after sorting.",
                     "answer": {
@@ -125,6 +133,7 @@ def build_action_outcome_prompt(action_description: str) -> str:
                 },
                 {
                     "action_description": "Open the export dialog",
+                    "expected_outcome": "A stable export dialog becomes visible.",
                     "before": "The report editor is active.",
                     "after": "A stable Export Report modal is active over the editor.",
                     "answer": {
@@ -135,6 +144,7 @@ def build_action_outcome_prompt(action_description: str) -> str:
                 },
                 {
                     "action_description": "Submit the required form",
+                    "expected_outcome": "A confirmation or next workflow surface becomes visible.",
                     "before": "A form is visible with an empty required field.",
                     "after": "The same form remains visible and shows a validation error.",
                     "answer": {
@@ -145,6 +155,7 @@ def build_action_outcome_prompt(action_description: str) -> str:
                 },
                 {
                     "action_description": "Complete the required project details",
+                    "expected_outcome": "The required project fields contain entered values.",
                     "before": "A project-detail form is visible with editable fields.",
                     "after": "The same project-detail form remains visible with completed values.",
                     "answer": {
@@ -197,9 +208,10 @@ def summarize_action_outcome(
     before_screenshot_path: str,
     after_screenshot_path: str,
     action_description: str,
+    expected_outcome: str,
     provider: ActionOutcomeProvider,
 ) -> ActionOutcomeResult:
-    prompt = build_action_outcome_prompt(action_description)
+    prompt = build_action_outcome_prompt(action_description, expected_outcome)
     raw_response = ""
     try:
         raw_response = provider(

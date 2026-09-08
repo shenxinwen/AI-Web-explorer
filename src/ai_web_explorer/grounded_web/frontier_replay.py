@@ -415,6 +415,7 @@ def _edge_with_memory_action(edge: WebKobeEdge, record) -> WebKobeEdge:
             },
             supporting_facts=list(affordance.supporting_facts),
             execution_policy=affordance.execution_policy,
+            expected_outcome=affordance.expected_outcome,
         ),
     )
 

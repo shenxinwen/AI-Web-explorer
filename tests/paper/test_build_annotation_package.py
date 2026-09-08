@@ -14,7 +14,11 @@ def _fixture_run(tmp_path: Path) -> tuple[Path, Path]:
     graph = {
         "edges": [{
             "edge_id": edge_id,
-            "action": {"semantic_id": "submit", "action_label": "Submit order"},
+            "action": {
+                "semantic_id": "submit",
+                "action_label": "Submit order",
+                "expected_outcome": "An order confirmation becomes visible.",
+            },
             "status": "succeeded_with_observed_change",
             "required_action_ids": ["fill_form"],
             "execution_trace": {"success": True},
@@ -51,6 +55,7 @@ def test_extract_samples_merges_attempt_and_screenshots_without_predictions(tmp_
     sample = samples[0]
     assert sample["sample_id"] == "demo-attempt-1"
     assert sample["action_label"] == "Submit order"
+    assert sample["expected_outcome"] == "An order confirmation becomes visible."
     assert sample["executor_success"] is True
     assert sample["required_action_ids"] == ["fill_form"]
     serialized = json.dumps(sample)
@@ -73,12 +78,13 @@ def test_build_package_separates_c1_and_no_leakage_c3_views(tmp_path):
     assert "images/S001_before.png" in c3_html
     assert "images/S001_after.png" not in c3_html
     assert "secret prediction" not in c1_html + c3_html
+    assert "An order confirmation becomes visible." in c1_html
+    assert "An order confirmation becomes visible." not in c3_html
 
     with (destination / "demo" / "c1_annotations.csv").open(encoding="utf-8-sig", newline="") as handle:
         assert next(csv.reader(handle)) == [
-            "sample_id", "function_exists", "executor_completion", "functional_outcome", "location_transition",
-            "dependency_correctness", "evidence_sufficiency",
-            "derived_verification_state", "notes",
+            "sample_id", "sample_valid", "invalid_reason",
+            "function_exists", "functional_outcome", "notes",
         ]
         first_row = next(csv.reader(handle))
         assert first_row[0] == "S001"

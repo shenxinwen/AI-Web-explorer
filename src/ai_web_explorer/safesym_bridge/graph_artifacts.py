@@ -55,6 +55,7 @@ def _compact_business_affordance(affordance: dict[str, Any]) -> dict[str, Any]:
         "label",
         "relevance_hint",
         "target_hint",
+        "expected_outcome",
         "execution_policy",
         "source",
         "confidence",
@@ -121,6 +122,7 @@ def _compact_action(action: dict[str, Any]) -> dict[str, Any]:
         "input_values",
         "description",
         "action_label",
+        "expected_outcome",
         "supporting_facts",
         "execution_policy",
     ):

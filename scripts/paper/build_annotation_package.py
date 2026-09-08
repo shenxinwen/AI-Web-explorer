@@ -12,9 +12,8 @@ from typing import Any, Iterable
 
 
 C1_COLUMNS = [
-    "sample_id", "function_exists", "executor_completion", "functional_outcome", "location_transition",
-    "dependency_correctness", "evidence_sufficiency",
-    "derived_verification_state", "notes",
+    "sample_id", "sample_valid", "invalid_reason",
+    "function_exists", "functional_outcome", "notes",
 ]
 C3_COLUMNS = ["sample_id", "potential_risk", "risk_type", "evidence", "notes"]
 
@@ -57,6 +56,7 @@ def extract_samples(
             "edge_id": edge_id,
             "action_id": edge.get("action", {}).get("semantic_id", ""),
             "action_label": edge.get("action", {}).get("action_label") or detail.get("instruction", ""),
+            "expected_outcome": edge.get("action", {}).get("expected_outcome", ""),
             "executor_success": edge.get("execution_trace", {}).get("success"),
             "required_action_ids": edge.get("required_action_ids", []),
             "before_source": str(before),
@@ -93,8 +93,14 @@ def _page(title: str, samples: list[dict[str, Any]], task: str) -> str:
         if task == "c1" and sample.get("after_image"):
             after = f'<figure><figcaption>动作后</figcaption><img src="{html.escape(sample["after_image"])}"></figure>'
         reminder = "只根据动作前截图和动作描述判断，勿查看 C1 页面。" if task == "c3" else "根据动作前后证据判断，不参考系统预测。"
+        expected = ""
+        if task == "c1":
+            expected = (
+                f'<p><b>执行前预期结果：</b>'
+                f'{html.escape(sample.get("expected_outcome", ""))}</p>'
+            )
         cards.append(f'''<article data-sample="{sid}"><h2>{sid}</h2>
-<p><b>动作：</b>{html.escape(sample["action_label"])}</p><p class="hint">{reminder}</p>
+<p><b>动作：</b>{html.escape(sample["action_label"])}</p>{expected}<p class="hint">{reminder}</p>
 <div class="shots"><figure><figcaption>动作前</figcaption><img src="{html.escape(sample["before_image"])}"></figure>{after}</div>
 <p>请在对应 CSV 中填写此样本标签。</p></article>''')
     return f'''<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>{title}</title>

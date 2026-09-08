@@ -371,6 +371,28 @@ def test_compact_roundtrip_preserves_action_dependencies_in_semantic_pddl(tmp_pa
     )
 
 
+def test_compact_artifact_preserves_frozen_expected_outcome():
+    graph = _verbose_graph_fixture()
+    graph = replace(
+        graph,
+        edges=[
+            replace(
+                graph.edges[0],
+                action=replace(
+                    graph.edges[0].action,
+                    expected_outcome="The signed-in home surface becomes visible.",
+                ),
+            )
+        ],
+    )
+
+    payload = build_graph_artifact_payload(graph).compact_graph
+
+    assert payload["edges"][0]["action"]["expected_outcome"] == (
+        "The signed-in home surface becomes visible."
+    )
+
+
 def test_compact_payload_preserves_semantic_location_hint():
     graph = _verbose_graph_fixture()
     graph = type(graph)(

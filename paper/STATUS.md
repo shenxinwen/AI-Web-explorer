@@ -8,7 +8,7 @@
 
 - 目标会议：ICLR 2027
 - 暂定题目：Building Evidence-Grounded Functional Models of Web Applications through Risk-Aware Open-Ended Exploration
-- 当前阶段：最小风险感知链路已实现并完成工程冒烟；C1 方法与自然探索实验设计已对齐，待 expected outcome 最小实现和双站点 pilot
+- 当前阶段：最小风险感知链路已实现并完成工程冒烟；C1 方法、自然探索实验设计和 expected outcome 最小链路已对齐，待双站点 pilot
 
 ## 当前有效结论
 
@@ -35,7 +35,7 @@
 
 ## 主要缺口
 
-- 当前代码的候选结构只有 action label/description，没有执行前独立持久化的 expected outcome；需完成最小字段、prompt、验证输入和工件输出调整后才能开始 C1 正式运行。
+- expected outcome 已接入候选生成、执行前持久化、outcome verifier 输入、压缩图工件和 C1 标注页面；需通过双站点 pilot 检查真实 VLM 输出质量与工件完整性。
 - C1 正式自然探索轨迹、人工 gold 和三种准入策略结果尚未生成。
 - 冻结风险评测集、人工标注规范和上下文对照样例。
 - 验证五类风险在多网站、多动作上的覆盖，并单独评估 replay 链路。

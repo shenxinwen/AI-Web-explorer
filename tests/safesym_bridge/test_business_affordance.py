@@ -84,6 +84,7 @@ def test_initial_scan_parses_minimal_action_dependencies_without_planning_inputs
                     "action_id": "stable_snake_case_action",
                     "description": "one precise visible semantic operation",
                     "target": "visible target",
+                    "expected_outcome": "one concise observable post-action result",
                     "execution_policy": "single_instance | composite",
                     "requires": ["other_action_id"],
                 }
@@ -112,12 +113,14 @@ def test_initial_scan_parses_minimal_action_dependencies_without_planning_inputs
                         "action_id": "fill_identity",
                         "description": "Fill the visible identity form",
                         "target": "identity form",
+                        "expected_outcome": "The visible identity fields contain entered values.",
                         "requires": [],
                     },
                     {
                         "action_id": "submit_form",
                         "description": "Submit the visible form",
                         "target": "submit button",
+                        "expected_outcome": "A confirmation or next workflow surface becomes visible.",
                         "requires": ["fill_identity"],
                     },
                 ]
@@ -136,6 +139,9 @@ def test_initial_scan_parses_minimal_action_dependencies_without_planning_inputs
         "fill_identity": [],
         "submit_form": ["fill_identity"],
     }
+    assert result.business_affordances[0].expected_outcome == (
+        "The visible identity fields contain entered values."
+    )
 
 
 def test_initial_prompt_contains_validated_domain_neutral_few_shots():
@@ -312,6 +318,7 @@ def test_visual_affordance_prompt_prioritizes_breadth_without_external_task_goal
             "action_id",
             "description",
             "target",
+            "expected_outcome",
             "execution_policy",
             "requires",
         }

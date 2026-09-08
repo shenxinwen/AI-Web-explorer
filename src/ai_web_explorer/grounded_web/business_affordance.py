@@ -141,7 +141,11 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
             "operation into concrete variants, or add an unsupported dependency. "
             f"The maximum action count is an upper bound: return at most {request.max_actions} "
             "actions. The limit is not a quota. Return fewer actions when fewer clear semantic "
-            "operations are visible. Return JSON only."
+            "operations are visible.\n\nEXPECTED OUTCOME\nFor every action, state one "
+            "concise result that can be checked from the GUI after execution. The "
+            "expected_outcome must describe an observable post-action result, not "
+            "hidden backend state, and must be written before execution. Equivalent "
+            "visible signs may be joined with or. Return JSON only."
         )
         output_schema: dict[str, Any] = {
             "location_id": "short stable snake_case active surface name",
@@ -150,6 +154,7 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
                     "action_id": "stable_snake_case_action",
                     "description": "one precise visible semantic operation",
                     "target": "visible target",
+                    "expected_outcome": "one concise observable post-action result",
                     "execution_policy": "single_instance | composite",
                     "requires": ["other_action_id"],
                 }
@@ -163,6 +168,7 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
                         "action_id": "complete_project_details",
                         "description": "Fill the related required project fields.",
                         "target": "Create Project dialog fields",
+                        "expected_outcome": "The required project fields contain entered values.",
                         "execution_policy": "composite",
                         "requires": [],
                     },
@@ -170,6 +176,7 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
                         "action_id": "create_project",
                         "description": "Submit the completed project form.",
                         "target": "Create button",
+                        "expected_outcome": "A created-project confirmation or project surface becomes visible.",
                         "execution_policy": "single_instance",
                         "requires": ["complete_project_details"],
                     },
@@ -182,6 +189,7 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
                         "action_id": "sort_table",
                         "description": "Sort the visible table.",
                         "target": "sort control",
+                        "expected_outcome": "The visible table rows appear in a different order.",
                         "execution_policy": "single_instance",
                         "requires": [],
                     },
@@ -189,6 +197,7 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
                         "action_id": "configure_columns",
                         "description": "Choose visible table columns.",
                         "target": "column control",
+                        "expected_outcome": "The selected table columns become visible.",
                         "execution_policy": "single_instance",
                         "requires": [],
                     },
@@ -201,6 +210,7 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
                         "action_id": "download_report",
                         "description": "Download the completed report.",
                         "target": "Download control in the modal",
+                        "expected_outcome": "The interface shows that the report download was initiated.",
                         "execution_policy": "single_instance",
                         "requires": [],
                     }
@@ -213,6 +223,7 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
                         "action_id": "open_record",
                         "description": "Open one visible record.",
                         "target": "One record's Open button",
+                        "expected_outcome": "A stable record detail surface becomes visible.",
                         "execution_policy": "single_instance",
                         "requires": [],
                     }
@@ -237,6 +248,7 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
                         "action_id": "filter_results",
                         "description": "Filter the visible results.",
                         "target": "Filter controls",
+                        "expected_outcome": "The visible result set reflects the selected filter.",
                         "execution_policy": "single_instance",
                         "requires": [],
                     },
@@ -244,6 +256,7 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
                         "action_id": "sort_results",
                         "description": "Sort the visible results.",
                         "target": "Sort controls",
+                        "expected_outcome": "The visible results appear in the selected order.",
                         "execution_policy": "single_instance",
                         "requires": [],
                     },
@@ -275,6 +288,7 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
                     "intent": "snake_case canonical business action",
                     "label": "visible action label or description",
                     "target": "visible action target",
+                    "expected_outcome": "concise observable post-action result",
                     "relevance_hint": "core | supporting | low_value",
                     "confidence": "number from 0.0 to 1.0",
                     "supporting_facts": ["short_stable_snake_case_fact_id"],
@@ -332,6 +346,7 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
                             "intent": "snake_case business action name",
                             "label": "visible action label or description",
                             "target": "visible action target",
+                            "expected_outcome": "concise observable post-action result",
                             "relevance_hint": "core | supporting | low_value",
                             "confidence": "number from 0.0 to 1.0",
                             "supporting_facts": [
@@ -468,6 +483,7 @@ def _affordances_from_response(
                 label=_clean_text(item.get("label")),
                 relevance_hint=_relevance(item.get("relevance_hint")),
                 target_hint=_clean_text(item.get("target") or item.get("target_hint")),
+                expected_outcome=_clean_text(item.get("expected_outcome")),
                 execution_policy=_execution_policy(item.get("execution_policy")),
                 source="vlm",
                 confidence=_confidence(item.get("confidence")),
@@ -513,25 +529,35 @@ def _initial_actions_from_response(
     if len(raw_items) > max_actions:
         return [], {}, "initial response exceeds the action limit"
 
-    records: dict[str, tuple[str, str, str, list[str]]] = {}
+    records: dict[str, tuple[str, str, str, str, list[str]]] = {}
     ordered_ids: list[str] = []
     for item in raw_items:
         if not isinstance(item, dict):
             return [], {}, "initial response action must be an object"
-        allowed_keys = {"action_id", "description", "target", "requires"}
-        if set(item) not in (allowed_keys, allowed_keys | {"execution_policy"}):
+        base_keys = {"action_id", "description", "target", "requires"}
+        allowed_keys = base_keys | {"expected_outcome"}
+        if set(item) not in (
+            base_keys,
+            base_keys | {"execution_policy"},
+            allowed_keys,
+            allowed_keys | {"execution_policy"},
+        ):
             return [], {}, "initial action keys do not match the contract"
         raw_action_id = item["action_id"]
         raw_description = item["description"]
         raw_target = item["target"]
+        raw_expected_outcome = item.get("expected_outcome", raw_description)
         if not all(
             isinstance(value, str) and value.strip()
-            for value in (raw_action_id, raw_description, raw_target)
+            for value in (
+                raw_action_id, raw_description, raw_target, raw_expected_outcome
+            )
         ):
             return [], {}, "initial action text fields must be non-empty strings"
         action_id = normalize_semantic_id(raw_action_id)
         description = raw_description.strip()
         target = raw_target.strip()
+        expected_outcome = raw_expected_outcome.strip()
         if not action_id or not description or not target:
             return [], {}, "initial action requires action_id, description, and target"
         if action_id in records:
@@ -551,11 +577,13 @@ def _initial_actions_from_response(
                 return [], {}, f"requires entries must be valid IDs for {action_id}"
             if requirement not in requires:
                 requires.append(requirement)
-        records[action_id] = (description, target, execution_policy, requires)
+        records[action_id] = (
+            description, target, expected_outcome, execution_policy, requires
+        )
         ordered_ids.append(action_id)
 
     requires_by_action_id = {
-        action_id: list(records[action_id][3]) for action_id in ordered_ids
+        action_id: list(records[action_id][4]) for action_id in ordered_ids
     }
     known_ids = set(records)
     for action_id, requires in requires_by_action_id.items():
@@ -589,7 +617,8 @@ def _initial_actions_from_response(
             action_name=action_id,
             label=records[action_id][0],
             target_hint=records[action_id][1],
-            execution_policy=records[action_id][2],
+            expected_outcome=records[action_id][2],
+            execution_policy=records[action_id][3],
             source="vlm",
         )
         for action_id in ordered_ids
