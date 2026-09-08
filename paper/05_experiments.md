@@ -22,7 +22,7 @@
 
 - 主实验使用已有运行经验的 SauceDemo 与 Practice Shopping，从入口 URL 和干净浏览器会话开始。
 - Pilot 为每网站、每条件 1 次、最多 10 个 action attempts；正式实验为每网站、每条件 3 次、每次最多 25 个 attempts。
-- RQ1/RQ3 以 action attempt 为单位，RQ2 以独立 run 为单位。
+- RQ1 以每次运行内去重后的功能知识为统计对象，action attempt 只作为验证证据来源；RQ3 以 action attempt 为单位，RQ2 以独立 run 为单位。
 - AI 生成初始标注，人工逐项审查并修订；正式标注前先用 20 个样本检查字段和规则是否可执行。该流程不等同于双人独立标注。
 - 完整冻结协议见 [`experiments/protocol_v1.md`](experiments/protocol_v1.md)。
 - 逐字段定义与论文级 verification state 的离线派生规则见 [`experiments/annotation_guide_v1.md`](experiments/annotation_guide_v1.md)；工件核查见 [`experiments/pilot_readiness_audit.md`](experiments/pilot_readiness_audit.md)。
@@ -51,6 +51,8 @@
 - executor–outcome disagreement rate、证据链完整率和无效样本率作为诊断统计。
 
 RQ1 不使用候选功能准确率或 supported core-function recall 作为主指标，避免把 C2 的候选发现能力混入知识准入效果。Knowledge precision 与 unsupported admission rate 互为补数，不作为两个独立主指标重复报告。
+
+RQ1 中一条功能知识由 `site + semantic_location + canonical_action_id` 标识；同一运行中的重复 attempts 合并为一条功能。每次运行独立计算指标，再报告每个网站 3 次运行的平均值和跨网站 macro-average。
 
 ### 执行驱动归纳
 

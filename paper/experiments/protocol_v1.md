@@ -13,13 +13,15 @@
 - 正式探索预算：每个网站、每个条件、每次运行最多 25 个已选 high-level action attempts；每个条件运行 3 次。
 - Pilot 预算：每个网站、每个条件 1 次、最多 10 个 attempts。
 - 重置：每次运行使用新浏览器上下文；能够重置的站点状态在运行前恢复。无法保证的动态变化写入异常日志。
-- 统计单位：RQ1/RQ3 以 action attempt 为基本单位；RQ2 以独立 run 为基本单位，避免把同一轨迹内动作误当作独立重复。
+- 统计单位：RQ1 以单次运行内去重后的功能知识为评价对象，action attempt 只提供验证证据；RQ3 以 action attempt 为基本单位；RQ2 以独立 run 为基本单位。
 
 ## 2. RQ1 / C1：功能结果验证与知识准入
 
 ### 数据
 
 使用完整方法正式运行得到的冻结轨迹。每个候选在执行前同时生成并冻结一句可观察的 `expected_outcome`。每个样本包含候选功能、expected outcome、executor-reported status、before/after observation、系统 outcome judgment 和 evidence reference。RQ1 明确区分候选发现、交互执行完成和获得可观察结果支持的功能知识。
+
+一条功能知识在单次运行内由 `site + semantic_location + canonical_action_id` 唯一标识。同一功能的多个 attempts 合并，不能作为多条知识重复计数；不同运行保持为独立重复。
 
 ### 对比
 
@@ -29,9 +31,13 @@
 
 三种条件消费完全相同的候选和冻结轨迹，隔离知识判定方式；不把重新探索产生的差异混入 RQ1。
 
+同一功能存在多次 attempts 时，三种策略按“是否获得过相应支持”聚合：proposal-as-fact 在功能被提出后即准入；executor-success-as-fact 在至少一次 attempt 报告执行成功后准入；evidence-grounded admission 在至少一次 evidence-complete attempt 被系统判定 outcome success 后准入。
+
 ### 人工标注
 
 每个有效 action attempt 的人工判断聚焦于：候选功能是否真实存在，以及动作是否产生了执行前冻结的 expected observable outcome。人工 gold 中，`function_exists=yes` 且 `functional_outcome=success` 定义为 supported knowledge。Executor-reported status 和证据工件完整性直接从运行记录读取，不作为人工重复判断的核心标签。缺少必要运行工件、无法形成结果判断的样本作为无效样本单独报告。expected outcome 本身模糊、错误或不可观察时不删除样本，也不改写预期；该候选不能获得结果支持，并进入错误分析。
+
+功能级 gold 由其 attempts 聚合：至少一次有效 attempt 同时满足 `function_exists=yes` 与 `functional_outcome=success`，该功能即视为 supported knowledge；若同一功能的存在性标签互相冲突，必须人工复核后再计算。
 
 ### 主要指标与诊断
 
@@ -89,6 +95,7 @@ SeerGuard、OS-Sentinel 和 OSGuard 用于相关工作及协议参照，不作�
 - AI 生成第一次标注，人工审查全部样本并作最终修订；AI 初标不作为独立人工标注者，当前不报告 Cohen's kappa。
 - 系统预测相对人工 gold 的多类 outcome/risk type 表现报告 macro-F1 或一致率。
 - 报告每个网站和总体结果；总体值按网站 macro-average。
+- RQ1 先对每次独立运行计算指标，再对同一网站的 3 次运行取平均；不把不同运行中数量不等的功能直接混成一个样本池。
 - 对主要比例指标报告 bootstrap 95% confidence interval；小样本不强制显著性检验。
 - 失败分析至少区分：候选幻觉、executor/outcome 混淆、视觉变化不足、dependency 误判、风险误报、风险漏报和风险类型错误。
 
