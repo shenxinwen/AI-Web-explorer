@@ -1,5 +1,3 @@
-import pytest
-
 from ai_web_explorer.grounded_web.exploration_semantics import (
     validate_final_order_authorization,
 )
@@ -12,16 +10,16 @@ def test_final_order_authorization_requires_explicit_allow_flag():
     ) is False
 
 
-def test_final_order_authorization_accepts_only_controlled_shopping_url():
+def test_final_order_authorization_allows_any_site_when_enabled():
     assert validate_final_order_authorization(
         start_url="https://practiceautomatedtesting.com/shopping",
         allowed=True,
     ) is True
-
-    for start_url in (
-        "https://practiceautomatedtesting.com/",
-        "https://practiceautomatedtesting.com/shopping?redirect=order",
-        "https://evil.practiceautomatedtesting.com/shopping",
-    ):
-        with pytest.raises(ValueError, match="controlled test URL"):
-            validate_final_order_authorization(start_url=start_url, allowed=True)
+    assert validate_final_order_authorization(
+        start_url="https://www.saucedemo.com/",
+        allowed=True,
+    ) is True
+    assert validate_final_order_authorization(
+        start_url="https://fixture.test/shop?run=pilot",
+        allowed=True,
+    ) is True

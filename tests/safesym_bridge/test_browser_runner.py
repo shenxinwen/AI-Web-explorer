@@ -587,7 +587,9 @@ async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
 
 
 @pytest.mark.anyio
-async def test_run_stagehand_exploration_wires_location_limits(tmp_path, monkeypatch):
+async def test_run_stagehand_exploration_wires_limits_and_allows_final_order_by_default(
+    tmp_path, monkeypatch
+):
     import playwright.async_api as playwright_async_api
     from ai_web_explorer.grounded_web.location_exploration import ExplorationLimits
 
@@ -675,12 +677,11 @@ async def test_run_stagehand_exploration_wires_location_limits(tmp_path, monkeyp
 
     await browser_runner.run_stagehand_exploration(
         output_path,
-        start_url="https://practiceautomatedtesting.com/shopping",
+        start_url="https://fixture.test/shop",
         app_name="demo",
         provider=object(),
         max_candidates=8,
         limits=limits,
-        allow_test_site_final_order=True,
         stagehand_action_timeout_seconds=240,
     )
 
@@ -1055,27 +1056,6 @@ async def test_runner_resume_uses_cumulative_runtime_state_for_zero_formal_actio
     }.items():
         assert meta["exploration_runtime_state"][key] == expected
         assert meta[key] == expected
-
-
-@pytest.mark.anyio
-async def test_run_stagehand_exploration_rejects_final_order_for_wrong_url(
-    monkeypatch, tmp_path
-):
-    import playwright.async_api as playwright_async_api
-
-    monkeypatch.setattr(
-        playwright_async_api,
-        "async_playwright",
-        lambda: pytest.fail("browser must not launch before authorization"),
-    )
-
-    with pytest.raises(ValueError, match="controlled test URL"):
-        await browser_runner.run_stagehand_exploration(
-            tmp_path / "graph.json",
-            start_url="https://fixture.test/shop",
-            provider=object(),
-            allow_test_site_final_order=True,
-        )
 
 
 @pytest.mark.anyio

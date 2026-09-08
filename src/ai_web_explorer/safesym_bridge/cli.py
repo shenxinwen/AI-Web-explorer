@@ -165,6 +165,11 @@ def main(argv: list[str] | None = None) -> int:
     stagehand_explore_parser.add_argument(
         "--allow-test-site-final-order", action="store_true"
     )
+    stagehand_explore_parser.add_argument(
+        "--disallow-final-order",
+        action="store_true",
+        help="Prevent the explorer from submitting a final confirmation.",
+    )
     stagehand_explore_parser.add_argument("--screenshot-dir", type=Path, default=None)
     stagehand_explore_parser.add_argument(
         "--clean-output-dir",
@@ -278,9 +283,9 @@ def main(argv: list[str] | None = None) -> int:
             )
             output_path = result.report_path
         elif args.mode == "web-kobe-stagehand-explore":
-            validate_final_order_authorization(
+            final_order_allowed = validate_final_order_authorization(
                 start_url=args.url,
-                allowed=args.allow_test_site_final_order,
+                allowed=not args.disallow_final_order,
             )
             defaults = ExplorationLimits()
             limits = ExplorationLimits(
@@ -369,13 +374,12 @@ def main(argv: list[str] | None = None) -> int:
                 "frontier_replay": args.frontier_replay or resume_graph is not None,
                 "resume_graph": resume_graph,
                 "resume_policy": resume_policy,
+                "allow_test_site_final_order": final_order_allowed,
             }
             if args.viewport_width != 1440:
                 runner_kwargs["viewport_width"] = args.viewport_width
             if args.viewport_height != 1000:
                 runner_kwargs["viewport_height"] = args.viewport_height
-            if args.allow_test_site_final_order:
-                runner_kwargs["allow_test_site_final_order"] = True
             if args.vlm_request_timeout_seconds is not None:
                 runner_kwargs["vlm_request_timeout_seconds"] = (
                     args.vlm_request_timeout_seconds

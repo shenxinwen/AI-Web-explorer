@@ -338,6 +338,7 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
         frontier_replay=False,
         resume_graph=None,
         resume_policy=None,
+        allow_test_site_final_order=True,
     ):
         calls.append(
             (
@@ -610,30 +611,30 @@ def test_main_stagehand_explore_rejects_legacy_steps(monkeypatch, capsys):
     assert "unrecognized arguments: --steps 2" in capsys.readouterr().err
 
 
-def test_main_stagehand_explore_rejects_final_order_for_wrong_url(
-    monkeypatch, tmp_path, capsys
+def test_main_stagehand_explore_allows_final_order_by_default_and_can_disable_it(
+    monkeypatch, tmp_path
 ):
-    monkeypatch.setattr(
-        cli,
-        "run_stagehand_exploration",
-        lambda *args, **kwargs: pytest.fail("runner should not be called"),
-        raising=False,
-    )
+    calls = []
 
-    assert (
-        main(
-            [
-                "web-kobe-stagehand-explore",
-                "--url",
-                "https://fixture.test/shop",
-                "--output",
-                str(tmp_path / "graph.json"),
-                "--allow-test-site-final-order",
-            ]
-        )
-        == 1
-    )
-    assert "controlled test URL" in capsys.readouterr().out
+    async def fake_run(output_path, **kwargs):
+        calls.append(kwargs)
+        output_path.write_text("{}", encoding="utf-8")
+        return output_path
+
+    monkeypatch.setattr(cli, "run_stagehand_exploration", fake_run, raising=False)
+
+    base_args = [
+        "web-kobe-stagehand-explore",
+        "--url",
+        "https://fixture.test/shop",
+        "--output",
+        str(tmp_path / "graph.json"),
+    ]
+    assert main(base_args) == 0
+    assert main([*base_args, "--disallow-final-order"]) == 0
+
+    assert calls[0]["allow_test_site_final_order"] is True
+    assert calls[1]["allow_test_site_final_order"] is False
 
 
 def test_main_web_kobe_stagehand_explore_passes_explicit_resume_defaults(

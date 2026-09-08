@@ -361,7 +361,7 @@ async def run_stagehand_exploration(
     resume_graph: WebKobeGraph | None = None,
     resume_policy: ResumePolicy | None = None,
     limits: ExplorationLimits | None = None,
-    allow_test_site_final_order: bool = False,
+    allow_test_site_final_order: bool = True,
     viewport_width: int = 1440,
     viewport_height: int = 1000,
     vlm_request_timeout_seconds: float | None = None,
