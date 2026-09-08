@@ -51,7 +51,7 @@ Building Evidence-Grounded Functional Models of Web Applications through Risk-Aw
 
 ### 3.2 Evidence-Grounded Functional Model
 
-定义候选、executor-reported success 与 verified functional outcome 三个不同层次。系统仅在动作前后可观察证据支持预期结果时准入对应功能知识；该机制旨在减少未经支持的知识准入，不构成绝对正确性保证。
+定义候选、executor-reported success 与 verified functional outcome 三个不同层次。每个候选关联一个执行前冻结的 expected observable outcome；系统仅在动作后证据支持该预期结果时准入对应功能知识。验证被明确用于持久功能知识准入，而不只是当前动作纠错；该机制旨在减少未经支持的知识准入，不构成绝对正确性保证。
 
 - Semantic Location and High-Level Function
 - Location Constraint and Observed Direct Action Dependency
@@ -77,7 +77,7 @@ Building Evidence-Grounded Functional Models of Web Applications through Risk-Aw
 
 ### 4.1 Functional Model Quality
 
-在固定候选和交互轨迹下，比较“候选即事实”“executor success 即事实”和基于可观察结果验证的知识准入，对应 C1。
+在固定候选、执行前预期结果和交互轨迹下，比较“候选即事实”“executor success 即事实”和基于可观察结果验证的知识准入，对应 C1。主表报告 admitted knowledge precision、supported knowledge retention 和 admission yield；验证器一致性与证据完整性作为诊断。
 
 ### 4.2 Execution-Grounded Model Induction
 

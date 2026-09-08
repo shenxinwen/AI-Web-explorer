@@ -39,6 +39,6 @@ Precision 仍以 action-attempt 人工标注计算，不能用 core inventory �
 ## 人工流程
 
 1. 对每次运行导出唯一的 `semantic_location + action` 列表；
-2. 两名标注者或一名标注者加复核者按上述规则匹配；
+2. 初始匹配结果必须经过人工逐项复核；若使用 AI 预填，AI 不作为独立人工标注者；
 3. `uncertain` 和一对多候选必须仲裁；
 4. 保存原始 action/attempt ID、匹配到的 `core_id` 和最终标签。

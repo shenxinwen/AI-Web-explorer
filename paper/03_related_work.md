@@ -3,8 +3,8 @@
 | 方向 | 已核实代表工作 | 与本文的关系 | 基线可行性 |
 | --- | --- | --- | --- |
 | Autonomous GUI Exploration | [GUI-explorer (ACL 2025)](https://aclanthology.org/2025.acl-long.282/)、[UIExplore-Bench](https://arxiv.org/abs/2506.17779)、[UI-KOBE](https://arxiv.org/abs/2605.29534) | 已覆盖自动目标生成、真实交互轨迹、功能覆盖、图构建和欠探索节点重访。本文不能把 Web 探索或 persistent frontier 本身作为创新；C2 应聚焦为功能假设持续产生支持/否定证据的过程。 | UIExplore-Bench 的 GitLab Screen 模式、Random、BFS/DFS 和 UIExplore-AlGo 最适合 C2；GUI-explorer 有代码但主要面向移动 GUI；UI-KOBE 有代码但迁移成本较高。 |
-| Environment Modeling and Executable Memory | [GraphPilot](https://arxiv.org/abs/2601.17418)、[EAM](https://arxiv.org/abs/2605.12294)、[ActionEngine](https://arxiv.org/abs/2602.20502) | 已覆盖页面/元素功能、状态转移规则、状态机记忆、执行路径验证和失败后更新。C1 的差异聚焦于不把候选发现或 executor success 直接视为功能知识，而以动作前后证据验证预期 functional outcome 并控制知识准入。 | GraphPilot/EAM 主要适合定位及下游比较；ActionEngine 是 Web 场景的重要近邻，需继续核查代码与可复现实验。 |
-| Action-Effect Verification | [VeriGUI (ACL 2026)](https://aclanthology.org/2026.acl-long.1335/) | 已显式建模预期 action effect、后续验证和失败恢复，因此 outcome verification 不能单独作为首次贡献。本文区别在于开放探索所得应用级功能知识及其长期验证状态与证据链。 | 主要用于 C1 的概念和机制对照；其任务导向、训练式移动 GUI 设置不宜直接作为同环境主 baseline。 |
+| Environment Modeling and Executable Memory | [GraphPilot](https://arxiv.org/abs/2601.17418)、[EAM](https://arxiv.org/abs/2605.12294)、[ActionEngine](https://arxiv.org/abs/2602.20502) | 已覆盖页面/元素功能、状态转移规则、状态机记忆、执行路径验证和失败后更新。C1 不以“存在验证”为差异，而将验证明确建模为持久功能知识的准入门槛：候选、executor success 与 verified knowledge 分离，候选的执行前 expected outcome 必须获得执行后证据支持。 | GraphPilot/EAM 主要适合定位及下游比较；ActionEngine 是 Web 场景的重要近邻，需继续核查其验证结果是否直接控制持久知识准入。 |
+| Action-Effect Verification | [VeriGUI (ACL 2026)](https://aclanthology.org/2026.acl-long.1335/) | 已显式建模预期 action effect、后续验证和失败恢复，因此 expected-effect verification 或 VLM 复审不能单独作为首次贡献。本文聚焦验证结果对开放探索所得持久功能知识的准入作用，并直接测量准入准确性与有效知识保留。 | 主要用于 C1 的概念和机制对照；其任务导向、训练式移动 GUI 设置不宜直接作为同环境主 baseline。 |
 | Safe and Reliable GUI Agents | [Guided Exploration of User-Sensitive Screens](https://arxiv.org/abs/2606.25705)、[OS-Sentinel (ACL 2026)](https://aclanthology.org/2026.acl-long.431/)、[OSGuard](https://arxiv.org/abs/2606.15034)、[SeerGuard](https://arxiv.org/abs/2607.15550) | 已有工作覆盖敏感状态探索、step/trajectory-level 风险检测以及基于当前 GUI 和 proposed action 的执行前风险判断。本文不能主张首次考虑探索安全；C3 的差异是 task-free 功能探索中的已选动作判断，以及风险记录与功能假设、轨迹和长期证据的关联。 | SeerGuard 有公开代码，是最接近的 C3 方法候选；OS-Sentinel 是重要方法参照；OSGuard 可作外部动作级评测，但标签依赖用户指令，与本文设定不同。 |
 
 ## 差异化定位
@@ -22,7 +22,7 @@
 
 ## 当前基线建议
 
-- **RQ1 / C1：** proposal-as-fact、executor-success-as-fact、w/o outcome verification；GUI-explorer 风格 transition knowledge 作为结构性对照，VeriGUI 作为 action-effect verification 定位对照。
+- **RQ1 / C1：** 在同一冻结候选和轨迹上比较 proposal-as-fact、executor-success-as-fact 与 evidence-grounded admission。外部工作用于定位和机制核查，不作为 C1 主实验的硬性数值 baseline。
 - **RQ2 / C2：** UIExplore-Bench Screen 模式下的 Random、BFS/DFS、UIExplore-AlGo，以及 w/o persistent frontier；资源允许时加入 GUI-explorer 系统级对照。
 - **RQ3 / C3：** 通用 VLM zero-shot、w/o visual context、w/o taxonomy、SeerGuard/OS-Sentinel 类执行前判断；OSGuard 仅作补充外部评测。
 

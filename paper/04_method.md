@@ -14,6 +14,7 @@
 | --- | --- | --- |
 | Semantic location | 稳定的业务位置，如商品列表、购物车、项目设置页 | 不是 DOM/截图的逐元素状态 |
 | High-level function | 具有业务意义的功能，如添加商品、创建项目、邀请成员 | 不是按钮或输入框枚举 |
+| Expected observable outcome | 候选执行后应在 GUI 或保存的可观察状态中出现的结果；与候选同时产生并在执行前冻结 | 不包含隐藏后端状态，也不在看到 after observation 后改写 |
 | Location constraint | 功能被提出、执行和观察时所在的位置 | 不等同于完整业务 precondition |
 | Observed direct action dependency | 页面观察提出且由成功交互序列支持的直接顺序关系 | 不主张普遍必要、充分或严格因果关系 |
 | Functional outcome | 功能结果状态与界面转移类型 | Executor Success 不等于 Functional Success |
@@ -38,9 +39,9 @@ pending、retryable、stale、blocked 等只作为实现层子状态。
 
 ## 方法概述
 
-### 1. Function Hypothesis Proposal
+### 1. Testable Function Hypothesis Proposal
 
-VLM 根据当前 GUI 和已有模型提出 semantic location、high-level function 与可能的直接动作依赖。所有新内容先保存为 Proposed 假设，不直接写成环境事实。VLM 是可替换的候选生成与观察工具。
+VLM 根据当前 GUI 和已有模型提出 semantic location、high-level function、可能的直接动作依赖，以及一句简短的 expected observable outcome。该结果只能描述执行后可从 GUI 或保存状态中检查的变化，可以包含多个等价的可见证据，但不得依赖隐藏后端状态。候选与 expected outcome 同时保存，并在动作执行前冻结；所有新内容先处于 Proposed 状态，不直接写成环境事实。VLM 是可替换的候选生成与观察工具。
 
 ### 2. Pre-Execution Risk Awareness
 
@@ -57,13 +58,15 @@ VLM 根据当前 GUI 和已有模型提出 semantic location、high-level functi
 
 ### 3. Execution and Evidence Observation
 
-浏览器执行器尝试执行被选中的 high-level function。系统记录执行轨迹与动作前后观察，形成供功能知识判定使用的交互证据。浏览器执行器是可替换工具。
+浏览器执行器尝试执行被选中的 high-level function。系统记录 executor-reported status、动作前后截图、URL、可用的结构化状态变化和证据引用，形成供功能知识判定使用的 evidence packet。浏览器执行器是可替换工具；其成功状态只说明具体交互被报告为完成。
 
 ### 4. Evidence-Driven Model Update
 
-系统依据执行记录和结果观察更新 outcome 与 verification state。失败、不确定和未完成结果分别保留；只有达到证据要求的知识才能供下游使用。每项结论应支持如下追溯：
+系统以冻结的 functional claim 和 expected outcome 为条件，判断执行后 evidence packet 是否支持预期结果。当前实现使用 VLM 作为可替换的证据判断器；方法贡献是主张—预期结果—证据—准入协议，而不是新的 VLM 模型。失败、证据不足和未完成结果分别保留以供审查，但不能作为已验证功能供下游使用。只有证据完整且 outcome judgment 为 success 的候选进入 admitted 状态。每项结论应支持如下追溯：
 
-> hypothesis source → execution trace → before/after observations → outcome judgment
+> functional claim + frozen expected outcome → execution trace → before/after observations → outcome judgment → admission decision
+
+论文级准入状态使用 `Proposed → Admitted / Rejected`：Rejected 轨迹仍被持久保存，但不进入可供后续规划或探索复用的已验证功能集合。验证器异常或关键证据缺失时，知识准入采取保守处理，即不准入；这与运行时执行链路是否 fail-open 是两个不同问题。
 
 ### 5. Persistent Frontier
 

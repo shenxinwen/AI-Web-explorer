@@ -2,11 +2,11 @@
 
 > 适用实验：E002（C3）与 E003（C1）
 >
-> 标注对象是一个已选 high-level action attempt。标注者只能使用该 attempt 冻结保存的候选、执行记录、before/after screenshots 和页面证据，不得根据后续轨迹倒推当时不可见的信息。
+> 标注对象是一个已选 high-level action attempt。标注者只能使用该 attempt 在执行前冻结的候选及 expected outcome，以及对应执行记录、before/after screenshots 和页面证据，不得根据后续轨迹倒推当时不可见的信息，也不得在看到 after observation 后改写 expected outcome。
 
 ## 1. 样本标识与完整性
 
-每个样本必须具有：`app`、`run_id`、`attempt_id`、`semantic_location`、`action_id`、`action_label`、before screenshot、executor record，以及在执行成功时的 after screenshot。缺少必需输入时将 `sample_valid=false` 并填写 `invalid_reason`，不进入主要准确率计算，但计入工件缺失率。
+每个样本必须具有：`app`、`run_id`、`attempt_id`、`semantic_location`、`action_id`、`action_label`、执行前冻结的 `expected_outcome`、before screenshot、executor record，以及在执行成功时的 after screenshot。缺少必需运行工件时将 `sample_valid=false` 并填写 `invalid_reason`，不进入主要准确率计算，但计入工件缺失率。若系统生成的 expected outcome 模糊、错误或不可观察，样本仍保留为有效候选，不允许事后修正预期；它不能获得 functional outcome 支持，并应在 `notes` 中说明。
 
 ## 2. C1 功能知识标注
 
@@ -26,6 +26,8 @@
 
 页面跳转本身不自动等于 success；只有跳转确实是该功能的预期结果时才算成功。无法形成可靠结果判断时，将样本标为无效，不用 `uncertain` 代替判断。
 
+判断对象是 before/after evidence 是否支持执行前冻结的 `expected_outcome`，而不是页面是否发生任意变化。页面跳转、元素变化或 executor success 只有与该预期结果一致时，才能支持 success。
+
 ### 2.3 系统记录字段
 
 下列字段由冻结运行工件自动读取，不要求人工重复标注：
@@ -33,6 +35,7 @@
 - `executor_reported_success`：执行器是否报告完成具体交互；
 - `evidence_complete`：before/after screenshot、executor record 和必要引用是否齐全；
 - `predicted_outcome`：系统根据动作前后证据作出的结果判断。
+- `expected_outcome`：系统与候选同时生成并在动作执行前冻结的一句可观察结果描述。
 
 其中 `executor_reported_success` 不等同于人工确认的 `functional_outcome`。核心错误类型是 executor 报告成功，但人工确认预期功能结果失败。
 
@@ -80,10 +83,9 @@
 ## 4. 标注流程
 
 1. 使用 20 个样本试标，尽量包含成功、失败、无效工件、风险和非风险案例。
-2. 两名标注者独立完成，不讨论个别样本。
-3. 汇总分歧，优先修改指南中的歧义定义，而不是只修改标签。
-4. 指南冻结后，由主标注者完成全部样本，第二标注者随机复标至少 25%。
-5. 仲裁结果作为 gold label，同时保存两位原始标签。
+2. AI 使用冻结材料生成第一次标注。
+3. 人工逐项审查全部初标并修订；遇到系统性歧义时优先修改指南，而不是只修改个别标签。
+4. 人工审查后的结果作为 gold label；AI 初标只用于提高效率，不视为第二位人工标注者。
 
 ## 5. 最小输出字段
 
@@ -98,7 +100,7 @@ risk_evidence_grounding
 notes
 ```
 
-`executor_reported_success`、`evidence_complete`、`predicted_outcome` 和派生准入状态保存在系统结果或分析表中，不作为人工标注字段。
+`expected_outcome`、`executor_reported_success`、`evidence_complete`、`predicted_outcome` 和派生准入状态保存在系统结果或分析表中，并展示给标注者，但不作为需要人工填写的标注字段。
 
 对外标注表使用 `S001` 形式的短编号；原始 attempt ID 必须保存在独立映射文件中，以保证可追溯性。
 

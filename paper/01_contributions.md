@@ -4,18 +4,18 @@
 
 | ID | 主张 | 所需证据 | 当前状态 |
 | --- | --- | --- | --- |
-| C1 | **Evidence-Grounded Functional Modeling：** 候选动作被发现或 executor 报告执行成功，都不足以证明功能知识成立。本文根据动作前后的可观察执行证据验证预期 functional outcome，并仅将通过验证的候选准入功能模型。 | 在相同候选与冻结交互轨迹下，比较 proposal-as-fact、executor-success-as-fact 与 evidence-grounded admission，检验结果验证能否减少未经支持的知识准入。 | 主张已确定，证据待实验 |
+| C1 | **Evidence-Grounded Functional Verification and Knowledge Admission：** 本文将功能验证建模为知识准入问题，显式区分 candidate discovery、executor-reported success 与 verified functional outcome。每个候选在执行前关联一个冻结的、可观察的 expected outcome；只有执行后证据支持该结果时，候选才进入持久功能模型。该机制旨在减少未经支持的知识准入，而非保证绝对正确。 | 在相同候选与冻结交互轨迹下，比较 proposal-as-fact、executor-success-as-fact 与 evidence-grounded admission，检验其能否提高准入知识准确性，同时保留已获得支持的有效功能知识。 | 主张已确定，证据待实验 |
 | C2 | **Execution-Grounded Open-Ended Model Induction：** 在固定探索预算下，通过“功能假设选择 → GUI 执行 → 前后观察 → 交互证据采集”持续产生 C1 所需的证据，并通过 persistent frontier 保留和重访未验证或未完成假设。 | 多轮开放探索协议；经交互支持的功能覆盖率与知识增长曲线；单位预算有效证据；移除 persistent frontier 的消融。 | 主张已确定，证据待实验 |
 | C3 | **Risk-Aware Open-Ended Exploration：** 将已选动作的执行前风险判断纳入 task-free/open-ended functional model induction，并把二元判断、主要风险类型和界面证据与相应功能假设及交互轨迹关联保存，以支持过程监督和事后审查。 | 风险识别 precision/recall/F1；风险类型准确率；动作语义与视觉上下文消融；上下文敏感案例；风险记录与功能/轨迹的关联完整率；普通探索与 replay 覆盖。 | 最小机制已实现，效果证据待实验 |
 
 ## 贡献之间的证据链
 
-1. C1 定义如何根据动作前后证据验证候选的预期功能结果，并据此控制功能知识准入。
+1. C1 定义可检验的功能主张、执行前冻结的 expected outcome、执行后证据验证和持久知识准入规则。
 2. C2 通过开放式真实交互持续产生 C1 所需的证据。
 3. C3 为 C2 自主生成的功能验证目标提供执行前风险感知，并使探索过程可追踪、可审查。
 4. 下游规划与行为验证用于检验 C1–C3 产生的模型是否具有应用价值，但不作为第四项独立贡献。
 
-概念接口为：**C2 输出候选、交互轨迹与前后观察，C1 消费这些证据，区分 executor-reported success 与 verified functional outcome，并输出准入决定。** 工程实现可以将两者放在同一循环中，但论文定义和实验控制变量必须分开。
+概念接口为：**C2 输出候选、执行前 expected outcome、交互轨迹与前后观察；C1 消费冻结的主张与证据，区分 executor-reported success 与 verified functional outcome，并输出 proposed → admitted / rejected 的准入决定。** 工程实现可以将两者放在同一循环中，但论文定义和实验控制变量必须分开。
 
 ## 当前不应提前写入的效果性结论
 

@@ -1,6 +1,6 @@
 # 论文状态
 
-> 最后更新：2026-09-06
+> 最后更新：2026-09-08
 >
 > 维护规则：只记录当前有效结论、证据缺口和下一步；详细内容写入对应专题文件。
 
@@ -8,15 +8,17 @@
 
 - 目标会议：ICLR 2027
 - 暂定题目：Building Evidence-Grounded Functional Models of Web Applications through Risk-Aware Open-Ended Exploration
-- 当前阶段：最小风险感知链路已实现并完成工程冒烟，最小可投稿实验协议 v1 已冻结，待 pilot
+- 当前阶段：最小风险感知链路已实现并完成工程冒烟；C1 方法与自然探索实验设计已对齐，待 expected outcome 最小实现和双站点 pilot
 
 ## 当前有效结论
 
 - 研究问题：在自动化的开放式 Web 探索中，如何通过真实交互发现并验证应用功能，同时识别系统自主生成的功能验证行为可能带来的环境风险。
 - 核心模型统一表达 semantic location、high-level function、location constraint、observed direct action dependency、functional outcome、verification state 和 interaction evidence。
-- C1 已收敛为 evidence-grounded functional verification and knowledge admission：候选发现与 executor-reported success 均不直接构成功能知识，只有得到动作前后可观察结果支持的候选才进入功能模型。
+- C1 已收敛为 evidence-grounded functional verification and knowledge admission：候选发现与 executor-reported success 均不直接构成功能知识。每个候选在执行前同时生成并冻结一句 expected observable outcome；只有执行后证据支持该结果的候选才进入持久功能模型。
 - 三项核心贡献已确定：evidence-grounded functional modeling、execution-grounded open-ended model induction、risk-aware open-ended exploration。
-- C1 与 C2 的边界已明确：C2 发现候选并产生交互轨迹和前后观察；C1 使用这些证据验证预期 functional outcome，并据此控制知识准入。
+- C1 与 C2 的边界已明确：C2 发现候选、生成执行前 expected outcome，并产生交互轨迹和前后观察；C1 使用冻结的主张与证据验证 functional outcome，并据此输出 proposed → admitted / rejected。VLM 是当前可替换验证器，不是 C1 的贡献本身。
+- C1 自然实验固定同一组候选和轨迹，比较 proposal-as-fact、executor-success-as-fact 与 evidence-grounded admission；主指标为 admitted knowledge precision、supported knowledge retention 和 admission yield，验证器一致性及 executor–outcome disagreement 为诊断。
+- C1 首先只运行 SauceDemo 与 Practice Shopping 的自然探索和双站点小规模 pilot；受控挑战集仅在自然负样本不足时再考虑，不与自然样本混合报告。
 - 风险机制在每个普通探索或 replay 动作执行前，将当前截图、已选 high-level action label 和完整风险库交给独立 VLM 判断，保存二元风险标记、一个主要风险类型和页面证据。
 - 风险检测以 shadow mode 运行：判断不拦截动作；检测失败时 fail-open 并记录错误，保证探索链路可继续。
 - 当前风险贡献聚焦检测、记录和可审查性，不主张已经拦截危险动作或保证探索安全。
@@ -33,6 +35,8 @@
 
 ## 主要缺口
 
+- 当前代码的候选结构只有 action label/description，没有执行前独立持久化的 expected outcome；需完成最小字段、prompt、验证输入和工件输出调整后才能开始 C1 正式运行。
+- C1 正式自然探索轨迹、人工 gold 和三种准入策略结果尚未生成。
 - 冻结风险评测集、人工标注规范和上下文对照样例。
 - 验证五类风险在多网站、多动作上的覆盖，并单独评估 replay 链路。
 - 设计风险识别标注规范，以及完整方法、w/o visual context、w/o taxonomy 的对比实验。

@@ -19,28 +19,29 @@
 
 ### 数据
 
-使用完整方法正式运行得到的冻结轨迹。每个样本包含候选功能、executor-reported status、before/after observation、系统 outcome judgment 和 evidence reference。RQ1 明确区分候选发现、交互执行完成和获得可观察结果支持的功能知识。
+使用完整方法正式运行得到的冻结轨迹。每个候选在执行前同时生成并冻结一句可观察的 `expected_outcome`。每个样本包含候选功能、expected outcome、executor-reported status、before/after observation、系统 outcome judgment 和 evidence reference。RQ1 明确区分候选发现、交互执行完成和获得可观察结果支持的功能知识。
 
 ### 对比
 
 1. **Proposal-as-fact：** 所有 VLM 候选直接作为有效功能知识。
 2. **Executor-success-as-fact：** executor 报告完成即作为成功功能知识。
-3. **Evidence-grounded admission：** 仅在动作前后证据支持预期 functional outcome 时准入知识。
+3. **Evidence-grounded admission：** 仅当 `evidence_complete=true` 且系统 `predicted_outcome=success` 时准入知识。
 
 三种条件消费完全相同的候选和冻结轨迹，隔离知识判定方式；不把重新探索产生的差异混入 RQ1。
 
 ### 人工标注
 
-每个有效 action attempt 的人工判断聚焦于：候选功能是否真实存在，以及动作是否产生了预期 observable functional outcome。Executor-reported status 和证据工件完整性直接从运行记录读取，不作为人工重复判断的核心标签。无法形成结果判断的缺失工件作为无效样本单独报告，不把模糊判断强行写成成功或失败。
+每个有效 action attempt 的人工判断聚焦于：候选功能是否真实存在，以及动作是否产生了执行前冻结的 expected observable outcome。人工 gold 中，`function_exists=yes` 且 `functional_outcome=success` 定义为 supported knowledge。Executor-reported status 和证据工件完整性直接从运行记录读取，不作为人工重复判断的核心标签。缺少必要运行工件、无法形成结果判断的样本作为无效样本单独报告。expected outcome 本身模糊、错误或不可观察时不删除样本，也不改写预期；该候选不能获得结果支持，并进入错误分析。
 
-### 主要指标
+### 主要指标与诊断
 
-- admitted functional knowledge precision；
-- unsupported knowledge admission rate；
-- outcome accuracy；
-- evidence-chain completeness。
+- **Admitted knowledge precision：** 准入知识中属于人工 supported knowledge 的比例；
+- **Supported knowledge retention：** 全部人工 supported knowledge 中被该策略准入的比例；
+- **Admission yield：** 全部有效候选中被该策略准入的比例。
 
-使用冻结的 `core_functions/*.csv` 和 `core_function_matching_v1.md` 计算 supported core-function recall。该指标只表示预先定义的核心功能覆盖率，不称为全站 recall。Dependency accuracy 作为次要指标。
+另报告 functional outcome verification accuracy 或 macro-F1、executor–outcome disagreement rate、evidence-chain completeness 和无效样本率。Knowledge precision 与 unsupported admission rate 互为补数，只选择前者作为主表指标。候选功能准确率、core-function recall 和 dependency accuracy 不作为 RQ1 主指标；它们分别属于候选发现、端到端覆盖或其他模型内容。
+
+RQ1 首先只评估自然探索轨迹。受控挑战集暂不构建；仅在自然负样本不足以解释准入行为时，作为后续独立数据集考虑，且不得与自然样本混合统计。
 
 ## 3. RQ2 / C2：执行驱动持续归纳
 
@@ -85,8 +86,8 @@ SeerGuard、OS-Sentinel 和 OSGuard 用于相关工作及协议参照，不作�
 ## 5. 标注与统计
 
 - 使用 `annotation_guide_v1.md` 并在正式标注前试标 20 个样本。
-- 全部样本由一名标注者标注，至少 25% 由第二名标注者独立复标；分歧由讨论仲裁。
-- 二元标签报告 Cohen's kappa；多类 outcome/risk type 报告 macro-F1 或一致率。
+- AI 生成第一次标注，人工审查全部样本并作最终修订；AI 初标不作为独立人工标注者，当前不报告 Cohen's kappa。
+- 系统预测相对人工 gold 的多类 outcome/risk type 表现报告 macro-F1 或一致率。
 - 报告每个网站和总体结果；总体值按网站 macro-average。
 - 对主要比例指标报告 bootstrap 95% confidence interval；小样本不强制显著性检验。
 - 失败分析至少区分：候选幻觉、executor/outcome 混淆、视觉变化不足、dependency 误判、风险误报、风险漏报和风险类型错误。
@@ -99,10 +100,10 @@ SeerGuard、OS-Sentinel 和 OSGuard 用于相关工作及协议参照，不作�
 
 Pilot 通过需同时满足：
 
-1. 两个网站均能产生可解析的 action、executor-reported status、before/after observation、outcome judgment、证据完整性检查所需字段和 risk record；
+1. 两个网站均能产生可解析的 action、执行前冻结的 expected outcome、executor-reported status、before/after observation、outcome judgment、证据完整性检查所需字段和 risk record；
 2. RQ1 三种准入条件能从同一轨迹离线计算；
 3. no-replay 与 full 条件能够被明确配置或从运行行为中区分；
-4. 两名标注者能使用指南完成 20 个样本，且主要标签没有系统性歧义；
+4. AI 初标与人工审查流程能完成 20 个样本，且主要标签没有系统性歧义；
 5. 所有主要指标都能由保存工件计算。
 
 Pilot 若未通过，只修复协议、日志或标注阻塞项；不新增论文贡献或扩展框架功能。
