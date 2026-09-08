@@ -34,11 +34,15 @@ def extract_samples(
     graph = json.loads(graph_path.read_text(encoding="utf-8"))
     evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
     evidence_by_edge = evidence.get("edges", {})
+    evidence_by_event = evidence.get("execution_events", {})
     samples: list[dict[str, Any]] = []
     seen: set[str] = set()
-    for index, edge in enumerate(graph.get("edges", []), 1):
+    records = graph.get("execution_events") or graph.get("edges", [])
+    for index, edge in enumerate(records, 1):
         edge_id = edge.get("edge_id", "")
-        detail = evidence_by_edge.get(f"edge-evidence:{edge_id}", {})
+        detail = evidence_by_event.get(edge.get("evidence_ref", ""))
+        if detail is None:
+            detail = evidence_by_edge.get(f"edge-evidence:{edge_id}", {})
         metadata = detail.get("execution_trace", {}).get("metadata", {})
         attempt_id = str(metadata.get("attempt_id") or f"edge-{index:04d}")
         sample_id = f"{site}-{attempt_id}"

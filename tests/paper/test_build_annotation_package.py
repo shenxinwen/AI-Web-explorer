@@ -63,6 +63,33 @@ def test_extract_samples_merges_attempt_and_screenshots_without_predictions(tmp_
     assert "risk_assessment" not in serialized
 
 
+def test_extract_samples_reads_each_execution_event_evidence(tmp_path):
+    graph_path, evidence_path = _fixture_run(tmp_path)
+    graph = json.loads(graph_path.read_text(encoding="utf-8"))
+    edge = graph["edges"][0]
+    graph["execution_events"] = [
+        {**edge, "evidence_ref": "execution-event-evidence:attempt-1"},
+        {**edge, "evidence_ref": "execution-event-evidence:attempt-2"},
+    ]
+    graph_path.write_text(json.dumps(graph), encoding="utf-8")
+    evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+    first = evidence["edges"][f"edge-evidence:{edge['edge_id']}"]
+    second = json.loads(json.dumps(first))
+    second["execution_trace"]["metadata"]["attempt_id"] = "attempt-2"
+    evidence["execution_events"] = {
+        "execution-event-evidence:attempt-1": first,
+        "execution-event-evidence:attempt-2": second,
+    }
+    evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+
+    samples = extract_samples("demo", graph_path, evidence_path, tmp_path)
+
+    assert [sample["sample_id"] for sample in samples] == [
+        "demo-attempt-1",
+        "demo-attempt-2",
+    ]
+
+
 def test_build_package_separates_c1_and_no_leakage_c3_views(tmp_path):
     graph_path, evidence_path = _fixture_run(tmp_path)
     destination = tmp_path / "package"

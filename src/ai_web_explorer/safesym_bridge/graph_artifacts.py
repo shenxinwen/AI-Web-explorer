@@ -236,6 +236,7 @@ def build_graph_artifact_payload(graph: WebKobeGraph) -> GraphArtifactPayload:
         "schema_version": GRAPH_EVIDENCE_SCHEMA_VERSION,
         "nodes": {},
         "edges": {},
+        "execution_events": {},
     }
 
     for node in full_graph.get("nodes", []):
@@ -255,14 +256,25 @@ def build_graph_artifact_payload(graph: WebKobeGraph) -> GraphArtifactPayload:
         compact_graph["edges"].append(compact_edge)
 
     if full_graph.get("execution_events"):
-        compact_graph["execution_events"] = [
-            _compact_edge(event)[0] for event in full_graph["execution_events"]
-        ]
+        compact_graph["execution_events"] = []
+        for index, event in enumerate(full_graph["execution_events"], 1):
+            compact_event, sidecar_event = _compact_edge(event)
+            if sidecar_event:
+                attempt_id = (
+                    event.get("execution_trace", {}).get("metadata", {}).get("attempt_id")
+                )
+                identity = attempt_id or f"{index:04d}:{event['edge_id']}"
+                evidence_ref = f"execution-event-evidence:{identity}"
+                compact_event["evidence_ref"] = evidence_ref
+                evidence_sidecar["execution_events"][evidence_ref] = sidecar_event
+            compact_graph["execution_events"].append(compact_event)
 
     if not evidence_sidecar["nodes"]:
         evidence_sidecar.pop("nodes")
     if not evidence_sidecar["edges"]:
         evidence_sidecar.pop("edges")
+    if not evidence_sidecar["execution_events"]:
+        evidence_sidecar.pop("execution_events")
     return GraphArtifactPayload(
         compact_graph=compact_graph,
         evidence_sidecar=evidence_sidecar,

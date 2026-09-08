@@ -262,6 +262,42 @@ def test_build_graph_artifact_payload_moves_verbose_evidence_out_of_graph():
     assert evidence["execution_trace"]["metadata"]["visual_delta_trace"]
 
 
+def test_execution_events_keep_attempt_specific_evidence_for_repeated_edge():
+    graph = _verbose_graph_fixture()
+    edge = graph.edges[0]
+    first = replace(
+        edge,
+        execution_trace=replace(
+            edge.execution_trace,
+            metadata={**edge.execution_trace.metadata, "attempt_id": "attempt-1"},
+        ),
+    )
+    second = replace(
+        edge,
+        execution_trace=replace(
+            edge.execution_trace,
+            metadata={**edge.execution_trace.metadata, "attempt_id": "attempt-2"},
+        ),
+    )
+
+    payload = build_graph_artifact_payload(
+        replace(graph, edges=[second], execution_events=[first, second])
+    )
+
+    events = payload.compact_graph["execution_events"]
+    assert [event["evidence_ref"] for event in events] == [
+        "execution-event-evidence:attempt-1",
+        "execution-event-evidence:attempt-2",
+    ]
+    evidence = payload.evidence_sidecar["execution_events"]
+    assert evidence[events[0]["evidence_ref"]]["execution_trace"]["metadata"][
+        "attempt_id"
+    ] == "attempt-1"
+    assert evidence[events[1]["evidence_ref"]]["execution_trace"]["metadata"][
+        "attempt_id"
+    ] == "attempt-2"
+
+
 def test_compact_payload_preserves_action_fields_required_for_replay():
     graph = _verbose_graph_fixture()
     graph.edges[0] = replace(
