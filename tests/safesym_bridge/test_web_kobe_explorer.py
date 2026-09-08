@@ -806,18 +806,19 @@ class OutcomeTargetChangeAdapter:
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("outcome", ["failed", "uncertain"])
-async def test_failed_or_uncertain_outcome_cannot_be_promoted_to_navigation(outcome):
+async def test_failed_or_uncertain_outcome_still_scans_observed_new_location(outcome):
     adapter = OutcomeTargetChangeAdapter()
     coordinator = LocationExplorationCoordinator(memory=LocationExplorationMemory())
 
     scan_locations = []
 
     def candidate_provider(prompt, **kwargs):
-        scan_locations.append("listing")
-        action_id = "open_checkout"
+        location_id = "listing" if not scan_locations else "checkout"
+        scan_locations.append(location_id)
+        action_id = "open_checkout" if location_id == "listing" else "fill_billing"
         return json.dumps(
             {
-                "location_id": "listing",
+                "location_id": location_id,
                 "actions": [
                     {
                         "action_id": action_id,
@@ -858,19 +859,17 @@ async def test_failed_or_uncertain_outcome_cannot_be_promoted_to_navigation(outc
     }
     assert semantic.actions == []
     assert report.excluded_edges
-    assert set(coordinator.memory.locations) == {"listing"}
-    assert scan_locations == ["listing"]
-    assert explorer._current_node_id == edge.source_node_id
-    source_anchor, unresolved = _semantic_location_anchor(
-        explorer.manager.node_for_id(edge.source_node_id)
+    assert set(coordinator.memory.locations) == {"listing", "checkout"}
+    assert scan_locations == ["listing", "checkout"]
+    assert "fill_billing" in coordinator.memory.pool_for("checkout").candidates
+    assert explorer._current_node_id == edge.target_node_id
+    target_anchor, unresolved = _semantic_location_anchor(
+        explorer.manager.node_for_id(edge.target_node_id)
     )
-    assert source_anchor == "listing"
+    assert target_anchor == "checkout"
     assert unresolved is False
-    assert graph.meta["last_step_kind"] not in {
-        "location_transition",
-        "initial_location_scan",
-    }
-    assert graph.meta["last_step_semantic_progress"] is False
+    assert graph.meta["last_step_kind"] == "initial_location_scan"
+    assert graph.meta["last_step_semantic_progress"] is True
 
 
 def test_explorer_restore_graph_preserves_candidates_without_current_browser_pointer():

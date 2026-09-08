@@ -648,16 +648,16 @@ class WebKobeExplorer:
             "surface",
             "mixed",
         }
-        state_changed = (
+        independently_observed_state_change = (
             path_changed
             or signature_changed
             or visual_fact_change
             or visual_kind_change
             or visual_observable_change
-            or bool(
-                action_outcome_result is not None
-                and action_outcome_result.location_change
-            )
+        )
+        state_changed = independently_observed_state_change or bool(
+            action_outcome_result is not None
+            and action_outcome_result.location_change
         )
         if self.business_profile is not None:
             planning_transition = self.manager.build_planning_transition(
@@ -673,7 +673,12 @@ class WebKobeExplorer:
             and action_outcome_result.outcome == "success"
             and action_outcome_result.location_change
         )
-        if outcome_location_change_accepted:
+        observed_location_change = bool(
+            action_outcome_result is not None
+            and action_outcome_result.location_change
+            and independently_observed_state_change
+        )
+        if observed_location_change:
             outcome_location_hint = (
                 _optional_semantic_id(after_draft.page_frame.page_type)
                 or _optional_semantic_id(after.page_id)
@@ -683,7 +688,7 @@ class WebKobeExplorer:
             target_node,
             semantic_location_hint=(
                 None
-                if outcome_location_change_accepted
+                if observed_location_change
                 else (
                     semantic_observation.target_location
                     if semantic_observation is not None
@@ -758,7 +763,7 @@ class WebKobeExplorer:
 
         location_scan_novel = False
         if (
-            outcome_location_change_accepted
+            observed_location_change
             and replay_handoff_location is None
             and after_screenshot_path is not None
             and self.visual_delta_provider is not None
@@ -959,7 +964,7 @@ class WebKobeExplorer:
             source_id=source_id,
             target_id=target_id,
             edge_status=edge_status,
-        ):
+        ) or (observed_location_change and source_id != target_id):
             self._set_current_node(target_id)
         elif self._current_node_id is None:
             self._set_current_node(source_id)
