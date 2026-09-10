@@ -126,3 +126,99 @@ def test_build_package_separates_c1_and_no_leakage_c3_views(tmp_path):
     manifest = json.loads((destination / "samples.json").read_text(encoding="utf-8"))
     assert manifest[0]["sample_id"] == "S001"
     assert manifest[0]["source_sample_id"] == "demo-attempt-1"
+    assert "executor_success" not in manifest[0]
+
+
+def test_build_package_groups_repeated_attempts_into_one_c1_function(tmp_path):
+    graph_path, evidence_path = _fixture_run(tmp_path)
+    graph = json.loads(graph_path.read_text(encoding="utf-8"))
+    edge = graph["edges"][0]
+    graph["execution_events"] = [
+        {**edge, "evidence_ref": "execution-event-evidence:attempt-1"},
+        {**edge, "evidence_ref": "execution-event-evidence:attempt-2"},
+    ]
+    graph_path.write_text(json.dumps(graph), encoding="utf-8")
+    evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+    first = evidence["edges"][f"edge-evidence:{edge['edge_id']}"]
+    second = json.loads(json.dumps(first))
+    second["execution_trace"]["metadata"]["attempt_id"] = "attempt-2"
+    evidence["execution_events"] = {
+        "execution-event-evidence:attempt-1": first,
+        "execution-event-evidence:attempt-2": second,
+    }
+    evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+    destination = tmp_path / "package"
+
+    build_package(
+        [("demo", graph_path, evidence_path)], destination, limit=20,
+        source_root=tmp_path,
+    )
+
+    with (destination / "demo" / "c1_annotations.csv").open(
+        encoding="utf-8-sig", newline=""
+    ) as handle:
+        rows = list(csv.reader(handle))
+    assert len(rows) == 2
+    c1_html = (destination / "c1.html").read_text(encoding="utf-8")
+    assert "Attempt 1" in c1_html
+    assert "Attempt 2" in c1_html
+
+
+def test_build_package_keeps_same_action_separate_across_locations(tmp_path):
+    graph_path, evidence_path = _fixture_run(tmp_path)
+    graph = json.loads(graph_path.read_text(encoding="utf-8"))
+    edge = graph["edges"][0]
+    graph["execution_events"] = [
+        {
+            **edge,
+            "evidence_ref": "execution-event-evidence:attempt-1",
+            "semantic_observation": {"source_location": "cart"},
+        },
+        {
+            **edge,
+            "evidence_ref": "execution-event-evidence:attempt-2",
+            "semantic_observation": {"source_location": "checkout"},
+        },
+    ]
+    graph_path.write_text(json.dumps(graph), encoding="utf-8")
+    evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+    first = evidence["edges"][f"edge-evidence:{edge['edge_id']}"]
+    second = json.loads(json.dumps(first))
+    second["execution_trace"]["metadata"]["attempt_id"] = "attempt-2"
+    evidence["execution_events"] = {
+        "execution-event-evidence:attempt-1": first,
+        "execution-event-evidence:attempt-2": second,
+    }
+    evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+    destination = tmp_path / "package"
+
+    build_package(
+        [("demo", graph_path, evidence_path)], destination, limit=20,
+        source_root=tmp_path,
+    )
+
+    with (destination / "demo" / "c1_annotations.csv").open(
+        encoding="utf-8-sig", newline=""
+    ) as handle:
+        rows = list(csv.reader(handle))
+    assert len(rows) == 3
+
+
+def test_c1_page_groups_sites_instead_of_interleaving_them(tmp_path):
+    graph_path, evidence_path = _fixture_run(tmp_path)
+    destination = tmp_path / "package"
+
+    build_package(
+        [
+            ("site-b", graph_path, evidence_path),
+            ("site-a", graph_path, evidence_path),
+        ],
+        destination,
+        limit=20,
+        source_root=tmp_path,
+    )
+
+    c1_html = (destination / "c1.html").read_text(encoding="utf-8")
+    assert c1_html.count("<h2>site-a</h2>") == 1
+    assert c1_html.count("<h2>site-b</h2>") == 1
+    assert c1_html.index("<h2>site-a</h2>") < c1_html.index("<h2>site-b</h2>")

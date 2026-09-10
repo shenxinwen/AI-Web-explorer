@@ -19,7 +19,7 @@
 
 ### 数据
 
-使用完整方法正式运行得到的冻结轨迹。每个候选在执行前同时生成并冻结一句可观察的 `expected_outcome`。每个样本包含候选功能、expected outcome、executor-reported status、before/after observation、系统 outcome judgment 和 evidence reference。RQ1 明确区分候选发现、交互执行完成和获得可观察结果支持的功能知识。
+使用 SauceDemo 与 Practice Shopping 的完整方法正式运行得到的全部自然冻结轨迹。旧调试运行和人为补充的困难样本不混入主统计，也不为达到预设 attempt 数量而选择性抽样。每个候选在执行前同时生成并冻结一句可观察的 `expected_outcome`。每个样本包含候选功能、expected outcome、executor-reported status、before/after observation、系统 outcome judgment 和 evidence reference。RQ1 明确区分候选发现、交互执行完成和获得可观察结果支持的功能知识。
 
 一条功能知识在单次运行内由 `site + semantic_location + canonical_action_id` 唯一标识。同一功能的多个 attempts 合并，不能作为多条知识重复计数；不同运行保持为独立重复。
 
@@ -35,17 +35,19 @@
 
 ### 人工标注
 
-每个有效 action attempt 的人工判断聚焦于：候选功能是否真实存在，以及动作是否产生了执行前冻结的 expected observable outcome。人工 gold 中，`function_exists=yes` 且 `functional_outcome=success` 定义为 supported knowledge。Executor-reported status 和证据工件完整性直接从运行记录读取，不作为人工重复判断的核心标签。缺少必要运行工件、无法形成结果判断的样本作为无效样本单独报告。expected outcome 本身模糊、错误或不可观察时不删除样本，也不改写预期；该候选不能获得结果支持，并进入错误分析。
+每个有效 action attempt 的人工判断聚焦于：候选功能是否真实存在，以及 before/after evidence 是否足以支持该功能的核心语义结果。证据必须与所选动作相关，并足以区分功能结果与任意页面变化；页面或 URL 发生变化本身不是成功证据。执行前冻结的 `expected_outcome` 用作验证锚点以限制事后解释，但不要求证据逐字满足其中过窄或无关的展示细节。人工 gold 中，`function_exists=yes` 且 `functional_outcome=success` 定义为 supported knowledge。
+
+Executor-reported status、系统 outcome judgment 和三种准入结果在 AI 初标及人工审核 C1 gold 时隐藏，完成 gold 后再从运行记录合并；证据工件完整性直接从运行记录读取。缺少必要运行工件、无法形成结果判断的样本作为无效样本单独报告。expected outcome 本身模糊、错误、过窄或不可观察时不删除样本，也不事后改写；在 `notes` 中记录并进入错误分析。
 
 功能级 gold 由其 attempts 聚合：至少一次有效 attempt 同时满足 `function_exists=yes` 与 `functional_outcome=success`，该功能即视为 supported knowledge；若同一功能的存在性标签互相冲突，必须人工复核后再计算。
 
 ### 主要指标与诊断
 
-- **Admitted knowledge precision：** 准入知识中属于人工 supported knowledge 的比例；
+- **Admitted knowledge precision：** 准入知识中属于人工 supported knowledge 的比例，是 C1 的核心指标；
 - **Supported knowledge retention：** 全部人工 supported knowledge 中被该策略准入的比例；
 - **Admission yield：** 全部有效候选中被该策略准入的比例。
 
-另报告 functional outcome verification accuracy 或 macro-F1、executor–outcome disagreement rate、evidence-chain completeness 和无效样本率。Knowledge precision 与 unsupported admission rate 互为补数，只选择前者作为主表指标。候选功能准确率、core-function recall 和 dependency accuracy 不作为 RQ1 主指标；它们分别属于候选发现、端到端覆盖或其他模型内容。
+另报告 functional outcome verification accuracy 或 macro-F1、executor–outcome disagreement rate、evidence-chain completeness、无效样本率和 expected-outcome 质量错误分析。Admission F1 仅作为可选汇总，不取代 precision、retention 和 yield 三项有独立解释的主指标。Knowledge precision 与 unsupported admission rate 互为补数，只选择前者作为主表指标。候选功能准确率、core-function recall 和 dependency accuracy 不作为 RQ1 主指标；它们分别属于候选发现、端到端覆盖或其他模型内容。
 
 RQ1 首先只评估自然探索轨迹。受控挑战集暂不构建；仅在自然负样本不足以解释准入行为时，作为后续独立数据集考虑，且不得与自然样本混合统计。
 

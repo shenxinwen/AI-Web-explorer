@@ -6,7 +6,7 @@
 
 ## 1. 样本标识与完整性
 
-每个样本必须具有：`app`、`run_id`、`attempt_id`、`semantic_location`、`action_id`、`action_label`、执行前冻结的 `expected_outcome`、before screenshot、executor record，以及在执行成功时的 after screenshot。缺少必需运行工件时将 `sample_valid=false` 并填写 `invalid_reason`，不进入主要准确率计算，但计入工件缺失率。若系统生成的 expected outcome 模糊、错误或不可观察，样本仍保留为有效候选，不允许事后修正预期；它不能获得 functional outcome 支持，并应在 `notes` 中说明。
+每个样本必须具有：`app`、`run_id`、`attempt_id`、`semantic_location`、`action_id`、`action_label`、执行前冻结的 `expected_outcome`、before screenshot、实际交互步骤，以及 after screenshot。缺少必需运行工件时将 `sample_valid=false` 并填写 `invalid_reason`，不进入主要准确率计算，但计入工件缺失率。若系统生成的 expected outcome 模糊、错误、过窄或不可观察，样本仍保留为有效候选，不允许事后修正预期，并应在 `notes` 中说明；是否获得 functional outcome 支持仍取决于证据能否证明候选功能的核心语义结果。
 
 ## 2. C1 功能知识标注
 
@@ -21,12 +21,12 @@
 
 ### 2.2 Functional Outcome
 
-- `success`：after screenshot 存在直接、可见且与动作一致的预期功能结果；
-- `failure`：动作没有产生预期功能结果、被拒绝、只完成部分操作，或产生了相反结果。
+- `success`：before/after evidence 直接支持与候选动作一致的核心功能结果；
+- `failure`：证据不能支持核心功能结果、动作被拒绝、只完成部分操作，或产生了相反结果。
 
-页面跳转本身不自动等于 success；只有跳转确实是该功能的预期结果时才算成功。无法形成可靠结果判断时，将样本标为无效，不用 `uncertain` 代替判断。
+页面跳转本身不自动等于 success；只有跳转能够证明该候选功能的核心结果时才算成功。无法形成可靠结果判断时，将样本标为无效，不用 `uncertain` 代替判断。
 
-判断对象是 before/after evidence 是否支持执行前冻结的 `expected_outcome`，而不是页面是否发生任意变化。页面跳转、元素变化或 executor success 只有与该预期结果一致时，才能支持 success。
+判断对象是 before/after evidence 是否支持候选功能的核心语义结果，而不是页面是否发生任意变化。`expected_outcome` 是执行前冻结的验证锚点，用来限制事后解释，但不是必须逐字满足的模板；不影响核心功能成立的过窄展示细节不能单独导致 failure。页面跳转或元素变化只有与所选动作相关且足以证明核心结果时，才能支持 success。
 
 ### 2.3 系统记录字段
 
@@ -37,7 +37,7 @@
 - `predicted_outcome`：系统根据动作前后证据作出的结果判断。
 - `expected_outcome`：系统与候选同时生成并在动作执行前冻结的一句可观察结果描述。
 
-其中 `executor_reported_success` 不等同于人工确认的 `functional_outcome`。核心错误类型是 executor 报告成功，但人工确认预期功能结果失败。
+其中 `executor_reported_success` 不等同于人工确认的 `functional_outcome`。核心错误类型是 executor 报告成功，但人工确认核心功能结果没有证据支持。
 
 ### 2.4 知识准入派生
 
@@ -83,8 +83,8 @@
 ## 4. 标注流程
 
 1. 使用 20 个样本试标，尽量包含成功、失败、无效工件、风险和非风险案例。
-2. AI 使用冻结材料生成第一次标注。
-3. 人工逐项审查全部初标并修订；遇到系统性歧义时优先修改指南，而不是只修改个别标签。
+2. AI 使用冻结的候选、expected outcome、实际交互步骤和 before/after evidence 生成第一次标注；不向 AI 展示 executor-reported success、系统 predicted outcome 或准入结果。
+3. 人工在相同盲化材料上逐项审查全部初标并修订；遇到系统性歧义时优先修改指南，而不是只修改个别标签。
 4. 人工审查后的结果作为 gold label；AI 初标只用于提高效率，不视为第二位人工标注者。
 
 ## 5. 最小输出字段
@@ -100,7 +100,7 @@ risk_evidence_grounding
 notes
 ```
 
-`expected_outcome`、`executor_reported_success`、`evidence_complete`、`predicted_outcome` 和派生准入状态保存在系统结果或分析表中，并展示给标注者，但不作为需要人工填写的标注字段。
+`expected_outcome` 展示给标注者，但不作为需要人工填写的字段。`executor_reported_success`、`predicted_outcome` 和派生准入状态在 C1 gold 完成前隐藏，之后才合并用于比较；`evidence_complete` 由工件检查派生。
 
 对外标注表使用 `S001` 形式的短编号；原始 attempt ID 必须保存在独立映射文件中，以保证可追溯性。
 

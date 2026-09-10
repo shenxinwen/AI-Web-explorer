@@ -35,6 +35,10 @@ def extract_samples(
     evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
     evidence_by_edge = evidence.get("edges", {})
     evidence_by_event = evidence.get("execution_events", {})
+    locations_by_node = {
+        node.get("node_id", ""): node.get("semantic_location_hint", "")
+        for node in graph.get("nodes", [])
+    }
     samples: list[dict[str, Any]] = []
     seen: set[str] = set()
     records = graph.get("execution_events") or graph.get("edges", [])
@@ -59,6 +63,10 @@ def extract_samples(
             "run_id": graph_path.parent.name,
             "edge_id": edge_id,
             "action_id": edge.get("action", {}).get("semantic_id", ""),
+            "semantic_location": (
+                edge.get("semantic_observation", {}).get("source_location")
+                or locations_by_node.get(edge.get("source_node_id", ""), "")
+            ),
             "action_label": edge.get("action", {}).get("action_label") or detail.get("instruction", ""),
             "expected_outcome": edge.get("action", {}).get("expected_outcome", ""),
             "executor_success": edge.get("execution_trace", {}).get("success"),
@@ -112,6 +120,62 @@ def _page(title: str, samples: list[dict[str, Any]], task: str) -> str:
 <h1>{title}</h1><p>样本顺序已固定。标注定义见 paper/experiments/annotation_guide_v1.md。</p>{''.join(cards)}</html>'''
 
 
+def _group_c1_samples(samples: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    groups: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    for sample in samples:
+        key = (
+            sample["site"],
+            sample["run_id"],
+            sample.get("semantic_location", ""),
+            sample["action_id"],
+        )
+        if key not in groups:
+            groups[key] = {
+                "sample_id": sample["sample_id"],
+                "site": sample["site"],
+                "run_id": sample["run_id"],
+                "action_id": sample["action_id"],
+                "action_label": sample["action_label"],
+                "expected_outcome": sample["expected_outcome"],
+                "attempts": [],
+            }
+        groups[key]["attempts"].append(sample)
+    return list(groups.values())
+
+
+def _c1_page(groups: list[dict[str, Any]]) -> str:
+    site_sections = []
+    for site in sorted({group["site"] for group in groups}):
+        cards = []
+        site_groups = [group for group in groups if group["site"] == site]
+        for group in site_groups:
+            attempts = []
+            for index, sample in enumerate(group["attempts"], 1):
+                after = ""
+                if sample.get("after_image"):
+                    after = (
+                        f'<figure><figcaption>动作后</figcaption><img src="'
+                        f'{html.escape(sample["after_image"])}"></figure>'
+                    )
+                attempts.append(
+                    f'<section><h4>Attempt {index}</h4><div class="shots">'
+                    f'<figure><figcaption>动作前</figcaption><img src="'
+                    f'{html.escape(sample["before_image"])}"></figure>{after}</div></section>'
+                )
+            cards.append(
+                f'<article data-sample="{html.escape(group["sample_id"])}">'
+                f'<h3>{html.escape(group["sample_id"])}</h3>'
+                f'<p><b>动作：</b>{html.escape(group["action_label"])}</p>'
+                f'<p><b>执行前预期结果：</b>{html.escape(group["expected_outcome"])}</p>'
+                f'<p class="hint">综合组内全部 attempts 判断，不参考系统预测。</p>'
+                f'{"".join(attempts)}<p>请在对应 CSV 中填写此功能的标签。</p></article>'
+            )
+        site_sections.append(f'<section class="site"><h2>{html.escape(site)}</h2>{"".join(cards)}</section>')
+    return f'''<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>C1 功能证据标注</title>
+<style>body{{font:16px system-ui;margin:2rem;max-width:1400px}}article{{border:1px solid #bbb;padding:1rem;margin:1rem 0}}.shots{{display:flex;gap:1rem;flex-wrap:wrap}}figure{{margin:0;max-width:48%}}img{{max-width:100%;border:1px solid #ddd}}.hint{{color:#8a3b00}}</style>
+<h1>C1 功能证据标注</h1><p>同一功能的重复尝试已合并。标注定义见 paper/experiments/annotation_guide_v1.md。</p>{''.join(site_sections)}</html>'''
+
+
 def build_package(
     runs: list[tuple[str, Path, Path]], destination: Path, limit: int = 20,
     source_root: Path | None = None,
@@ -125,7 +189,10 @@ def build_package(
     public_samples = []
     for index, sample in enumerate(selected, 1):
         short_id = f"S{index:03d}"
-        public = {key: value for key, value in sample.items() if not key.endswith("_source")}
+        public = {
+            key: value for key, value in sample.items()
+            if not key.endswith("_source") and key != "executor_success"
+        }
         public["source_sample_id"] = public["sample_id"]
         public["sample_id"] = short_id
         for phase in ("before", "after"):
@@ -139,11 +206,13 @@ def build_package(
     (destination / "samples.json").write_text(
         json.dumps(public_samples, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+    c1_groups = _group_c1_samples(public_samples)
     for site in sorted({sample["site"] for sample in public_samples}):
         site_samples = [sample for sample in public_samples if sample["site"] == site]
+        site_c1_groups = [group for group in c1_groups if group["site"] == site]
         site_dir = destination / site.replace("-", "_")
         site_dir.mkdir(exist_ok=True)
-        _write_csv(site_dir / "c1_annotations.csv", C1_COLUMNS, site_samples)
+        _write_csv(site_dir / "c1_annotations.csv", C1_COLUMNS, site_c1_groups)
         _write_csv(site_dir / "c3_annotations.csv", C3_COLUMNS, site_samples)
         run_ids = sorted({sample["run_id"] for sample in site_samples})
         metadata = {
@@ -154,7 +223,7 @@ def build_package(
         (site_dir / "metadata.json").write_text(
             json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"
         )
-    (destination / "c1.html").write_text(_page("C1 功能证据标注", public_samples, "c1"), encoding="utf-8")
+    (destination / "c1.html").write_text(_c1_page(c1_groups), encoding="utf-8")
     (destination / "c3.html").write_text(_page("C3 动作风险标注（无结果泄漏）", public_samples, "c3"), encoding="utf-8")
     (destination / "README.md").write_text(
         "# 20 条样本试标包\n\n"

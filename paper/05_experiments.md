@@ -21,6 +21,7 @@
 ## 任务与数据
 
 - 主实验使用已有运行经验的 SauceDemo 与 Practice Shopping，从入口 URL 和干净浏览器会话开始。
+- RQ1 使用两站点正式运行产生的全部自然探索轨迹；旧调试运行和为增加困难样本而构造的数据不混入主统计，也不预设必须达到 200–300 条 attempts。
 - Pilot 为每网站、每条件 1 次、最多 10 个 action attempts；正式实验为每网站、每条件 3 次、每次最多 25 个 attempts。
 - RQ1 以每次运行内去重后的功能知识为统计对象，action attempt 只作为验证证据来源；RQ3 以 action attempt 为单位，RQ2 以独立 run 为单位。
 - AI 生成初始标注，人工逐项审查并修订；正式标注前先用 20 个样本检查字段和规则是否可执行。该流程不等同于双人独立标注。
@@ -44,7 +45,7 @@
 
 ### 功能模型质量
 
-- admitted knowledge precision：准入知识中由人工确认真实存在且 functional outcome 成功的比例；
+- admitted knowledge precision：准入知识中由人工确认真实存在且核心功能结果得到 before/after evidence 支持的比例；
 - supported knowledge retention：人工确认获得支持的候选知识中被当前准入策略保留的比例；
 - admission yield：全部有效候选中被准入的比例；
 - functional outcome verification accuracy 或 macro-F1：系统 outcome judgment 与人工标签的一致性；
@@ -77,7 +78,7 @@ RQ1 中一条功能知识由 `site + semantic_location + canonical_action_id` �
 
 ### 统计规则
 
-正式实验每条件运行 3 次，报告逐网站结果和网站 macro-average；主要比例指标报告 bootstrap 95% confidence interval。当前采用 AI 初标加人工审查，不报告 Cohen's kappa；小样本不强制显著性检验，不得仅报告最优运行。
+正式实验每条件运行 3 次，报告逐网站结果和网站 macro-average；主要比例指标报告 bootstrap 95% confidence interval。当前采用 AI 初标加人工逐项审查，以人工审核后的标签作为 gold；该流程不是双人独立标注，因此不报告 Cohen's kappa。小样本不强制显著性检验，不得仅报告最优运行。
 
 ## 消融与稳健性检查
 
