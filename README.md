@@ -67,3 +67,24 @@ pytest tests/safesym_bridge -q
 ```
 
 Browser integration tests that launch Playwright Chromium may require local process-launch permission.
+
+## Site-scoped adapters
+
+The generic exploration path remains the default. Controlled demo sites may opt
+into narrowly scoped execution support without changing candidate discovery or
+evidence verification. For the RealWorld demo, `--site-adapter realworld`
+supplies unique fictional registration values and adds a short post-action wait
+for its asynchronous navigation. It also marks the visibly authenticated home
+state separately so it is not merged with the anonymous home state. Other sites,
+including SauceDemo, are unchanged unless this flag is explicitly provided.
+
+Frontier replay records every attempt in `replay_attempt_history`, including the
+target node, replay path, failed edge, completed step count, and reason. A
+successful action sequence is accepted only after a fresh observation matches
+stable target-state identity fields.
+
+Replay is part of normal exploration, not a separate experiment. Continue a run
+by pointing `--resume-graph` and `--output` to the same canonical graph while
+keeping its trace and screenshots in the same `run_xx/` directory. These
+artifacts then grow as one exploration run. Replay keeps separate diagnostic
+counters but is not counted as a discovered functional action.

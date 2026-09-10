@@ -95,8 +95,21 @@ class FrontierReplayRunner:
                 )
             completed_steps += 1
 
-        # A fully successful semantic-location action path restores context;
-        # replay does not perform a second observation or semantic validation.
+        validate_target = getattr(
+            self.explorer,
+            "validate_replay_target",
+            None,
+        )
+        if validate_target is not None and not await validate_target(target.node_id):
+            return ReplayResult(
+                False,
+                None,
+                None,
+                "target_state_mismatch",
+                completed_steps,
+            )
+
+        # Restore context only after the observed target identity is confirmed.
         restore_context = getattr(
             self.explorer, "restore_replay_context", None
         )

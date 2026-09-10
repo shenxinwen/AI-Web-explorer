@@ -23,6 +23,7 @@ class FakeBaseBackend:
 
     def __init__(self):
         self.back_calls = 0
+        self.external_settle_calls = []
 
     async def observe_state(self):
         return StateSnapshot(
@@ -41,6 +42,9 @@ class FakeBaseBackend:
     async def go_back(self):
         self.back_calls += 1
         return True
+
+    async def settle_after_external_action(self, milliseconds):
+        self.external_settle_calls.append(milliseconds)
 
 
 class ResetBaseBackend(FakeBaseBackend):
@@ -312,6 +316,84 @@ async def test_stagehand_backend_observe_act_mode_avoids_agent_execute():
         "arguments": [],
         "backendNodeId": 42,
     }
+
+
+@pytest.mark.anyio
+async def test_stagehand_backend_observe_act_appends_explicit_site_input_context():
+    provider = FakeStagehandProvider()
+    backend = StagehandAutomationBackend(
+        base_backend=FakeBaseBackend(),
+        provider=provider,
+        goal="Explore visible functionality.",
+        execution_mode="observe_act",
+        site_input_context=(
+            "For this test site, use username awe_test, email "
+            "awe_test@example.com, and password Test-password-1."
+        ),
+    )
+
+    await backend.execute(
+        BrowserAction(
+            action_kind="business_intent",
+            locator=None,
+            semantic_id="complete_signup_details",
+            description="Fill the visible signup fields.",
+            execution_policy="composite",
+        )
+    )
+
+    assert provider.observed_instructions == [
+        "Fill the visible signup fields.\n\n"
+        "Site-specific test input:\n"
+        "For this test site, use username awe_test, email "
+        "awe_test@example.com, and password Test-password-1."
+    ]
+
+
+@pytest.mark.anyio
+async def test_stagehand_backend_default_observe_act_instruction_is_unchanged():
+    provider = FakeStagehandProvider()
+    backend = StagehandAutomationBackend(
+        base_backend=FakeBaseBackend(),
+        provider=provider,
+        goal="Explore visible functionality.",
+        execution_mode="observe_act",
+    )
+
+    await backend.execute(
+        BrowserAction(
+            action_kind="business_intent",
+            locator=None,
+            semantic_id="complete_login_fields",
+            description="Fill the visible login fields.",
+            execution_policy="composite",
+        )
+    )
+
+    assert provider.observed_instructions == ["Fill the visible login fields."]
+    assert backend.base_backend.external_settle_calls == []
+
+
+@pytest.mark.anyio
+async def test_stagehand_backend_applies_configured_post_action_settle():
+    base = FakeBaseBackend()
+    backend = StagehandAutomationBackend(
+        base_backend=base,
+        provider=FakeStagehandProvider(),
+        goal="Explore visible functionality.",
+        execution_mode="observe_act",
+        post_action_settle_ms=3000,
+    )
+
+    assert await backend.execute(
+        BrowserAction(
+            action_kind="business_intent",
+            locator=None,
+            semantic_id="submit_signup_form",
+            description="Submit the signup form.",
+        )
+    )
+    assert base.external_settle_calls == [3000]
 
 
 @pytest.mark.anyio

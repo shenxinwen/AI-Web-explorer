@@ -53,6 +53,8 @@ class StagehandAutomationBackend:
             "observed_action"
         ),
         action_timeout_seconds: float | None = None,
+        site_input_context: str | None = None,
+        post_action_settle_ms: int | None = None,
     ) -> None:
         if execution_mode not in {"observed_action", "observe_act"}:
             raise ValueError(
@@ -63,6 +65,8 @@ class StagehandAutomationBackend:
         self.goal = goal
         self.execution_mode = execution_mode
         self.action_timeout_seconds = action_timeout_seconds
+        self.site_input_context = site_input_context
+        self.post_action_settle_ms = post_action_settle_ms
         self.app_name = base_backend.app_name
         self.last_execution_error: str | None = None
         self.last_execution_metadata: dict[str, Any] = {}
@@ -193,6 +197,13 @@ class StagehandAutomationBackend:
         step_metadata: dict[str, Any],
         execution_policy: str = "single_instance",
     ) -> bool:
+        if self.site_input_context:
+            instruction = "\n\n".join(
+                [
+                    instruction,
+                    f"Site-specific test input:\n{self.site_input_context}",
+                ]
+            )
         if (
             self.execution_mode != "observe_act"
             and self._exploration_context_prompt
@@ -329,6 +340,10 @@ class StagehandAutomationBackend:
         )
         self.last_execution_metadata["execution_policy"] = execution_policy
         self.last_execution_metadata.update(step_metadata)
+        if result.success and self.post_action_settle_ms is not None:
+            settle = getattr(self.base_backend, "settle_after_external_action", None)
+            if settle is not None:
+                await settle(self.post_action_settle_ms)
         self.last_execution_error = None if result.success else result.message
         return result.success
 

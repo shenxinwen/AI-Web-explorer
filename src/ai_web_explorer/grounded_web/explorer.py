@@ -1097,6 +1097,32 @@ class WebKobeExplorer:
         self._set_current_node(node_id)
         self._replay_handoff_pending = True
 
+    async def validate_replay_target(self, node_id: str) -> bool:
+        """Check stable observed identity fields without mutating the graph."""
+
+        try:
+            target = self.manager.node_for_id(node_id)
+        except KeyError:
+            return False
+        observed = await self.adapter.observe_state()
+        expected = target.last_state_snapshot
+        identity_keys = (
+            key
+            for key in ("site_auth_state", "url_path", "surface")
+            if key in expected and key in observed.signature
+        )
+        compared = False
+        for key in identity_keys:
+            compared = True
+            if observed.signature.get(key) != expected.get(key):
+                return False
+        if compared:
+            return True
+        return observed.page_id in {
+            target.page_frame.page_id,
+            target.page_frame.page_type,
+        }
+
     def _unique_location_for_url_pattern(self, url_pattern: str) -> str | None:
         locations: set[str] = set()
         for node in self.manager.to_graph().nodes:

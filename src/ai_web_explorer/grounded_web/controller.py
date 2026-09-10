@@ -259,6 +259,12 @@ class WebKobeExplorationController:
             ),
             "last_replay_reason": None,
         }
+        replay_attempt_history = list(
+            (graph.meta if graph is not None else {}).get(
+                "replay_attempt_history",
+                [],
+            )
+        )
         replay_enabled = (
             self.frontier_replay_runner is not None and self.start_url is not None
         )
@@ -305,6 +311,9 @@ class WebKobeExplorationController:
             if not replay_enabled:
                 return target_graph
             target_graph.meta.update(replay_metrics)
+            target_graph.meta["replay_attempt_history"] = list(
+                replay_attempt_history
+            )
             target_graph.meta["blocked_replay_node_ids"] = sorted(
                 blocked_replay_node_ids
             )
@@ -335,6 +344,9 @@ class WebKobeExplorationController:
                 persisted_blocked = graph.meta.get("blocked_replay_node_ids", [])
                 if isinstance(persisted_blocked, list):
                     blocked_replay_node_ids.update(str(item) for item in persisted_blocked)
+                persisted_history = graph.meta.get("replay_attempt_history", [])
+                if isinstance(persisted_history, list) and not replay_attempt_history:
+                    replay_attempt_history.extend(persisted_history)
                 persisted_replay_count = graph.meta.get("replay_attempt_count")
                 if persisted_replay_count is not None:
                     replay_metrics["replay_attempt_count"] = max(
@@ -390,6 +402,17 @@ class WebKobeExplorationController:
                 replay_result = await self.frontier_replay_runner.replay(
                     frontier,
                     start_url=self.start_url,
+                )
+                replay_attempt_history.append(
+                    {
+                        "attempt": int(replay_metrics["replay_attempt_count"]),
+                        "target_node_id": frontier.node_id,
+                        "path_edge_ids": [step.edge_id for step in frontier.path],
+                        "success": bool(replay_result.success),
+                        "reason": replay_result.reason,
+                        "failed_edge_id": replay_result.failed_edge_id,
+                        "completed_steps": int(replay_result.completed_steps),
+                    }
                 )
                 replay_metrics["last_replay_reason"] = replay_result.reason
                 if not replay_result.success:

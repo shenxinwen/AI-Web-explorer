@@ -655,7 +655,7 @@ async def test_frontier_replay_does_not_require_intermediate_raw_nodes_to_match(
 
 
 @pytest.mark.anyio
-async def test_frontier_replay_accepts_successful_actions_without_checkpoint_validation():
+async def test_frontier_replay_rejects_wrong_observed_target_state():
     adapter = _ReplayAdapter(
         [
             StateSnapshot(
@@ -683,9 +683,9 @@ async def test_frontier_replay_accepts_successful_actions_without_checkpoint_val
         start_url="https://fixture.test/shop",
     )
 
-    assert result.success is True
-    assert result.reached_node_id == "target"
-    assert result.reason == "replay_succeeded"
+    assert result.success is False
+    assert result.reached_node_id is None
+    assert result.reason == "target_state_mismatch"
 
 
 @pytest.mark.anyio

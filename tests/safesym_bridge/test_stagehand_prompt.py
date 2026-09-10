@@ -1,5 +1,6 @@
 from ai_web_explorer.grounded_web.stagehand_prompt import (
     build_generic_stagehand_exploration_goal,
+    build_site_input_context,
 )
 
 
@@ -21,3 +22,15 @@ def test_generic_stagehand_goal_can_enable_controlled_completion_boundary():
 
     assert "final confirmation is allowed" in goal
     assert "fictional values" in goal
+
+
+def test_realworld_site_input_context_uses_valid_isolated_registration_values():
+    context = build_site_input_context("realworld", run_token="abc123")
+
+    assert "awe_abc123" in context
+    assert "awe_abc123@example.com" in context
+    assert "Test-password-1" in context
+
+
+def test_default_site_input_context_does_not_affect_other_sites():
+    assert build_site_input_context(None, run_token="ignored") is None

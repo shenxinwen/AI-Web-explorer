@@ -44,12 +44,14 @@ class WebKobePlaywrightAdapter:
         state_observer: StateObserver | None = None,
         action_provider: ActionProvider | None = None,
         screenshot_dir: str | Path | None = None,
+        site_adapter: str | None = None,
     ):
         self.page = page
         self.app_name = app_name
         self.page_id = page_id
         self.state_observer = state_observer
         self.action_provider = action_provider
+        self.site_adapter = site_adapter
         self.screenshot_dir = (
             Path(screenshot_dir) if screenshot_dir is not None else None
         )
@@ -80,6 +82,13 @@ class WebKobePlaywrightAdapter:
         signature = state_signature_from_facts(facts)
         self.last_structure_observation = structure
         self.last_state_facts = facts
+
+        if self.site_adapter == "realworld":
+            editor_visible = await self.page.locator('a[href="/editor"]').count()
+            settings_visible = await self.page.locator('a[href="/settings"]').count()
+            if editor_visible or settings_visible:
+                signature = dict(signature)
+                signature["site_auth_state"] = "authenticated"
 
         return StateSnapshot(
             page_id=page_id,
@@ -126,6 +135,9 @@ class WebKobePlaywrightAdapter:
         except Exception:
             self.last_execution_error = "page_settle_timeout"
         await self.page.wait_for_timeout(100)
+
+    async def settle_after_external_action(self, milliseconds: int) -> None:
+        await self.page.wait_for_timeout(milliseconds)
 
     async def execute(self, action: BrowserAction) -> bool:
         self.last_execution_error = None
@@ -187,7 +199,8 @@ class WebKobePlaywrightAdapter:
     async def reset_to(self, url: str) -> bool:
         self.last_execution_error = None
         try:
-            await self.page.goto(url, wait_until="domcontentloaded", timeout=5000)
+            timeout = 15000 if self.site_adapter == "realworld" else 5000
+            await self.page.goto(url, wait_until="domcontentloaded", timeout=timeout)
             await self.page.wait_for_timeout(100)
             return True
         except Exception as exc:

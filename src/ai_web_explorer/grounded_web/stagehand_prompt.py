@@ -14,6 +14,23 @@ GENERIC_EXPLORATION_ACTION_POLICY = (
 )
 
 
+def build_site_input_context(
+    site_adapter: str | None,
+    *,
+    run_token: str,
+) -> str | None:
+    if site_adapter is None:
+        return None
+    if site_adapter != "realworld":
+        raise ValueError(f"Unsupported site adapter: {site_adapter}")
+    username = f"awe_{run_token}"
+    return (
+        "When filling the RealWorld registration form, use the fictional "
+        f"username {username}, email {username}@example.com, and password "
+        "Test-password-1. Use these exact values instead of placeholder-like text."
+    )
+
+
 def build_generic_stagehand_exploration_goal(
     *,
     site_purpose: str | None = None,
@@ -38,4 +55,8 @@ def build_generic_stagehand_exploration_goal(
     return "\n\n".join(sections)
 
 
-__all__ = ["GENERIC_EXPLORATION_ACTION_POLICY", "build_generic_stagehand_exploration_goal"]
+__all__ = [
+    "GENERIC_EXPLORATION_ACTION_POLICY",
+    "build_generic_stagehand_exploration_goal",
+    "build_site_input_context",
+]

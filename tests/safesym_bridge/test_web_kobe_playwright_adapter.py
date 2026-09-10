@@ -143,6 +143,22 @@ class ResetPage(FakePage):
             raise self.goto_error
 
 
+class RealWorldPage(FakePage):
+    def __init__(self, visible_hrefs):
+        super().__init__()
+        self.url = "https://demo.realworld.show/"
+        self.visible_hrefs = set(visible_hrefs)
+
+    async def title(self):
+        return "Conduit"
+
+    def locator(self, selector):
+        if selector.startswith('a[href="'):
+            href = selector.removeprefix('a[href="').removesuffix('"]')
+            return FakeTextLocator("", count_value=int(href in self.visible_hrefs))
+        return super().locator(selector)
+
+
 @pytest.mark.anyio
 async def test_observe_state_reads_title_url_and_cart_count():
     adapter = WebKobePlaywrightAdapter(
@@ -161,6 +177,31 @@ async def test_observe_state_reads_title_url_and_cart_count():
         "cart_count": 1,
         "cart_count_visible": True,
     }
+
+
+@pytest.mark.anyio
+async def test_realworld_adapter_adds_authenticated_state_identity():
+    adapter = WebKobePlaywrightAdapter(
+        RealWorldPage({"/editor", "/settings"}),
+        app_name="realworld",
+        site_adapter="realworld",
+    )
+
+    snapshot = await adapter.observe_state()
+
+    assert snapshot.signature["site_auth_state"] == "authenticated"
+
+
+@pytest.mark.anyio
+async def test_default_adapter_does_not_add_realworld_state_identity():
+    adapter = WebKobePlaywrightAdapter(
+        RealWorldPage({"/editor", "/settings"}),
+        app_name="realworld",
+    )
+
+    snapshot = await adapter.observe_state()
+
+    assert "site_auth_state" not in snapshot.signature
 
 
 @pytest.mark.anyio
@@ -338,6 +379,21 @@ async def test_reset_to_navigates_to_entry_and_settles():
     ]
     assert page.waits == [100]
     assert adapter.last_execution_error is None
+
+
+@pytest.mark.anyio
+async def test_realworld_reset_allows_slow_entry_navigation():
+    page = ResetPage()
+    adapter = WebKobePlaywrightAdapter(
+        page,
+        app_name="realworld",
+        site_adapter="realworld",
+    )
+
+    assert await adapter.reset_to("https://demo.realworld.show/") is True
+    assert page.goto_calls == [
+        ("https://demo.realworld.show/", "domcontentloaded", 15000)
+    ]
 
 
 @pytest.mark.anyio

@@ -194,6 +194,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     stagehand_explore_parser.add_argument("--site-purpose", default=None)
     stagehand_explore_parser.add_argument(
+        "--site-adapter",
+        choices=["realworld"],
+        default=None,
+        help="Optional site-scoped test-input adapter.",
+    )
+    stagehand_explore_parser.add_argument(
         "--business-profile",
         choices=["none", "ecommerce_checkout"],
         default=None,
@@ -362,6 +368,7 @@ def main(argv: list[str] | None = None) -> int:
                 "embedding_model": args.embedding_model,
                 "embedding_dimension": args.embedding_dimension,
                 "site_purpose": args.site_purpose,
+                "site_adapter": args.site_adapter,
                 "business_profile": args.business_profile,
                 "use_openai_visual_delta": args.openai_visual_delta,
                 "visual_delta_model": args.visual_delta_model,

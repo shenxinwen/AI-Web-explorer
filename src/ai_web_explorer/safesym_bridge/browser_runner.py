@@ -59,6 +59,7 @@ from ai_web_explorer.grounded_web.stagehand_backend import (
 )
 from ai_web_explorer.grounded_web.stagehand_prompt import (
     build_generic_stagehand_exploration_goal,
+    build_site_input_context,
 )
 from ai_web_explorer.grounded_web.exploration_semantics import (
     validate_final_order_authorization,
@@ -354,6 +355,7 @@ async def run_stagehand_exploration(
     embedding_model: str | None = None,
     embedding_dimension: int | None = None,
     site_purpose: str | None = None,
+    site_adapter: str | None = None,
     business_profile: str | BusinessFlowProfile | None = None,
     stagehand_execution_mode: str = "observed_action",
     max_candidates: int = 5,
@@ -430,6 +432,10 @@ async def run_stagehand_exploration(
         site_purpose=site_purpose,
         allow_final_order=final_order_allowed,
     )
+    site_input_context = build_site_input_context(
+        site_adapter,
+        run_token=str(time.time_ns())[-8:],
+    )
     resolved_business_profile = _resolve_business_profile(business_profile)
     if resume_policy is not None and resume_graph is None:
         raise ValueError("resume_policy_requires_resume_graph")
@@ -474,17 +480,21 @@ async def run_stagehand_exploration(
                     page=page,
                     local_cdp_url=local_cdp_url,
                 )
-            base_adapter = WebKobePlaywrightAdapter(
-                page,
-                app_name=app_name,
-                screenshot_dir=screenshot_dir,
-            )
+            base_adapter_kwargs = {
+                "app_name": app_name,
+                "screenshot_dir": screenshot_dir,
+            }
+            if site_adapter is not None:
+                base_adapter_kwargs["site_adapter"] = site_adapter
+            base_adapter = WebKobePlaywrightAdapter(page, **base_adapter_kwargs)
             adapter = StagehandAutomationBackend(
                 base_backend=base_adapter,
                 provider=resolved_provider,
                 goal=stagehand_goal,
                 execution_mode=stagehand_execution_mode,
                 action_timeout_seconds=stagehand_action_timeout_seconds,
+                site_input_context=site_input_context,
+                post_action_settle_ms=3000 if site_adapter == "realworld" else None,
             )
             explorer = WebKobeExplorer(
                 adapter=adapter,

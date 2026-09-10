@@ -326,6 +326,7 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
         embedding_model=None,
         embedding_dimension=None,
         site_purpose=None,
+        site_adapter=None,
         business_profile=None,
         use_openai_visual_delta=False,
         visual_delta_model=None,
@@ -355,6 +356,7 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
                 embedding_model,
                 embedding_dimension,
                 site_purpose,
+                site_adapter,
                 business_profile,
                 use_openai_visual_delta,
                 visual_delta_model,
@@ -435,6 +437,7 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
             "text-embedding-test",
             512,
             "demo store",
+            None,
             "ecommerce_checkout",
             True,
             "gpt-4o",
@@ -500,6 +503,33 @@ def test_main_stagehand_explore_passes_viewport_dimensions(monkeypatch, tmp_path
     )
     assert captured["viewport_width"] == 1920
     assert captured["viewport_height"] == 1080
+
+
+def test_main_stagehand_explore_wires_realworld_site_adapter(monkeypatch, tmp_path):
+    captured = {}
+
+    async def fake_run(output_path, **kwargs):
+        captured.update(kwargs)
+        output_path.write_text("{}", encoding="utf-8")
+        return output_path
+
+    monkeypatch.setattr(cli, "run_stagehand_exploration", fake_run, raising=False)
+
+    assert (
+        main(
+            [
+                "web-kobe-stagehand-explore",
+                "--url",
+                "https://demo.realworld.show/",
+                "--output",
+                str(tmp_path / "graph.json"),
+                "--site-adapter",
+                "realworld",
+            ]
+        )
+        == 0
+    )
+    assert captured["site_adapter"] == "realworld"
 
 
 def test_main_web_kobe_stagehand_explore_accepts_frontier_replay(monkeypatch, tmp_path):
