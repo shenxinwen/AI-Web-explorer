@@ -23,7 +23,7 @@ class OpenAIVisualDeltaProvider:
     client: Any
     model: str = DEFAULT_OPENAI_VISUAL_DELTA_MODEL
     temperature: float = 0
-    max_tokens: int = 700
+    max_tokens: int = 1400
 
     def __call__(
         self,

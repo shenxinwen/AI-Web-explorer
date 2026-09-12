@@ -64,6 +64,7 @@ def test_openai_visual_delta_provider_sends_prompt_and_two_images(tmp_path):
     assert '"candidate_added_facts":["cart_has_items"]' in raw
     call = client.chat.completions.calls[0]
     assert call["model"] == "gpt-vision-test"
+    assert call["max_tokens"] == 1400
     assert call["response_format"] == {"type": "json_object"}
     content = call["messages"][1]["content"]
     assert content[0] == {"type": "text", "text": "compare screenshots"}
