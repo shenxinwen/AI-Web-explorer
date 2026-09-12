@@ -904,6 +904,7 @@ def _normalized_affordance(
         confidence=affordance.confidence,
         supporting_facts=_normalized_ids(affordance.supporting_facts),
         expected_outcome=affordance.expected_outcome,
+        execution_instance=affordance.execution_instance,
     )
 
 
@@ -919,6 +920,7 @@ def _affordance_from_dict(data: dict[str, Any]) -> BusinessAffordance:
             confidence=data.get("confidence"),
             supporting_facts=list(data.get("supporting_facts") or []),
             expected_outcome=data.get("expected_outcome"),
+            execution_instance=data.get("execution_instance"),
         ),
         normalize_semantic_id(data.get("action_name", data.get("action_id", ""))),
     )

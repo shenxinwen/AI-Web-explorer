@@ -80,6 +80,7 @@ class BrowserAction:
     supporting_facts: list[str] = field(default_factory=list)
     execution_policy: str = "single_instance"
     expected_outcome: str | None = None
+    execution_instance: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         data = {
@@ -100,6 +101,8 @@ class BrowserAction:
         }
         if self.expected_outcome is not None:
             data["expected_outcome"] = self.expected_outcome
+        if self.execution_instance is not None:
+            data["execution_instance"] = self.execution_instance
         return data
 
 
@@ -130,6 +133,7 @@ class BusinessAffordance:
     confidence: float | None = None
     supporting_facts: list[str] = field(default_factory=list)
     expected_outcome: str | None = None
+    execution_instance: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         data = {
@@ -144,6 +148,8 @@ class BusinessAffordance:
         }
         if self.expected_outcome is not None:
             data["expected_outcome"] = self.expected_outcome
+        if self.execution_instance is not None:
+            data["execution_instance"] = self.execution_instance
         return data
 
 

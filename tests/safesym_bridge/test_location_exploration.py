@@ -89,6 +89,30 @@ def test_dependency_records_round_trip_and_schedule_requirements_first():
     assert restored.next_candidate("checkout").action_name == "place_order"
 
 
+def test_execution_instance_round_trips_through_location_memory():
+    memory = LocationExplorationMemory()
+    memory.merge_scan(
+        "shopping",
+        [
+            BusinessAffordance(
+                action_name="filter_by_availability",
+                target_hint="In Stock Only checkbox",
+                execution_instance="Select In Stock Only",
+                expected_outcome="The checkbox is selected and results change.",
+            )
+        ],
+        kind="initial",
+    )
+
+    restored = LocationExplorationMemory.from_dict(memory.to_dict())
+
+    affordance = restored.next_candidate("shopping")
+    assert affordance.execution_instance == "Select In Stock Only"
+    assert affordance.expected_outcome == (
+        "The checkbox is selected and results change."
+    )
+
+
 def test_failed_requirement_blocks_target_but_leaves_independent_action_eligible():
     memory = LocationExplorationMemory(
         limits=ExplorationLimits(max_action_attempts_per_candidate=1)

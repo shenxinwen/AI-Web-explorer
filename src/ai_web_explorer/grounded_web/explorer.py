@@ -166,6 +166,8 @@ def _business_action_from_affordance(affordance: BusinessAffordance) -> BrowserA
     if affordance.target_hint:
         target = affordance.target_hint.strip().rstrip(".")
         details.append(f"Target: {target}.")
+    if affordance.execution_instance:
+        details.append(f"Execute this specific instance: {affordance.execution_instance}.")
     return BrowserAction(
         action_kind="business_intent",
         locator=None,
@@ -183,6 +185,7 @@ def _business_action_from_affordance(affordance: BusinessAffordance) -> BrowserA
         expected_outcome=affordance.expected_outcome,
         supporting_facts=list(affordance.supporting_facts),
         execution_policy=affordance.execution_policy,
+        execution_instance=affordance.execution_instance,
     )
 
 

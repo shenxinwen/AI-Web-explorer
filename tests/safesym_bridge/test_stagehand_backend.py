@@ -494,6 +494,28 @@ async def test_stagehand_backend_observe_act_executes_only_first_single_instance
 
 
 @pytest.mark.anyio
+async def test_business_action_instruction_uses_frozen_execution_instance():
+    provider = FakeStagehandProvider()
+    backend = StagehandAutomationBackend(
+        base_backend=FakeBaseBackend(), provider=provider,
+        goal="Explore visible functionality.", execution_mode="observe_act",
+    )
+
+    success = await backend.execute(BrowserAction(
+        action_kind="business_intent", locator=None, semantic_id="filter_by_availability",
+        canonical_action_name="filter_by_availability",
+        description="Filter products by availability.",
+        execution_instance="Select the In Stock Only checkbox",
+    ))
+
+    assert success is True
+    assert provider.observed_instructions == [
+        "Filter products by availability. "
+        "Execute this specific instance: Select the In Stock Only checkbox."
+    ]
+
+
+@pytest.mark.anyio
 async def test_stagehand_backend_observe_act_does_not_append_exploration_memory():
     provider = FakeStagehandProvider()
     backend = StagehandAutomationBackend(

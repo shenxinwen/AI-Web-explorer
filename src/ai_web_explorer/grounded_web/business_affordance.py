@@ -94,11 +94,13 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
             "a separate semantic action. The action must execute on exactly one "
             "instance. Use a singular target for that instance and do not enumerate "
             "similar instances with targets such as each, all, or every. When one "
-            "function offers several "
-            "dimensions, modes, options, or selectable values, return one action "
-            "for that function, not one action per value. Different filter "
-            "conditions or the result subset they produce are parameters of one "
-            "filtering action. A different sort field or direction is a parameter "
+            "function offers several selectable values within the same business "
+            "dimension, return one action for that dimension, not one action per "
+            "value. Keep distinct filter dimensions as distinct actions when they "
+            "operate on different business attributes or parameter types, such as "
+            "category, price, rating, or availability. A category value is an "
+            "execution parameter of filter_by_category; it is not a new action. "
+            "A different sort field or direction is likewise an execution parameter "
             "of one sorting action. Keep actions separate only when they have "
             "meaningfully different effects or serve different workflow roles. Do "
             "not use a vague umbrella action to merge different effects.\n\n"
@@ -110,6 +112,14 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
             "required fields. Do not use composite merely because multiple similar "
             "controls are visible. The execution_policy describes how the caller "
             "should execute the observed Stagehand actions.\n\n"
+            "EXECUTION INSTANCE\nFor every action, freeze one concrete executable "
+            "instance that is visible now. execution_instance must name the exact "
+            "object, option, or value to use for this attempt, such as Select In "
+            "Stock Only, Select Electronics, or Click Login button. It must be "
+            "specific enough for an executor to act without choosing among controls. "
+            "Choose an instance expected to cause an observable state change. "
+            "Opening a menu, scrolling to a control, or focusing an input is not a "
+            "completed business action.\n\n"
             "VISIBLE AND BLOCKED ACTIONS\nReturn an action when its target is clearly "
             "visible and usable, or clearly visible but blocked by another semantic "
             "action visible on the same surface. Do not return hidden or speculative "
@@ -154,6 +164,7 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
                     "action_id": "stable_snake_case_action",
                     "description": "one precise visible semantic operation",
                     "target": "visible target",
+                    "execution_instance": "one concrete executable instance",
                     "expected_outcome": "one concise observable post-action result",
                     "execution_policy": "single_instance | composite",
                     "requires": ["other_action_id"],
@@ -168,6 +179,7 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
                         "action_id": "complete_project_details",
                         "description": "Fill the related required project fields.",
                         "target": "Create Project dialog fields",
+                        "execution_instance": "Fill the visible required project fields",
                         "expected_outcome": "The required project fields contain entered values.",
                         "execution_policy": "composite",
                         "requires": [],
@@ -176,6 +188,7 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
                         "action_id": "create_project",
                         "description": "Submit the completed project form.",
                         "target": "Create button",
+                        "execution_instance": "Click the Create button",
                         "expected_outcome": "A created-project confirmation or project surface becomes visible.",
                         "execution_policy": "single_instance",
                         "requires": ["complete_project_details"],
@@ -189,6 +202,7 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
                         "action_id": "sort_table",
                         "description": "Sort the visible table.",
                         "target": "sort control",
+                        "execution_instance": "Select one visible non-default sort order",
                         "expected_outcome": "The visible table rows appear in a different order.",
                         "execution_policy": "single_instance",
                         "requires": [],
@@ -197,6 +211,7 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
                         "action_id": "configure_columns",
                         "description": "Choose visible table columns.",
                         "target": "column control",
+                        "execution_instance": "Select one currently hidden table column",
                         "expected_outcome": "The selected table columns become visible.",
                         "execution_policy": "single_instance",
                         "requires": [],
@@ -210,6 +225,7 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
                         "action_id": "download_report",
                         "description": "Download the completed report.",
                         "target": "Download control in the modal",
+                        "execution_instance": "Click the Download control",
                         "expected_outcome": "The interface shows that the report download was initiated.",
                         "execution_policy": "single_instance",
                         "requires": [],
@@ -223,6 +239,7 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
                         "action_id": "open_record",
                         "description": "Open one visible record.",
                         "target": "One record's Open button",
+                        "execution_instance": "Click the Open button for one visible record",
                         "expected_outcome": "A stable record detail surface becomes visible.",
                         "execution_policy": "single_instance",
                         "requires": [],
@@ -240,15 +257,35 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
             },
             {
                 "screen": (
-                    "A results page has filters for type, status, owner, and date, "
+                    "A shopping results page has filters for category, price, rating, "
+                    "and availability, "
                     "plus several sort orders."
                 ),
                 "correct_actions": [
                     {
-                        "action_id": "filter_results",
-                        "description": "Filter the visible results.",
-                        "target": "Filter controls",
-                        "expected_outcome": "The visible result set reflects the selected filter.",
+                        "action_id": "filter_by_category",
+                        "description": "Filter products by category.",
+                        "target": "Electronics category option",
+                        "execution_instance": "Select the Electronics category",
+                        "expected_outcome": "The selected category is shown and the visible products reflect it.",
+                        "execution_policy": "single_instance",
+                        "requires": [],
+                    },
+                    {
+                        "action_id": "filter_by_price",
+                        "description": "Filter products by price.",
+                        "target": "Maximum price control",
+                        "execution_instance": "Set the maximum price to a visible non-default value",
+                        "expected_outcome": "The selected price limit is shown and the visible products reflect it.",
+                        "execution_policy": "single_instance",
+                        "requires": [],
+                    },
+                    {
+                        "action_id": "filter_by_rating",
+                        "description": "Filter products by rating.",
+                        "target": "4 stars and above option",
+                        "execution_instance": "Select 4 stars and above",
+                        "expected_outcome": "The selected rating threshold is shown and the visible products reflect it.",
                         "execution_policy": "single_instance",
                         "requires": [],
                     },
@@ -256,21 +293,22 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
                         "action_id": "sort_results",
                         "description": "Sort the visible results.",
                         "target": "Sort controls",
+                        "execution_instance": "Select one visible non-default sort order",
                         "expected_outcome": "The visible results appear in the selected order.",
                         "execution_policy": "single_instance",
                         "requires": [],
                     },
                 ],
                 "incorrect_actions": [
-                    "filter_by_type",
-                    "filter_by_status",
+                    "filter_category_electronics",
+                    "filter_category_books",
                     "sort_newest",
                     "sort_oldest",
                 ],
                 "reason": (
-                    "Filter dimensions are values of one filtering function; sort "
-                    "orders are values of one sorting function. Filtering and "
-                    "sorting remain separate because their effects differ."
+                    "Different business attributes are separate filter dimensions, "
+                    "while values within one dimension are execution parameters. "
+                    "Sort orders remain values of one sorting function."
                 ),
             },
         ]
@@ -288,6 +326,7 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
                     "intent": "snake_case canonical business action",
                     "label": "visible action label or description",
                     "target": "visible action target",
+                    "execution_instance": "one concrete executable instance",
                     "expected_outcome": "concise observable post-action result",
                     "relevance_hint": "core | supporting | low_value",
                     "confidence": "number from 0.0 to 1.0",
@@ -346,6 +385,7 @@ def _prompt_for_request(request: VisualAffordanceRequest) -> str:
                             "intent": "snake_case business action name",
                             "label": "visible action label or description",
                             "target": "visible action target",
+                            "execution_instance": "one concrete executable instance",
                             "expected_outcome": "concise observable post-action result",
                             "relevance_hint": "core | supporting | low_value",
                             "confidence": "number from 0.0 to 1.0",
@@ -483,6 +523,7 @@ def _affordances_from_response(
                 label=_clean_text(item.get("label")),
                 relevance_hint=_relevance(item.get("relevance_hint")),
                 target_hint=_clean_text(item.get("target") or item.get("target_hint")),
+                execution_instance=_clean_text(item.get("execution_instance")),
                 expected_outcome=_clean_text(item.get("expected_outcome")),
                 execution_policy=_execution_policy(item.get("execution_policy")),
                 source="vlm",
@@ -529,12 +570,14 @@ def _initial_actions_from_response(
     if len(raw_items) > max_actions:
         return [], {}, "initial response exceeds the action limit"
 
-    records: dict[str, tuple[str, str, str, str, list[str]]] = {}
+    records: dict[str, tuple[str, str, str, str, str, list[str]]] = {}
     ordered_ids: list[str] = []
     for item in raw_items:
         if not isinstance(item, dict):
             return [], {}, "initial response action must be an object"
-        base_keys = {"action_id", "description", "target", "requires"}
+        base_keys = {
+            "action_id", "description", "target", "execution_instance", "requires"
+        }
         allowed_keys = base_keys | {"expected_outcome"}
         if set(item) not in (
             base_keys,
@@ -546,17 +589,20 @@ def _initial_actions_from_response(
         raw_action_id = item["action_id"]
         raw_description = item["description"]
         raw_target = item["target"]
+        raw_execution_instance = item["execution_instance"]
         raw_expected_outcome = item.get("expected_outcome", raw_description)
         if not all(
             isinstance(value, str) and value.strip()
             for value in (
-                raw_action_id, raw_description, raw_target, raw_expected_outcome
+                raw_action_id, raw_description, raw_target, raw_execution_instance,
+                raw_expected_outcome
             )
         ):
             return [], {}, "initial action text fields must be non-empty strings"
         action_id = normalize_semantic_id(raw_action_id)
         description = raw_description.strip()
         target = raw_target.strip()
+        execution_instance = raw_execution_instance.strip()
         expected_outcome = raw_expected_outcome.strip()
         if not action_id or not description or not target:
             return [], {}, "initial action requires action_id, description, and target"
@@ -578,12 +624,13 @@ def _initial_actions_from_response(
             if requirement not in requires:
                 requires.append(requirement)
         records[action_id] = (
-            description, target, expected_outcome, execution_policy, requires
+            description, target, execution_instance, expected_outcome,
+            execution_policy, requires
         )
         ordered_ids.append(action_id)
 
     requires_by_action_id = {
-        action_id: list(records[action_id][4]) for action_id in ordered_ids
+        action_id: list(records[action_id][5]) for action_id in ordered_ids
     }
     known_ids = set(records)
     for action_id, requires in requires_by_action_id.items():
@@ -617,8 +664,9 @@ def _initial_actions_from_response(
             action_name=action_id,
             label=records[action_id][0],
             target_hint=records[action_id][1],
-            expected_outcome=records[action_id][2],
-            execution_policy=records[action_id][3],
+            execution_instance=records[action_id][2],
+            expected_outcome=records[action_id][3],
+            execution_policy=records[action_id][4],
             source="vlm",
         )
         for action_id in ordered_ids

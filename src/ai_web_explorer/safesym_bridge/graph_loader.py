@@ -91,6 +91,8 @@ def _business_affordance_from_dict(data: dict[str, Any]) -> BusinessAffordance:
             for fact in supporting_facts
             if str(fact).strip()
         ],
+        expected_outcome=data.get("expected_outcome"),
+        execution_instance=data.get("execution_instance"),
     )
 
 
@@ -144,6 +146,7 @@ def _action_from_dict(data: dict[str, Any]) -> BrowserAction:
         ],
         execution_policy=str(data.get("execution_policy") or "single_instance"),
         expected_outcome=data.get("expected_outcome"),
+        execution_instance=data.get("execution_instance"),
     )
 
 

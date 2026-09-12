@@ -411,11 +411,24 @@ def test_compact_artifact_preserves_frozen_expected_outcome():
     graph = _verbose_graph_fixture()
     graph = replace(
         graph,
+        nodes=[
+            replace(
+                graph.nodes[0],
+                business_affordances=[
+                    replace(
+                        graph.nodes[0].business_affordances[0],
+                        execution_instance="Enter mouse and submit the search",
+                    )
+                ],
+            ),
+            *graph.nodes[1:],
+        ],
         edges=[
             replace(
                 graph.edges[0],
                 action=replace(
                     graph.edges[0].action,
+                    execution_instance="Enter mouse and submit the search",
                     expected_outcome="The signed-in home surface becomes visible.",
                 ),
             )
@@ -427,6 +440,12 @@ def test_compact_artifact_preserves_frozen_expected_outcome():
     assert payload["edges"][0]["action"]["expected_outcome"] == (
         "The signed-in home surface becomes visible."
     )
+    assert payload["edges"][0]["action"]["execution_instance"] == (
+        "Enter mouse and submit the search"
+    )
+    assert payload["nodes"][0]["business_affordances"][0][
+        "execution_instance"
+    ] == "Enter mouse and submit the search"
 
 
 def test_compact_payload_preserves_semantic_location_hint():

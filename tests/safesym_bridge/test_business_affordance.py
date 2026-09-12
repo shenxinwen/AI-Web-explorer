@@ -41,10 +41,12 @@ def test_summarize_visual_affordances_maps_provider_json():
             '{"action_id":"add_item_to_cart",'
             '"description":"Add a visible item to the cart",'
             '"target":"button labeled Add to cart on a visible item",'
+            '"execution_instance":"Click one visible Add to cart button",'
             '"requires":[]},'
             '{"action_id":"open_cart",'
             '"description":"Open the cart",'
-            '"target":"cart link", "requires":[]}'
+            '"target":"cart link",'
+            '"execution_instance":"Click the cart link", "requires":[]}'
             ']}'
         )
 
@@ -84,6 +86,7 @@ def test_initial_scan_parses_minimal_action_dependencies_without_planning_inputs
                     "action_id": "stable_snake_case_action",
                     "description": "one precise visible semantic operation",
                     "target": "visible target",
+                    "execution_instance": "one concrete executable instance",
                     "expected_outcome": "one concise observable post-action result",
                     "execution_policy": "single_instance | composite",
                     "requires": ["other_action_id"],
@@ -113,6 +116,7 @@ def test_initial_scan_parses_minimal_action_dependencies_without_planning_inputs
                         "action_id": "fill_identity",
                         "description": "Fill the visible identity form",
                         "target": "identity form",
+                        "execution_instance": "Fill the visible identity form fields",
                         "expected_outcome": "The visible identity fields contain entered values.",
                         "requires": [],
                     },
@@ -120,6 +124,7 @@ def test_initial_scan_parses_minimal_action_dependencies_without_planning_inputs
                         "action_id": "submit_form",
                         "description": "Submit the visible form",
                         "target": "submit button",
+                        "execution_instance": "Click the submit button",
                         "expected_outcome": "A confirmation or next workflow surface becomes visible.",
                         "requires": ["fill_identity"],
                     },
@@ -141,6 +146,9 @@ def test_initial_scan_parses_minimal_action_dependencies_without_planning_inputs
     }
     assert result.business_affordances[0].expected_outcome == (
         "The visible identity fields contain entered values."
+    )
+    assert result.business_affordances[0].execution_instance == (
+        "Fill the visible identity form fields"
     )
 
 
@@ -185,7 +193,8 @@ def test_initial_prompt_contains_validated_domain_neutral_few_shots():
     assert "composite" in payload["instruction"]
     assert "distinct atomic steps" in payload["instruction"]
     assert "selectable value" in payload["instruction"].lower()
-    assert "result subset" in payload["instruction"].lower()
+    assert "different business attributes" in payload["instruction"].lower()
+    assert "values within one dimension" in examples.lower()
     assert "sort field or direction" in payload["instruction"].lower()
     assert "prefer precision over recall" in payload["instruction"].lower()
     assert "controls whose meaning cannot be determined confidently" in payload[
@@ -215,8 +224,9 @@ def test_initial_prompt_contains_validated_domain_neutral_few_shots():
         "download_report",
         "open_record",
         "open_record_a",
-        "filter_results",
-        "filter_by_status",
+        "filter_by_category",
+        "filter_by_price",
+        "filter_by_rating",
         "sort_newest",
     ):
         assert token in examples
@@ -235,6 +245,7 @@ def test_initial_prompt_contains_validated_domain_neutral_few_shots():
                     "single_instance",
                     "composite",
                 }
+                assert item["execution_instance"]
     assert result.trace.status == "summarized"
 
 
@@ -252,6 +263,7 @@ def test_initial_scan_parses_execution_policy_into_affordance():
                         "action_id": "enter_credentials",
                         "description": "Fill in the username and password fields.",
                         "target": "Username and Password fields",
+                        "execution_instance": "Fill the visible username and password fields",
                         "execution_policy": "composite",
                         "requires": [],
                     }
@@ -318,6 +330,7 @@ def test_visual_affordance_prompt_prioritizes_breadth_without_external_task_goal
             "action_id",
             "description",
             "target",
+            "execution_instance",
             "expected_outcome",
             "execution_policy",
             "requires",
@@ -466,6 +479,7 @@ def test_targeted_scan_parses_semantic_replacement():
                         "intent": "open_checkout",
                         "label": "Cart",
                         "target": "cart button",
+                        "execution_instance": "Click the cart button",
                         "confidence": 0.9,
                         "supporting_facts": ["cart_has_items"],
                     }
@@ -486,6 +500,9 @@ def test_targeted_scan_parses_semantic_replacement():
     ]
     assert result.replacements == [("open_empty_cart", "open_checkout")]
     assert result.disabled_action_ids == ["open_empty_cart"]
+    assert result.business_affordances[0].execution_instance == (
+        "Click the cart button"
+    )
 
 
 def test_summarize_visual_affordances_rejects_non_object_response():
@@ -557,6 +574,7 @@ def test_initial_scan_rejects_legacy_candidate_shapes(response):
     "response",
     [
         '{"actions":[{"action_id":"fill_form","description":"Fill","target":"form"}]}',
+        '{"actions":[{"action_id":"fill_form","description":"Fill","target":"form","requires":[]}]}',
         '{"actions":[{"action_id":"fill_form","description":"Fill","target":"form","requires":"other"}]}',
         '{"actions":[],"extra":"unexpected"}',
         '{"actions":[{"action_id":"fill_form","description":"Fill","target":"form","requires":[],"extra":true}]}',

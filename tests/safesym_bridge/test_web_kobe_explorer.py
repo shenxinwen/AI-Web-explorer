@@ -131,6 +131,7 @@ def _default_visual_provider(
                             "action_id": action_name,
                             "description": action_label,
                             "target": target_hint,
+                            "execution_instance": f"Use the visible {action_label} control",
                             "requires": [],
                         }
                     ],
@@ -304,6 +305,7 @@ async def test_minimal_active_path_uses_outcome_without_targeted_or_supplement_s
                         "action_id": "add_to_cart_product",
                         "description": "Add the visible product to the cart.",
                         "target": "Add to cart control",
+                        "execution_instance": "Click one visible Add to cart control",
                         "requires": [],
                     }
                 ],
@@ -388,6 +390,7 @@ async def test_minimal_active_path_scans_new_location_with_initial_contract():
                         "action_id": action_id,
                         "description": action_id.replace("_", " "),
                         "target": f"{action_id} control",
+                        "execution_instance": f"Use the visible {action_id} control",
                         "requires": [],
                     }
                 ],
@@ -471,12 +474,14 @@ def _checkout_dependency_candidate_provider(prompt, **kwargs):
                     "action_id": "fill_billing",
                     "description": "Fill the visible billing form.",
                     "target": "Billing form",
+                    "execution_instance": "Fill the visible billing form fields",
                     "requires": [],
                 },
                 {
                     "action_id": "place_order",
                     "description": "Submit the visible checkout form.",
                     "target": "Submit control",
+                    "execution_instance": "Click the visible Submit control",
                     "requires": ["fill_billing"],
                 },
             ],
@@ -571,6 +576,7 @@ async def test_real_location_change_same_page_type_uses_one_new_location_anchor(
                         "action_id": "target_location_action",
                         "description": "Use the action on the new location.",
                         "target": "New location control",
+                        "execution_instance": "Click the new location control",
                         "requires": [],
                     }
                 ],
@@ -824,6 +830,7 @@ async def test_failed_or_uncertain_outcome_still_scans_observed_new_location(out
                         "action_id": action_id,
                         "description": action_id.replace("_", " "),
                         "target": f"{action_id} control",
+                        "execution_instance": f"Use the visible {action_id} control",
                         "requires": [],
                     }
                 ],
@@ -1134,3 +1141,14 @@ async def test_multi_step_graph_nodes_have_embedding_records():
     graph_node_ids = {node.node_id for node in graph.nodes}
     embedding_node_ids = {record.node_id for record in explorer.state_embedding_records}
     assert graph_node_ids <= embedding_node_ids
+
+
+def test_business_action_freezes_execution_instance():
+    action = _business_action_from_affordance(BusinessAffordance(
+        action_name="add_to_cart",
+        label="Add a product to the cart.",
+        execution_instance="Sauce Labs Backpack Add to cart button",
+    ))
+
+    assert action.execution_instance == "Sauce Labs Backpack Add to cart button"
+    assert "Sauce Labs Backpack" in action.description

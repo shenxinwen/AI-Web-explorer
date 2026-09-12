@@ -38,6 +38,16 @@ def _execution_policy(action: BrowserAction | dict[str, Any]) -> str:
     )
 
 
+def _instruction_with_execution_instance(
+    instruction: str,
+    execution_instance: str | None,
+) -> str:
+    instance = str(execution_instance or "").strip()
+    if not instance or instance in instruction:
+        return instruction
+    return f"{instruction.rstrip()} Execute this specific instance: {instance}."
+
+
 class StagehandAutomationBackend:
     app_name: str
 
@@ -147,6 +157,15 @@ class StagehandAutomationBackend:
                 else str(action.get("description") or semantic_id)
             )
             execution_policy = _execution_policy(action)
+            execution_instance = (
+                action.execution_instance
+                if isinstance(action, BrowserAction)
+                else action.get("execution_instance")
+            )
+            instruction = _instruction_with_execution_instance(
+                instruction or semantic_id,
+                execution_instance,
+            )
             if self.execution_mode != "observe_act":
                 instruction = _agent_business_instruction(
                     semantic_id,
