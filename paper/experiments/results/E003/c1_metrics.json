@@ -1,0 +1,248 @@
+{
+  "aggregation_key": [
+    "site",
+    "semantic_location",
+    "canonical_action_id"
+  ],
+  "gold_rule": "supported when at least one valid grouped attempt has function_exists=yes and functional_outcome=success",
+  "admission_rules": {
+    "proposal_as_fact": "admit every proposed candidate function",
+    "executor_success_as_fact": "admit when at least one attempt has backend_reported_success=true",
+    "evidence_grounded": "admit when at least one evidence-complete attempt has system outcome=success"
+  },
+  "sites": {
+    "saucedemo": {
+      "candidate_functions": 26,
+      "supported_functions": 17,
+      "attempts": 48,
+      "evidence_complete_attempts": 48,
+      "metrics": {
+        "proposal_as_fact": {
+          "admitted": 26,
+          "true_positive": 17,
+          "precision": 0.6538461538461539,
+          "supported_knowledge_retention": 1.0,
+          "admission_yield": 1.0,
+          "f1": 0.7906976744186047
+        },
+        "executor_success_as_fact": {
+          "admitted": 21,
+          "true_positive": 17,
+          "precision": 0.8095238095238095,
+          "supported_knowledge_retention": 1.0,
+          "admission_yield": 0.8076923076923077,
+          "f1": 0.8947368421052632
+        },
+        "evidence_grounded": {
+          "admitted": 17,
+          "true_positive": 16,
+          "precision": 0.9411764705882353,
+          "supported_knowledge_retention": 0.9411764705882353,
+          "admission_yield": 0.6538461538461539,
+          "f1": 0.9411764705882353
+        }
+      },
+      "errors": {
+        "proposal_as_fact": {
+          "false_positives": [
+            [
+              "saucedemo",
+              "",
+              "add_to_cart"
+            ],
+            [
+              "saucedemo",
+              "",
+              "open_cart"
+            ],
+            [
+              "saucedemo",
+              "",
+              "sort_products"
+            ],
+            [
+              "saucedemo",
+              "checkout_complete",
+              "generate_pdf_order"
+            ],
+            [
+              "saucedemo",
+              "checkout_information_form",
+              "complete_checkout_information"
+            ],
+            [
+              "saucedemo",
+              "checkout_information_form",
+              "complete_information_fields"
+            ],
+            [
+              "saucedemo",
+              "checkout_information_form",
+              "proceed_to_next_step"
+            ],
+            [
+              "saucedemo",
+              "checkout_information_form",
+              "submit_checkout_information"
+            ],
+            [
+              "saucedemo",
+              "product_catalog",
+              "filter_products"
+            ]
+          ],
+          "false_negatives": []
+        },
+        "executor_success_as_fact": {
+          "false_positives": [
+            [
+              "saucedemo",
+              "",
+              "sort_products"
+            ],
+            [
+              "saucedemo",
+              "checkout_information_form",
+              "complete_checkout_information"
+            ],
+            [
+              "saucedemo",
+              "checkout_information_form",
+              "complete_information_fields"
+            ],
+            [
+              "saucedemo",
+              "product_catalog",
+              "filter_products"
+            ]
+          ],
+          "false_negatives": []
+        },
+        "evidence_grounded": {
+          "false_positives": [
+            [
+              "saucedemo",
+              "checkout_information_form",
+              "complete_information_fields"
+            ]
+          ],
+          "false_negatives": [
+            [
+              "saucedemo",
+              "product_catalog",
+              "sort_products"
+            ]
+          ]
+        }
+      }
+    },
+    "practice-shopping": {
+      "candidate_functions": 19,
+      "supported_functions": 16,
+      "attempts": 55,
+      "evidence_complete_attempts": 51,
+      "metrics": {
+        "proposal_as_fact": {
+          "admitted": 19,
+          "true_positive": 16,
+          "precision": 0.8421052631578947,
+          "supported_knowledge_retention": 1.0,
+          "admission_yield": 1.0,
+          "f1": 0.9142857142857143
+        },
+        "executor_success_as_fact": {
+          "admitted": 19,
+          "true_positive": 16,
+          "precision": 0.8421052631578947,
+          "supported_knowledge_retention": 1.0,
+          "admission_yield": 1.0,
+          "f1": 0.9142857142857143
+        },
+        "evidence_grounded": {
+          "admitted": 16,
+          "true_positive": 16,
+          "precision": 1.0,
+          "supported_knowledge_retention": 1.0,
+          "admission_yield": 0.8421052631578947,
+          "f1": 1.0
+        }
+      },
+      "errors": {
+        "proposal_as_fact": {
+          "false_positives": [
+            [
+              "practice-shopping",
+              "payment_success_modal",
+              "download_invoice"
+            ],
+            [
+              "practice-shopping",
+              "shopping_results_page",
+              "filter_by_price"
+            ],
+            [
+              "practice-shopping",
+              "shopping_results_page",
+              "sort_results"
+            ]
+          ],
+          "false_negatives": []
+        },
+        "executor_success_as_fact": {
+          "false_positives": [
+            [
+              "practice-shopping",
+              "payment_success_modal",
+              "download_invoice"
+            ],
+            [
+              "practice-shopping",
+              "shopping_results_page",
+              "filter_by_price"
+            ],
+            [
+              "practice-shopping",
+              "shopping_results_page",
+              "sort_results"
+            ]
+          ],
+          "false_negatives": []
+        },
+        "evidence_grounded": {
+          "false_positives": [],
+          "false_negatives": []
+        }
+      }
+    }
+  },
+  "overall": {
+    "candidate_functions": 45,
+    "supported_functions": 33,
+    "metrics": {
+      "proposal_as_fact": {
+        "admitted": 45,
+        "true_positive": 33,
+        "precision": 0.7333333333333333,
+        "supported_knowledge_retention": 1.0,
+        "admission_yield": 1.0,
+        "f1": 0.846153846153846
+      },
+      "executor_success_as_fact": {
+        "admitted": 40,
+        "true_positive": 33,
+        "precision": 0.825,
+        "supported_knowledge_retention": 1.0,
+        "admission_yield": 0.8888888888888888,
+        "f1": 0.9041095890410958
+      },
+      "evidence_grounded": {
+        "admitted": 33,
+        "true_positive": 32,
+        "precision": 0.9696969696969697,
+        "supported_knowledge_retention": 0.9696969696969697,
+        "admission_yield": 0.7333333333333333,
+        "f1": 0.9696969696969697
+      }
+    }
+  }
+}

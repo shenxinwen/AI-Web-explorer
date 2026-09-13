@@ -121,11 +121,10 @@ def _page(title: str, samples: list[dict[str, Any]], task: str) -> str:
 
 
 def _group_c1_samples(samples: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    groups: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    groups: dict[tuple[str, str, str], dict[str, Any]] = {}
     for sample in samples:
         key = (
             sample["site"],
-            sample["run_id"],
             sample.get("semantic_location", ""),
             sample["action_id"],
         )
@@ -207,6 +206,11 @@ def build_package(
         json.dumps(public_samples, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     c1_groups = _group_c1_samples(public_samples)
+    for site in sorted({group["site"] for group in c1_groups}):
+        for index, group in enumerate(
+            (group for group in c1_groups if group["site"] == site), 1
+        ):
+            group["sample_id"] = f"S{index:03d}"
     for site in sorted({sample["site"] for sample in public_samples}):
         site_samples = [sample for sample in public_samples if sample["site"] == site]
         site_c1_groups = [group for group in c1_groups if group["site"] == site]
@@ -226,8 +230,8 @@ def build_package(
     (destination / "c1.html").write_text(_c1_page(c1_groups), encoding="utf-8")
     (destination / "c3.html").write_text(_page("C3 动作风险标注（无结果泄漏）", public_samples, "c3"), encoding="utf-8")
     (destination / "README.md").write_text(
-        "# 20 条样本试标包\n\n"
-        "本包只用于检查标注流程，不作为论文正式实验结果。\n\n"
+        "# 标注包\n\n"
+        f"本包包含 {len(public_samples)} 条 attempt 样本。\n\n"
         "1. 先标风险：打开 `c3.html`，填写 `c3_annotations.csv`。\n"
         "2. 再标功能证据：打开 `c1.html`，填写 `c1_annotations.csv`。\n"
         "3. 标签定义见 `paper/experiments/annotation_guide_v1.md`。\n"
