@@ -717,3 +717,4 @@ async def test_frontier_replay_stops_on_action_failure_without_observation():
     assert result.success is False
     assert result.reason == "replay_action_failed"
     assert result.completed_steps == 0
+    assert result.attempted_steps == 1

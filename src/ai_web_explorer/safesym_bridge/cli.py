@@ -222,6 +222,18 @@ def main(argv: list[str] | None = None) -> int:
         help="Opt in to reset-and-replay of reachable under-explored frontiers.",
     )
     stagehand_explore_parser.add_argument(
+        "--exploration-condition",
+        choices=["ungated_random", "linear", "full"],
+        default="linear",
+        help="Frozen E004 exploration condition.",
+    )
+    stagehand_explore_parser.add_argument(
+        "--random-seed",
+        type=int,
+        default=None,
+        help="Seed persisted for ungated-random candidate selection.",
+    )
+    stagehand_explore_parser.add_argument(
         "--resume-graph",
         type=Path,
         default=None,
@@ -379,6 +391,8 @@ def main(argv: list[str] | None = None) -> int:
                 "max_candidates": effective_max_candidates,
                 "limits": limits,
                 "frontier_replay": args.frontier_replay or resume_graph is not None,
+                "exploration_condition": args.exploration_condition,
+                "random_seed": args.random_seed,
                 "resume_graph": resume_graph,
                 "resume_policy": resume_policy,
                 "allow_test_site_final_order": final_order_allowed,

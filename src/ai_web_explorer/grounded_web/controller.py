@@ -258,6 +258,9 @@ class WebKobeExplorationController:
                 int(self.replay_metric_baseline.get("replay_mismatch_count", 0)),
             ),
             "last_replay_reason": None,
+            "replay_gui_action_attempts": int(
+                self.replay_metric_baseline.get("replay_gui_action_attempts", 0)
+            ),
         }
         replay_attempt_history = list(
             (graph.meta if graph is not None else {}).get(
@@ -403,17 +406,24 @@ class WebKobeExplorationController:
                     frontier,
                     start_url=self.start_url,
                 )
-                replay_attempt_history.append(
-                    {
+                replay_metrics["replay_gui_action_attempts"] += int(
+                    replay_result.attempted_steps
+                )
+                replay_history_entry = {
                         "attempt": int(replay_metrics["replay_attempt_count"]),
+                        "replay_id": (
+                            f"replay-{int(replay_metrics['replay_attempt_count']):04d}"
+                        ),
                         "target_node_id": frontier.node_id,
                         "path_edge_ids": [step.edge_id for step in frontier.path],
                         "success": bool(replay_result.success),
                         "reason": replay_result.reason,
                         "failed_edge_id": replay_result.failed_edge_id,
                         "completed_steps": int(replay_result.completed_steps),
+                        "attempted_steps": int(replay_result.attempted_steps),
+                        "post_replay_attempt_id": None,
                     }
-                )
+                replay_attempt_history.append(replay_history_entry)
                 replay_metrics["last_replay_reason"] = replay_result.reason
                 if not replay_result.success:
                     replay_metrics["replay_failure_count"] += 1
@@ -435,8 +445,15 @@ class WebKobeExplorationController:
                 ):
                     stop_reason = "max_exploration_steps_reached"
                     break
+                event_count_before_followup = len(graph.execution_events)
                 next_graph = await self.explorer.explore_one_step()
                 graph = apply_replay_metrics(next_graph)
+                if len(graph.execution_events) > event_count_before_followup:
+                    replay_history_entry["post_replay_attempt_id"] = (
+                        graph.execution_events[-1]
+                        .execution_trace.metadata.get("attempt_id")
+                    )
+                    apply_replay_metrics(graph)
                 state.formal_action_attempts = max(
                     state.formal_action_attempts,
                     int(graph.meta.get("formal_action_attempts", 0)),

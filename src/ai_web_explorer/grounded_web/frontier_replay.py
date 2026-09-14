@@ -65,6 +65,7 @@ class ReplayResult:
     failed_edge_id: str | None
     reason: str
     completed_steps: int
+    attempted_steps: int = 0
 
 
 class FrontierReplayRunner:
@@ -84,7 +85,9 @@ class FrontierReplayRunner:
             return ReplayResult(False, None, None, "entry_reset_failed", 0)
 
         completed_steps = 0
+        attempted_steps = 0
         for step in target.path:
+            attempted_steps += 1
             if not await self.explorer.execute_replay_action(step.edge.action):
                 return ReplayResult(
                     False,
@@ -92,6 +95,7 @@ class FrontierReplayRunner:
                     step.edge_id,
                     "replay_action_failed",
                     completed_steps,
+                    attempted_steps,
                 )
             completed_steps += 1
 
@@ -107,6 +111,7 @@ class FrontierReplayRunner:
                 None,
                 "target_state_mismatch",
                 completed_steps,
+                attempted_steps,
             )
 
         # Restore context only after the observed target identity is confirmed.
@@ -123,6 +128,7 @@ class FrontierReplayRunner:
             None,
             "replay_succeeded",
             completed_steps,
+            attempted_steps,
         )
 
 def select_frontier(

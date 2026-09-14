@@ -55,20 +55,19 @@ RQ1 首先只评估自然探索轨迹。受控挑战集暂不构建；仅在自�
 
 ### 对比
 
-1. **Linear / no replay：** 离开当前位置后不通过 persistent frontier 恢复未完成候选。
-2. **Full method：** 保留 persistent frontier，并通过 replay 恢复上下文后继续探索。
+1. **Ungated Random：** 在当前位置的未完成高层候选中按冻结 seed 随机选择，不检查动作依赖，不 replay；保留与其他条件相同的候选生命周期记录。
+2. **Linear / no replay：** 检查动作依赖并按现有确定性顺序选择；离开当前位置后不恢复未完成候选。
+3. **Full method：** 与 Linear 完全相同，唯一增加 persistent frontier 与 replay 恢复。
 
 不在主实验中强行复现 UIExplore-AlGo、GUI-explorer 等异构系统；它们使用不同环境、动作空间或移动 GUI。若 UIExplore-Bench 能在不修改核心方法的条件下接入，则仅作为追加实验。
 
 ### 主要指标
 
-- interaction-supported functions at budget；
-- supported core-function recall at budget；
-- supported functions / action attempts；
-- unfinished-hypothesis revisit rate；
-- revisited-hypothesis completion rate。
+- supported core-function coverage（主指标，报告 x/n 与百分比）；
+- interaction-supported functions；
+- supported functions / normal candidate attempts。
 
-绘制随 attempt budget 变化的 supported-knowledge growth curve。重复探索率仅作描述性指标，不预设完整方法一定降低重复。
+普通候选 attempt 的 pilot/formal 上限分别为 10/25。Replay GUI 动作不占候选 attempt 预算，但单独限制并报告；同时报告 total GUI actions 与 cost-aware efficiency。绘制随普通 candidate attempt 变化的 supported-knowledge growth curve。失败、无变化、证据不完整、依赖违规、重复、停止原因和 replay-mediated gains 均作诊断指标。
 
 ## 4. RQ3 / C3：已选动作风险识别
 

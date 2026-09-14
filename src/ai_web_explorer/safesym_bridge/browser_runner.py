@@ -31,6 +31,7 @@ from ai_web_explorer.grounded_web.frontier_replay import (
 from ai_web_explorer.grounded_web.location_exploration import (
     LOCATION_EXPLORATION_META_KEY,
     ExplorationLimits,
+    LocationExplorationCoordinator,
 )
 from ai_web_explorer.grounded_web.resume import (
     ActionAttemptKey,
@@ -360,6 +361,8 @@ async def run_stagehand_exploration(
     stagehand_execution_mode: str = "observed_action",
     max_candidates: int = 5,
     frontier_replay: bool = False,
+    exploration_condition: str = "linear",
+    random_seed: int | None = None,
     resume_graph: WebKobeGraph | None = None,
     resume_policy: ResumePolicy | None = None,
     limits: ExplorationLimits | None = None,
@@ -370,6 +373,15 @@ async def run_stagehand_exploration(
     stagehand_action_timeout_seconds: float | None = None,
 ) -> Path:
     from playwright.async_api import async_playwright
+
+    if exploration_condition not in {"ungated_random", "linear", "full"}:
+        raise ValueError(f"invalid exploration condition: {exploration_condition}")
+    if exploration_condition == "ungated_random" and frontier_replay:
+        raise ValueError("ungated_random cannot enable frontier replay")
+    if exploration_condition == "full":
+        frontier_replay = True
+    if exploration_condition != "ungated_random" and random_seed is not None:
+        raise ValueError("random seed is only valid for ungated_random")
 
     final_order_allowed = validate_final_order_authorization(
         start_url=start_url,
@@ -496,6 +508,11 @@ async def run_stagehand_exploration(
                 site_input_context=site_input_context,
                 post_action_settle_ms=3000 if site_adapter == "realworld" else None,
             )
+            candidate_selection_policy = (
+                "ungated_random"
+                if exploration_condition == "ungated_random"
+                else "deterministic"
+            )
             explorer = WebKobeExplorer(
                 adapter=adapter,
                 semantic_assistor=DeterministicSemanticAssistor(app=app_name),
@@ -512,9 +529,17 @@ async def run_stagehand_exploration(
                 max_candidates=max_candidates,
                 resume_policy=resume_policy,
                 exploration_limits=limits,
+                location_exploration_coordinator=LocationExplorationCoordinator(
+                    limits=limits,
+                    selection_policy=candidate_selection_policy,
+                    random_seed=random_seed,
+                ),
             )
 
             def checkpoint(graph: WebKobeGraph) -> None:
+                graph.meta["exploration_condition"] = exploration_condition
+                graph.meta["candidate_selection_policy"] = candidate_selection_policy
+                graph.meta["random_seed"] = random_seed
                 if location_scoped and limits is not None:
                     graph.meta["exploration_limits"] = limits.to_dict()
                 _write_stagehand_checkpoint(

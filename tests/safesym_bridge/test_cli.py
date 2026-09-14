@@ -336,8 +336,10 @@ def test_main_web_kobe_stagehand_explore_wires_runner(monkeypatch, tmp_path):
         stagehand_execution_mode="observed_action",
         max_candidates=5,
         limits=None,
-        frontier_replay=False,
-        resume_graph=None,
+            frontier_replay=False,
+            exploration_condition="linear",
+            random_seed=None,
+            resume_graph=None,
         resume_policy=None,
         allow_test_site_final_order=True,
     ):
@@ -570,6 +572,25 @@ def test_main_web_kobe_stagehand_explore_accepts_frontier_replay(monkeypatch, tm
     assert calls[0]["stagehand_execution_mode"] == "observed_action"
     assert isinstance(calls[0]["limits"], ExplorationLimits)
     assert calls[0]["limits"].max_candidates_per_location == 5
+
+
+def test_main_stagehand_explore_passes_e004_condition_and_seed(monkeypatch, tmp_path):
+    calls = []
+
+    async def fake_run(*args, **kwargs):
+        calls.append(kwargs)
+        args[0].write_text("{}", encoding="utf-8")
+        return args[0]
+
+    monkeypatch.setattr(cli, "run_stagehand_exploration", fake_run, raising=False)
+
+    assert main([
+        "web-kobe-stagehand-explore", "--url", "https://fixture.test/shop",
+        "--output", str(tmp_path / "graph.json"),
+        "--exploration-condition", "ungated_random", "--random-seed", "17",
+    ]) == 0
+    assert calls[0]["exploration_condition"] == "ungated_random"
+    assert calls[0]["random_seed"] == 17
 
 
 def test_main_stagehand_explore_accepts_location_feasibility_parameters(

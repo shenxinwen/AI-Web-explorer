@@ -37,7 +37,9 @@ and evidence capture settings remain fixed across conditions.
 
 ### Ungated Random
 
-- Use the same frozen high-level functional candidates as the other conditions.
+- Use the same candidate generator and generation settings as the other
+  conditions. Each selected candidate is frozen before its own attempt; runs
+  do not share a pre-generated candidate list.
 - Randomly select among unfinished candidates at the current semantic location.
 - Do not enforce candidate dependency eligibility before selection.
 - Preserve failed, no-change, uncertain, and evidence-incomplete attempts.
@@ -161,9 +163,10 @@ Formal experiment, only after pilot approval:
 
 ## Required Comparisons
 
-- Ungated Random versus Linear evaluates the combined system-level effect of
-  dependency-aware functional exploration and candidate lifecycle memory. It
-  must not be used to attribute gains to either component individually.
+- Ungated Random and Linear share candidate lifecycle bookkeeping. Their
+  comparison evaluates the system-level effect of ungated random selection
+  versus dependency-aware deterministic ordering; it must not be used to
+  attribute gains to one ordering heuristic or to state memory independently.
 - Linear versus Full evaluates the marginal effect of persistent-frontier
   recovery on supported coverage and evidence production.
 - Replay cost is always reported beside replay-mediated knowledge gains.

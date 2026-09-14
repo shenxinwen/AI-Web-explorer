@@ -7,6 +7,7 @@ this control state.
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Mapping
 
@@ -252,12 +253,19 @@ class LocationExplorationCoordinator:
         *,
         memory: LocationExplorationMemory | None = None,
         limits: ExplorationLimits | None = None,
+        selection_policy: str = "deterministic",
+        random_seed: int | None = None,
     ) -> None:
+        if selection_policy not in {"deterministic", "ungated_random"}:
+            raise ValueError(f"invalid selection policy: {selection_policy}")
         if memory is None:
             memory = LocationExplorationMemory(limits=limits)
         elif limits is not None and memory.limits != limits:
             memory.limits = limits
         self.memory = memory
+        self.selection_policy = selection_policy
+        self.random_seed = random_seed
+        self._random = random.Random(random_seed)
 
     def ensure_candidates(
         self,
@@ -422,6 +430,10 @@ class LocationExplorationCoordinator:
             candidate = self.memory.next_candidate(
                 location_id,
                 excluded_action_ids=gated_action_ids,
+                dependency_gated=self.selection_policy != "ungated_random",
+                randomizer=(
+                    self._random if self.selection_policy == "ungated_random" else None
+                ),
             )
             if candidate is None:
                 return None, last_preflight
@@ -693,9 +705,12 @@ class LocationExplorationMemory:
         location_id: str,
         *,
         excluded_action_ids: Iterable[str] = (),
+        dependency_gated: bool = True,
+        randomizer: random.Random | None = None,
     ) -> BusinessAffordance | None:
         pool = self.pool_for(location_id)
-        self._propagate_failed_requirements(pool)
+        if dependency_gated:
+            self._propagate_failed_requirements(pool)
         excluded = {
             normalize_semantic_id(action_id)
             for action_id in excluded_action_ids
@@ -708,14 +723,21 @@ class LocationExplorationMemory:
             in {"pending", "retryable_no_change", "retryable_failure"}
             and record.attempts < self.limits.max_action_attempts_per_candidate
             and record.action_id not in excluded
-            and all(
-                requirement in pool.candidates
-                and pool.candidates[requirement].status == "success"
-                for requirement in record.requires
+            and (
+                not dependency_gated
+                or all(
+                    requirement in pool.candidates
+                    and pool.candidates[requirement].status == "success"
+                    for requirement in record.requires
+                )
             )
         ]
         if not eligible:
             return None
+        if randomizer is not None:
+            return randomizer.choice(
+                sorted(eligible, key=lambda item: item.action_id)
+            ).affordance
         relevance = {"core": 0, "supporting": 1, "low_value": 2, "unknown": 3}
         return min(
             eligible,

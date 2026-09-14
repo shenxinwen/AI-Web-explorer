@@ -213,6 +213,7 @@ async def test_controller_uses_historical_step_and_replay_metric_baselines():
     assert result.graph.meta["replay_success_count"] == 2
     assert result.graph.meta["replay_failure_count"] == 1
     assert result.graph.meta["replay_mismatch_count"] == 1
+    assert result.graph.meta["replay_gui_action_attempts"] == 0
 
 
 @pytest.mark.anyio
@@ -459,12 +460,15 @@ async def test_controller_blocks_failed_frontier_replay_and_stops_without_graph_
     assert result.graph.meta["replay_attempt_history"] == [
         {
             "attempt": 1,
+            "replay_id": "replay-0001",
             "target_node_id": "frontier",
             "path_edge_ids": ["start__open_frontier__frontier"],
             "success": False,
             "reason": "target_semantic_location_mismatch",
             "failed_edge_id": "start__open_frontier__frontier",
             "completed_steps": 0,
+            "attempted_steps": 0,
+            "post_replay_attempt_id": None,
         }
     ]
 
