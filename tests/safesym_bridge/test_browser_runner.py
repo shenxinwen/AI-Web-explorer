@@ -441,6 +441,34 @@ def test_write_web_kobe_graph_failed_overwrite_preserves_old_pair(
     assert list(tmp_path.glob(".*.tmp")) == []
 
 
+def test_write_web_kobe_graph_retries_transient_permission_error(
+    tmp_path, monkeypatch
+):
+    output_path = tmp_path / "graph.json"
+    original_replace = Path.replace
+    graph_replace_attempts = 0
+
+    def transient_graph_replace(path, target):
+        nonlocal graph_replace_attempts
+        if Path(target) == output_path:
+            graph_replace_attempts += 1
+            if graph_replace_attempts == 1:
+                raise PermissionError("graph temporarily locked")
+        return original_replace(path, target)
+
+    monkeypatch.setattr(Path, "replace", transient_graph_replace)
+    monkeypatch.setattr(browser_runner.time, "sleep", lambda _seconds: None)
+
+    browser_runner.write_web_kobe_graph(
+        _transactional_graph("action_a"), output_path
+    )
+
+    assert graph_replace_attempts == 2
+    assert output_path.exists()
+    assert (tmp_path / "graph_evidence.json").exists()
+    assert list(tmp_path.glob(".*.tmp")) == []
+
+
 @pytest.mark.anyio
 async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
     tmp_path,

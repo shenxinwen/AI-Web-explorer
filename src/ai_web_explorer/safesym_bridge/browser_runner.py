@@ -167,9 +167,9 @@ def write_web_kobe_graph(
     sidecar_replaced = False
     try:
         graph_temp = _write_json_temp(output_path, graph_text)
-        evidence_temp.replace(evidence_path)
+        _replace_with_permission_retry(evidence_temp, evidence_path)
         sidecar_replaced = True
-        graph_temp.replace(output_path)
+        _replace_with_permission_retry(graph_temp, output_path)
     except Exception:
         if sidecar_replaced:
             if old_evidence is None:
@@ -182,6 +182,23 @@ def write_web_kobe_graph(
         if graph_temp is not None:
             graph_temp.unlink(missing_ok=True)
     return output_path
+
+
+def _replace_with_permission_retry(
+    source: Path,
+    target: Path,
+    *,
+    max_attempts: int = 3,
+    delay_seconds: float = 0.05,
+) -> None:
+    for attempt in range(1, max_attempts + 1):
+        try:
+            source.replace(target)
+            return
+        except PermissionError:
+            if attempt == max_attempts:
+                raise
+            time.sleep(delay_seconds)
 
 
 def _write_json_temp(path: Path, text: str) -> Path:
