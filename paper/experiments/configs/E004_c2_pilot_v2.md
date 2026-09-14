@@ -1,8 +1,8 @@
-# E004 / C2 Pilot 配置 v1
+# E004 / C2 Pilot 配置 v2
 
-> 状态：已冻结并中止。4/6 runs 已启动；因 checkpoint 写入阻塞停止，详见 `paper/experiments/results/E004/README.md`。本版本不进入论文正式结果。
+> 状态：已冻结，待运行。v2 仅修复 v1 暴露的运行可靠性与记录问题；不进入论文正式结果。
 >
-> 冻结后如需修改，创建新版本；不得覆盖本版本产物。
+> v1 产物保持原样。v2 使用全新目录，不续跑或替换 v1 runs。
 
 ## 实验矩阵
 
@@ -11,14 +11,15 @@
 - 每个网站每种方法运行 1 次，共 6 runs。
 - 每个 run 最多 10 个普通候选 action attempts；frontier 自然耗尽可提前结束。
 - Random seeds：SauceDemo `4101`，Practice Shopping `4201`。Linear 与 Full 不使用随机选择 seed。
-- 输出根目录：`outputs/paper/pilot/E004_c2_v1/`。
+- 输出根目录：`outputs/paper/pilot/E004_c2_v2/`。
 
 ## 固定实现与公共参数
 
 | 字段 | 值 |
 | --- | --- |
 | 冻结日期 | 2026-09-14 |
-| 实现提交 | `0c1f0c4479594eee3bb30b99ce1d00f07233df9c` |
+| 实现提交 | `72727ce985d25d023fc156da3f6070e0e7c18a7a` |
+| 相对 v1 的实现变化 | checkpoint 文件替换遇到瞬时 `PermissionError` 时最多尝试 3 次，间隔 50 ms |
 | Stagehand / candidate / outcome / risk 模型 | `gpt-4o` |
 | Stagehand execution mode | `observe_act` |
 | business profile | `none` |
@@ -33,7 +34,7 @@
 | Location exploration SHA-256 | `7031ae07bd8680f9f89b3f5ea9f9245d4c019db6b57ca83088dec14354a96770` |
 | Frontier replay SHA-256 | `d8648f10bd974ec4dbc4df8cf3a5510f2233d8e214f622c966c9eaeb50555f95` |
 
-所有条件使用相同入口、模型、prompt、viewport、候选上限、重试规则、executor、outcome observer、风险记录和证据采集。唯一有意差异如下：
+除上述 checkpoint 修复外，三种方法的控制变量和唯一有意差异与 v1 相同：
 
 | 方法 | 候选选择 | 依赖检查 | replay |
 | --- | --- | --- | --- |
@@ -41,21 +42,19 @@
 | Linear | 现有确定性顺序 | 是 | 否 |
 | Full | 与 Linear 相同 | 是 | 是 |
 
-## 运行与成本口径
+## 预算与记录
 
 - 普通候选 attempt 是共享的 10-step 预算单位。
-- Replay GUI 动作不占普通候选预算；单独报告 attempted steps、completed steps、成功/失败和恢复后的首个普通 attempt。
-- Total GUI actions = 普通候选 attempts + replay GUI action attempts。
+- Replay GUI 动作不占普通候选预算，单独统计；`Total GUI actions = 普通候选 attempts + replay GUI action attempts`。
 - 失败、无变化、uncertain、evidence-incomplete attempts 全部保留。
-- Risk detection 以相同 shadow-mode 配置运行，不拦截动作；其输出供后续 C3 使用，不作为 C2 成功条件。
+- Risk detection 以相同 shadow-mode 配置运行，不拦截动作。
+- 每条 run 启动前写入 `run_command.txt`；退出后无论成功或失败均写入 `run_status.json`，至少包含开始/结束时间、exit code、完成状态和异常摘要。
 - 最终订单/提交动作仅允许在两个受控测试网站中执行。
 
 ## 输出布局
 
-每个 run 使用独立目录：
-
 ```text
-outputs/paper/pilot/E004_c2_v1/<site>/<condition>/run_01/
+outputs/paper/pilot/E004_c2_v2/<site>/<condition>/run_01/
   graph.json
   graph_evidence.json
   stagehand_trace.json
@@ -63,8 +62,6 @@ outputs/paper/pilot/E004_c2_v1/<site>/<condition>/run_01/
   run_command.txt
   run_status.json
 ```
-
-`<site>` 为 `saucedemo` 或 `practice_shopping`；`<condition>` 为 `random`、`linear` 或 `full`。
 
 ## Pilot 验收
 
@@ -74,6 +71,7 @@ outputs/paper/pilot/E004_c2_v1/<site>/<condition>/run_01/
 2. 每个普通 attempt 均可导出，失败或截图缺失不会被删除；
 3. 功能覆盖率、覆盖增长曲线和有效尝试率可由导出表计算；
 4. Full 的 replay GUI 成本及 replay-to-follow-up-attempt 关联可计算；
-5. 停止原因和实际使用的普通候选 attempts 可解析。
+5. 停止原因和实际使用的普通候选 attempts 可解析；
+6. 每条 run 均有命令与退出状态记录。
 
-Pilot 通过后仍需用户确认，才可冻结并启动 25-attempt 正式 runs。
+若 Full 没有发生 replay，必须先确认这是两个网站在 10-attempt pilot 下自然没有 recoverable frontier，不能直接据此进入正式实验。Pilot 通过后仍需用户确认，才可冻结并启动 25-attempt 正式 runs。
