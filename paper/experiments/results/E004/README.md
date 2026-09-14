@@ -51,3 +51,13 @@
 两条 run 均越过 v1 的 checkpoint 失败位置并正常结束，说明 bounded retry 修复有效。失败与 evidence-incomplete attempts 均保留，并生成了 `run_command.txt`、`run_status.json` 和 `c2_attempts.csv`。
 
 Full 在 10-attempt 预算内仍未触发 replay。代码审查确认 replay 仅在当前状态返回 `current_state_exhausted` 后启动；本次 run 在预算结束前始终还有当前路径候选。因此当前只能验证 Full 条件可运行，尚不能完成 replay 成本与增量覆盖的 pilot 验收。继续完整矩阵前，应增加一条不计入条件比较结果的 replay activation smoke，或调整下一版 pilot 使其自然达到当前状态耗尽；不得把人为触发 smoke 混入 Random/Linear/Full 主比较。
+
+## 正式实验 v1（暂停）
+
+- 配置：`paper/experiments/configs/E004_c2_formal_v1.md`
+- 原始输出：`outputs/paper/formal/E004_c2_v1/`
+- 经用户确认采用分阶段运行；目前仅执行第一条 Practice Shopping / Full / `run_01`，其余 5 条尚未启动。
+
+该 run 在 17 个普通 attempts 后因 `no_recoverable_frontier` 自然停止：14 次 executor success，16 次 evidence-complete；成功触发 1 次 replay，并关联到恢复后的首个普通 attempt。Replay 目标由入口 reset 直接到达，路径 action 为 0。
+
+审计发现当前 `replay_gui_action_attempts` 只累计 replay path actions，没有累计 `reset_to(start_url)` 导航。因此本次 replay 虽然发生，成本却记为 0，不能满足“完整单列 replay GUI 成本”的实验口径。为避免系统性低估 Full 成本，正式 v1 在 1/6 条后暂停；原始 run 永久保留，不覆盖。修复前不继续其他正式 runs。
