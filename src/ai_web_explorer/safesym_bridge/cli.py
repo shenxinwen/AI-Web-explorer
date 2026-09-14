@@ -224,7 +224,7 @@ def main(argv: list[str] | None = None) -> int:
     stagehand_explore_parser.add_argument(
         "--exploration-condition",
         choices=["ungated_random", "linear", "full"],
-        default="linear",
+        default=None,
         help="Frozen E004 exploration condition.",
     )
     stagehand_explore_parser.add_argument(

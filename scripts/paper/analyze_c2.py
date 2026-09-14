@@ -35,7 +35,10 @@ def analyze(annotation_path: Path, core_dir: Path) -> dict:
         supported_core: set[str] = set()
         growth = []
         for row in attempts:
-            if row.get("evidence_label", "").strip().lower() == "supported":
+            if (
+                row.get("evidence_label", "").strip().lower() == "supported"
+                and _truthy(row.get("evidence_complete"))
+            ):
                 supported_keys.add(
                     (row.get("semantic_location", ""), row.get("canonical_action_id", ""))
                 )
@@ -54,6 +57,7 @@ def analyze(annotation_path: Path, core_dir: Path) -> dict:
             "candidate_attempts": attempt_count,
             "supported_functions": len(supported_keys),
             "supported_core_count": len(supported_core),
+            "supported_noncore_count": len(supported_keys) - len(supported_core),
             "core_total": core_total,
             "supported_core_coverage": (
                 len(supported_core) / core_total if core_total else None

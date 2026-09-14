@@ -361,7 +361,7 @@ async def run_stagehand_exploration(
     stagehand_execution_mode: str = "observed_action",
     max_candidates: int = 5,
     frontier_replay: bool = False,
-    exploration_condition: str = "linear",
+    exploration_condition: str | None = None,
     random_seed: int | None = None,
     resume_graph: WebKobeGraph | None = None,
     resume_policy: ResumePolicy | None = None,
@@ -374,12 +374,19 @@ async def run_stagehand_exploration(
 ) -> Path:
     from playwright.async_api import async_playwright
 
+    condition_was_explicit = exploration_condition is not None
+    if exploration_condition is None:
+        exploration_condition = "full" if frontier_replay else "linear"
     if exploration_condition not in {"ungated_random", "linear", "full"}:
         raise ValueError(f"invalid exploration condition: {exploration_condition}")
     if exploration_condition == "ungated_random" and frontier_replay:
         raise ValueError("ungated_random cannot enable frontier replay")
     if exploration_condition == "full":
         frontier_replay = True
+    if condition_was_explicit and exploration_condition == "linear" and frontier_replay:
+        raise ValueError("linear cannot enable frontier replay")
+    if exploration_condition == "ungated_random" and random_seed is None:
+        raise ValueError("ungated_random requires a random seed")
     if exploration_condition != "ungated_random" and random_seed is not None:
         raise ValueError("random seed is only valid for ungated_random")
 

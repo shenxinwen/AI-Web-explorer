@@ -39,7 +39,10 @@ def extract_attempts(
             "run_id": run_id,
             "site": site,
             "condition": str(graph.get("meta", {}).get("exploration_condition", "")),
-            "random_seed": str(graph.get("meta", {}).get("random_seed") or ""),
+            "random_seed": (
+                "" if graph.get("meta", {}).get("random_seed") is None
+                else str(graph["meta"]["random_seed"])
+            ),
             "attempt_id": str(metadata.get("attempt_id") or f"event-{index:04d}"),
             "attempt_index": str(index),
             "semantic_location": str(

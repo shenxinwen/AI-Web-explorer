@@ -1153,6 +1153,23 @@ async def test_run_stagehand_exploration_opt_in_wires_frontier_replay(
 
 
 @pytest.mark.anyio
+async def test_e004_conditions_reject_confounded_or_unseeded_configuration(tmp_path):
+    with pytest.raises(ValueError, match="linear cannot enable frontier replay"):
+        await browser_runner.run_stagehand_exploration(
+            tmp_path / "linear.json",
+            start_url="https://fixture.test/shop",
+            exploration_condition="linear",
+            frontier_replay=True,
+        )
+    with pytest.raises(ValueError, match="ungated_random requires a random seed"):
+        await browser_runner.run_stagehand_exploration(
+            tmp_path / "random.json",
+            start_url="https://fixture.test/shop",
+            exploration_condition="ungated_random",
+        )
+
+
+@pytest.mark.anyio
 async def test_run_stagehand_exploration_bootstraps_resume_without_spending_new_step(
     tmp_path,
     monkeypatch,
