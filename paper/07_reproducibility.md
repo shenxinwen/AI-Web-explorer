@@ -12,9 +12,9 @@
 | 工件 | 位置 | 生成命令 | 状态 |
 | --- | --- | --- | --- |
 | 功能模型 schema 与 verification state 定义 | 待定 | 待定 | 未开始 |
-| 探索配置、提示词与冻结运行参数 | `experiments/`（待登记） | 待定 | 未开始 |
-| 原始执行轨迹与 before/after observations | 待定 | 待定 | 未开始 |
-| 结果判断、证据链与人工标注 | 待定 | 待定 | 未开始 |
+| 探索配置、提示词与冻结运行参数 | `experiments/configs/`、`experiments/protocol_v1.md` | 各实验配置内记录 | C1 已冻结；C2 待冻结精确运行配置 |
+| 原始执行轨迹与 before/after observations | `../outputs/paper/formal/` | 各实验配置内记录 | C1 已有；C2 尚未运行 |
+| 结果判断、证据链与人工标注 | `experiments/results/E003/` | `scripts/paper/analyze_c1.py` | C1 已归档；C2 尚未运行 |
 | 风险类别定义、风险知识库与版本 | `../src/ai_web_explorer/grounded_web/risk_taxonomy_v1.json` | 随代码版本冻结 | 已有 v1 |
 | VLM 风险判断提示词与结构化输出 | `../src/ai_web_explorer/grounded_web/risk_detection.py` | 单元测试校验 | 已实现 |
 | 候选功能、GUI 上下文与人工风险标签 | 待定 | 待定 | 未开始 |
@@ -27,4 +27,4 @@
 - 记录模型采样参数、随机种子、每个应用的交互预算和重复次数。
 - 报告模型调用量、浏览器交互步数、运行时间和失败/重试规则。
 - 对外部网站状态变化和非确定性响应单独记录时间戳与异常。
-- 具体预算将在实验协议冻结时填写。
+- C2 pilot/formal 的普通候选 attempt 上限为 10/25；replay GUI 动作单独限额和报告。精确 seed 与运行命令在 pilot 配置中冻结。

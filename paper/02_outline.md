@@ -81,7 +81,7 @@ Building Evidence-Grounded Functional Models of Web Applications through Risk-Aw
 
 ### 4.2 Execution-Grounded Model Induction
 
-在固定应用、起点和交互预算下，评价经支持功能覆盖、有效证据获取、知识增长和 persistent frontier 恢复，对应 C2。
+在固定应用、起点和普通候选动作预算下比较 Random、Linear 与 Full，以有交互证据支持的功能覆盖率为主指标，并报告覆盖增长、有效尝试以及 persistent frontier/replay 的新增覆盖和额外 GUI 成本，对应 C2。
 
 ### 4.3 Risk-Aware Exploration
 

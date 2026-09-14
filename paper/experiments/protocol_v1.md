@@ -64,8 +64,9 @@ RQ1 首先只评估自然探索轨迹。受控挑战集暂不构建；仅在自�
 ### 主要指标
 
 - 功能覆盖率（主指标，报告 x/n 与百分比）；
-- interaction-supported functions；
-- supported functions / normal candidate attempts。
+- 覆盖增长曲线：横轴为累计普通候选 attempts，纵轴为功能覆盖率；
+- 有效尝试率：首次带来一个清单内 supported function 的普通候选 attempts / 全部普通候选 attempts；
+- replay 成本与贡献：额外 replay GUI 动作数，以及成功恢复后首次新增覆盖的清单内功能数。
 
 普通候选 attempt 的 pilot/formal 上限分别为 10/25。Replay GUI 动作不占候选 attempt 预算，但单独限制并报告；同时报告 total GUI actions 与 cost-aware efficiency。绘制随普通 candidate attempt 变化的 supported-knowledge growth curve。失败、无变化、证据不完整、依赖违规、重复、停止原因和 replay-mediated gains 均作诊断指标。
 

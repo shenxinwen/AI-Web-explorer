@@ -46,7 +46,7 @@ def analyze(annotation_path: Path, core_dir: Path) -> dict:
                     core_id = row.get("core_id", "").strip()
                     if core_id:
                         supported_core.add(core_id)
-            growth.append(len(supported_keys))
+            growth.append(len(supported_core))
 
         attempt_count = len(attempts)
         core_total = core_totals.get(site, 0)
@@ -62,8 +62,8 @@ def analyze(annotation_path: Path, core_dir: Path) -> dict:
             "function_coverage": (
                 len(supported_core) / core_total if core_total else None
             ),
-            "supported_per_attempt": (
-                len(supported_keys) / attempt_count if attempt_count else None
+            "effective_attempt_rate": (
+                len(supported_core) / attempt_count if attempt_count else None
             ),
             "failed_attempts": sum(
                 row.get("executor_status", "").strip().lower() == "failed"
@@ -72,7 +72,7 @@ def analyze(annotation_path: Path, core_dir: Path) -> dict:
             "evidence_incomplete_attempts": sum(
                 not _truthy(row.get("evidence_complete")) for row in attempts
             ),
-            "growth_curve": growth,
+            "coverage_growth_curve": growth,
         })
     return {"schema_version": "e004-c2-metrics-v1", "runs": runs}
 

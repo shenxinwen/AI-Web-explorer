@@ -2,7 +2,7 @@
 
 ## 目的与边界
 
-该 inventory 只覆盖两个实验网站中稳定、可复现、可直接执行的核心高层功能，用于计算 `core-function recall`。它不是网站全部功能的穷举，也不包含导航栏中的站外功能、主题切换、登录入口等与购物主流程无关的通用控件。
+该 inventory 只覆盖两个实验网站中稳定、可复现、可直接执行的高层功能，用作 C2“功能覆盖率”的冻结分母。它不是网站全部功能的穷举，也不包含导航栏中的站外功能、主题切换、登录入口等与购物主流程无关的通用控件。文件中的 `core_id` 仅是稳定条目标识，不改变论文中的指标名称。
 
 Gold inventory 在查看待评测运行结果之前冻结。系统运行中产生的候选不能反向增加 gold 项；确需修订时必须提升 inventory 版本，并对全部条件重新评分。
 
@@ -18,7 +18,7 @@ Gold inventory 在查看待评测运行结果之前冻结。系统运行中产�
 ## 匹配标签
 
 - `matched`：位置和语义效果均一致，并至少有一个 interaction-supported attempt；
-- `proposed_only`：语义可匹配，但没有足够执行证据，不计入 supported core recall；
+- `proposed_only`：语义可匹配，但没有足够执行证据，不计入功能覆盖率；
 - `wrong_location`：效果相似但位置不一致；
 - `no_match`：gold inventory 中没有对应功能；
 - `uncertain`：材料不足，交由人工仲裁，不自动计为 matched。
@@ -28,11 +28,10 @@ Gold inventory 在查看待评测运行结果之前冻结。系统运行中产�
 每个网站、每次运行分别计算：
 
 ```text
-supported core recall = matched gold functions / all gold functions
-proposal core recall  = (matched + proposed_only) gold functions / all gold functions
+function coverage = interaction-supported matched functions / frozen functions
 ```
 
-主文报告 supported core recall；proposal core recall 用于说明“提出候选”和“获得证据支持”之间的差距。跨网站总体结果使用网站 macro-average。
+主文报告功能覆盖率，并同时给出 `x/n` 与百分比。候选被提出但未获得交互证据支持时不计入覆盖。跨网站总体结果使用网站 macro-average。
 
 Precision 仍以 action-attempt 人工标注计算，不能用 core inventory 中不存在某项就直接认定该候选错误，因为 inventory 明确不是全站穷举。
 

@@ -4,8 +4,8 @@
 
 | ID | 主张 | 所需证据 | 当前状态 |
 | --- | --- | --- | --- |
-| C1 | **Evidence-Grounded Functional Verification and Knowledge Admission：** 本文将功能验证建模为知识准入问题，显式区分 candidate discovery、executor-reported success 与 verified functional outcome。每个候选在执行前关联一个冻结的、可观察的 expected outcome；只有执行后证据支持该结果时，候选才进入持久功能模型。该机制旨在减少未经支持的知识准入，而非保证绝对正确。 | 在相同候选与冻结交互轨迹下，比较 proposal-as-fact、executor-success-as-fact 与 evidence-grounded admission，检验其能否提高准入知识准确性，同时保留已获得支持的有效功能知识。 | 主张已确定，证据待实验 |
-| C2 | **Execution-Grounded Open-Ended Model Induction：** 在固定探索预算下，通过“功能假设选择 → GUI 执行 → 前后观察 → 交互证据采集”持续产生 C1 所需的证据，并通过 persistent frontier 保留和重访未验证或未完成假设。 | 多轮开放探索协议；经交互支持的功能覆盖率与知识增长曲线；单位预算有效证据；移除 persistent frontier 的消融。 | 主张已确定，证据待实验 |
+| C1 | **Evidence-Grounded Functional Verification and Knowledge Admission：** 本文将功能验证建模为知识准入问题，显式区分 candidate discovery、executor-reported success 与 verified functional outcome。每个候选在执行前关联一个冻结的、可观察的 expected outcome；只有执行后证据支持该结果时，候选才进入持久功能模型。该机制旨在减少未经支持的知识准入，而非保证绝对正确。 | 在相同候选与冻结交互轨迹下，比较 proposal-as-fact、executor-success-as-fact 与 evidence-grounded admission，检验其能否提高准入知识准确性，同时保留已获得支持的有效功能知识。 | 正式实验完成；结果见 E003 |
+| C2 | **Execution-Grounded Open-Ended Model Induction：** 在固定普通候选动作预算下，通过“功能假设选择 → GUI 执行 → 前后观察 → 交互证据采集”持续产生 C1 所需的证据。结构化选择用于减少因忽略已观察依赖造成的无效尝试；persistent frontier 与 replay 用于恢复并继续验证离开位置时遗留的候选。 | Random、Linear、Full 三条件比较；有交互证据支持的功能覆盖率；覆盖增长曲线与有效尝试率；replay 新增覆盖及额外 GUI 成本。 | 协议与 instrumentation 已准备；待 pilot |
 | C3 | **Risk-Aware Open-Ended Exploration：** 将已选动作的执行前风险判断纳入 task-free/open-ended functional model induction，并把二元判断、主要风险类型和界面证据与相应功能假设及交互轨迹关联保存，以支持过程监督和事后审查。 | 风险识别 precision/recall/F1；风险类型准确率；动作语义与视觉上下文消融；上下文敏感案例；风险记录与功能/轨迹的关联完整率；普通探索与 replay 覆盖。 | 最小机制已实现，效果证据待实验 |
 
 ## 贡献之间的证据链
@@ -19,7 +19,7 @@
 
 ## 当前不应提前写入的效果性结论
 
-- “减少错误尝试”与“减少重复探索”只有在实验支持后才能报告。
+- “减少无效尝试”与“减少重复探索”只有在对应诊断指标支持后才能报告；C2 主结论优先使用功能覆盖率。
 - 风险检测不等于实际拦截，也不能直接证明探索过程已经更加安全。
 - Web 环境本身不是创新点；已有工作已研究 Web UI 开放探索与 Web GUI 状态机记忆。
 - 不主张本文首次考虑自动探索安全；本文的差异是将已选动作风险判断与开放式功能归纳及其证据链结合。

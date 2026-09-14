@@ -1,6 +1,6 @@
 # Pilot 工件就绪性核查
 
-> 核查日期：2026-09-06
+> 核查日期：2026-09-14
 >
 > 范围：只核查当前代码和已有工件能否支持 `protocol_v1.md`，不运行浏览器或模型实验。
 
@@ -15,21 +15,22 @@
 | candidate lifecycle/frontier | graph meta `location_exploration_memory` | 已有 | 计算 pending、attempts、revisit/completion |
 | 普通探索风险判断 | `execution_trace.metadata.risk_assessment` 或 error | 已有 | 计算识别与检测覆盖 |
 | replay 风险判断 | graph meta `replay_risk_assessments` | 已有 | 单独标记 sample source |
-| replay 次数和结果 | graph meta replay metrics | 已有 | 计算恢复相关指标 |
+| replay 次数和结果 | graph meta replay metrics、`replay_attempt_history` | 已有 | 计算 replay GUI 成本、恢复结果和后续正常 attempt |
 | 论文级 verification state | 无单一持久字段 | 可离线派生 | 使用 `annotation_guide_v1.md` 冻结映射，不新增运行时功能 |
-| no-replay 条件 | controller 在 `max_total_replays=0` 时禁止 replay | 可配置 | Pilot 前用现有测试确认，不新增开关 |
-| RQ1 baseline 输出 | 相同轨迹的离线准入规则 | 可派生 | 编写结果脚本，不重新运行浏览器 |
+| 三种 C2 条件 | CLI `--exploration-condition random/linear/full` | 已实现并测试 | Random 强制 seed；Linear 禁止 replay；Full 启用 replay |
+| C2 attempt 表 | `scripts/paper/build_c2_attempt_table.py` | 已实现并测试 | 不因失败或截图缺失删除 attempt |
+| C2 指标 | `scripts/paper/analyze_c2.py` | 已实现并测试 | 计算功能覆盖率、增长曲线和 attempt 诊断 |
 
 ## 当前结论
 
-当前 graph 和 execution-event 结构原则上覆盖 Pilot 所需原始信息。主要风险不是缺少核心字段，而是运行结束后截图文件可能未被完整保留、不同路径的 metadata 可能缺项，以及论文级 verification state 需要离线派生。
+当前 graph 和 execution-event 结构覆盖 Pilot 所需原始信息。剩余运行风险主要是截图文件是否完整保留、真实 replay 是否都能关联到恢复后的首个普通 attempt，以及两个网站的候选是否能在 10-attempt pilot 内形成可计算覆盖曲线。
 
 本地 `outputs/experiments/` 中仍保留 Practice Shopping 与 SauceDemo 的历史 graph、stagehand trace 和逐步 before/after screenshots，可用于样本导出格式验证。这些运行采用旧配置，只用于试标和工具检查，不转为正式论文结果。
 
 ## Pilot 前检查清单
 
 1. 固定一次输出目录并确认 graph、execution events、普通动作截图和 replay 截图均不会被覆盖。
-2. 用现有测试或 fixture 确认 `max_total_replays=0` 与 full 条件可区分。
-3. 从一个历史 graph 导出候选样本表，验证所有 `attempt_id` 唯一且截图路径可定位。
-4. 对 20 个样本完成双人试标；如暂无第二名标注者，只能完成格式试标，不能宣称标注一致性。
+2. 分别运行 Random、Linear、Full 的最小 smoke，确认条件名、seed、普通 attempt 数和 replay GUI 成本写入元数据。
+3. 从 smoke graph 导出完整 attempt 表，验证所有 `attempt_id` 唯一；截图缺失的 attempt 必须保留并标为 evidence-incomplete。
+4. 对 20 个样本完成 AI 初标与人工逐项审查，检查标签定义是否可执行；该流程不作为双人独立标注，也不报告标注者一致性。
 5. Pilot 后再决定是否需要补日志；在看到真实缺失前不修改探索框架。

@@ -8,7 +8,7 @@
 
 ### RQ2：Execution-Grounded Model Induction
 
-在相同 Web 应用、探索起点和交互预算下，执行驱动的探索循环与 persistent frontier 是否能够获得更多经交互支持的功能知识，并正确保留和恢复未完成假设？
+在相同 Web 应用、探索起点和普通候选动作预算下，结构化功能探索能否比随机选择获得更高的功能覆盖率，persistent frontier 与 replay 能否通过恢复遗留候选进一步提高覆盖率？
 
 ### RQ3：Risk-Aware Exploration
 
@@ -34,7 +34,7 @@
 
 - 直接采用 VLM 提议、缺少真实 outcome verification 的模型。
 - C1：在同一组冻结候选和轨迹上比较 proposal-as-fact、executor-success-as-fact 与 evidence-grounded admission；外部方法不作为 C1 主实验的硬性数值基线。
-- C2：linear/no replay 与完整 persistent-frontier 方法；UIExplore-AlGo、GUI-explorer 作为非阻塞追加对照。
+- C2：Random、Linear 与 Full。Random 不检查依赖且不 replay；Linear 检查已观察依赖并确定性选择，但不返回旧位置；Full 仅在 Linear 上增加 persistent frontier 与 replay。外部工作作为思想与机制对照，数值复现不作为主实验前提。
 - C3：通用 VLM zero-shot、OS-Sentinel/SeerGuard 类执行前判断，以及完整方法的输入消融；OSGuard 可作为补充外部数据，但需处理其依赖用户指令的标签差异。
 - 完整方法与三项核心消融。
 - 完整方法：截图 + 动作 label + 风险库。
@@ -57,10 +57,12 @@ RQ1 中一条功能知识由 `site + semantic_location + canonical_action_id` �
 
 ### 执行驱动归纳
 
-- 固定预算下 interaction-supported function coverage；
-- 随交互预算变化的知识增长曲线；
-- 单位交互获得的有效证据数；
-- 未完成假设的保留、重访与完成率。
+- 功能覆盖率：获得交互证据支持并匹配冻结功能清单的功能数 / 清单总数，是唯一主指标，同时报告 `x/n` 与百分比；
+- 覆盖增长曲线：随普通候选动作 attempts 变化的功能覆盖率；
+- 有效尝试率：带来新增已支持功能的普通候选 attempt 比例；
+- replay 成本与贡献：额外 replay GUI 动作数及 replay 后新增覆盖功能数。
+
+失败、无变化、证据不完整、依赖违规、重复尝试、停止原因和未完成候选恢复情况仅作诊断。Replay 动作不占普通候选动作预算，但必须单独限额并报告；因此 Full 的覆盖提升不自动等同于总 GUI 动作效率提升。
 
 ### 风险与副作用
 

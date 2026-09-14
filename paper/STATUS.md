@@ -1,6 +1,6 @@
 # 论文状态
 
-> 最后更新：2026-09-12
+> 最后更新：2026-09-14
 >
 > 维护规则：只记录当前有效结论、证据缺口和下一步；详细内容写入对应专题文件。
 
@@ -26,6 +26,7 @@
 - C3 的差异化定位收紧为：在 task-free/open-ended 功能归纳中，将已选动作的风险判断与功能假设、执行轨迹和结果证据关联保存。
 - 下游规划与行为验证用于检验模型价值；PDDL、SafeSym、VLM、浏览器执行器和 persistent frontier 均不作为独立创新。
 - C1 正式结果已归档：45 条候选功能中有 33 条人工支持知识。Evidence-grounded admission 的 precision 为 96.97%，supported knowledge retention 为 96.97%，高于 proposal-as-fact 的 73.33% precision 和 executor-success-as-fact 的 82.50% precision。该结论目前仅限 C1 的两个正式网站和冻结设置。
+- C2 主实验已收敛为 Random、Linear、Full 三条件比较，唯一主指标为有交互证据支持的功能覆盖率；覆盖增长、有效尝试率以及 replay 成本与新增覆盖作为辅助分析。Replay GUI 动作不计入普通候选 attempt 预算，但单独限额和报告。
 
 ## 已有资产
 
@@ -41,12 +42,12 @@
 - 设计风险识别标注规范，以及完整方法、w/o visual context、w/o taxonomy 的对比实验。
 - 核实相关工作及正式引用，明确最接近方法和可比实验设定。
 - 逐字段人工标注指南已建立；论文级 verification state 使用冻结规则从实现字段离线派生，不新增运行时功能。
-- 核查论文方法与当前代码的逐模块映射。
+- C2 三条件开关、随机 seed、replay GUI 动作计数、恢复后 attempt 关联、完整 attempt 导出和离线指标脚本已实现并通过回归；尚未进行 live pilot。
 - 冻结可复现环境、模型版本、配置、轨迹与结果工件格式。
 - 建立 ICLR LaTex 主稿。
 
 ## 下一步
 
-1. 冻结 E004 / C2 的运行配置和消融边界，不复用 C1 的结果作为 C2 过程指标。
-2. 运行 C2 pilot，检查知识增长曲线、单位预算有效证据和 frontier 恢复记录是否可计算。
+1. 冻结 E004 / C2 的精确模型、prompt、seed、运行命令和输出目录；不复用 C1 的结果作为 C2 过程指标。
+2. 获得确认后运行 6 次 C2 pilot，检查功能覆盖率、覆盖增长曲线、有效尝试率和 frontier/replay 成本记录是否可计算。
 3. C2 稳定后再开始 C3 pilot；当前不撰写论文正文。

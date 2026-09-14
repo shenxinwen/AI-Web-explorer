@@ -23,7 +23,7 @@
 ## 当前基线建议
 
 - **RQ1 / C1：** 在同一冻结候选和轨迹上比较 proposal-as-fact、executor-success-as-fact 与 evidence-grounded admission。外部工作用于定位和机制核查，不作为 C1 主实验的硬性数值 baseline。
-- **RQ2 / C2：** UIExplore-Bench Screen 模式下的 Random、BFS/DFS、UIExplore-AlGo，以及 w/o persistent frontier；资源允许时加入 GUI-explorer 系统级对照。
+- **RQ2 / C2：** 主实验在同一实现和动作空间内比较 Random、Linear 与 Full，以隔离结构化选择和 persistent-frontier replay 的作用。UIExplore-Bench、GUI-explorer 与 UI-KOBE 用于探索思想和机制对照；只有在环境、动作空间和预算无需实质改造即可对齐时，才作为追加数值实验。
 - **RQ3 / C3：** 通用 VLM zero-shot、w/o visual context、w/o taxonomy、SeerGuard/OS-Sentinel 类执行前判断；OSGuard 仅作补充外部评测。
 
 以上为第一轮核实结果。正式冻结 baseline 前仍需确认 ActionEngine、OS-Sentinel、OSGuard 和 SeerGuard 的代码、数据许可、输入输出映射及运行成本。
