@@ -89,7 +89,7 @@ def test_dependency_records_round_trip_and_schedule_requirements_first():
     assert restored.next_candidate("checkout").action_name == "place_order"
 
 
-def test_ungated_random_can_select_candidate_before_its_requirement():
+def test_random_can_select_candidate_before_its_requirement():
     memory = LocationExplorationMemory()
     memory.merge_scan(
         "checkout",
@@ -99,7 +99,7 @@ def test_ungated_random_can_select_candidate_before_its_requirement():
     )
     coordinator = LocationExplorationCoordinator(
         memory=memory,
-        selection_policy="ungated_random",
+        selection_policy="random",
         random_seed=0,
     )
 
@@ -108,7 +108,7 @@ def test_ungated_random_can_select_candidate_before_its_requirement():
     assert selected.action_name == "place_order"
 
 
-def test_ungated_random_selection_is_reproducible_and_keeps_lifecycle_limits():
+def test_random_selection_is_reproducible_and_keeps_lifecycle_limits():
     def selections(seed: int) -> list[str]:
         memory = LocationExplorationMemory(
             limits=ExplorationLimits(max_action_attempts_per_candidate=1)
@@ -120,7 +120,7 @@ def test_ungated_random_selection_is_reproducible_and_keeps_lifecycle_limits():
         )
         coordinator = LocationExplorationCoordinator(
             memory=memory,
-            selection_policy="ungated_random",
+            selection_policy="random",
             random_seed=seed,
         )
         result = []

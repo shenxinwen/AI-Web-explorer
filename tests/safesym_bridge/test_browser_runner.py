@@ -1161,11 +1161,11 @@ async def test_e004_conditions_reject_confounded_or_unseeded_configuration(tmp_p
             exploration_condition="linear",
             frontier_replay=True,
         )
-    with pytest.raises(ValueError, match="ungated_random requires a random seed"):
+    with pytest.raises(ValueError, match="random requires a random seed"):
         await browser_runner.run_stagehand_exploration(
             tmp_path / "random.json",
             start_url="https://fixture.test/shop",
-            exploration_condition="ungated_random",
+            exploration_condition="random",
         )
 
 

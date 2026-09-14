@@ -56,10 +56,10 @@ def analyze(annotation_path: Path, core_dir: Path) -> dict:
             "condition": condition,
             "candidate_attempts": attempt_count,
             "supported_functions": len(supported_keys),
-            "supported_core_count": len(supported_core),
+            "covered_functions": len(supported_core),
             "supported_noncore_count": len(supported_keys) - len(supported_core),
-            "core_total": core_total,
-            "supported_core_coverage": (
+            "function_total": core_total,
+            "function_coverage": (
                 len(supported_core) / core_total if core_total else None
             ),
             "supported_per_attempt": (

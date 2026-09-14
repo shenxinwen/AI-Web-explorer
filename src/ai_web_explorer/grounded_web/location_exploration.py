@@ -256,7 +256,7 @@ class LocationExplorationCoordinator:
         selection_policy: str = "deterministic",
         random_seed: int | None = None,
     ) -> None:
-        if selection_policy not in {"deterministic", "ungated_random"}:
+        if selection_policy not in {"deterministic", "random"}:
             raise ValueError(f"invalid selection policy: {selection_policy}")
         if memory is None:
             memory = LocationExplorationMemory(limits=limits)
@@ -430,9 +430,9 @@ class LocationExplorationCoordinator:
             candidate = self.memory.next_candidate(
                 location_id,
                 excluded_action_ids=gated_action_ids,
-                dependency_gated=self.selection_policy != "ungated_random",
+                dependency_gated=self.selection_policy != "random",
                 randomizer=(
-                    self._random if self.selection_policy == "ungated_random" else None
+                    self._random if self.selection_policy == "random" else None
                 ),
             )
             if candidate is None:

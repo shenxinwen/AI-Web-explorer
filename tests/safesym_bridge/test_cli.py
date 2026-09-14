@@ -587,9 +587,9 @@ def test_main_stagehand_explore_passes_e004_condition_and_seed(monkeypatch, tmp_
     assert main([
         "web-kobe-stagehand-explore", "--url", "https://fixture.test/shop",
         "--output", str(tmp_path / "graph.json"),
-        "--exploration-condition", "ungated_random", "--random-seed", "17",
+        "--exploration-condition", "random", "--random-seed", "17",
     ]) == 0
-    assert calls[0]["exploration_condition"] == "ungated_random"
+    assert calls[0]["exploration_condition"] == "random"
     assert calls[0]["random_seed"] == 17
 
 

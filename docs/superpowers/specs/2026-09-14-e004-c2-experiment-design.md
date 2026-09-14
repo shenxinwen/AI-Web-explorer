@@ -3,7 +3,7 @@
 ## Objective
 
 Evaluate whether structured functional exploration discovers a larger fraction
-of a small website's core functionality than ungated random exploration, and
+of a small website's frozen functionality than Random exploration, and
 whether persistent-frontier replay further improves coverage by returning to
 locations whose functional candidates remain unfinished.
 
@@ -15,8 +15,8 @@ knowledge-admission policies.
 
 Under a fixed candidate-attempt budget, structured functional exploration uses
 high-level functional candidates, dependency-aware execution, and candidate
-state memory to obtain greater interaction-supported core-function coverage
-than ungated random exploration. Persistent-frontier replay can further improve
+state memory to obtain greater interaction-supported function coverage
+than Random exploration. Persistent-frontier replay can further improve
 coverage by recovering functional candidates stranded by a linear trajectory,
 with replay interactions reported as a separate cost.
 
@@ -35,7 +35,7 @@ and evidence capture settings remain fixed across conditions.
 
 ## Conditions
 
-### Ungated Random
+### Random
 
 - Use the same candidate generator and generation settings as the other
   conditions. Each selected candidate is frozen before its own attempt; runs
@@ -108,7 +108,7 @@ added to the denominator after seeing results.
 
 ## Primary Metrics
 
-### Supported Core Coverage
+### Function Coverage
 
 `number of interaction-supported core functions / frozen core-function total`
 
@@ -133,7 +133,7 @@ This measures evidence-producing efficiency under the shared candidate budget.
 - supported-knowledge growth over normal candidate attempts;
 - executor success rate, reported only as a diagnostic and never as a proxy for
   supported knowledge;
-- dependency-violation attempts in Ungated Random;
+- dependency-violation attempts in Random;
 - failed, no-change, uncertain, and evidence-incomplete attempts;
 - repeated attempts of already completed functions;
 - stop reason and actual candidate attempts used;
@@ -163,8 +163,8 @@ Formal experiment, only after pilot approval:
 
 ## Required Comparisons
 
-- Ungated Random and Linear share candidate lifecycle bookkeeping. Their
-  comparison evaluates the system-level effect of ungated random selection
+- Random and Linear share candidate lifecycle bookkeeping. Their
+  comparison evaluates the system-level effect of random selection
   versus dependency-aware deterministic ordering; it must not be used to
   attribute gains to one ordering heuristic or to state memory independently.
 - Linear versus Full evaluates the marginal effect of persistent-frontier
@@ -190,7 +190,7 @@ Before starting the six pilot runs:
 
 If Full improves supported coverage per candidate attempt but not per total GUI
 action, the conclusion is that recovery improves coverage at additional replay
-cost, not that it improves total interaction efficiency. If Ungated Random
+cost, not that it improves total interaction efficiency. If Random
 performs worse, the result supports the structured exploration package as a
 whole; it does not independently validate dependency-recognition accuracy.
 

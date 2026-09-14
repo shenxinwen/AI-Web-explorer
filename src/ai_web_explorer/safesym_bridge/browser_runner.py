@@ -377,18 +377,18 @@ async def run_stagehand_exploration(
     condition_was_explicit = exploration_condition is not None
     if exploration_condition is None:
         exploration_condition = "full" if frontier_replay else "linear"
-    if exploration_condition not in {"ungated_random", "linear", "full"}:
+    if exploration_condition not in {"random", "linear", "full"}:
         raise ValueError(f"invalid exploration condition: {exploration_condition}")
-    if exploration_condition == "ungated_random" and frontier_replay:
-        raise ValueError("ungated_random cannot enable frontier replay")
+    if exploration_condition == "random" and frontier_replay:
+        raise ValueError("random cannot enable frontier replay")
     if exploration_condition == "full":
         frontier_replay = True
     if condition_was_explicit and exploration_condition == "linear" and frontier_replay:
         raise ValueError("linear cannot enable frontier replay")
-    if exploration_condition == "ungated_random" and random_seed is None:
-        raise ValueError("ungated_random requires a random seed")
-    if exploration_condition != "ungated_random" and random_seed is not None:
-        raise ValueError("random seed is only valid for ungated_random")
+    if exploration_condition == "random" and random_seed is None:
+        raise ValueError("random requires a random seed")
+    if exploration_condition != "random" and random_seed is not None:
+        raise ValueError("random seed is only valid for random")
 
     final_order_allowed = validate_final_order_authorization(
         start_url=start_url,
@@ -516,8 +516,8 @@ async def run_stagehand_exploration(
                 post_action_settle_ms=3000 if site_adapter == "realworld" else None,
             )
             candidate_selection_policy = (
-                "ungated_random"
-                if exploration_condition == "ungated_random"
+                "random"
+                if exploration_condition == "random"
                 else "deterministic"
             )
             explorer = WebKobeExplorer(

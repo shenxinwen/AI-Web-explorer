@@ -55,7 +55,7 @@ RQ1 首先只评估自然探索轨迹。受控挑战集暂不构建；仅在自�
 
 ### 对比
 
-1. **Ungated Random：** 在当前位置的未完成高层候选中按冻结 seed 随机选择，不检查动作依赖，不 replay；保留与其他条件相同的候选生命周期记录。
+1. **Random：** 在当前位置的未完成高层候选中按冻结 seed 随机选择，不检查动作依赖，不 replay；保留与其他条件相同的候选生命周期记录。
 2. **Linear / no replay：** 检查动作依赖并按现有确定性顺序选择；离开当前位置后不恢复未完成候选。
 3. **Full method：** 与 Linear 完全相同，唯一增加 persistent frontier 与 replay 恢复。
 
@@ -63,7 +63,7 @@ RQ1 首先只评估自然探索轨迹。受控挑战集暂不构建；仅在自�
 
 ### 主要指标
 
-- supported core-function coverage（主指标，报告 x/n 与百分比）；
+- 功能覆盖率（主指标，报告 x/n 与百分比）；
 - interaction-supported functions；
 - supported functions / normal candidate attempts。
 

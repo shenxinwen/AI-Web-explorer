@@ -7,7 +7,7 @@ def test_extract_attempts_retains_missing_screenshot_and_failed_event(tmp_path):
     graph = tmp_path / "graph.json"
     evidence = tmp_path / "evidence.json"
     graph.write_text(json.dumps({
-        "meta": {"exploration_condition": "ungated_random", "random_seed": 0},
+        "meta": {"exploration_condition": "random", "random_seed": 0},
         "nodes": [{"node_id": "n1", "semantic_location_hint": "login"}],
         "execution_events": [{
             "edge_id": "e1", "evidence_ref": "ev1", "source_node_id": "n1",
