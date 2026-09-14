@@ -35,3 +35,19 @@
 - 不删除、不覆盖、不选择性替换上述 v1 产物。
 - 在修复 checkpoint bounded retry 和运行清单记录后创建 pilot v2。
 - pilot v2 必须实际触发至少一次 replay，或明确证明两个网站在 pilot 预算下自然没有 recoverable frontier；否则不能进入正式 C2 runs。
+
+## Pilot v2（进行中）
+
+- 配置：`paper/experiments/configs/E004_c2_pilot_v2.md`
+- 实现提交：`72727ce985d25d023fc156da3f6070e0e7c18a7a`
+- 原始输出：`outputs/paper/pilot/E004_c2_v2/`
+- 当前状态：2/6 runs 完成；尚未启动正式实验。
+
+| 网站 | 方法 | 状态 | 普通 attempts | evidence-complete | executor success | replay GUI attempts | 停止原因 |
+| --- | --- | --- | ---: | ---: | ---: | ---: | --- |
+| Practice Shopping | Linear | 完成 | 10 | 8 | 8 | 0 | `max_exploration_steps_reached` |
+| Practice Shopping | Full | 完成 | 10 | 8 | 3 | 0 | `max_exploration_steps_reached` |
+
+两条 run 均越过 v1 的 checkpoint 失败位置并正常结束，说明 bounded retry 修复有效。失败与 evidence-incomplete attempts 均保留，并生成了 `run_command.txt`、`run_status.json` 和 `c2_attempts.csv`。
+
+Full 在 10-attempt 预算内仍未触发 replay。代码审查确认 replay 仅在当前状态返回 `current_state_exhausted` 后启动；本次 run 在预算结束前始终还有当前路径候选。因此当前只能验证 Full 条件可运行，尚不能完成 replay 成本与增量覆盖的 pilot 验收。继续完整矩阵前，应增加一条不计入条件比较结果的 replay activation smoke，或调整下一版 pilot 使其自然达到当前状态耗尽；不得把人为触发 smoke 混入 Random/Linear/Full 主比较。
