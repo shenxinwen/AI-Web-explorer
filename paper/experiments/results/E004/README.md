@@ -62,12 +62,27 @@ Full 在 10-attempt 预算内仍未触发 replay。代码审查确认 replay 仅
 
 审计发现当前 `replay_gui_action_attempts` 只累计 replay path actions，没有累计 `reset_to(start_url)` 导航。因此本次 replay 虽然发生，成本却记为 0，不能满足“完整单列 replay GUI 成本”的实验口径。为避免系统性低估 Full 成本，正式 v1 在 1/6 条后暂停；原始 run 永久保留，不覆盖。修复前不继续其他正式 runs。
 
-## 正式实验 v2（暂停）
+## 正式实验 v2（第一阶段完成）
 
 - 配置：`paper/experiments/configs/E004_c2_formal_v2.md`
 - 实现提交：`bab1318824a945ef13fbe9e521aa4fd862bd53f1`
 - 原始输出：`outputs/paper/formal/E004_c2_v2/`
 
-Replay reset 成本修复通过测试后，重新启动 Practice Shopping / Full / `run_01`。该 run 保存了 `before_0001`，但初始动作的外部模型/Stagehand 调用超过 150 秒没有返回，因配置未冻结请求超时而由操作者中断；未形成 graph checkpoint，状态标记为 `environment_failure`。其余 5 条未启动，原始目录保留。继续正式实验前需冻结对所有条件一致的 VLM 与 Stagehand action timeout。
+Replay reset 成本修复通过测试后，重新启动 Practice Shopping / Full / `run_01`。该 run 保存了 `before_0001`，但初始动作的外部模型/Stagehand 调用超过 150 秒没有返回，因配置未冻结请求超时而由操作者中断；未形成 graph checkpoint，状态标记为 `environment_failure`，原始目录永久保留。
 
-经用户确认，在不修改 v2 配置的情况下执行一次独立 `replacement_01`。该 run 正常跑满 25 个普通 attempts：17 次 executor success、21 次 evidence-complete、8 次 executor failure，停止原因为 `max_exploration_steps_reached`；未触发 replay。该结果说明前一条初始挂起是偶发外部异常，而不是稳定配置错误。原失败 run 与 replacement 均保留；replacement 是否作为该组合的主分析 run，须在人工覆盖率标注前确定。
+经用户确认，在不修改 v2 配置的情况下执行一次独立 `replacement_01`。该 run 正常跑满 25 个普通 attempts：17 次 executor success、21 次 evidence-complete、8 次 executor failure，停止原因为 `max_exploration_steps_reached`；未触发 replay。该结果说明前一条初始挂起是偶发外部异常，而不是稳定配置错误。原失败 run 与 replacement 均保留；用户已在人工覆盖率标注前确认将 `replacement_01` 作为 Practice Shopping / Full 的有效 `run_01` 纳入主分析。
+
+第一阶段的 6 条有效 `run_01` 已完成：
+
+| 网站 | 方法 | 有效目录 | 普通 attempts | evidence-complete | executor success | executor failed | replay 次数 | replay GUI actions | 停止原因 |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Practice Shopping | Random | `random/run_01` | 19 | 18 | 7 | 12 | 0 | 0 | `current_state_exhausted` |
+| Practice Shopping | Linear | `linear/run_01` | 17 | 15 | 11 | 6 | 0 | 0 | `current_state_exhausted` |
+| Practice Shopping | Full | `full/replacement_01` | 25 | 21 | 17 | 8 | 0 | 0 | `max_exploration_steps_reached` |
+| SauceDemo | Random | `random/run_01` | 3 | 3 | 1 | 2 | 0 | 0 | `current_state_exhausted` |
+| SauceDemo | Linear | `linear/run_01` | 10 | 10 | 10 | 0 | 0 | 0 | `current_state_exhausted` |
+| SauceDemo | Full | `full/run_01` | 20 | 20 | 16 | 4 | 4 | 28 | `total_replay_limit_reached` |
+
+这里的普通 attempts 是三种方法共享的 25-attempt 主预算。Full 的 replay reset 与路径执行不计入普通 attempts，而是单列为 replay GUI actions。SauceDemo / Full 提供了真实验证：它在 20 个普通 attempts 之外执行了 28 个 replay GUI actions；停止原因是独立的总 replay 上限，而不是普通 attempt 上限。
+
+目前只可报告运行与成本诊断，不能据此下覆盖率结论。`c2_attempts.csv` 已全部导出，但功能覆盖率仍需按冻结功能清单完成人工标注。按预注册阶段门，暂不启动 `run_02` 和 `run_03`。
