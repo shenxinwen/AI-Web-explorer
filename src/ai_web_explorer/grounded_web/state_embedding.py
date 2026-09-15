@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable, Sequence
@@ -136,8 +137,25 @@ def write_state_embedding_records(
         ) as handle:
             temp_path = Path(handle.name)
             handle.write(text)
-        temp_path.replace(path)
+        _replace_with_permission_retry(temp_path, path)
     finally:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)
     return path
+
+
+def _replace_with_permission_retry(
+    source: Path,
+    target: Path,
+    *,
+    max_attempts: int = 3,
+    delay_seconds: float = 0.05,
+) -> None:
+    for attempt in range(1, max_attempts + 1):
+        try:
+            source.replace(target)
+            return
+        except PermissionError:
+            if attempt == max_attempts:
+                raise
+            time.sleep(delay_seconds)

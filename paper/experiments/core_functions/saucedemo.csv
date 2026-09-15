@@ -1,14 +1,23 @@
-﻿core_id,semantic_location,function_label,accepted_aliases,notes
+core_id,semantic_location,function_label,accepted_aliases,notes
 SD01,login_form,enter credentials,fill login fields;fill username and password,填写登录凭据，不包含提交
 SD02,login_form,submit login,login;submit login form,提交已填写的登录表单
-SD03,product_catalog,add one product to cart,add to cart;add product,同类商品按钮按一个参数化功能计数
-SD04,product_catalog,sort products,change product order;sort catalog,不同排序值不拆分
-SD05,product_catalog,view cart,open cart;shopping cart,
-SD06,cart_page,remove one cart item,remove item;remove from cart,同类商品按参数化功能计数
-SD07,cart_page,continue shopping,return to products;back to catalog,
-SD08,cart_page,start checkout,checkout;proceed to checkout,
-SD09,checkout_information_form,complete checkout information,fill checkout information;fill customer information,将姓名和邮编字段视为一个复合高层功能
-SD10,checkout_information_form,submit checkout information,continue checkout;submit customer information,
-SD11,checkout_information_form,cancel checkout,cancel;return to cart,
-SD12,checkout_overview,complete checkout,finish;place order,
-SD13,checkout_overview,cancel checkout,cancel;return to products,与信息页的取消按不同语义位置分别计数
+SD03,product_catalog,sort products,change product order;sort catalog,不同排序值不拆分
+SD04,product_catalog,view product details,open product details;select product,同类商品按一个参数化功能计数
+SD05,product_catalog,add one product to cart,add to cart;add product,同类商品按一个参数化功能计数
+SD06,product_catalog,remove one product from cart,remove product;remove from catalog,商品列表页中的移除功能
+SD07,global_header,view cart,open cart;shopping cart,持续显示的全局购物车入口只计一次
+SD08,product_detail,add one product to cart,add to cart;add product,商品详情页中的加入购物车功能
+SD09,product_detail,remove one product from cart,remove product;remove from detail,商品详情页中的移除功能
+SD10,product_detail,return to products,back to products;back to catalog,商品详情页返回商品列表
+SD11,cart_page,view product details,open product details;select cart item,购物车中的商品详情入口
+SD12,cart_page,remove one cart item,remove item;remove from cart,同类商品按参数化功能计数
+SD13,cart_page,continue shopping,return to products;back to catalog,
+SD14,cart_page,start checkout,checkout;proceed to checkout,
+SD15,checkout_information_form,complete checkout information,fill checkout information;fill customer information,将姓名和邮编字段视为一个复合高层功能
+SD16,checkout_information_form,submit checkout information,continue checkout;submit customer information,
+SD17,checkout_information_form,cancel checkout,cancel;return to cart,
+SD18,checkout_overview,view product details,open product details;select order item,结账概览页中的商品详情入口
+SD19,checkout_overview,complete checkout,finish;place order,
+SD20,checkout_overview,cancel checkout,cancel;return to products,
+SD21,checkout_complete_surface,return to products,back home;navigate home,订单完成页返回商品列表
+SD22,checkout_complete_surface,generate order PDF,download order pdf;generate pdf,订单完成页生成订单 PDF

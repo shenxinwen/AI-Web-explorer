@@ -85,4 +85,34 @@ Replay reset 成本修复通过测试后，重新启动 Practice Shopping / Full
 
 这里的普通 attempts 是三种方法共享的 25-attempt 主预算。Full 的 replay reset 与路径执行不计入普通 attempts，而是单列为 replay GUI actions。SauceDemo / Full 提供了真实验证：它在 20 个普通 attempts 之外执行了 28 个 replay GUI actions；停止原因是独立的总 replay 上限，而不是普通 attempt 上限。
 
+## 正式实验 v2（Full / run_02 初标待人工复核）
+
+本阶段仅执行两个 Full 条件的 `run_02`；没有启动 Random、Linear 或任何 `run_03`，候选上限与探索提示词均未修改。以下覆盖率来自 AI 初标，必须按冻结 inventory 做人工逐项复核后才能进入正式汇总。
+
+| 网站 | 方法 | 有效目录 | 普通 attempts | evidence-complete | executor failed | replay 次数 | replay GUI actions | 停止原因 | AI 初标覆盖率 |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| Practice Shopping | Full | `practice_shopping/full/run_02_replacement_03` | 18 | 16 | 4 | 1 | 1 | `no_recoverable_frontier` | 9/16 (56.3%) |
+| SauceDemo | Full | `saucedemo/full/run_02` | 21 | 21 | 0 | 3 | 20 | `no_recoverable_frontier` | 14/22 (63.6%) |
+
+- AI 初标分别保存在有效 run 目录的 `c2_attempts_ai_initial.csv`；对应可重算摘要为 `c2_metrics_ai_initial.json`。
+- Practice Shopping 的两条价格筛选 attempt 缺少 after 截图，标作 `incomplete`；其余 16 条 evidence complete。唯一 replay 为入口 reset，包含 1 个 GUI 动作，恢复后首个普通 attempt 是 `view_cart`。
+- SauceDemo 的 3 条 replay 均成功，GUI 成本分别为 5、7、8 个动作。`generate_order_pdf` 被提出并执行两次，但 before/after 未呈现可见下载或其他结果，因此初标为 `proposed_only`，不计 SD22。
+- 两个 run 都未产生商品详情候选；Practice Shopping 也未产生分页候选。这是候选生成覆盖的观察记录，不能由这两条 run 单独推广为随机性结论。
+
+### 保留的无效 Practice Shopping Full / run_02 目录
+
+下列目录永久保留供可追溯性使用，但不进入正式结果：
+
+| 目录 | 排除原因 |
+| --- | --- |
+| `practice_shopping/full/run_02` | 浏览器启动前的 spawn `EPERM`。 |
+| `practice_shopping/full/run_02_replacement_01` | 共享 `state_embeddings` 写入失败。 |
+| `practice_shopping/full/run_02_replacement_02` | `stagehand_trace` 写入失败。 |
+
+`run_02_replacement_03` 是唯一有效的 Practice Shopping Full / run_02。后续每条 run 必须使用显式、独立的 `--embedding-path`，以避免共享嵌入状态写入。
+
+### Windows 原子写入修复
+
+Windows 上 `os.replace` 偶发 `PermissionError` 的两个 checkpoint 写入点已加入有界重试：`browser_runner.py` 的运行产物写入，以及 `state_embedding.py` 的状态嵌入写入；相应回归测试已添加。上述两条有效 run 均在修复后完成。该修复不改变候选预算、选择策略或探索提示词。
+
 目前只可报告运行与成本诊断，不能据此下覆盖率结论。`c2_attempts.csv` 已全部导出，但功能覆盖率仍需按冻结功能清单完成人工标注。按预注册阶段门，暂不启动 `run_02` 和 `run_03`。

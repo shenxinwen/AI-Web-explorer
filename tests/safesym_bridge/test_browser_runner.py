@@ -469,6 +469,31 @@ def test_write_web_kobe_graph_retries_transient_permission_error(
     assert list(tmp_path.glob(".*.tmp")) == []
 
 
+def test_write_text_atomically_retries_transient_permission_error(
+    tmp_path, monkeypatch
+):
+    output_path = tmp_path / "stagehand_trace.json"
+    original_replace = Path.replace
+    replace_attempts = 0
+
+    def transient_replace(path, target):
+        nonlocal replace_attempts
+        if Path(target) == output_path:
+            replace_attempts += 1
+            if replace_attempts == 1:
+                raise PermissionError("trace temporarily locked")
+        return original_replace(path, target)
+
+    monkeypatch.setattr(Path, "replace", transient_replace)
+    monkeypatch.setattr(browser_runner.time, "sleep", lambda _seconds: None)
+
+    browser_runner._write_text_atomically(output_path, '[{"ok": true}]')
+
+    assert replace_attempts == 2
+    assert output_path.read_text(encoding="utf-8") == '[{"ok": true}]'
+    assert list(tmp_path.glob(".*.tmp")) == []
+
+
 @pytest.mark.anyio
 async def test_run_stagehand_exploration_wires_generic_stagehand_backend(
     tmp_path,

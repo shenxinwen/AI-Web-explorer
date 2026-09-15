@@ -225,7 +225,7 @@ def _write_text_atomically(path: Path, text: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = _write_json_temp(path, text)
     try:
-        temp_path.replace(path)
+        _replace_with_permission_retry(temp_path, path)
     finally:
         temp_path.unlink(missing_ok=True)
     return path

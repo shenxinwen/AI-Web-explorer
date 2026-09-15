@@ -1,11 +1,17 @@
-﻿core_id,semantic_location,function_label,accepted_aliases,notes
-PS01,shopping,search products,"search items;product search",""
-PS02,shopping,filter products,"apply filters;filter catalog","类别、价格、评分、库存和优惠属于同一参数化功能"
-PS03,shopping,sort products,"sort by name;sort by price;change product order","不同排序字段与方向不拆分"
-PS04,shopping,add one product to cart,"add to cart;add product","同类商品按一个参数化功能计数"
-PS05,shopping,view cart,"open cart;shopping cart",""
-PS06,checkout,complete billing information,"fill billing information;fill address",""
-PS07,checkout,select payment method,"choose credit card;choose paypal;choose ideal","不同付款方式不拆分"
-PS08,checkout,complete payment information,"fill payment information;enter card details",""
-PS09,checkout,place order,"submit order;confirm purchase",""
-PS10,confirmation,download invoice,"download invoice pdf;save invoice","成功提示文本本身不是动作"
+core_id,semantic_location,function_label,accepted_aliases,notes
+PS01,shopping_results_page,search products,search items;product search,
+PS02,shopping_results_page,filter products,apply filters;filter catalog,类别、价格、评分、库存和优惠属于同一参数化功能
+PS03,shopping_results_page,clear filters,reset filters;clear all filters,
+PS04,shopping_results_page,sort products,sort by name;sort by price;change product order,不同排序字段与方向不拆分
+PS05,shopping_results_page,paginate products,next page;previous page;change page,不同页码和方向不拆分
+PS06,shopping_results_page,view product details,open product details;view item,
+PS07,product_detail_modal,close product details,close detail modal;return to products,
+PS08,shopping_results_page,add one product to cart,add to cart;add product,同类商品按一个参数化功能计数
+PS09,product_detail_modal,add one product to cart,add to cart;add product,商品详情弹窗中的加入购物车功能
+PS10,global_header,view cart or checkout,open cart;shopping cart;checkout,持续显示的全局购物车入口只计一次
+PS11,checkout_modal,close checkout and continue shopping,continue shopping;close checkout;return to products,空购物车或结账弹窗均视为同一关闭动作
+PS12,checkout_form,complete billing information,fill billing information;fill address,
+PS13,checkout_form,select payment method,choose credit card;choose paypal;choose ideal,不同付款方式不拆分
+PS14,checkout_form,complete payment information,fill payment information;enter card details,
+PS15,checkout_form,place order,submit order;confirm purchase,
+PS16,payment_success_modal,download invoice,download invoice pdf;save invoice,成功提示文本本身不是动作

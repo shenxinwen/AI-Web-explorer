@@ -105,3 +105,25 @@ def test_failed_embedding_replace_preserves_previous_file(tmp_path, monkeypatch)
 
     assert path.read_bytes() == old_bytes
     assert list(tmp_path.glob("*.tmp")) == []
+
+
+def test_embedding_write_retries_transient_permission_error(tmp_path, monkeypatch):
+    path = tmp_path / "state_embeddings.json"
+    original_replace = Path.replace
+    replace_attempts = 0
+
+    def transient_replace(self, target):
+        nonlocal replace_attempts
+        if Path(target) == path:
+            replace_attempts += 1
+            if replace_attempts == 1:
+                raise PermissionError("embedding temporarily locked")
+        return original_replace(self, target)
+
+    monkeypatch.setattr(Path, "replace", transient_replace)
+
+    write_state_embedding_records(path, [])
+
+    assert replace_attempts == 2
+    assert read_state_embedding_records(path) == []
+    assert list(tmp_path.glob("*.tmp")) == []
