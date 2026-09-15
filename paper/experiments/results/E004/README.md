@@ -69,3 +69,5 @@ Full 在 10-attempt 预算内仍未触发 replay。代码审查确认 replay 仅
 - 原始输出：`outputs/paper/formal/E004_c2_v2/`
 
 Replay reset 成本修复通过测试后，重新启动 Practice Shopping / Full / `run_01`。该 run 保存了 `before_0001`，但初始动作的外部模型/Stagehand 调用超过 150 秒没有返回，因配置未冻结请求超时而由操作者中断；未形成 graph checkpoint，状态标记为 `environment_failure`。其余 5 条未启动，原始目录保留。继续正式实验前需冻结对所有条件一致的 VLM 与 Stagehand action timeout。
+
+经用户确认，在不修改 v2 配置的情况下执行一次独立 `replacement_01`。该 run 正常跑满 25 个普通 attempts：17 次 executor success、21 次 evidence-complete、8 次 executor failure，停止原因为 `max_exploration_steps_reached`；未触发 replay。该结果说明前一条初始挂起是偶发外部异常，而不是稳定配置错误。原失败 run 与 replacement 均保留；replacement 是否作为该组合的主分析 run，须在人工覆盖率标注前确定。
