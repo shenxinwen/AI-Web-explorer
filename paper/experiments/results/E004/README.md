@@ -61,3 +61,11 @@ Full 在 10-attempt 预算内仍未触发 replay。代码审查确认 replay 仅
 该 run 在 17 个普通 attempts 后因 `no_recoverable_frontier` 自然停止：14 次 executor success，16 次 evidence-complete；成功触发 1 次 replay，并关联到恢复后的首个普通 attempt。Replay 目标由入口 reset 直接到达，路径 action 为 0。
 
 审计发现当前 `replay_gui_action_attempts` 只累计 replay path actions，没有累计 `reset_to(start_url)` 导航。因此本次 replay 虽然发生，成本却记为 0，不能满足“完整单列 replay GUI 成本”的实验口径。为避免系统性低估 Full 成本，正式 v1 在 1/6 条后暂停；原始 run 永久保留，不覆盖。修复前不继续其他正式 runs。
+
+## 正式实验 v2（暂停）
+
+- 配置：`paper/experiments/configs/E004_c2_formal_v2.md`
+- 实现提交：`bab1318824a945ef13fbe9e521aa4fd862bd53f1`
+- 原始输出：`outputs/paper/formal/E004_c2_v2/`
+
+Replay reset 成本修复通过测试后，重新启动 Practice Shopping / Full / `run_01`。该 run 保存了 `before_0001`，但初始动作的外部模型/Stagehand 调用超过 150 秒没有返回，因配置未冻结请求超时而由操作者中断；未形成 graph checkpoint，状态标记为 `environment_failure`。其余 5 条未启动，原始目录保留。继续正式实验前需冻结对所有条件一致的 VLM 与 Stagehand action timeout。
