@@ -384,7 +384,14 @@ async def test_controller_replays_entry_frontier_with_empty_path_then_explores()
             ),
             _graph(completed=1),
         ],
-        ReplayResult(True, "start", None, "replay_succeeded", 0),
+        ReplayResult(
+            True,
+            "start",
+            None,
+            "replay_succeeded",
+            0,
+            reset_attempted_steps=1,
+        ),
     )
     controller = WebKobeExplorationController(
         explorer,
@@ -400,6 +407,9 @@ async def test_controller_replays_entry_frontier_with_empty_path_then_explores()
     assert explorer.calls == 2
     assert result.summary.steps_completed == 1
     assert result.summary.stop_reason == "max_steps"
+    assert result.graph.meta["replay_gui_action_attempts"] == 1
+    assert result.graph.meta["replay_attempt_history"][0]["reset_attempted_steps"] == 1
+    assert result.graph.meta["replay_attempt_history"][0]["gui_action_attempts"] == 1
 
 
 @pytest.mark.anyio
@@ -468,6 +478,8 @@ async def test_controller_blocks_failed_frontier_replay_and_stops_without_graph_
             "failed_edge_id": "start__open_frontier__frontier",
             "completed_steps": 0,
             "attempted_steps": 0,
+            "reset_attempted_steps": 0,
+            "gui_action_attempts": 0,
             "post_replay_attempt_id": None,
         }
     ]

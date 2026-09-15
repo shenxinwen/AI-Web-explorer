@@ -66,6 +66,11 @@ class ReplayResult:
     reason: str
     completed_steps: int
     attempted_steps: int = 0
+    reset_attempted_steps: int = 0
+
+    @property
+    def gui_action_attempts(self) -> int:
+        return self.reset_attempted_steps + self.attempted_steps
 
 
 class FrontierReplayRunner:
@@ -82,7 +87,14 @@ class FrontierReplayRunner:
         if start_node_id is None:
             return ReplayResult(False, None, None, "entry_state_unavailable", 0)
         if not await self.explorer.adapter.reset_to(start_url):
-            return ReplayResult(False, None, None, "entry_reset_failed", 0)
+            return ReplayResult(
+                False,
+                None,
+                None,
+                "entry_reset_failed",
+                0,
+                reset_attempted_steps=1,
+            )
 
         completed_steps = 0
         attempted_steps = 0
@@ -96,6 +108,7 @@ class FrontierReplayRunner:
                     "replay_action_failed",
                     completed_steps,
                     attempted_steps,
+                    reset_attempted_steps=1,
                 )
             completed_steps += 1
 
@@ -112,6 +125,7 @@ class FrontierReplayRunner:
                 "target_state_mismatch",
                 completed_steps,
                 attempted_steps,
+                reset_attempted_steps=1,
             )
 
         # Restore context only after the observed target identity is confirmed.
@@ -129,6 +143,7 @@ class FrontierReplayRunner:
             "replay_succeeded",
             completed_steps,
             attempted_steps,
+            reset_attempted_steps=1,
         )
 
 def select_frontier(

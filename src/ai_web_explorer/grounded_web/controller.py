@@ -407,7 +407,7 @@ class WebKobeExplorationController:
                     start_url=self.start_url,
                 )
                 replay_metrics["replay_gui_action_attempts"] += int(
-                    replay_result.attempted_steps
+                    replay_result.gui_action_attempts
                 )
                 replay_history_entry = {
                         "attempt": int(replay_metrics["replay_attempt_count"]),
@@ -421,6 +421,12 @@ class WebKobeExplorationController:
                         "failed_edge_id": replay_result.failed_edge_id,
                         "completed_steps": int(replay_result.completed_steps),
                         "attempted_steps": int(replay_result.attempted_steps),
+                        "reset_attempted_steps": int(
+                            replay_result.reset_attempted_steps
+                        ),
+                        "gui_action_attempts": int(
+                            replay_result.gui_action_attempts
+                        ),
                         "post_replay_attempt_id": None,
                     }
                 replay_attempt_history.append(replay_history_entry)

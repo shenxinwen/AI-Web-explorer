@@ -575,6 +575,8 @@ async def test_frontier_replay_resets_executes_and_validates_without_graph_edges
     assert result.success is True
     assert result.reached_node_id == "target"
     assert result.completed_steps == 1
+    assert result.reset_attempted_steps == 1
+    assert result.gui_action_attempts == 2
     assert adapter.reset_calls == ["https://fixture.test/shop"]
     assert adapter.executed == ["open_target"]
     assert explorer.manager.to_graph().to_dict() == before_graph
@@ -718,3 +720,5 @@ async def test_frontier_replay_stops_on_action_failure_without_observation():
     assert result.reason == "replay_action_failed"
     assert result.completed_steps == 0
     assert result.attempted_steps == 1
+    assert result.reset_attempted_steps == 1
+    assert result.gui_action_attempts == 2
