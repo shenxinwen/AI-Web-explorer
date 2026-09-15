@@ -1,6 +1,6 @@
 # E004 / C2 正式实验配置 v1
 
-> 状态：已冻结。经用户确认，先执行每个网站、每种方法的 `run_01`；审计后再决定是否补齐 `run_02` 与 `run_03`。
+> 状态：已冻结并暂停。首条 Full run 暴露 replay reset 导航未计入 GUI 成本的问题；其余 runs 未启动，详见 `paper/experiments/results/E004/README.md`。
 >
 > Pilot v1/v2 产物不计入正式结果，且不得复制、续跑或替换为正式 run。
 
