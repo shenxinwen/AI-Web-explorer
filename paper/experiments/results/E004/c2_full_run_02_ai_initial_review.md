@@ -1,6 +1,8 @@
 # C2 Full / run_02 AI 初标人工复核表
 
-状态说明：`covered` 为至少一条 evidence-complete、interaction-supported 的 AI 初标匹配；`proposed_only` 不计覆盖；`not proposed` 表示有效 run 中未见对应候选。请逐项将“人工决定”填写为 `accept`、`revise` 或 `uncertain`，并在需要时注明依据。此表不替代原始逐 attempt CSV。
+状态说明：`covered` 为至少一条 evidence-complete、interaction-supported 的 AI 初标匹配；`proposed_only` 不计覆盖；`not proposed` 表示有效 run 中未见对应候选。
+
+人工复核结论（2026-09-15）：复核者确认本表列举的功能存在，且全部初始标注无误；下表所有条目的“人工决定”均为 `accept`。此表不替代原始逐 attempt CSV。
 
 ## SauceDemo / Full / run_02
 

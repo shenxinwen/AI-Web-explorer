@@ -85,16 +85,16 @@ Replay reset 成本修复通过测试后，重新启动 Practice Shopping / Full
 
 这里的普通 attempts 是三种方法共享的 25-attempt 主预算。Full 的 replay reset 与路径执行不计入普通 attempts，而是单列为 replay GUI actions。SauceDemo / Full 提供了真实验证：它在 20 个普通 attempts 之外执行了 28 个 replay GUI actions；停止原因是独立的总 replay 上限，而不是普通 attempt 上限。
 
-## 正式实验 v2（Full / run_02 初标待人工复核）
+## 正式实验 v2（Full / run_02 已完成人工复核）
 
-本阶段仅执行两个 Full 条件的 `run_02`；没有启动 Random、Linear 或任何 `run_03`，候选上限与探索提示词均未修改。以下覆盖率来自 AI 初标，必须按冻结 inventory 做人工逐项复核后才能进入正式汇总。
+本阶段仅执行两个 Full 条件的 `run_02`；没有启动 Random、Linear 或任何 `run_03`，候选上限与探索提示词均未修改。AI 初标已经冻结 inventory 的逐项人工复核确认，可作为这两条 run 的正式覆盖率；其余条件仍未标注或复核。
 
-| 网站 | 方法 | 有效目录 | 普通 attempts | evidence-complete | executor failed | replay 次数 | replay GUI actions | 停止原因 | AI 初标覆盖率 |
+| 网站 | 方法 | 有效目录 | 普通 attempts | evidence-complete | executor failed | replay 次数 | replay GUI actions | 停止原因 | 已复核覆盖率 |
 | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
 | Practice Shopping | Full | `practice_shopping/full/run_02_replacement_03` | 18 | 16 | 4 | 1 | 1 | `no_recoverable_frontier` | 9/16 (56.3%) |
 | SauceDemo | Full | `saucedemo/full/run_02` | 21 | 21 | 0 | 3 | 20 | `no_recoverable_frontier` | 14/22 (63.6%) |
 
-- AI 初标分别保存在有效 run 目录的 `c2_attempts_ai_initial.csv`；对应可重算摘要为 `c2_metrics_ai_initial.json`。
+- 初始逐 attempt 标注分别保存在有效 run 目录的 `c2_attempts_ai_initial.csv`；人工复核接受该初标，且对应可重算摘要为 `c2_metrics_ai_initial.json`。
 - Practice Shopping 的两条价格筛选 attempt 缺少 after 截图，标作 `incomplete`；其余 16 条 evidence complete。唯一 replay 为入口 reset，包含 1 个 GUI 动作，恢复后首个普通 attempt 是 `view_cart`。
 - SauceDemo 的 3 条 replay 均成功，GUI 成本分别为 5、7、8 个动作。`generate_order_pdf` 被提出并执行两次，但 before/after 未呈现可见下载或其他结果，因此初标为 `proposed_only`，不计 SD22。
 - 两个 run 都未产生商品详情候选；Practice Shopping 也未产生分页候选。这是候选生成覆盖的观察记录，不能由这两条 run 单独推广为随机性结论。
