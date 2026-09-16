@@ -115,4 +115,8 @@ Replay reset 成本修复通过测试后，重新启动 Practice Shopping / Full
 
 Windows 上 `os.replace` 偶发 `PermissionError` 的两个 checkpoint 写入点已加入有界重试：`browser_runner.py` 的运行产物写入，以及 `state_embedding.py` 的状态嵌入写入；相应回归测试已添加。上述两条有效 run 均在修复后完成。该修复不改变候选预算、选择策略或探索提示词。
 
+## 正式实验 v2（run_02 矩阵）
+
+run_02 的两条 Full、四条 Random/Linear 已完成；所有 run 使用独立 embedding 路径，且未启动 run_03。执行质量、停止原因、AI 初标覆盖、增长曲线和 replay 增量见 [c2_run_02_execution_metrics_ai_initial.md](c2_run_02_execution_metrics_ai_initial.md)。其中 Full 覆盖率已经人工复核；Random 和 Linear 的覆盖初标仍待复核。
+
 目前只可报告运行与成本诊断，不能据此下覆盖率结论。`c2_attempts.csv` 已全部导出，但功能覆盖率仍需按冻结功能清单完成人工标注。按预注册阶段门，暂不启动 `run_02` 和 `run_03`。
