@@ -8,11 +8,15 @@
 
 ### RQ2：Execution-Grounded Model Induction
 
-在相同 Web 应用、探索起点和普通候选动作预算下，结构化功能探索能否比随机选择获得更高的功能覆盖率，persistent frontier 与 replay 能否通过恢复遗留候选进一步提高覆盖率？
+在相同 Web 应用、探索起点和普通候选动作预算下，执行驱动探索能否持续产生支持或否定功能假设的交互证据，并在证据准入约束下保留有用的功能发现能力？依赖感知选择以及 persistent frontier/replay 对跨位置未完成假设的恢复、增量覆盖和额外 GUI 成本分别有什么影响？
 
-### RQ3：Risk-Aware Exploration
+### RQ3：Environmental Risk Awareness
 
-风险感知模块能否准确识别自动探索生成的已选动作可能带来的风险，并给出有 GUI 上下文证据支持的风险分类？
+风险感知模块能否根据执行前 GUI observation 和动作语义，准确识别自动探索生成的已选交互在当前上下文中可能带来的环境风险，并给出有界面证据支持的风险分类？
+
+### Overall Claim：Reliability and Risk Awareness without Abandoning Exploration
+
+C1–C3 的综合证据用于检验：VERA 能否提高功能知识准入的可靠性、使自主探索动作的潜在环境风险可感知和可追溯，同时在固定预算下仍保留有用的功能发现能力。当前 shadow-mode 风险判断不改变执行，因此该综合 claim 不等同于端到端安全性提升，也不检验风险控制与覆盖率之间的执行策略权衡。
 
 ### Auxiliary Evaluation：Downstream Planning and Behavior Verification
 
@@ -34,7 +38,7 @@
 
 - 直接采用 VLM 提议、缺少真实 outcome verification 的模型。
 - C1：在同一组冻结候选和轨迹上比较 proposal-as-fact、executor-success-as-fact 与 evidence-grounded admission；外部方法不作为 C1 主实验的硬性数值基线。
-- C2：Random、Linear 与 Full。Random 不检查依赖且不 replay；Linear 检查已观察依赖并确定性选择，但不返回旧位置；Full 仅在 Linear 上增加 persistent frontier 与 replay。外部工作作为思想与机制对照，数值复现不作为主实验前提。
+- C2：Random、Linear 与 Full。Random 不检查依赖且不 replay；Linear 检查已观察依赖并确定性选择，但不返回旧位置；Full 仅在 Linear 上增加 persistent frontier 与 replay。该内部比较用于隔离证据生产机制，并评估可靠知识归纳是否保留有用覆盖；不以复现或击败外部探索器作为主实验成立条件。
 - C3：通用 VLM zero-shot、OS-Sentinel/SeerGuard 类执行前判断，以及完整方法的输入消融；OSGuard 可作为补充外部数据，但需处理其依赖用户指令的标签差异。
 - 完整方法与三项核心消融。
 - 完整方法：截图 + 动作 label + 风险库。

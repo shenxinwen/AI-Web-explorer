@@ -20,7 +20,7 @@
 | Functional outcome | 功能结果状态与界面转移类型 | Executor Success 不等于 Functional Success |
 | Verification state | 功能结论当前获得的支持程度 | 与运行时调度状态分离 |
 | Interaction evidence | 支持结论的来源、轨迹、前后观察与结果判断 | 可追溯不等于形式化正确性保证 |
-| Risk annotation | 已选动作的二元风险判断、一个主要风险类型和页面证据 | 风险识别不等于阻止危险行为 |
+| Interaction-level risk annotation | 在当前 GUI observation 中执行已选动作的二元风险判断、一个主要风险类型和页面证据 | 属于具体交互语境，不是动作或功能的固定属性；风险识别不等于阻止危险行为 |
 
 功能结果使用两个独立维度：
 
@@ -37,7 +37,9 @@
 
 pending、retryable、stale、blocked 等只作为实现层子状态。
 
-## 方法概述
+## 方法概述：VERA
+
+VERA（Verification and Environmental Risk Awareness）将开放探索组织为持续的功能知识归纳循环：C2 提出可检验功能假设并通过真实交互产生证据，C3 在每个已选验证动作执行前生成环境风险判断，C1 在执行后依据冻结预期与观察证据控制持久知识准入。探索是证据生产手段，可靠、可审查的功能模型是主要产物；当前风险判断以 shadow mode 支持监督和审计，不构成执行安全边界。
 
 ### 1. Testable Function Hypothesis Proposal
 
@@ -45,7 +47,7 @@ VLM 根据当前 GUI 和已有模型提出 semantic location、high-level functi
 
 ### 2. Pre-Execution Risk Awareness
 
-系统在候选 high-level function 执行前进行轻量风险判断：
+系统在候选 high-level function 执行前进行上下文条件风险判断：
 
 1. 截取动作执行前的当前 GUI；
 2. 将截图、已选 high-level action label 和完整的版本化风险库输入独立 VLM 判断；
@@ -53,6 +55,8 @@ VLM 根据当前 GUI 和已有模型提出 semantic location、high-level functi
 4. 普通探索将判断写入动作元数据，replay 将判断写入独立审计记录。
 
 风险知识库提供稳定、可检查的类别定义、正例和明确低风险反例，VLM 负责结合动态页面上下文作二元判断。当前采用 shadow mode，风险标记不改变执行；检测异常 fail-open 并留存错误。人工确认、停止和拦截是可扩展执行策略。
+
+风险判断的对象是 observation-conditioned interaction，即“在当前 GUI 状态下执行这个已选动作是否具有潜在环境风险”，而不是动作 label 或 high-level function 是否天然危险。同一语义动作在不同页面、数据和业务状态下可以得到不同判断。风险标注附着于具体 interaction attempt，并链接至相应功能假设、执行轨迹和结果证据；完整功能模型可以引用这些记录，但不把它们聚合成功能的上下文无关属性。
 
 该模块的论文定位不是通用安全防线，而是开放式功能归纳中的风险注释层：每次判断与被选功能假设、执行前观察和后续交互轨迹关联，以支持过程监督与事后审查。
 
@@ -68,9 +72,9 @@ VLM 根据当前 GUI 和已有模型提出 semantic location、high-level functi
 
 论文级准入状态使用 `Proposed → Admitted / Rejected`：Rejected 轨迹仍被持久保存，但不进入可供后续规划或探索复用的已验证功能集合。验证器异常或关键证据缺失时，知识准入采取保守处理，即不准入；这与运行时执行链路是否 fail-open 是两个不同问题。
 
-### 5. Persistent Frontier
+### 5. Persistent Evidence Production
 
-当前位置尚待验证或未完成的假设被持久保存，系统可以重访已访问位置继续建模。该机制服务于持续探索，不作为独立概念贡献。
+当前位置尚待验证或未完成的假设被持久保存，系统可以重访已访问位置继续建模。Persistent frontier 与 replay 服务于跨位置持续生产验证证据，不作为独立概念贡献，也不用于主张通用探索覆盖领先。
 
 在论文概念上，开放探索循环（C2）负责发现候选并产生交互轨迹和前后观察；证据驱动模型（C1）负责判断预期 functional outcome 是否得到可观察证据支持，并据此作出知识准入决定。Executor-reported success 只是交互执行状态，不等同于 verified functional outcome。二者可以共享工程循环，但实验中分别控制证据输入与探索过程。
 

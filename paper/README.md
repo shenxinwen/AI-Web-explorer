@@ -23,6 +23,6 @@
 - `08_ethics_and_limitations.md`：伦理、局限和负面结果。
 - `09_anonymity_and_ai.md`：匿名性和 AI 使用披露。
 - `10_submission_checklist.md`：投稿检查清单。
-- `manuscript/`：LaTex 主稿与章节源文件。
+- `manuscript/`：ICLR 2027 LaTeX 主稿与章节源文件；正式入口为 `manuscript/iclr2027_conference.tex`，`iclr2027_conference_template.tex` 保留为原始模板。
 - `experiments/`：实验注册表、冻结配置和投稿级结果。
 - `figures/`：论文图及其清单。

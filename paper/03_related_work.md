@@ -11,6 +11,8 @@
 
 本文相关工作分析应围绕同一个问题展开：探索产生的候选信息何时可以成为下游可使用的环境知识。重点比较以下维度：
 
+统一缺口表述为：现有方法能够探索界面、验证动作效果或评估执行风险，但没有显式管理 task-free 探索如何形成风险判断与证据状态共同可追溯的持久功能知识。该表述不主张三个方向从未被组合，而聚焦于“自主验证行为的风险”和“所得功能知识的准入状态”是否在同一证据链中被共同表达。
+
 其中，C2 关注探索过程如何持续产生交互证据，C1 关注给定这些证据后如何判定、表示和准入功能知识；比较相关工作时应分别核查这两个层面。
 
 1. 功能是由静态观察提出，还是经过真实 GUI 交互支持；
@@ -23,7 +25,7 @@
 ## 当前基线建议
 
 - **RQ1 / C1：** 在同一冻结候选和轨迹上比较 proposal-as-fact、executor-success-as-fact 与 evidence-grounded admission。外部工作用于定位和机制核查，不作为 C1 主实验的硬性数值 baseline。
-- **RQ2 / C2：** 主实验在同一实现和动作空间内比较 Random、Linear 与 Full，以隔离结构化选择和 persistent-frontier replay 的作用。UIExplore-Bench、GUI-explorer 与 UI-KOBE 用于探索思想和机制对照；只有在环境、动作空间和预算无需实质改造即可对齐时，才作为追加数值实验。
+- **RQ2 / C2：** 主实验在同一实现和动作空间内比较 Random、Linear 与 Full，以隔离证据生产、依赖感知选择和 persistent-frontier replay 的作用，并检查可靠知识归纳是否保留有用功能覆盖。UIExplore-Bench、GUI-explorer 与 UI-KOBE 用于探索思想和机制对照；不以通用覆盖领先作为论文成立条件。
 - **RQ3 / C3：** 通用 VLM zero-shot、w/o visual context、w/o taxonomy、SeerGuard/OS-Sentinel 类执行前判断；OSGuard 仅作补充外部评测。
 
 以上为第一轮核实结果。正式冻结 baseline 前仍需确认 ActionEngine、OS-Sentinel、OSGuard 和 SeerGuard 的代码、数据许可、输入输出映射及运行成本。

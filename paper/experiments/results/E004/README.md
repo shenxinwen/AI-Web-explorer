@@ -119,4 +119,4 @@ Windows 上 `os.replace` 偶发 `PermissionError` 的两个 checkpoint 写入点
 
 run_02 的两条 Full、四条 Random/Linear 已完成；所有 run 使用独立 embedding 路径，且未启动 run_03。执行质量、停止原因、AI 初标覆盖、增长曲线和 replay 增量见 [c2_run_02_execution_metrics_ai_initial.md](c2_run_02_execution_metrics_ai_initial.md)。其中 Full 覆盖率已经人工复核；Random 和 Linear 的覆盖初标仍待复核。
 
-目前只可报告运行与成本诊断，不能据此下覆盖率结论。`c2_attempts.csv` 已全部导出，但功能覆盖率仍需按冻结功能清单完成人工标注。按预注册阶段门，暂不启动 `run_02` 和 `run_03`。
+此处的 run_02 记录保留当时的阶段性状态。当前 v2 的 18 条运行已完成；最新执行质量、AI 初标覆盖汇总、replay 成本与待汇签范围见 [c2_execution_status_through_run_03.md](c2_execution_status_through_run_03.md)。Full/run_02 的两条覆盖已人工复核，其余覆盖率仍需统一人工汇签，不能据此形成最终跨条件结论。

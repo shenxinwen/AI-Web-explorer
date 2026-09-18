@@ -2,28 +2,29 @@
 
 本文件是当前正式论文大纲。早期中文工作大纲已归档为 [`archive/大纲v3.md`](archive/大纲v3.md)，仅用于追溯，不再要求与本文件同步更新。
 
-## 暂定题目
+## 论文题目
 
-Building Evidence-Grounded Functional Models of Web Applications through Risk-Aware Open-Ended Exploration
+VERA: Verification and Environmental Risk Awareness for Functional Model Induction through Open-Ended Web Exploration
 
 ## 摘要结构（待撰写）
 
-1. 背景：任务导向 Web Agent 的交互经验难以沉淀为应用级知识。
-2. 问题：自动探索产生的功能提议并不天然等于可靠知识，自主生成并执行验证目标还可能造成真实副作用。
-3. 方法：维护 evidence-grounded functional model，通过执行前风险识别、真实执行和前后观察持续更新验证状态、证据链与风险信息。
-4. 评价：功能模型质量、风险感知探索、下游规划与行为验证。
-5. 结果：待实验完成后填写，不能提前作效果性陈述。
+1. 背景：任务无关的开放探索能够发现网站功能，但其价值不应只由覆盖率衡量。
+2. 问题：自动探索同时面临行为与知识两类可靠性问题——自主验证动作可能具有环境风险，功能提议或 executor success 也不能直接成为持久知识。
+3. 缺口：现有方法可以探索界面、验证动作效果或判断执行风险，但没有显式管理 task-free 探索如何形成风险信息与证据状态共同可追溯的持久功能知识。
+4. 方法：VERA 通过执行前环境风险判断、真实 GUI 交互、执行前冻结的 expected outcome 和执行后证据准入持续归纳功能模型。
+5. 评价：知识准入可靠性；在固定预算下保留的证据支持功能覆盖；已选探索动作的风险识别与记录完整性。
+6. 结果：当前仅写入已完成并可复现的效果结论；C2/C3 完成后再形成综合结果句。
 
 ## 1. Introduction
 
 ### 1.1 Background and Problem
 
-自主 Web/GUI 探索能够自动提出目标并发现页面、功能和转移，但“探索到信息”不等于“获得可靠知识”；自动化程度越高，越需要识别和记录系统主动行为的潜在副作用。
+自主 Web/GUI 探索能够自动提出目标并发现页面、功能和转移，但“探索到信息”不等于“获得可靠知识”；自动化程度越高，越需要在不实质性放弃功能发现能力的情况下，提高所得知识的可靠性并识别系统主动行为的潜在环境风险。
 
 ### 1.2 Two Core Challenges
 
 1. 候选动作被发现、executor 报告执行成功，都不能直接证明预期功能结果真实发生，因而不能直接作为功能知识准入依据。
-2. 验证未知功能可能触发删除、发送、授权、交易等高影响或不可逆行为。
+2. 验证未知功能可能触发删除、发送、授权、交易等高影响或不可逆行为，而这些风险判断通常没有与最终形成的功能知识和证据链共同保存。
 
 ### 1.3 Approach
 
@@ -31,7 +32,7 @@ Building Evidence-Grounded Functional Models of Web Applications through Risk-Aw
 
 ### 1.4 Contributions
 
-概述三项贡献：evidence-grounded functional modeling、execution-grounded open-ended model induction、risk-aware open-ended exploration。
+概述三项并列且相互依赖的贡献：evidence-grounded knowledge admission、execution-grounded open-ended functional model induction、environmental risk awareness for open-ended exploration。强调探索是证据生产手段，可靠知识和风险可审查性是主要目标。
 
 ## 2. Related Work
 
@@ -41,7 +42,7 @@ Building Evidence-Grounded Functional Models of Web Applications through Risk-Aw
 
 ### 2.2 Safe and Reliable GUI Agents
 
-讨论 Guided Exploration of User-Sensitive Screens、OS-Sentinel、OSGuard、SeerGuard 等敏感状态发现、危险动作识别与后果预测工作。不主张首次考虑自动探索安全；区分本文把 task-free 探索中已选动作的风险判断与功能假设及证据链关联保存的场景。
+讨论 Guided Exploration of User-Sensitive Screens、OS-Sentinel、OSGuard、SeerGuard 等敏感状态发现、危险动作识别与后果预测工作。不主张首次考虑自动探索安全；区分本文在 task-free 探索中对“当前 GUI 上下文中的已选动作”作交互级风险判断，并将其与功能假设及证据链关联保存的场景。
 
 ## 3. Method
 
@@ -67,7 +68,7 @@ Building Evidence-Grounded Functional Models of Web Applications through Risk-Aw
 
 ### 3.4 Risk-Aware Open-Ended Exploration
 
-定义截图、已选动作 label 与版本化风险库共同驱动的 VLM 二元风险判断；确认与拦截不是当前必要机制。
+定义由执行前截图、已选动作 label 与版本化风险库共同驱动的上下文条件 VLM 二元风险判断。风险标注属于具体 interaction attempt，不作为 high-level function 的固定属性；确认与拦截不是当前必要机制。
 
 ### 3.5 Conservative Downstream Projection
 
