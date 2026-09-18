@@ -33,7 +33,7 @@ async def _observe_action_with_saucedemo_overrides(
     actions = await _original_observe_action(self, instruction)
     overridden_actions = []
     for action in actions:
-        if action.method != "fill":
+        if action.method not in {"fill", "type"}:
             overridden_actions.append(action)
             continue
 

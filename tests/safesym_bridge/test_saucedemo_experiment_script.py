@@ -155,6 +155,41 @@ async def test_saucedemo_script_replaces_placeholder_username(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_saucedemo_script_replaces_typed_login_credentials(monkeypatch):
+    async def observe_returns_typed_credentials(provider, instruction):
+        return [
+            StagehandObservedAction(
+                description="Username field",
+                selector='[data-test="username"]',
+                method="type",
+                arguments=("example_username",),
+            ),
+            StagehandObservedAction(
+                description="Password field",
+                selector='[data-test="password"]',
+                method="type",
+                arguments=("example_password",),
+            ),
+        ]
+
+    monkeypatch.setattr(
+        experiment,
+        "_original_observe_action",
+        observe_returns_typed_credentials,
+    )
+
+    actions = await experiment._observe_action_with_saucedemo_overrides(
+        object(),
+        "Enter the username and password fields.",
+    )
+
+    assert [action.arguments for action in actions] == [
+        ("standard_user",),
+        ("secret_sauce",),
+    ]
+
+
+@pytest.mark.anyio
 async def test_saucedemo_script_assigns_credentials_per_observed_field(monkeypatch):
     async def observe_returns_combined_actions(provider, instruction):
         return [
