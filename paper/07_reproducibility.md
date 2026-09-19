@@ -14,7 +14,7 @@
 | 功能模型 schema 与 verification state 定义 | 待定 | 待定 | 未开始 |
 | 探索配置、提示词与冻结运行参数 | `experiments/configs/`、`experiments/protocol_v1.md` | 各实验配置内记录 | C1 已冻结；C2 formal v2 已冻结，18 条运行已完成 |
 | 原始执行轨迹与 before/after observations | `../outputs/paper/formal/` | 各实验配置内记录 | C1 已有；C2 formal v2 的 run_01–run_03 已有；SauceDemo run_03 原失败件已归档 |
-| 结果判断、证据链与人工标注 | `experiments/results/E003/`、`experiments/results/E004/` | `scripts/paper/analyze_c1.py`、`scripts/paper/analyze_c2.py` | C1 已归档；C2 Full/run_02 已人工复核，其他覆盖标注待完成 |
+| 结果判断、证据链与人工标注 | `experiments/results/E003/`、`experiments/results/E004/` | `scripts/paper/analyze_c1.py`、`scripts/paper/analyze_c2.py` | C1 已归档；C2 覆盖账本 v1 已人工确认，最终报告为 `results/E004/c2_final_results.md` |
 | 风险类别定义、风险知识库与版本 | `../src/ai_web_explorer/grounded_web/risk_taxonomy_v1.json` | 随代码版本冻结 | 已有 v1 |
 | VLM 风险判断提示词与结构化输出 | `../src/ai_web_explorer/grounded_web/risk_detection.py` | 单元测试校验 | 已实现 |
 | 候选功能、GUI 上下文与人工风险标签 | 待定 | 待定 | 未开始 |
