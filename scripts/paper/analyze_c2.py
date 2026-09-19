@@ -18,8 +18,50 @@ def _truthy(value: str | None) -> bool:
     return (value or "").strip().lower() in {"1", "true", "yes", "y"}
 
 
-def analyze(annotation_path: Path, core_dir: Path) -> dict:
-    annotations = _rows(annotation_path)
+def _apply_coverage_ledger(
+    annotations: list[dict[str, str]], coverage_ledger_path: Path
+) -> None:
+    attempts_by_key = {
+        (
+            row["run_id"],
+            row["site"],
+            row["condition"],
+            row["attempt_index"],
+        ): row
+        for row in annotations
+    }
+    for entry in _rows(coverage_ledger_path):
+        core_attempts = entry.get("core_attempts", "")
+        pairs = (
+            (item.split("@", 1) for item in core_attempts.split(";") if item)
+            if core_attempts
+            else [(entry["core_id"], entry["first_supported_attempt"])]
+        )
+        for core_id, attempt_index in pairs:
+            key = (
+                entry["run_id"], entry["site"], entry["condition"], attempt_index
+            )
+            row = attempts_by_key.get(key)
+            if row is None:
+                raise ValueError(f"coverage ledger references unknown attempt: {key}")
+            row["evidence_label"] = "supported"
+            row["core_match_status"] = "matched"
+            row["core_id"] = core_id
+
+
+def analyze(
+    annotation_path: Path | list[Path],
+    core_dir: Path,
+    coverage_ledger_path: Path | None = None,
+) -> dict:
+    annotation_paths = (
+        annotation_path if isinstance(annotation_path, list) else [annotation_path]
+    )
+    annotations = [
+        row for path in annotation_paths for row in _rows(path)
+    ]
+    if coverage_ledger_path is not None:
+        _apply_coverage_ledger(annotations, coverage_ledger_path)
     grouped: dict[tuple[str, str, str], list[dict[str, str]]] = defaultdict(list)
     for row in annotations:
         grouped[(row["run_id"], row["site"], row["condition"])].append(row)
@@ -79,11 +121,12 @@ def analyze(annotation_path: Path, core_dir: Path) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("annotations", type=Path)
+    parser.add_argument("annotations", type=Path, nargs="+")
     parser.add_argument("--core-dir", type=Path, required=True)
+    parser.add_argument("--coverage-ledger", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    result = analyze(args.annotations, args.core_dir)
+    result = analyze(args.annotations, args.core_dir, args.coverage_ledger)
     args.output.write_text(
         json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )

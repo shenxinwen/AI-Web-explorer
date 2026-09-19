@@ -51,3 +51,88 @@ def test_analyze_c2_counts_all_attempts_and_deduplicates_supported_functions(tmp
     assert run["failed_attempts"] == 1
     assert run["evidence_incomplete_attempts"] == 1
     assert run["coverage_growth_curve"] == [1, 1, 1, 1]
+
+
+def test_analyze_c2_applies_first_evidence_coverage_ledger(tmp_path):
+    core_dir = tmp_path / "core"
+    core_dir.mkdir()
+    _write_csv(core_dir / "saucedemo.csv", [
+        {"core_id": "SD01", "semantic_location": "login", "function_label": "login"},
+        {"core_id": "SD02", "semantic_location": "catalog", "function_label": "sort"},
+    ])
+    annotations = tmp_path / "annotations.csv"
+    base = {
+        "run_id": "r1", "site": "saucedemo", "condition": "linear",
+        "semantic_location": "catalog", "canonical_action_id": "sort_products",
+        "executor_status": "success", "evidence_complete": "true",
+        "evidence_label": "", "core_match_status": "", "core_id": "",
+    }
+    _write_csv(annotations, [
+        {**base, "attempt_id": "a1", "attempt_index": "1"},
+        {**base, "attempt_id": "a2", "attempt_index": "2"},
+        {**base, "attempt_id": "a3", "attempt_index": "3"},
+    ])
+    ledger = tmp_path / "ledger.csv"
+    _write_csv(ledger, [{
+        "run_id": "r1", "site": "saucedemo", "condition": "linear",
+        "core_id": "SD02", "first_supported_attempt": "2",
+    }])
+
+    result = analyze(annotations, core_dir, coverage_ledger_path=ledger)
+    run = result["runs"][0]
+
+    assert run["covered_functions"] == 1
+    assert run["coverage_growth_curve"] == [0, 1, 1]
+
+
+def test_analyze_c2_combines_annotation_files(tmp_path):
+    core_dir = tmp_path / "core"
+    core_dir.mkdir()
+    _write_csv(core_dir / "saucedemo.csv", [
+        {"core_id": "SD01", "semantic_location": "login", "function_label": "login"},
+    ])
+    row = {
+        "run_id": "r1", "site": "saucedemo", "condition": "linear",
+        "semantic_location": "login", "canonical_action_id": "login",
+        "executor_status": "success", "evidence_complete": "true",
+        "evidence_label": "supported", "core_match_status": "matched", "core_id": "SD01",
+    }
+    first = tmp_path / "first.csv"
+    second = tmp_path / "second.csv"
+    _write_csv(first, [{**row, "attempt_id": "a1", "attempt_index": "1"}])
+    _write_csv(second, [{**row, "attempt_id": "a2", "attempt_index": "2"}])
+
+    result = analyze([first, second], core_dir)
+    run = result["runs"][0]
+
+    assert run["candidate_attempts"] == 2
+    assert run["coverage_growth_curve"] == [1, 1]
+
+
+def test_analyze_c2_expands_compact_coverage_ledger_rows(tmp_path):
+    core_dir = tmp_path / "core"
+    core_dir.mkdir()
+    _write_csv(core_dir / "saucedemo.csv", [
+        {"core_id": "SD01", "semantic_location": "login", "function_label": "login"},
+        {"core_id": "SD02", "semantic_location": "catalog", "function_label": "sort"},
+    ])
+    annotations = tmp_path / "annotations.csv"
+    base = {
+        "run_id": "r1", "site": "saucedemo", "condition": "linear",
+        "semantic_location": "catalog", "canonical_action_id": "action",
+        "executor_status": "success", "evidence_complete": "true",
+        "evidence_label": "", "core_match_status": "", "core_id": "",
+    }
+    _write_csv(annotations, [
+        {**base, "attempt_id": "a1", "attempt_index": "1"},
+        {**base, "attempt_id": "a2", "attempt_index": "2"},
+    ])
+    ledger = tmp_path / "ledger.csv"
+    _write_csv(ledger, [{
+        "run_id": "r1", "site": "saucedemo", "condition": "linear",
+        "core_attempts": "SD01@1;SD02@2",
+    }])
+
+    result = analyze(annotations, core_dir, coverage_ledger_path=ledger)
+
+    assert result["runs"][0]["coverage_growth_curve"] == [1, 2]

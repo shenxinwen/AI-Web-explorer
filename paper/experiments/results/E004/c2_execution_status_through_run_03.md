@@ -6,7 +6,7 @@
 
 18 条预定的 C2 运行均已完成并保留了原始工件。SauceDemo / Linear 与 Full 的原始 `run_03` 因登录动作类型兼容性缺口而无效；修复后重跑的有效结果已提升为标准 `run_03` 路径，原结果归档为 `run_03_login_type_failure_archived`。
 
-执行矩阵已经完成；功能覆盖率矩阵尚未定稿。可使用的覆盖数据为所有 run_01 的 AI 初标，以及两条已人工接受的 Full / run_02。Practice Shopping 与 SauceDemo 的 Random/Linear / run_02，以及全部 run_03，仍需按冻结 inventory 做逐 attempt 映射和人工复核。
+执行矩阵与覆盖映射均已冻结。用户于 2026-09-19 接受覆盖账本 v1，逐 run 的首次证据与 core 映射见 [c2_coverage_mapping_ledger_v1.md](c2_coverage_mapping_ledger_v1.md)，机器可读输入与输出分别为 [ledger CSV](c2_coverage_mapping_ledger_v1.csv) 和 [metrics JSON](c2_metrics_consolidated_ai_initial.json)。逐 attempt CSV 保留原始 AI 初标；最终人工确认以冻结账本为准。
 
 ## 执行质量
 
@@ -37,37 +37,37 @@
 
 | run | 网站 | Random | Linear | Full | 覆核状态 |
 | --- | --- | ---: | ---: | ---: | --- |
-| 01 | Practice Shopping | 5/16 (31.2%) | 7/16 (43.8%) | 7/16 (43.8%) | AI 初标；尚待统一人工复核 |
-| 01 | SauceDemo | 1/22 (4.5%) | 10/22 (45.5%) | 12/22 (54.5%) | AI 初标；尚待统一人工复核 |
-| 02 | Practice Shopping | 7/16 (43.8%) | 7/16 (43.8%) | 9/16 (56.3%) | Full 已人工接受；其他为 AI 初标 |
-| 02 | SauceDemo | 8/22 (36.4%) | 10/22 (45.5%) | 14/22 (63.6%) | Full 已人工接受；其他为 AI 初标 |
-| 03 | Practice Shopping | — | — | — | 待映射 |
-| 03 | SauceDemo | — | — | — | 待映射 |
+| 01 | Practice Shopping | 5/16 (31.2%) | 7/16 (43.8%) | 7/16 (43.8%) | 已人工确认 |
+| 01 | SauceDemo | 1/22 (4.5%) | 10/22 (45.5%) | 12/22 (54.5%) | 已人工确认 |
+| 02 | Practice Shopping | 7/16 (43.8%) | 7/16 (43.8%) | 9/16 (56.3%) | 已人工确认 |
+| 02 | SauceDemo | 8/22 (36.4%) | 10/22 (45.5%) | 14/22 (63.6%) | 已人工确认 |
+| 03 | Practice Shopping | 4/16 (25.0%) | 8/16 (50.0%) | 8/16 (50.0%) | 已人工确认 |
+| 03 | SauceDemo | 7/22 (31.8%) | 6/22 (27.3%) | 13/22 (59.1%) | 已人工确认 |
 
 不应在完成缺失映射与人工复核之前，对三条件的平均覆盖率或显著性作出论文级结论。
 
-## 三次重复覆盖率（AI 初标汇总）
+## 三次重复覆盖率（最终人工确认）
 
-下表将已接受的 Full / run_02 与其余 AI 初标一并汇总；它用于结果整理和复核，不替代最终人工决定。
+下表基于冻结的覆盖账本 v1。
 
 | 网站 | 条件 | run_01 | run_02 | run_03 | 平均覆盖数 / 分母 | 平均覆盖率 |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| Practice Shopping | Random | 5/16 | 7/16 | 3/16 | 5.00/16 | 31.3% |
+| Practice Shopping | Random | 5/16 | 7/16 | 4/16 | 5.33/16 | 33.3% |
 | Practice Shopping | Linear | 7/16 | 7/16 | 8/16 | 7.33/16 | 45.8% |
 | Practice Shopping | Full | 7/16 | 9/16 | 8/16 | 8.00/16 | 50.0% |
 | SauceDemo | Random | 1/22 | 8/22 | 7/22 | 5.33/22 | 24.2% |
 | SauceDemo | Linear | 10/22 | 10/22 | 6/22 | 8.67/22 | 39.4% |
 | SauceDemo | Full | 12/22 | 14/22 | 13/22 | 13.00/22 | 59.1% |
 
-按网站 macro-average（先在各网站内以其 16 或 22 的固定分母计算比例，再平均），三条件的 AI 初标覆盖率分别为 Random 27.7%、Linear 42.6%、Full 54.5%。Full 相对 Linear 的 macro-average 差为 +11.9 个百分点，相对 Random 为 +26.8 个百分点。
+按网站 macro-average（先在各网站内以其 16 或 22 的固定分母计算比例，再平均），三条件覆盖率分别为 Random 28.8%、Linear 42.6%、Full 54.5%。Full 相对 Linear 的 macro-average 差为 +11.9 个百分点，相对 Random 为 +25.8 个百分点。
 
-这些数字支持结构化探索优于 Random、Full 进一步优于 Linear 的方向性主张；但由于大部分条目仍为 AI 初标，不能在人工汇签前报告显著性或将其称为最终论文数字。
+这些数字支持结构化探索优于 Random、Full 进一步优于 Linear 的方向性主张。三次重复不提供可靠的显著性检验功效，因此本实验报告效应方向与描述统计，不主张显著性。
 
 ## 已知 replay 结果
 
 - SauceDemo / Full / run_02：3 次 replay、20 GUI 动作；replay 后的普通 attempts 新增 3 项 AI 初标覆盖。
 - Practice Shopping / Full / run_02：1 次 replay、1 GUI 动作；replay 后的普通 attempts 新增 2 项 AI 初标覆盖。
-- SauceDemo / Full / run_03：4 次 replay、28 GUI 动作；待完成覆盖映射后再计算 replay 新增覆盖。
+- SauceDemo / Full / run_03：4 次 replay、28 GUI 动作；前三次成功 replay 后新增 SD17、SD19、SD21 共 3 项覆盖。前三次成功 replay 成本为 19 GUI 动作；第 4 次以 target-state mismatch 失败但仍产生 9 GUI 动作成本，故 run 级报告成本保持 28。
 
 ## 三次重复的执行指标（不依赖覆盖映射）
 
