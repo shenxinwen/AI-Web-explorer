@@ -27,8 +27,9 @@ The only intended difference is the GUI observation. The earlier `action_only` a
 
 Construct 100 formal samples from final-reviewed WebGuard metadata:
 
-- 60 samples forming 30 candidate pairs with the same normalized target phrase on different page contexts;
-- 40 diversity samples stratified across sites and original WebGuard risk levels;
+- up to 60 samples forming at most 30 candidate pairs with the same normalized target phrase on different page contexts;
+- fill all remaining positions with diversity samples stratified across sites and original WebGuard risk levels;
+- prioritize readable, semantically usable action targets over reaching the maximum pair count, and record the realized pair count before annotation;
 - keep the 10 pilot samples separate from the formal evaluation set;
 - strip original SAFE/LOW/HIGH labels and reviewer reasons before model input and VERA annotation;
 - reconstruct action text mechanically as `Click the target labeled '<target text>'.`;
