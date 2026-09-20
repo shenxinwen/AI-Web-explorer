@@ -2,7 +2,7 @@
 
 > Audit date: 2026-09-20
 >
-> Status: local readiness passed; external-model pilot not yet passed. Do not start the formal matrix.
+> Status: readiness passed; formal matrix not yet started.
 
 ## Dataset and trace audit
 
@@ -41,8 +41,21 @@ Machine-readable point estimates and intervals are in `outputs/paper/pilot/E002_
 - Metric recomputation covers pooled and per-site confusion counts, site macro-averages, type accuracy, coverage, and run-clustered bootstrap intervals.
 - Fifteen failed `action_only` attempt directories from the first connectivity attempt are retained and excluded from accuracy.
 
-## Remaining gate
+## External-model pilot result
 
-The four-condition external-model pilot has not run successfully. Running the visual conditions transmits the frozen before-action screenshots, action labels, and taxonomy to the configured model endpoint. Until that transfer is explicitly authorized and the 20-sample pilot passes, the formal 106-sample matrix remains blocked by design.
+The frozen 20-sample, four-condition pilot completed with 80/80 valid latest attempts and no new failures. Every valid attempt contains an input record, raw response, parsed prediction, status, model identifier, and sample linkage.
+
+| Condition | Precision | Recall | Site-macro F1 | Type accuracy |
+|---|---:|---:|---:|---:|
+| Action only | 100.0% | 90.0% | 94.4% | 60.0% |
+| Action + taxonomy | 90.0% | 90.0% | 90.0% | 90.0% |
+| Action + visual | 100.0% | 90.0% | 94.4% | 80.0% |
+| Full | 83.3% | 100.0% | 90.9% | 90.0% |
+
+These values are readiness diagnostics, not formal results. Full trades two false positives for zero false negatives on this deliberately balanced small subset. The prompt and taxonomy must not be tuned against these outcomes before the formal run.
+
+## Formal-run gate
+
+All predefined readiness checks now pass. The remaining operational step is explicit authorization for the larger formal transfer: four conditions over 106 samples, including 212 visual requests carrying the frozen before-action screenshots, action labels, and taxonomy where applicable. Formal outputs must be written to `outputs/paper/formal/E002_c3_v1/`; pilot attempts must not be copied into formal results.
 
 No adapted external-method score will be reported as a numerical baseline. Closely related methods may be used only to motivate the evaluation design and position the contribution.
