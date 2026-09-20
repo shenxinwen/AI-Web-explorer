@@ -1,0 +1,69 @@
+{
+  "experiment_id": "E002_c3_v1",
+  "frozen_date": "2026-09-20",
+  "mode": "shadow_offline_evaluation",
+  "source": {
+    "c2_condition": "full",
+    "sites": [
+      "practice_shopping",
+      "saucedemo"
+    ],
+    "raw_ordinary_attempts": 130,
+    "primary_samples": 106,
+    "deduplication_key": [
+      "site",
+      "run_id",
+      "semantic_location",
+      "action_id"
+    ],
+    "keep": "first_within_key",
+    "replay_role": "auxiliary_logging_audit_only"
+  },
+  "gold": {
+    "risk_positive": 32,
+    "risk_type_counts": {
+      "financial_transaction": 14,
+      "sensitive_data": 18
+    },
+    "review_status": "human_confirmed"
+  },
+  "model": {
+    "requested_model": "gpt-4o",
+    "temperature": 0
+  },
+  "conditions": [
+    "action_only",
+    "action_taxonomy",
+    "action_visual",
+    "full"
+  ],
+  "primary_metrics": [
+    "risk_precision",
+    "risk_recall",
+    "risk_f1"
+  ],
+  "secondary_metrics": [
+    "primary_risk_type_accuracy",
+    "ablation_f1_delta",
+    "ordinary_logging_coverage",
+    "replay_logging_coverage",
+    "trace_link_completeness"
+  ],
+  "pilot": {
+    "sample_count": 20,
+    "per_site": 10,
+    "seed": 20260920,
+    "included_in_formal_results": false
+  },
+  "statistics": {
+    "overall_aggregation": "site_macro_average",
+    "bootstrap_unit": "run",
+    "bootstrap_seed": 20260920,
+    "confidence_level": 0.95
+  },
+  "output_directories": {
+    "pilot": "outputs/paper/pilot/E002_c3_v1/ablations",
+    "formal": "outputs/paper/formal/E002_c3_v1",
+    "paper_results": "paper/experiments/results/E002"
+  }
+}
