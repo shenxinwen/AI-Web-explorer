@@ -2,7 +2,7 @@
 
 > Sampling date: 2026-09-20
 >
-> Status: candidate manifest generated; no formal model calls have started. Screenshot availability and human annotation remain pre-run gates.
+> Status: candidate manifest and blind annotation sheet generated; no formal model calls have started. Human annotation remains a pre-run gate.
 
 ## Frozen construction
 
@@ -29,18 +29,35 @@ Quality takes precedence over the maximum pair target. The sampler rejects inacc
 - Unique normalized action targets: 66.
 - Blinded-manifest leakage check: no WebGuard label, reviewer reason, or source page URL fields.
 
+## Screenshot gate
+
+- First download pass: 84 valid, 16 transient SSL/timeout failures.
+- Failed-only retry: 99 valid, 1 transient SSL failure.
+- Final single-item retry: 100 valid, 0 failed.
+- Valid formats: 100 PNG.
+- Duplicate image-content hashes: 0.
+
+All transient failures remain visible in the run history described above; the final machine-readable audit records the verified terminal state. No failed item was silently replaced with another source sample.
+
 ## Artifacts
 
 - Blinded annotation/evaluation manifest: `outputs/paper/formal/E002_c3_external_v1/formal_samples_blinded.json`
 - Private sampling audit manifest: `outputs/paper/formal/E002_c3_external_v1/formal_samples_audit.json`
 - Machine-readable sampling audit: `outputs/paper/formal/E002_c3_external_v1/sampling_audit.json`
+- Screenshot audit: `outputs/paper/formal/E002_c3_external_v1/screenshot_audit.json`
+- Downloaded screenshots: `outputs/paper/formal/E002_c3_external_v1/screenshots/`
+- Shuffled blind annotation sheet: `outputs/paper/formal/E002_c3_external_v1/annotations_blind.csv`
 - Sampler: `scripts/paper/build_c3_external_formal_manifest.py`
+- Screenshot validator: `scripts/paper/fetch_c3_external_screenshots.py`
+- Annotation-sheet builder: `scripts/paper/build_c3_external_annotation_sheet.py`
 
 SHA-256 at generation time:
 
 - blinded manifest: `214807B7CB2575FCD229EC0B192B295D860AC81EDD929FC8052DE21DA6C1942D`
 - audit manifest: `1699AAE723680EE45AE6FE72F1F4193AA72A2C5F2B4B708AC5291CB4C09FA68C`
+- terminal screenshot audit: `F721926EF96E46CEA85F4FBDECD0531FD7050218FDB7CA864F23A4B62BAEB0D4`
+- blind annotation sheet: `DDF80F00073BC3173E49837F2234D90466D6EE2170AA860DC6FA59024ADF98EC`
 
 ## Remaining gate
 
-Before any model execution, retrieve or verify the 100 screenshots, record download failures without replacement after results are visible, and prepare a prediction-blind human annotation package. Only samples with valid screenshots and complete traceability may enter the formal result.
+Before any model execution, complete human VERA annotation from the blind sheet and screenshots, then audit all binary labels, acceptable type sets, and evidence. Only human-confirmed samples with complete traceability may enter the formal result.
