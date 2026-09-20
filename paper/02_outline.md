@@ -13,7 +13,7 @@ VERA: Verification and Environmental Risk Awareness for Functional Model Inducti
 3. 缺口：现有方法可以探索界面、验证动作效果或判断执行风险，但没有显式管理 task-free 探索如何形成风险信息与证据状态共同可追溯的持久功能知识。
 4. 方法：VERA 通过执行前环境风险判断、真实 GUI 交互、执行前冻结的 expected outcome 和执行后证据准入持续归纳功能模型。
 5. 评价：知识准入可靠性；在固定预算下保留的证据支持功能覆盖；已选探索动作的风险识别与记录完整性。
-6. 结果：当前仅写入已完成并可复现的效果结论；C2/C3 完成后再形成综合结果句。
+6. 结果：C1 提高知识准入 precision，C2 在固定普通动作预算下保留并提高证据支持覆盖，C3 的视觉上下文显著改善可接受风险类型 grounding，并呈现更高 recall、较低 precision 的二元权衡。
 
 ## 1. Introduction
 
@@ -92,7 +92,7 @@ VERA: Verification and Environmental Risk Awareness for Functional Model Inducti
 
 作为辅助效用实验，评价保守投影是否能支持新目标的路径规划，并减少使用未经证据支持的功能知识。
 
-核心消融：w/o evidence-based outcome verification、w/o persistent frontier、w/o visual context / w/o taxonomy risk detection。
+核心消融：w/o evidence-based outcome verification、w/o persistent frontier，以及 C3 的 Text-only / Context-conditioned 比较。风险 taxonomy 作为共享的形式化表达词汇，不单独承担外部消融主张。
 
 ## 5. Limitations and Ethics Statement
 

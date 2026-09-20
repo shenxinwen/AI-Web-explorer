@@ -1,6 +1,6 @@
 # 论文状态
 
-> 最后更新：2026-09-17
+> 最后更新：2026-09-21
 >
 > 维护规则：只记录当前有效结论、证据缺口和下一步；详细内容写入对应专题文件。
 
@@ -8,14 +8,14 @@
 
 - 目标会议：ICLR 2027
 - 论文题目：VERA: Verification and Environmental Risk Awareness for Functional Model Induction through Open-Ended Web Exploration
-- 当前阶段：论文标题、摘要提交版、keywords 与 TL;DR 已暂定；ICLR 2027 官方 LaTeX 模板已放入 `manuscript/`，下一阶段开始搭建匿名主稿。C1 正式结果已归档；C2 formal v2 的 18 条运行、人工确认覆盖账本与结果包均已冻结；C3 正式效果实验尚未开始。
+- 当前阶段：C1、C2、C3 的正式实验与结果包均已冻结，论文级状态文档已对齐；ICLR 2027 官方 LaTeX 模板已放入 `manuscript/`，下一阶段是搭建匿名主稿并写入三项贡献的有界结果。
 
 ## 写作状态
 
 - 正式 LaTeX 入口：`manuscript/iclr2027_conference.tex`。
 - 原始模板备份：`manuscript/iclr2027_conference_template.tex`；后续不在该文件上撰写正文。
 - 投稿模式：保持 `\iclrfinalcopy` 注释，作者身份不写入匿名投稿版本。
-- 标题已暂定为 VERA 正式标题；摘要提交版已暂定，C2 结果句可更新，仍待 C3 最终结果完成后统一定稿。
+- 标题已暂定为 VERA 正式标题；摘要结构已暂定，现可根据 C1–C3 冻结结果统一形成结果句，但尚未写入匿名主稿。
 - Keywords 暂定为：`web agents, open-ended web exploration, GUI agents, functional model induction, evidence-grounded verification, knowledge admission, environmental risk awareness`。
 - TL;DR 暂定为：`VERA builds reliable functional models through open-ended web exploration by assessing interaction risks in context and admitting only evidence-supported functions, while preserving useful functional coverage.`
 - `manuscript/sections/` 尚未开始写作；模板示例正文尚未替换。
@@ -40,6 +40,8 @@
 - C1 正式结果已归档：45 条候选功能中有 33 条人工支持知识。Evidence-grounded admission 的 precision 为 96.97%，supported knowledge retention 为 96.97%，高于 proposal-as-fact 的 73.33% precision 和 executor-success-as-fact 的 82.50% precision。该结论目前仅限 C1 的两个正式网站和冻结设置。
 - C2 主实验已收敛为 Random、Linear、Full 三条件比较，唯一主指标为有交互证据支持的功能覆盖率；覆盖增长、有效尝试率以及 replay 成本与新增覆盖作为辅助分析。该实验用于评估可靠知识归纳是否保留有用的功能发现能力，而非宣称通用探索能力领先。Replay GUI 动作不计入普通候选 attempt 预算，但单独限额和报告。
 - C2 formal v2 的 18 条运行已执行，覆盖账本 v1 已人工确认并冻结。网站 macro-average 为 Random 28.8%、Linear 42.6%、Full 54.5%，Full 相对 Linear 为 +11.9 pp；replay GUI 成本单列。SauceDemo Linear/Full 的登录失败 run_03 原件已归档，重跑结果已提升为标准 `run_03`。最终报告为 `paper/experiments/results/E004/c2_final_results.md`。
+- C3 正式结果已冻结为两条互补证据轨道。探索关联评测含 106 条 C2 Full 普通探索动作，Full pooled precision/recall/F1 为 86.5%/100.0%/92.8%，但四条件二元 F1 差异均未获得明确区分。外部 context-challenge 含 100 条样本；Context-conditioned 相对 Text-only 的 recall、F1、acceptable-type accuracy 分别提高 12.3、5.2、35.4 pp，precision 下降 4.5 pp。二元差异区间跨 0，类型准确率差异区间为 [+21.7, +49.3] pp。最终报告为 `paper/experiments/results/E002/c3_final_results.md`。
+- C3 错误分析显示视觉上下文纠正 16 个二元判断并引入 14 个错误；主要收益是消解模糊动作并改善风险后果类型表达，主要代价是把进入或准备工作流误判为已经产生下游影响。
 
 ## 已有资产
 
@@ -50,19 +52,16 @@
 ## 主要缺口
 
 - C1 的 expected outcome、执行实例、before/after evidence、功能级聚合、人工 gold、三种准入策略和离线指标均已完成；结果及错误案例见 `experiments/results/E003/`。
-- 冻结风险评测集、人工标注规范和上下文对照样例。
-- 验证五类风险在多网站、多动作上的覆盖，并单独评估 replay 链路。
-- 设计风险识别标注规范，以及完整方法、w/o visual context、w/o taxonomy 的对比实验。
 - 核实相关工作及正式引用，明确最接近方法和可比实验设定。
 - 逐字段人工标注指南已建立；论文级 verification state 使用冻结规则从实现字段离线派生，不新增运行时功能。
 - C2 三条件开关、随机 seed、replay GUI 动作计数、恢复后 attempt 关联、完整 attempt 导出和离线指标/绘图脚本已实现并通过回归；pilot 与 formal v2 的 18 条运行、覆盖映射与最终汇总均已冻结。
-- 冻结可复现环境、模型版本、配置、轨迹与结果工件格式。
+- 补全统一可复现环境说明；C1–C3 的模型、配置、轨迹、人工 gold、指标和结果工件已经分别冻结。
 - 将 ICLR 模板示例整理为匿名主稿骨架，并开始逐节写作；当前尚无本地 LaTeX 编译器。
 
 ## 下一步
 
 1. 在 `manuscript/iclr2027_conference.tex` 中建立匿名论文骨架，将章节正文拆分到 `manuscript/sections/`，并替换模板示例内容。
 2. 优先撰写 Introduction、Problem Formulation 与 Method；写作时以 `00_scope.md`、`01_contributions.md` 和 `04_method.md` 为事实边界。
-3. 将 C2 冻结结果写入匿名主稿的实验与结果章节，并保持描述统计口径。
-4. 执行 E002 / C3 pilot 与正式评测，报告风险 precision/recall/F1、类型准确率、上下文消融及记录完整率。
-5. C1–C3 完成后更新摘要结果句；不得把 shadow-mode 风险感知写成端到端安全提升。
+3. 将 C1–C3 冻结结果写入匿名主稿的实验与结果章节；C3 明确区分探索关联评测和外部 context challenge。
+4. 基于冻结结果更新摘要结果句；将 C3 的主要证据表述为类型 grounding 改善和 recall/precision 权衡，不宣称二元增益显著。
+5. 完成相关工作引用与复现环境说明；不得把 shadow-mode 风险感知写成端到端安全提升。

@@ -26,7 +26,7 @@
 
 - **RQ1 / C1：** 在同一冻结候选和轨迹上比较 proposal-as-fact、executor-success-as-fact 与 evidence-grounded admission。外部工作用于定位和机制核查，不作为 C1 主实验的硬性数值 baseline。
 - **RQ2 / C2：** 主实验在同一实现和动作空间内比较 Random、Linear 与 Full，以隔离证据生产、依赖感知选择和 persistent-frontier replay 的作用，并检查可靠知识归纳是否保留有用功能覆盖。UIExplore-Bench、GUI-explorer 与 UI-KOBE 用于探索思想和机制对照；不以通用覆盖领先作为论文成立条件。
-- **RQ3 / C3：** 通用 VLM zero-shot、w/o visual context、w/o taxonomy、SeerGuard/OS-Sentinel 类执行前判断；OSGuard 仅作补充外部评测。
+- **RQ3 / C3：** 以共享 taxonomy 下的 Text-only 与 Context-conditioned 输入比较隔离视觉上下文贡献；SeerGuard、OS-Sentinel、OSGuard 和 WebGuard 用于相关工作、协议参照或样本来源，不作为任务与标签不一致条件下的直接数值 baseline。
 
 以上为第一轮核实结果。正式冻结 baseline 前仍需确认 ActionEngine、OS-Sentinel、OSGuard 和 SeerGuard 的代码、数据许可、输入输出映射及运行成本。
 

@@ -2,7 +2,7 @@
 
 > Run date: 2026-09-20
 >
-> Status: formal matrix complete; results frozen pending final packaging review.
+> Status: formal matrix complete; results and final packaging frozen.
 
 ## Scope
 

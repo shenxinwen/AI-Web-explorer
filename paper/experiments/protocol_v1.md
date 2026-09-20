@@ -116,3 +116,12 @@ Pilot 通过需同时满足：
 5. 所有主要指标都能由保存工件计算。
 
 Pilot 若未通过，只修复协议、日志或标注阻塞项；不新增论文贡献或扩展框架功能。
+
+## 8. C3 执行后说明（2026-09-21）
+
+冻结设计执行后，C3 最终保留两条互补评测轨道，不混合统计：
+
+- 探索关联轨道使用六条有效 C2 Full 运行中 106 条运行内去重普通探索动作，完成四输入条件诊断；
+- 外部 context-challenge 使用 100 条 WebGuard screenshot-action 样本，只比较共享 taxonomy 下的 Text-only 与 Context-conditioned，以隔离视觉上下文贡献。外部样本是供应给风险判断器的动作，不主张 VERA explorer 会提出这些动作。
+
+外部 gold 对复合风险采用 set-valued `acceptable_risk_types`，模型仍输出一个主要类别；命中任一人工认可类别即视为类型正确。30 个候选 context pairs 中有 8 个最终形成二元标签差异。统计使用 30 个 pair clusters 与 40 个 singleton clusters 进行 10,000 次 bootstrap，seed 为 `20260920`。该说明记录实际执行口径，不回写改变上述原始冻结设计。

@@ -27,7 +27,7 @@ C1–C3 的综合证据用于检验：VERA 能否提高功能知识准入的可�
 - 主实验使用已有运行经验的 SauceDemo 与 Practice Shopping，从入口 URL 和干净浏览器会话开始。
 - RQ1 使用两站点正式运行产生的全部自然探索轨迹；旧调试运行和为增加困难样本而构造的数据不混入主统计，也不预设必须达到 200–300 条 attempts。
 - Pilot 为每网站、每条件 1 次、最多 10 个 action attempts；正式实验为每网站、每条件 3 次、每次最多 25 个 attempts。
-- RQ1 以每次运行内去重后的功能知识为统计对象，action attempt 只作为验证证据来源；RQ3 以 action attempt 为单位，RQ2 以独立 run 为单位。
+- RQ1 以每次运行内去重后的功能知识为统计对象，action attempt 只作为验证证据来源；RQ3 使用两条互补证据轨道：106 条 C2 Full 普通探索动作，以及 100 条外部 screenshot-action context 样本；RQ2 以独立 run 为单位。
 - AI 生成初始标注，人工逐项审查并修订；正式标注前先用 20 个样本检查字段和规则是否可执行。该流程不等同于双人独立标注。
 - 完整冻结协议见 [`experiments/protocol_v1.md`](experiments/protocol_v1.md)。
 - 逐字段定义与论文级 verification state 的离线派生规则见 [`experiments/annotation_guide_v1.md`](experiments/annotation_guide_v1.md)；工件核查见 [`experiments/pilot_readiness_audit.md`](experiments/pilot_readiness_audit.md)。
@@ -39,11 +39,8 @@ C1–C3 的综合证据用于检验：VERA 能否提高功能知识准入的可�
 - 直接采用 VLM 提议、缺少真实 outcome verification 的模型。
 - C1：在同一组冻结候选和轨迹上比较 proposal-as-fact、executor-success-as-fact 与 evidence-grounded admission；外部方法不作为 C1 主实验的硬性数值基线。
 - C2：Random、Linear 与 Full。Random 不检查依赖且不 replay；Linear 检查已观察依赖并确定性选择，但不返回旧位置；Full 仅在 Linear 上增加 persistent frontier 与 replay。该内部比较用于隔离证据生产机制，并评估可靠知识归纳是否保留有用覆盖；不以复现或击败外部探索器作为主实验成立条件。
-- C3：通用 VLM zero-shot、OS-Sentinel/SeerGuard 类执行前判断，以及完整方法的输入消融；OSGuard 可作为补充外部数据，但需处理其依赖用户指令的标签差异。
-- 完整方法与三项核心消融。
-- 完整方法：截图 + 动作 label + 风险库。
-- w/o visual context：动作 label + 风险库。
-- w/o taxonomy：截图 + 动作 label。
+- C3 探索关联评测保留 Action only、Action + taxonomy、Action + visual 和 Full 四条件诊断；外部主比较固定为 Text-only（动作 label + taxonomy）与 Context-conditioned（截图 + 动作 label + taxonomy）。Taxonomy 在外部主比较中是共享的形式化表达词汇，不作为独立消融变量。
+- SeerGuard、OS-Sentinel、OSGuard 和 WebGuard 用于相关工作、协议参照或外部样本来源，不作为直接数值 baseline；它们的任务条件、动作空间和标签语义与 C3 不同。
 
 ## 指标与统计规则
 
@@ -71,7 +68,7 @@ RQ1 中一条功能知识由 `site + semantic_location + canonical_action_id` �
 ### 风险与副作用
 
 - 风险识别 precision、recall 和 F1；
-- 在风险样本上的 risk type 准确率；
+- 在风险样本上的 acceptable risk-type accuracy；复合风险允许人工 gold 给出多个可接受类型，模型仍输出一个主要类型；
 - 风险判断证据与 GUI 上下文的一致性；
 - 相似动作在不同页面上下文中的判断差异；
 - 误报、漏报和错误分类案例。
@@ -84,7 +81,7 @@ RQ1 中一条功能知识由 `site + semantic_location + canonical_action_id` �
 
 ### 统计规则
 
-正式实验每条件运行 3 次，报告逐网站结果和网站 macro-average；主要比例指标报告 bootstrap 95% confidence interval。当前采用 AI 初标加人工逐项审查，以人工审核后的标签作为 gold；该流程不是双人独立标注，因此不报告 Cohen's kappa。小样本不强制显著性检验，不得仅报告最优运行。
+探索运行正式实验每条件运行 3 次并报告逐网站结果和网站 macro-average；C3 外部样本以 context pair 为 cluster、非配对样本为 singleton，进行 10,000 次 cluster bootstrap。当前采用 AI 初标加人工逐项审查，以人工审核后的标签作为 gold；该流程不是双人独立标注，因此不报告 Cohen's kappa。置信区间跨 0 的差异只报告为点估计方向，不宣称统计显著。
 
 ## 消融与稳健性检查
 
@@ -92,7 +89,7 @@ RQ1 中一条功能知识由 `site + semantic_location + canonical_action_id` �
 
 1. w/o evidence-based outcome verification（主要对应 C1）；
 2. w/o persistent frontier（主要对应 C2）；
-3. w/o visual context / w/o taxonomy risk detection。
+3. C3 的 Text-only / Context-conditioned 比较，用于隔离执行前视觉上下文的贡献；taxonomy 作为共享输出词汇，不再承担单独的外部消融主张。
 
 待考虑的稳健性检查：
 
