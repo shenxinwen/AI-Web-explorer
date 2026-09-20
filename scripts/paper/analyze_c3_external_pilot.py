@@ -85,6 +85,99 @@ def compute_acceptable_type_accuracy(
     }
 
 
+def compute_error_analysis(
+    samples: list[Mapping[str, Any]],
+    gold: Mapping[str, Mapping[str, Any]],
+    text_predictions: Mapping[str, Mapping[str, Any]],
+    full_predictions: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Describe where visual context corrects or introduces prediction errors."""
+    binary_transitions = {
+        "corrected_by_context": 0,
+        "introduced_by_context": 0,
+        "correct_both": 0,
+        "wrong_both": 0,
+    }
+    type_transitions = dict(binary_transitions)
+    text_errors: list[dict[str, Any]] = []
+    full_errors: list[dict[str, Any]] = []
+    sample_transitions: list[dict[str, Any]] = []
+
+    def type_is_acceptable(sample_id: str, prediction: Mapping[str, Any]) -> bool:
+        acceptable = {
+            item.strip()
+            for item in str(gold[sample_id].get("acceptable_risk_types", "")).split(";")
+            if item.strip()
+        }
+        return (
+            _is_true(prediction.get("potential_risk"))
+            and prediction.get("risk_type") in acceptable
+        )
+
+    for sample in samples:
+        sample_id = str(sample["sample_id"])
+        actual = _is_true(gold[sample_id]["potential_risk"])
+        text_prediction = text_predictions[sample_id]
+        full_prediction = full_predictions[sample_id]
+        text_value = _is_true(text_prediction.get("potential_risk"))
+        full_value = _is_true(full_prediction.get("potential_risk"))
+        text_correct = text_value == actual
+        full_correct = full_value == actual
+        transition = (
+            "corrected_by_context" if not text_correct and full_correct
+            else "introduced_by_context" if text_correct and not full_correct
+            else "correct_both" if text_correct
+            else "wrong_both"
+        )
+        binary_transitions[transition] += 1
+
+        common = {
+            "sample_id": sample_id,
+            "site": sample.get("site", ""),
+            "subset": sample.get("subset", ""),
+            "pair_id": sample.get("pair_id", ""),
+            "gold_risk": actual,
+            "gold_acceptable_types": gold[sample_id].get("acceptable_risk_types", ""),
+            "text_risk": text_value,
+            "text_type": text_prediction.get("risk_type"),
+            "full_risk": full_value,
+            "full_type": full_prediction.get("risk_type"),
+            "binary_transition": transition,
+        }
+        sample_transitions.append(common)
+        if not text_correct:
+            text_errors.append({
+                **common,
+                "binary_outcome": "fn" if actual else "fp",
+                "evidence": text_prediction.get("evidence", ""),
+            })
+        if not full_correct:
+            full_errors.append({
+                **common,
+                "binary_outcome": "fn" if actual else "fp",
+                "evidence": full_prediction.get("evidence", ""),
+            })
+
+        if actual:
+            text_type_correct = type_is_acceptable(sample_id, text_prediction)
+            full_type_correct = type_is_acceptable(sample_id, full_prediction)
+            type_transition = (
+                "corrected_by_context" if not text_type_correct and full_type_correct
+                else "introduced_by_context" if text_type_correct and not full_type_correct
+                else "correct_both" if text_type_correct
+                else "wrong_both"
+            )
+            type_transitions[type_transition] += 1
+
+    return {
+        "binary_transitions": binary_transitions,
+        "type_transitions": type_transitions,
+        "text_errors": text_errors,
+        "full_errors": full_errors,
+        "sample_transitions": sample_transitions,
+    }
+
+
 def _percentile(values: list[float], probability: float) -> float:
     ordered = sorted(values)
     position = (len(ordered) - 1) * probability
@@ -234,6 +327,9 @@ def main() -> None:
     full_predictions = load_predictions(args.predictions, "full")
     if text_predictions and full_predictions:
         results["comparison_bootstrap"] = compute_cluster_bootstrap(
+            samples, gold, text_predictions, full_predictions
+        )
+        results["error_analysis"] = compute_error_analysis(
             samples, gold, text_predictions, full_predictions
         )
     args.output.parent.mkdir(parents=True, exist_ok=True)

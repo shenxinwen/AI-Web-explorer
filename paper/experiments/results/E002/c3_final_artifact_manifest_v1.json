@@ -1,0 +1,32 @@
+{
+  "experiment": "C3",
+  "freeze_date": "2026-09-20",
+  "status": "formal_complete",
+  "evaluation_tracks": {
+    "exploration_linked": {
+      "samples": 106,
+      "conditions": 4,
+      "valid_predictions": 424,
+      "raw_root": "outputs/paper/formal/E002_c3_v1"
+    },
+    "external_context_challenge": {
+      "samples": 100,
+      "conditions": 2,
+      "valid_predictions": 200,
+      "failed_predictions": 0,
+      "raw_root": "outputs/paper/formal/E002_c3_external_v1"
+    }
+  },
+  "sha256": {
+    "exploration_report": "042DB9F2EB61B6A8FDE22D768218359E750670B448794C089AF1673598C18275",
+    "external_report": "7ECA53D6839DDB8870934F29A104E740B63D7FB2A17416F8719F5D66AD07964D",
+    "external_error_analysis": "8780917D62D3F3F7944ADA04C58E134C8DFFD4E0A9E1F499AA44404F78A3026B",
+    "final_results": "AEFB823E78E5DA5D8F1B9D9310D17C1FDBF5A02C0173ECF14A8CB9202D34BD1C",
+    "main_figure": "CB9E16F23B5D25058CAA4DB7D6F013ED133A6552D6C5467D65BB5BF903E065AD",
+    "exploration_metrics": "242929895411513301A5D9050E414EAC258D1DC425EB7AD9D49787BFCD43DA6E",
+    "external_metrics": "91D618EAADF16B033E08FF96A0597B39E3298F4604AE190FA4B899A5B583DFA7",
+    "external_human_gold": "C879AA4BFBEAE4E1EE7CE354E733465FB1085A5DCEBE16E621BEEF3359ABF60B",
+    "external_analysis_script": "8136DAFC784E58BC720B796A728C006D7099BAB03DE1371EA5F656C02726A870",
+    "plot_script": "0981119D3E0E456A686D4C586240097F807D71BFCC69E9B67CF64A43368727B6"
+  }
+}

@@ -2,7 +2,7 @@
 
 > Run date: 2026-09-20
 >
-> Status: complete two-condition run with frozen cluster-bootstrap uncertainty estimates.
+> Status: complete two-condition run with frozen cluster-bootstrap uncertainty estimates and post-run error analysis.
 
 ## Execution audit
 
@@ -21,6 +21,8 @@
 |---|---:|---:|---:|---:|---:|---:|
 | Text only | 77.6% | 58.5% | 66.7% | 27.7% | 0.0% | 0.0% |
 | Context conditioned | 73.0% | 70.8% | 71.9% | 63.1% | 25.0% | 25.0% |
+
+![C3 external main metrics](c3_external_main_metrics.png)
 
 Binary confusion counts were `TP=38, FP=11, FN=27, TN=24` for Text only and `TP=46, FP=17, FN=19, TN=18` for Context conditioned. Prediction coverage was 100% in both conditions.
 
@@ -45,3 +47,15 @@ Using 10,000 deterministic bootstrap replicates with the 30 context pairs as pai
 | Pair joint / correct flip | [0.0%, 0.0%] | [0.0%, 60.0%] | +25.0 pp [0.0, +60.0] |
 
 The F1 and recall difference intervals include zero, so the binary improvement should be described as a positive point estimate rather than a statistically resolved gain. The acceptable-type improvement is the clearest formal result. The small realized discordant-pair subset limits strong claims about risk-flip performance.
+
+## Error analysis
+
+Across all 100 samples, visual context corrected 16 binary decisions, introduced 14 errors, left 48 correct under both conditions, and left 22 wrong under both. The 16 corrections comprised 14 recovered positives and two corrected false alarms; the 14 introduced errors comprised six missed positives and eight new false alarms. Thus, the net recall improvement came with a clear conservatism cost.
+
+For acceptable risk type, context corrected 25 decisions and introduced only two type errors; 16 were correct and 22 wrong under both conditions. The strongest supported contribution is therefore improved grounding of the risk consequence and its formal category, rather than uniformly superior binary discrimination.
+
+The new false positives often treated entry into an upload, invitation, sharing, registration, cart, or package-building workflow as though the immediate click had already produced the downstream effect. This identifies an immediate-effect versus possible-downstream-effect boundary for future work; the frozen prompt and labels were not changed after observing it. Full details are in `c3_external_error_analysis_v1.md` and the `error_analysis` section of the recomputable metrics JSON.
+
+## Claim boundary
+
+The external formal set supports the claim that current visual context changes risk judgments and materially improves acceptable risk-type grounding. It provides positive but statistically unresolved binary F1 and recall estimates, and weak pair-level evidence because only eight candidate pairs were label-discordant. It does not establish end-to-end harm prevention, deployment-time intervention effectiveness, or generalization to actions not supplied to the assessor.

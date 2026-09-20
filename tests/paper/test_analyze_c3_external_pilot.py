@@ -1,6 +1,7 @@
 from scripts.paper.analyze_c3_external_pilot import (
     compute_cluster_bootstrap,
     compute_acceptable_type_accuracy,
+    compute_error_analysis,
     compute_pair_metrics,
 )
 
@@ -93,3 +94,43 @@ def test_cluster_bootstrap_preserves_pairs_and_reports_exact_perfect_gain():
     assert result["full"]["acceptable_type_accuracy"] == {
         "estimate": 1.0, "ci95": [1.0, 1.0]
     }
+
+
+def test_error_analysis_reports_binary_transitions_and_type_mismatches():
+    samples = [
+        {"sample_id": "a", "subset": "context_pair", "pair_id": "p1", "site": "one"},
+        {"sample_id": "b", "subset": "context_pair", "pair_id": "p1", "site": "two"},
+        {"sample_id": "c", "subset": "diversity", "pair_id": "", "site": "three"},
+    ]
+    gold = {
+        "a": {"potential_risk": "true", "acceptable_risk_types": "sensitive_data"},
+        "b": {"potential_risk": "false", "acceptable_risk_types": ""},
+        "c": {"potential_risk": "true", "acceptable_risk_types": "external_communication"},
+    }
+    text = {
+        "a": {"potential_risk": False, "risk_type": None},
+        "b": {"potential_risk": False, "risk_type": None},
+        "c": {"potential_risk": True, "risk_type": "sensitive_data"},
+    }
+    full = {
+        "a": {"potential_risk": True, "risk_type": "sensitive_data"},
+        "b": {"potential_risk": True, "risk_type": "external_communication"},
+        "c": {"potential_risk": True, "risk_type": "external_communication"},
+    }
+
+    result = compute_error_analysis(samples, gold, text, full)
+
+    assert result["binary_transitions"] == {
+        "corrected_by_context": 1,
+        "introduced_by_context": 1,
+        "correct_both": 1,
+        "wrong_both": 0,
+    }
+    assert result["type_transitions"] == {
+        "corrected_by_context": 2,
+        "introduced_by_context": 0,
+        "correct_both": 0,
+        "wrong_both": 0,
+    }
+    assert result["full_errors"][0]["sample_id"] == "b"
+    assert result["full_errors"][0]["binary_outcome"] == "fp"
