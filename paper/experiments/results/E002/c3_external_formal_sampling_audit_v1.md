@@ -2,7 +2,7 @@
 
 > Sampling date: 2026-09-20
 >
-> Status: candidate manifest and blind annotation sheet generated; no formal model calls have started. Human annotation remains a pre-run gate.
+> Status: candidate manifest, screenshots, and human-confirmed gold are frozen; no formal model calls have started.
 
 ## Frozen construction
 
@@ -60,4 +60,8 @@ SHA-256 at generation time:
 
 ## Remaining gate
 
-Before any model execution, complete human VERA annotation from the blind sheet and screenshots, then audit all binary labels, acceptable type sets, and evidence. Only human-confirmed samples with complete traceability may enter the formal result.
+Human review was completed on 2026-09-20. All 100 AI-initial binary labels, acceptable type sets, and evidence statements were confirmed without correction and frozen as `outputs/paper/formal/E002_c3_external_v1/annotations_human_confirmed.csv` (SHA-256 `C879AA4BFBEAE4E1EE7CE354E733465FB1085A5DCEBE16E621BEEF3359ABF60B`).
+
+The confirmed gold contains 65 risk-positive and 35 risk-negative samples. Primary explanatory types are: 24 `sensitive_data`, 21 `account_and_permission`, 18 `external_communication`, one `financial_transaction`, and one `destructive_change`. Eight of the 30 candidate context pairs are binary-discordant under VERA gold; pair metrics must use this prespecified realized subset rather than WebGuard source labels.
+
+The remaining pre-run gate is configuration and traceability verification for the two frozen conditions. Formal execution must not tune prompts or resample after inspecting results.
