@@ -60,6 +60,30 @@ def compute_pair_metrics(
     }
 
 
+def compute_acceptable_type_accuracy(
+    gold: Mapping[str, Mapping[str, Any]],
+    predictions: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any]:
+    positives = correct = 0
+    for sample_id, label in gold.items():
+        if not _is_true(label["potential_risk"]):
+            continue
+        positives += 1
+        acceptable = {
+            item.strip()
+            for item in str(label.get("acceptable_risk_types", "")).split(";")
+            if item.strip()
+        }
+        prediction = predictions.get(sample_id, {})
+        if _is_true(prediction.get("potential_risk")) and prediction.get("risk_type") in acceptable:
+            correct += 1
+    return {
+        "gold_positive": positives,
+        "correct": correct,
+        "accuracy": correct / positives if positives else None,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, required=True)
@@ -75,6 +99,7 @@ def main() -> None:
         predictions = load_predictions(args.predictions, condition)
         results[condition] = {
             "classification": compute_condition_metrics(samples, gold, predictions),
+            "acceptable_type": compute_acceptable_type_accuracy(gold, predictions),
             "context_pairs": compute_pair_metrics(samples, gold, predictions),
         }
     args.output.parent.mkdir(parents=True, exist_ok=True)

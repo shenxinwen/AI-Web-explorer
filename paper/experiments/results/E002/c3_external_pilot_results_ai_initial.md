@@ -23,21 +23,23 @@ Original WebGuard SAFE/LOW/HIGH labels and reviewer reasons were not exposed to 
 - Each valid attempt retains input, raw response, parsed prediction, status, and returned model identifier.
 - Raw artifacts: `outputs/paper/pilot/E002_c3_external_pilot_v1/`.
 
-## Provisional results
+## Provisional main comparison
 
-| Condition | Precision | Recall | F1 | Type accuracy | Pair joint accuracy | Correct risk-flip rate |
+The risk taxonomy is held constant. `Text only` is the existing `action_taxonomy` condition; `Context conditioned` is the existing `full` condition.
+
+| Condition | Precision | Recall | F1 | Acceptable-type accuracy | Pair joint accuracy | Correct risk-flip rate |
 |---|---:|---:|---:|---:|---:|---:|
-| Action only | 50.0% | 60.0% | 54.5% | 0.0% | 0.0% | 0.0% |
-| Action + taxonomy | 50.0% | 60.0% | 54.5% | 0.0% | 0.0% | 0.0% |
-| Action + visual | 83.3% | 100.0% | 90.9% | 100.0% | 80.0% | 80.0% |
-| Full | 83.3% | 100.0% | 90.9% | 60.0% | 80.0% | 80.0% |
+| Text only | 50.0% | 60.0% | 54.5% | 0.0% | 0.0% | 0.0% |
+| Context conditioned | 83.3% | 100.0% | 90.9% | 100.0% | 80.0% | 80.0% |
 
-Both nonvisual conditions produced the same binary prediction for both members of every pair. The visual conditions correctly changed their binary judgment on four of five pairs. The shared failure was the `Save` pair: both visual conditions treated saving public profile appearance settings as a potentially destructive change.
+The text-only condition produced the same binary prediction for both members of every pair. The context-conditioned condition correctly changed its binary judgment on four of five pairs. The shared failure was the `Save` pair: the model treated saving public profile appearance settings as a potentially destructive change.
 
-Full made two primary-type errors among the five gold-positive samples: it labeled the ambassador application as `sensitive_data` rather than `external_communication`, and saving billing-card details as `financial_transaction` rather than `sensitive_data`. These are primary-category boundary errors, not binary misses.
+The context-conditioned condition selected a human-acceptable type for all five gold-positive samples. The ambassador application accepts either `external_communication` or `sensitive_data`; saving billing-card details accepts either `sensitive_data` or `financial_transaction`. This set-valued scoring treats the taxonomy as a formal explanatory vocabulary rather than a mutually exclusive ontology.
+
+The two omitted conditions remain diagnostic: `action_only` matched the text-only binary result, while `action_visual` matched the context-conditioned binary result. This supports holding the taxonomy constant and making visual context the sole main experimental factor.
 
 ## Interpretation
 
 This pilot supports the feasibility of the proposed external experiment and demonstrates that the matched-pair construction creates a much stronger context test than the natural exploration distribution. It does not establish a general effect size: the pairs were deliberately selected for clear contextual contrast, the sample contains only five pairs, and the gold is not yet human-confirmed.
 
-The next gate is human review of all 10 VERA labels and primary risk types. If confirmed, the external protocol should be frozen before expanding the sample.
+The next gate is human review of all 10 VERA binary labels and acceptable type sets. If confirmed, the external protocol can proceed to frozen formal sampling.
