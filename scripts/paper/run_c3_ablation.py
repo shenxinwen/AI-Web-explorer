@@ -104,6 +104,22 @@ def _next_attempt_dir(root: Path, condition: str, sample_id: str) -> Path:
     return attempt
 
 
+def has_valid_attempt(root: Path, condition: str, sample_id: str) -> bool:
+    parent = root / condition / sample_id
+    for attempt in sorted(parent.glob("attempt_*")) if parent.is_dir() else []:
+        status_path = attempt / "status.json"
+        prediction_path = attempt / "prediction.json"
+        if not status_path.is_file() or not prediction_path.is_file():
+            continue
+        try:
+            status = json.loads(status_path.read_text(encoding="utf-8"))
+            if status.get("status") == "valid":
+                return True
+        except (OSError, json.JSONDecodeError):
+            continue
+    return False
+
+
 def run_one_sample(
     *,
     sample: Mapping[str, Any],
@@ -198,6 +214,7 @@ def main() -> None:
     parser.add_argument("--model", default="gpt-4o")
     parser.add_argument("--condition", action="append", choices=CONDITIONS)
     parser.add_argument("--sample-ids", type=Path)
+    parser.add_argument("--skip-valid", action="store_true")
     args = parser.parse_args()
 
     from dotenv import load_dotenv
@@ -211,9 +228,15 @@ def main() -> None:
         samples = [sample for sample in samples if sample["sample_id"] in wanted]
     conditions = args.condition or list(CONDITIONS)
     complete = _openai_complete(OpenAI())
-    counts = {"valid": 0, "failed": 0}
+    counts = {"valid": 0, "failed": 0, "skipped_valid": 0}
     for condition in conditions:
         for sample in samples:
+            if args.skip_valid and has_valid_attempt(
+                args.output, condition, str(sample["sample_id"])
+            ):
+                counts["skipped_valid"] += 1
+                print(condition, sample["sample_id"], "skipped_valid", flush=True)
+                continue
             screenshot = args.image_root / sample["before_image"]
             status = run_one_sample(
                 sample=sample,

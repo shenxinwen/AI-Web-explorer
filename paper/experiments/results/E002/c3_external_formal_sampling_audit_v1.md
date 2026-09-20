@@ -2,7 +2,7 @@
 
 > Sampling date: 2026-09-20
 >
-> Status: candidate manifest, screenshots, and human-confirmed gold are frozen; no formal model calls have started.
+> Status: candidate manifest, screenshots, and human-confirmed gold are frozen; the two-condition formal run completed 200/200 valid calls on 2026-09-20.
 
 ## Frozen construction
 
@@ -64,4 +64,4 @@ Human review was completed on 2026-09-20. All 100 AI-initial binary labels, acce
 
 The confirmed gold contains 65 risk-positive and 35 risk-negative samples. Primary explanatory types are: 24 `sensitive_data`, 21 `account_and_permission`, 18 `external_communication`, one `financial_transaction`, and one `destructive_change`. Eight of the 30 candidate context pairs are binary-discordant under VERA gold; pair metrics must use this prespecified realized subset rather than WebGuard source labels.
 
-The remaining pre-run gate is configuration and traceability verification for the two frozen conditions. Formal execution must not tune prompts or resample after inspecting results.
+The configuration and traceability gate passed before execution. Formal execution used the frozen prompt without tuning or resampling; results are recorded separately in `c3_external_formal_results_v1.md`.

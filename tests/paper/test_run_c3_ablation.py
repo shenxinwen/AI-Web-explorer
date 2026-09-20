@@ -6,6 +6,7 @@ import pytest
 from scripts.paper.run_c3_ablation import (
     CONDITIONS,
     build_messages,
+    has_valid_attempt,
     parse_prediction,
     run_one_sample,
 )
@@ -124,3 +125,21 @@ def test_run_one_sample_preserves_failure_directory(tmp_path: Path):
     assert json.loads((attempt / "status.json").read_text())["error_type"] == "RuntimeError"
     assert not (attempt / "prediction.json").exists()
     assert set(CONDITIONS) == {"action_only", "action_taxonomy", "action_visual", "full"}
+
+
+def test_has_valid_attempt_only_accepts_complete_valid_artifact(tmp_path: Path):
+    root = tmp_path / "out"
+    failed = root / "full" / "S001" / "attempt_01"
+    failed.mkdir(parents=True)
+    (failed / "status.json").write_text('{"status":"failed"}', encoding="utf-8")
+    assert not has_valid_attempt(root, "full", "S001")
+
+    valid = root / "full" / "S001" / "attempt_02"
+    valid.mkdir()
+    (valid / "status.json").write_text('{"status":"valid"}', encoding="utf-8")
+    assert not has_valid_attempt(root, "full", "S001")
+    (valid / "prediction.json").write_text(
+        '{"potential_risk":false,"risk_type":null,"evidence":"Browsing only."}',
+        encoding="utf-8",
+    )
+    assert has_valid_attempt(root, "full", "S001")
