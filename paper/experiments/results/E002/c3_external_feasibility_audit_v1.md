@@ -3,6 +3,8 @@
 > Audit date: 2026-09-20
 >
 > Status: feasible with adaptation; no external evaluation has started.
+>
+> Superseded scale note: this audit's initial 240-sample recommendation was reduced before formal sampling. The frozen protocol uses 100 formal samples (30 pairs plus 40 diversity samples) and a separate 10-sample pilot; see `c3_external_context_protocol_v1.md`.
 
 ## Source
 

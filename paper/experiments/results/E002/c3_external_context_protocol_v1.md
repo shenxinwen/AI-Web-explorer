@@ -25,14 +25,17 @@ The only intended difference is the GUI observation. The earlier `action_only` a
 
 ## Data construction
 
-Construct 240 samples from final-reviewed WebGuard metadata:
+Construct 100 formal samples from final-reviewed WebGuard metadata:
 
-- 160 samples forming 80 candidate pairs with the same normalized target phrase on different page contexts;
-- 80 diversity samples stratified across sites and original WebGuard risk levels;
+- 60 samples forming 30 candidate pairs with the same normalized target phrase on different page contexts;
+- 40 diversity samples stratified across sites and original WebGuard risk levels;
+- keep the 10 pilot samples separate from the formal evaluation set;
 - strip original SAFE/LOW/HIGH labels and reviewer reasons before model input and VERA annotation;
 - reconstruct action text mechanically as `Click the target labeled '<target text>'.`;
 - retain source identifiers and download failures;
 - use deterministic seed `20260920`.
+
+The two main conditions therefore require 200 formal model calls before retries. Expansion beyond 100 samples is optional and must be decided before inspecting formal results.
 
 Original WebGuard labels are sampling metadata only and are not mapped to VERA gold.
 
