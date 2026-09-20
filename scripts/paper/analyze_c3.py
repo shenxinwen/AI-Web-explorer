@@ -162,6 +162,75 @@ def compute_condition_report(
     return report
 
 
+def _site_macro_f1(
+    sampled_ids_by_site: Mapping[str, list[str]],
+    gold: Mapping[str, Mapping[str, Any]],
+    predictions: Mapping[str, Mapping[str, Any]],
+) -> float:
+    values = [
+        _metrics(sample_ids, gold, predictions)["f1"]
+        for sample_ids in sampled_ids_by_site.values()
+    ]
+    return sum(values) / len(values) if values else 0.0
+
+
+def bootstrap_macro_f1_deltas(
+    samples: list[Mapping[str, Any]],
+    gold: Mapping[str, Mapping[str, Any]],
+    predictions_by_condition: Mapping[str, Mapping[str, Mapping[str, Any]]],
+    *,
+    seed: int = 20260920,
+    resamples: int = 10000,
+    confidence_level: float = 0.95,
+) -> dict[str, Any]:
+    comparisons = {
+        "full_minus_action_only": "action_only",
+        "full_minus_action_taxonomy": "action_taxonomy",
+        "full_minus_action_visual": "action_visual",
+    }
+    runs_by_site: dict[str, dict[str, list[str]]] = {}
+    for sample in samples:
+        runs_by_site.setdefault(str(sample["site"]), {}).setdefault(
+            str(sample["run_id"]), []
+        ).append(str(sample["sample_id"]))
+    point_ids = {
+        site: [sample_id for ids in runs.values() for sample_id in ids]
+        for site, runs in runs_by_site.items()
+    }
+    point_full = _site_macro_f1(point_ids, gold, predictions_by_condition["full"])
+    distributions = {name: [] for name in comparisons}
+    rng = random.Random(seed)
+    for _ in range(resamples):
+        sampled: dict[str, list[str]] = {}
+        for site, runs in runs_by_site.items():
+            run_ids = sorted(runs)
+            sampled[site] = []
+            for selected_run in rng.choices(run_ids, k=len(run_ids)):
+                sampled[site].extend(runs[selected_run])
+        sampled_full = _site_macro_f1(sampled, gold, predictions_by_condition["full"])
+        for name, baseline in comparisons.items():
+            distributions[name].append(
+                sampled_full
+                - _site_macro_f1(sampled, gold, predictions_by_condition[baseline])
+            )
+    tail = (1 - confidence_level) / 2
+    return {
+        "unit": "paired_run_within_site",
+        "seed": seed,
+        "resamples": resamples,
+        "confidence_level": confidence_level,
+        **{
+            name: {
+                "point_estimate": point_full
+                - _site_macro_f1(point_ids, gold, predictions_by_condition[baseline]),
+                "lower": _quantile(distributions[name], tail),
+                "upper": _quantile(distributions[name], 1 - tail),
+            }
+            for name, baseline in comparisons.items()
+        },
+    }
+
+
 def load_predictions(output_root: Path, condition: str) -> dict[str, dict[str, Any]]:
     predictions: dict[str, dict[str, Any]] = {}
     condition_dir = output_root / condition
@@ -202,13 +271,21 @@ def main() -> None:
     with args.gold.open(encoding="utf-8-sig", newline="") as handle:
         gold = {row["sample_id"]: row for row in csv.DictReader(handle)}
     results = {}
+    predictions_by_condition = {}
     for condition in ("action_only", "action_taxonomy", "action_visual", "full"):
+        predictions_by_condition[condition] = load_predictions(args.predictions, condition)
         results[condition] = compute_condition_report(
             samples,
             gold,
-            load_predictions(args.predictions, condition),
+            predictions_by_condition[condition],
             bootstrap_resamples=args.bootstrap_resamples,
         )
+    results["ablation_f1_deltas"] = bootstrap_macro_f1_deltas(
+        samples,
+        gold,
+        predictions_by_condition,
+        resamples=args.bootstrap_resamples,
+    )
     if args.runtime_full:
         runtime_predictions = load_prediction_file(args.runtime_full)
         results["runtime_full"] = compute_condition_report(

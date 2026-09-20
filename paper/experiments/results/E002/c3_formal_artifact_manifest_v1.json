@@ -1,0 +1,57 @@
+{
+  "experiment_id": "E002_c3_v1",
+  "run_date": "2026-09-20",
+  "source_commit_before_formal_run": "2f4884c0486e886024d3758256836e55813da074",
+  "requested_model": "gpt-4o",
+  "temperature": 0,
+  "formal_output_root": "outputs/paper/formal/E002_c3_v1",
+  "conditions": {
+    "action_only": {
+      "valid": 106,
+      "failed": 0,
+      "returned_models": {
+        "gpt-4o-2024-11-20": 97,
+        "gpt-4o": 9
+      }
+    },
+    "action_taxonomy": {
+      "valid": 106,
+      "failed": 0,
+      "returned_models": {
+        "gpt-4o-2024-11-20": 102,
+        "gpt-4o": 4
+      }
+    },
+    "action_visual": {
+      "valid": 106,
+      "failed": 0,
+      "returned_models": {
+        "gpt-4o-2024-11-20": 98,
+        "gpt-4o": 8
+      }
+    },
+    "full": {
+      "valid": 106,
+      "failed": 0,
+      "returned_models": {
+        "gpt-4o-2024-11-20": 101,
+        "gpt-4o": 5
+      }
+    }
+  },
+  "artifact_completeness": {
+    "latest_attempts": 424,
+    "input_json": 424,
+    "raw_response_txt": 424,
+    "prediction_json": 424,
+    "status_json": 424
+  },
+  "sha256": {
+    "metrics": "242929895411513301A5D9050E414EAC258D1DC425EB7AD9D49787BFCD43DA6E",
+    "primary_samples": "6BB2E4D118E268CF2BB953ECA1F067504E4810C33BF7EA600D5913BCBF9F7A5E",
+    "human_confirmed_gold": "5B07D7F5B5955011E7BC0193F919BD0C4169F5CA9D4331A16BC780E85F164A5D",
+    "risk_taxonomy": "A515FBD9013B36EC7DF67BD0326CABD08950429C96FB1536642B0E3948EA717A",
+    "run_script": "FF5AEA41E253E668BBC9F502561C7D91F7AF0E0350F4A0BC54624FA4667A65E3",
+    "analysis_script": "212D5BBDEF810A2742F6DB8C65211EA3038112DC95AF364224B5107F0C78767A"
+  }
+}

@@ -1,6 +1,7 @@
 import pytest
 
 from scripts.paper.analyze_c3 import (
+    bootstrap_macro_f1_deltas,
     bootstrap_macro_confidence_intervals,
     compute_condition_report,
     compute_condition_metrics,
@@ -103,3 +104,34 @@ def test_load_prediction_file_unwraps_extraction_metadata(tmp_path):
     )
 
     assert load_prediction_file(path) == {"S001": {"potential_risk": False}}
+
+
+def test_bootstrap_macro_f1_deltas_use_paired_run_samples():
+    samples = [
+        {"sample_id": "1", "site": "a", "run_id": "r1"},
+        {"sample_id": "2", "site": "a", "run_id": "r2"},
+    ]
+    gold = {
+        "1": {"potential_risk": "true", "risk_type": "sensitive_data"},
+        "2": {"potential_risk": "true", "risk_type": "sensitive_data"},
+    }
+    full = {
+        "1": {"potential_risk": True, "risk_type": "sensitive_data"},
+        "2": {"potential_risk": True, "risk_type": "sensitive_data"},
+    }
+    weak = {
+        "1": {"potential_risk": False, "risk_type": None},
+        "2": {"potential_risk": False, "risk_type": None},
+    }
+
+    result = bootstrap_macro_f1_deltas(
+        samples,
+        gold,
+        {"full": full, "action_only": weak, "action_taxonomy": weak, "action_visual": weak},
+        seed=9,
+        resamples=50,
+    )
+
+    assert result["full_minus_action_only"]["point_estimate"] == 1.0
+    assert result["full_minus_action_only"]["lower"] == 1.0
+    assert result["full_minus_action_only"]["upper"] == 1.0
