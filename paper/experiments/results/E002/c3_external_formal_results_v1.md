@@ -2,7 +2,7 @@
 
 > Run date: 2026-09-20
 >
-> Status: complete two-condition run; descriptive results frozen. Confidence intervals remain to be added before paper use.
+> Status: complete two-condition run with frozen cluster-bootstrap uncertainty estimates.
 
 ## Execution audit
 
@@ -32,4 +32,16 @@ Visual context improved recall by 12.3 percentage points and F1 by 5.2 points, w
 
 Acceptable-type accuracy increased by 35.4 points. This supports the narrower claim that visual context helps connect an ambiguous action label to a plausible environmental consequence and explanatory risk category. The pair result points in the same direction but remains weak in absolute terms: only 2/8 discordant pairs were fully correct.
 
-These are descriptive point estimates. The result does not yet include pair/singleton cluster-bootstrap intervals, and the small realized discordant-pair subset limits strong claims about risk-flip performance.
+## Cluster-bootstrap uncertainty
+
+Using 10,000 deterministic bootstrap replicates with the 30 context pairs as paired clusters and the 40 diversity samples as singleton clusters (`seed=20260920`):
+
+| Metric | Text only 95% CI | Context conditioned 95% CI | Full−Text difference (95% CI) |
+|---|---:|---:|---:|
+| Precision | [65.9%, 88.9%] | [61.0%, 84.4%] | −4.5 pp [−15.1, +4.7] |
+| Recall | [43.9%, 72.6%] | [58.7%, 82.4%] | +12.3 pp [−2.0, +27.4] |
+| F1 | [54.5%, 76.7%] | [61.8%, 80.6%] | +5.2 pp [−5.6, +17.1] |
+| Acceptable-type accuracy | [15.9%, 40.6%] | [50.0%, 75.5%] | +35.4 pp [+21.7, +49.3] |
+| Pair joint / correct flip | [0.0%, 0.0%] | [0.0%, 60.0%] | +25.0 pp [0.0, +60.0] |
+
+The F1 and recall difference intervals include zero, so the binary improvement should be described as a positive point estimate rather than a statistically resolved gain. The acceptable-type improvement is the clearest formal result. The small realized discordant-pair subset limits strong claims about risk-flip performance.

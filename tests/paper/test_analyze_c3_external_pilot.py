@@ -1,4 +1,5 @@
 from scripts.paper.analyze_c3_external_pilot import (
+    compute_cluster_bootstrap,
     compute_acceptable_type_accuracy,
     compute_pair_metrics,
 )
@@ -54,3 +55,41 @@ def test_acceptable_type_accuracy_accepts_any_human_approved_category():
     result = compute_acceptable_type_accuracy(gold, predictions)
 
     assert result == {"gold_positive": 2, "correct": 1, "accuracy": 0.5}
+
+
+def test_cluster_bootstrap_preserves_pairs_and_reports_exact_perfect_gain():
+    samples = [
+        {"sample_id": "safe", "pair_id": "p1"},
+        {"sample_id": "risk", "pair_id": "p1"},
+    ]
+    gold = {
+        "safe": {"potential_risk": "false", "acceptable_risk_types": ""},
+        "risk": {
+            "potential_risk": "true",
+            "acceptable_risk_types": "sensitive_data",
+        },
+    }
+    text_predictions = {
+        "safe": {"potential_risk": False, "risk_type": None},
+        "risk": {"potential_risk": False, "risk_type": None},
+    }
+    full_predictions = {
+        "safe": {"potential_risk": False, "risk_type": None},
+        "risk": {"potential_risk": True, "risk_type": "sensitive_data"},
+    }
+
+    result = compute_cluster_bootstrap(
+        samples, gold, text_predictions, full_predictions, iterations=100, seed=7
+    )
+
+    assert result["clusters"] == 1
+    assert result["iterations"] == 100
+    assert result["delta_full_minus_text"]["f1"] == {
+        "estimate": 1.0, "ci95": [1.0, 1.0]
+    }
+    assert result["delta_full_minus_text"]["pair_joint_accuracy"] == {
+        "estimate": 1.0, "ci95": [1.0, 1.0]
+    }
+    assert result["full"]["acceptable_type_accuracy"] == {
+        "estimate": 1.0, "ci95": [1.0, 1.0]
+    }
