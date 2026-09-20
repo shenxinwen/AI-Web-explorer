@@ -2,7 +2,7 @@
 
 > Frozen direction: 2026-09-20
 >
-> Status: protocol amendment for the external experiment only; formal sampling waits for human review of pilot gold.
+> Status: pilot gold human-confirmed on 2026-09-20; protocol ready for deterministic formal sampling and pre-run audit.
 
 ## Research question
 
@@ -25,7 +25,7 @@ The only intended difference is the GUI observation. The earlier `action_only` a
 
 ## Data construction
 
-Subject to pilot gold review, construct 240 samples from final-reviewed WebGuard metadata:
+Construct 240 samples from final-reviewed WebGuard metadata:
 
 - 160 samples forming 80 candidate pairs with the same normalized target phrase on different page contexts;
 - 80 diversity samples stratified across sites and original WebGuard risk levels;

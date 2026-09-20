@@ -1,8 +1,8 @@
-# C3 External Context-Challenge Pilot — AI-initial Results
+# C3 External Context-Challenge Pilot — Human-confirmed Results
 
 > Run date: 2026-09-20
 >
-> Status: provisional; VERA gold labels require human review before use in any paper claim.
+> Gold review: all 10 labels and acceptable-type sets human-confirmed on 2026-09-20; no corrections were required.
 
 ## Pilot construction
 
@@ -14,7 +14,7 @@ The pilot contains 10 WebGuard screenshots arranged as five context pairs. Both 
 - `Save`: profile appearance versus stored billing information;
 - `Next`: trip-idea selection versus priced booking checkout.
 
-Original WebGuard SAFE/LOW/HIGH labels and reviewer reasons were not exposed to the evaluated model. Gold was recreated under the frozen VERA taxonomy from the pre-action screenshot and action label. The current labels are AI-initial and have not yet been human-confirmed.
+Original WebGuard SAFE/LOW/HIGH labels and reviewer reasons were not exposed to the evaluated model. Gold was recreated under the frozen VERA taxonomy from the pre-action screenshot and action label. The AI-initial labels were subsequently reviewed sample by sample and confirmed without changes. The frozen pilot gold is `outputs/paper/pilot/E002_c3_external_pilot_v1/pilot_gold_human_confirmed.csv`.
 
 ## Execution audit
 
@@ -23,7 +23,7 @@ Original WebGuard SAFE/LOW/HIGH labels and reviewer reasons were not exposed to 
 - Each valid attempt retains input, raw response, parsed prediction, status, and returned model identifier.
 - Raw artifacts: `outputs/paper/pilot/E002_c3_external_pilot_v1/`.
 
-## Provisional main comparison
+## Human-confirmed main comparison
 
 The risk taxonomy is held constant. `Text only` is the existing `action_taxonomy` condition; `Context conditioned` is the existing `full` condition.
 
@@ -40,6 +40,6 @@ The two omitted conditions remain diagnostic: `action_only` matched the text-onl
 
 ## Interpretation
 
-This pilot supports the feasibility of the proposed external experiment and demonstrates that the matched-pair construction creates a much stronger context test than the natural exploration distribution. It does not establish a general effect size: the pairs were deliberately selected for clear contextual contrast, the sample contains only five pairs, and the gold is not yet human-confirmed.
+This pilot supports the feasibility of the proposed external experiment and demonstrates that the matched-pair construction creates a much stronger context test than the natural exploration distribution. It does not establish a general effect size: the pairs were deliberately selected for clear contextual contrast and the sample contains only five pairs.
 
-The next gate is human review of all 10 VERA binary labels and acceptable type sets. If confirmed, the external protocol can proceed to frozen formal sampling.
+The pilot-gold review gate is complete. Formal sampling may now proceed under the frozen external protocol; the formal sample manifest and annotation package must still be audited before model execution.
