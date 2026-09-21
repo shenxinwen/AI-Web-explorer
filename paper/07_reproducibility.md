@@ -11,7 +11,7 @@
 
 | 工件 | 位置 | 生成命令 | 状态 |
 | --- | --- | --- | --- |
-| 功能模型 schema 与 verification state 定义 | 待定 | 待定 | 未开始 |
+| 功能模型 schema、evidence judgment 与 admission indicator 定义 | 待定 | 待定 | 未开始 |
 | 探索配置、提示词与冻结运行参数 | `experiments/configs/`、`experiments/protocol_v1.md` | 各实验配置内记录 | C1–C3 均已冻结；C2 formal v2 含 18 条运行 |
 | 原始执行轨迹与 before/after observations | `../outputs/paper/formal/` | 各实验配置内记录 | C1、C2 已有；C3 探索关联与外部正式工件位于 `E002_c3_v1/` 和 `E002_c3_external_v1/` |
 | 结果判断、证据链与人工标注 | `experiments/results/E002/`、`E003/`、`E004/` | `scripts/paper/analyze_c1.py`、`analyze_c2.py`、`analyze_c3.py`、`analyze_c3_external_pilot.py` | C1–C3 的人工确认 gold、可复算指标和最终报告均已归档 |

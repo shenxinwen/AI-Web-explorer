@@ -1,0 +1,161 @@
+\section{VERA}
+\label{sec:method}
+
+\subsection{Overview}
+
+VERA organizes open-ended Web exploration as a cycle for producing,
+evaluating, and retaining functional knowledge. Given the current GUI
+observation and the functional model accumulated so far, the system proposes a
+testable function hypothesis and freezes an expected observable outcome. It
+then annotates the potential environmental risk of executing the selected
+verification action in the current context. A browser executor performs the
+interaction and returns an execution status, while VERA stores the before and
+after observations and associated metadata. Finally, an outcome verifier
+compares this evidence with the frozen expectation and controls whether the
+hypothesis is admitted to the persistent functional model.
+
+This cycle separates three responsibilities. Open-ended exploration discovers
+candidates and produces interaction evidence; pre-execution risk awareness
+describes the potential consequence of the selected interaction; and
+post-execution verification governs knowledge admission. The candidate
+generator, browser executor, risk judge, and outcome verifier are replaceable
+components. VERA's method is the protocol connecting their outputs into a
+traceable functional model, rather than a new vision-language model or browser
+automation backend.
+
+\subsection{Testable Function Hypothesis Proposal}
+
+At a semantic location $\ell$, a proposal component conditions on the current
+GUI observation and the existing model to generate one or more high-level
+function hypotheses. Each proposal defines a location-conditioned functional
+claim using a functional label and a concise expected observable outcome. The
+model separately retains applicability metadata, including location constraints
+and any directly observed action dependencies. The proposal operates at the
+level of application functions---for example, adding an item or creating a
+project---rather than enumerating every visible widget.
+
+The expected outcome states what evidence should become observable if the
+function succeeds. It may allow equivalent visible manifestations, but it may
+not depend solely on hidden backend state. The hypothesis and expectation are
+stored together before the browser interaction begins and are not revised in
+response to the resulting observation. New hypotheses are registered as
+unresolved claims awaiting evidence. Thus, proposal generation expands the set
+of claims to test without asserting that those claims are already true.
+
+When a proposed function depends on an earlier interaction, VERA records the
+dependency as an observed direct ordering relation. These relations help
+prioritize executable hypotheses and preserve the local interaction context,
+but they are deliberately narrower than general business preconditions or
+causal rules.
+
+\subsection{Pre-Execution Risk Awareness}
+
+Before executing each selected browser action, VERA captures the current
+screenshot and constructs a risk-query tuple containing the screenshot, the
+semantic label of that action, and the complete versioned risk taxonomy.
+An independent vision-language judge returns a structured record with a binary
+\texttt{potential\_risk} decision, one primary \texttt{risk\_type} when risk is
+identified, and brief interface-grounded evidence. The taxonomy supplies
+stable category definitions, positive examples, and explicit low-risk
+counterexamples; it is shared output vocabulary rather than a prediction model
+on its own.
+
+Risk is assessed for the observation-conditioned selected action. The same action
+label may therefore receive different judgments on different pages or under
+different visible application states. VERA attaches the resulting record to
+the particular hypothesis and interaction attempt, rather than storing risk as
+a context-free property of a high-level function or an aggregate property of a
+multi-action verification attempt. Ordinary exploration actions store the
+annotation in their action metadata; every replay action is assessed separately
+and retains the same information in an audit record linked to its replay step.
+
+The evaluated system uses the detector in shadow mode. Its output does not
+cancel, replace, or modify the selected action. If risk inference fails, the
+execution path continues and the error is recorded. This fail-open execution
+policy preserves the exploration process for measurement, while making clear
+that the risk component is an awareness and audit layer rather than an
+execution-time safety boundary.
+
+\subsection{Execution and Evidence Collection}
+
+The browser executor receives the selected browser action that serves the
+current functional claim and attempts to realize that interaction. VERA stores
+the pre-execution observation, the concrete interaction trace, the
+executor-reported status, the post-execution
+observation, URLs, and any available structured state changes or evidence
+references. Together these fields form the evidence packet defined in
+Section~\ref{sec:problem-formulation}.
+
+The executor status is retained as a diagnostic signal, not used as the final
+functional truth label. In particular, an executor may report success after
+completing a click or input sequence even when the intended application-level
+outcome did not occur. Conversely, an execution failure may reflect grounding,
+timing, or environment errors rather than the absence of the proposed
+function. VERA therefore defers persistent knowledge admission until the
+evidence packet is evaluated against the frozen expected outcome.
+
+\subsection{Evidence-Grounded Model Update}
+
+The outcome verifier receives the frozen functional claim, its expected
+observable outcome, and the evidence packet. It decides whether the observed
+post-interaction state supports the expectation and records a
+\textsc{Supported}, \textsc{Unsupported}, or \textsc{Unresolved} evidence
+judgment. The current implementation uses a
+vision-language model for this judgment, but the admission protocol does not
+depend on a particular verifier architecture.
+
+VERA admits a hypothesis only when the required evidence is complete and the
+evidence judgment is \textsc{Supported}, following
+Equation~\ref{eq:admission}. The admitted record links the functional claim and
+frozen expectation to the execution trace, before--after observations, evidence
+judgment, and admission decision. Evidence that is missing, inconclusive, or
+inconsistent with the expectation does not enter the downstream-usable
+knowledge set. The associated attempt is nevertheless retained so that failure
+and uncertainty remain auditable.
+
+Knowledge admission is conservative even though risk inference is fail-open for
+execution. A risk-detector error does not halt the browser interaction, whereas
+an outcome-verification error or incomplete evidence cannot produce admitted
+knowledge. This asymmetry separates continuity of evidence production from the
+reliability requirement imposed on persistent knowledge.
+
+\subsection{Persistent Evidence Production}
+
+Open-ended exploration can leave hypotheses unresolved when an interaction
+moves away from their semantic location, encounters an execution error, or
+exhausts the current budget. VERA maintains these hypotheses in a persistent
+frontier instead of discarding them. The selection procedure prioritizes
+hypotheses whose observed direct dependencies are satisfied in the current
+context. When unresolved hypotheses remain at a previously visited location,
+the system may replay an observed path to that location and resume evidence
+production.
+
+Replay is therefore a mechanism for recovering verification opportunities, not
+an uncounted exploration action. VERA records replay interactions and their
+pre-execution risk annotations separately from ordinary candidate attempts.
+This separation permits an evaluation to hold the ordinary attempt budget
+fixed while reporting the additional GUI cost and any supported functionality
+obtained after replay.
+
+Persistent frontier, dependency-aware selection, and replay implement the
+evidence-production side of the method. They do not change the admission rule:
+regardless of how a candidate is reached, only an evidence-supported outcome
+can become admitted functional knowledge.
+
+\subsection{Conservative Downstream Projection}
+
+The complete VERA model retains supported, unsupported, and unresolved claims,
+including diagnostic reasons for non-admission, alongside admitted knowledge,
+evidence, and interaction-level risk annotations. A downstream consumer need
+not receive all of this internal state. VERA instead exposes a conservative
+projection that selects only admitted functions and preserves their semantic
+locations, supported direct dependencies, and observed outcomes.
+
+For symbolic planning, one possible projection maps semantic locations to
+predicates and admitted functions to actions. Location constraints and
+supported direct dependencies provide conservative applicability conditions,
+while observed successful outcomes provide effects. Risk records may remain
+available to a downstream policy as contextual metadata, but the current
+shadow-mode system does not prescribe a blocking policy. The projection is an
+interface for using the induced model, not a claim that VERA recovers complete
+preconditions, causal dynamics, or hidden business state.

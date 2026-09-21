@@ -23,12 +23,13 @@
 
 ## 当前有效结论
 
-- 研究问题：智能体如何通过开放式 Web 探索归纳可靠、可审查的功能知识，同时感知其自主探索动作可能给环境带来的风险，并避免为了可靠性与风险感知而实质性放弃功能发现能力。
-- 统一主线：探索是提出可检验假设并产生真实交互证据的手段；可靠、可审查的功能模型是主要产物；执行前环境风险判断是自主产生证据时的监督与审计维度。论文不以通用探索覆盖领先作为主要目标。
-- 核心模型统一表达 semantic location、high-level function、location constraint、observed direct action dependency、functional outcome、verification state 和 interaction evidence；交互级 risk annotation 与相应功能假设、GUI observation 和轨迹关联，但不作为 high-level function 的上下文无关属性。
+- 研究问题：智能体如何通过开放式 Web 探索归纳可信的功能模型，同时使其自主证据采集交互可能带来的环境风险显式化并可供审查？开放探索提高自动化与功能发现能力，但同时引入两类关联风险：未经支持的主张可能污染持久知识，验证这些主张的自主交互也可能对环境产生重要后果。
+- 统一主线：VERA 将开放探索视为证据生产过程，并区分“所得知识是否可信”与“获得知识的交互是否具有环境风险”。C1 通过执行后证据验证控制知识准入，C3 在执行前记录上下文相关风险，C2 是连接二者的候选发现与证据生产机制。安全是研究动机和长期目标；本文当前完成并评价的是知识可靠性与环境风险感知，而非端到端安全控制。功能覆盖用于检查这些目标是否以过度放弃发现能力为代价，不用于主张通用探索领先。
+- 核心知识单元是 location-conditioned functional claim `h=(semantic location, high-level function, frozen expected observable outcome)`；location constraint 与 observed direct action dependency 作为适用性和探索选择元数据保存，不被本次 outcome verification 自动视为已验证的普遍 precondition。模型另表达 functional outcome、三类 evidence judgment、二元 admission indicator 和 interaction evidence。
+- 风险判断对象是 observation-conditioned selected browser action `ρ_t=R(o_t,a_t,K)`，不是抽象 high-level function 或整个多动作验证尝试。普通探索记录链接 functional claim、GUI observation、轨迹和结果证据；replay 对每个 action 单独判断并链接 replay step。
 - C1 已收敛为 evidence-grounded functional verification and knowledge admission：候选发现与 executor-reported success 均不直接构成功能知识。每个候选在执行前同时生成并冻结一句 expected observable outcome；只有执行后证据支持该结果的候选才进入持久功能模型。
-- 三项并列且相互依赖的核心贡献已确定：evidence-grounded knowledge admission、execution-grounded open-ended functional model induction、environmental risk awareness for open-ended exploration。
-- C1–C3 的接口已明确：C2 发现候选、生成执行前 expected outcome，并产生交互轨迹和前后观察；C3 在已选验证动作执行前生成并关联环境风险判断；C1 使用冻结的主张与执行后证据验证 functional outcome，并据此输出 proposed → admitted / rejected。VLM 是当前可替换的生成器和判断器，不是贡献本身。
+- 三条相互依赖的机制与证据轨道已确定：evidence-grounded knowledge admission 处理功能模型归纳中的认知风险；context-conditioned environmental risk awareness 处理证据生产行为的可感知与可审查性；execution-grounded open-ended exploration 作为二者共享的候选发现与证据生产基础。三者共同服务于“可信功能模型归纳与环境风险感知”这一统一问题，而不是三个松散并列的系统目标。
+- C1–C3 的接口已明确：C2 发现候选、生成执行前 expected outcome，并产生交互轨迹和前后观察；C3 在已选验证动作执行前生成并关联环境风险判断；C1 使用冻结的主张与执行后证据产生三类 evidence judgment，并据此设置二元 admission indicator。VLM 是当前可替换的生成器和判断器，不是贡献本身。
 - C1 自然实验固定同一组候选和轨迹，比较 proposal-as-fact、executor-success-as-fact 与 evidence-grounded admission；主指标为 admitted knowledge precision、supported knowledge retention 和 admission yield，验证器一致性及 executor–outcome disagreement 为诊断。
 - C1 正式实验固定为 SauceDemo 与 Practice Shopping；RealWorld 的一次非正式资格检查因证据完整性不足而排除，不进入任何正式统计。受控挑战集仅在自然负样本不足时再考虑，不与自然样本混合报告。
 - 风险机制在每个普通探索或 replay 动作执行前，将当前截图、已选 high-level action label 和完整风险库交给独立 VLM 作上下文条件判断，保存本次交互的二元风险标记、一个主要风险类型和页面证据。
@@ -53,7 +54,7 @@
 
 - C1 的 expected outcome、执行实例、before/after evidence、功能级聚合、人工 gold、三种准入策略和离线指标均已完成；结果及错误案例见 `experiments/results/E003/`。
 - 核实相关工作及正式引用，明确最接近方法和可比实验设定。
-- 逐字段人工标注指南已建立；论文级 verification state 使用冻结规则从实现字段离线派生，不新增运行时功能。
+- 逐字段人工标注指南已建立；主文将冻结实现字段与人工标签归并为 Supported、Unsupported、Unresolved 三类 evidence judgment，并单独表达二元 admission indicator；该论文级抽象不新增运行时功能，也不修改冻结工件。
 - C2 三条件开关、随机 seed、replay GUI 动作计数、恢复后 attempt 关联、完整 attempt 导出和离线指标/绘图脚本已实现并通过回归；pilot 与 formal v2 的 18 条运行、覆盖映射与最终汇总均已冻结。
 - 补全统一可复现环境说明；C1–C3 的模型、配置、轨迹、人工 gold、指标和结果工件已经分别冻结。
 - 将 ICLR 模板示例整理为匿名主稿骨架，并开始逐节写作；当前尚无本地 LaTeX 编译器。

@@ -16,7 +16,7 @@
 
 ### Overall Claim：Reliability and Risk Awareness without Abandoning Exploration
 
-C1–C3 的综合证据用于检验：VERA 能否提高功能知识准入的可靠性、使自主探索动作的潜在环境风险可感知和可追溯，同时在固定预算下仍保留有用的功能发现能力。当前 shadow-mode 风险判断不改变执行，因此该综合 claim 不等同于端到端安全性提升，也不检验风险控制与覆盖率之间的执行策略权衡。
+C1–C3 的综合证据用于检验：在开放探索同时产生知识污染风险与环境交互风险的条件下，VERA 能否通过 evidence-grounded admission 提高功能知识准入的可靠性，通过 context-conditioned judgment 使自主证据采集动作的潜在环境风险可感知和可追溯，并在固定预算下仍保留有用的功能发现能力。当前 shadow-mode 风险判断不改变执行，因此该综合 claim 不等同于端到端安全性提升，也不检验风险控制与覆盖率之间的执行策略权衡。
 
 ### Auxiliary Evaluation：Downstream Planning and Behavior Verification
 
@@ -30,7 +30,7 @@ C1–C3 的综合证据用于检验：VERA 能否提高功能知识准入的可�
 - RQ1 以每次运行内去重后的功能知识为统计对象，action attempt 只作为验证证据来源；RQ3 使用两条互补证据轨道：106 条 C2 Full 普通探索动作，以及 100 条外部 screenshot-action context 样本；RQ2 以独立 run 为单位。
 - AI 生成初始标注，人工逐项审查并修订；正式标注前先用 20 个样本检查字段和规则是否可执行。该流程不等同于双人独立标注。
 - 完整冻结协议见 [`experiments/protocol_v1.md`](experiments/protocol_v1.md)。
-- 逐字段定义与论文级 verification state 的离线派生规则见 [`experiments/annotation_guide_v1.md`](experiments/annotation_guide_v1.md)；工件核查见 [`experiments/pilot_readiness_audit.md`](experiments/pilot_readiness_audit.md)。
+- 逐字段定义与冻结标签规则见 [`experiments/annotation_guide_v1.md`](experiments/annotation_guide_v1.md)；主文将其归并为三类 evidence judgment 与独立 admission indicator，不改变原始标注。工件核查见 [`experiments/pilot_readiness_audit.md`](experiments/pilot_readiness_audit.md)。
 - 下游任务包括：给定新目标或 PDDL problem 的规划，以及规划动作与模型约束/观察结果的一致性验证。
 - 若资源允许，可加入规划结果驱动真实浏览器执行，但不作为当前必要贡献。
 

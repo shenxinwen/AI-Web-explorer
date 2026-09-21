@@ -1,0 +1,118 @@
+\section{Problem Formulation}
+\label{sec:problem-formulation}
+
+\paragraph{Open-ended Web exploration.}
+Let $\mathcal{W}$ denote a Web application whose internal business state and
+transition rules are unknown. At interaction step $t$, an agent receives a GUI
+observation $o_t \in \mathcal{O}$ and selects a browser action
+$a_t \in \mathcal{A}$. Executing $a_t$ produces a new observation $o_{t+1}$
+and executor-reported status $x_t$. The resulting interaction record is
+$\tau_t=(o_t,a_t,x_t,o_{t+1})$. Unlike task-conditioned Web agents, the agent
+is not given a user goal to complete. It instead explores the application to
+induce a reusable functional model from interaction traces. The model is
+limited to states and outcomes that are observable through the GUI or saved
+interaction artifacts; it is not intended to recover hidden application logic.
+
+\paragraph{Testable functional hypotheses.}
+From an observation, the agent may propose a functional hypothesis
+\begin{equation}
+    h_i=(\ell_i,f_i,\hat{y}_i),
+\end{equation}
+where $\ell_i$ is a semantic location, $f_i$ is a high-level function,
+and $\hat{y}_i$ is an expected observable outcome. The claim states that
+executing $f_i$ at $\ell_i$ is expected to produce $\hat{y}_i$. Semantic
+locations and high-level functions describe application-level concepts rather
+than individual DOM elements. The model may additionally retain applicability
+metadata, including location constraints and observed direct action
+dependencies. Such dependencies record interaction-supported ordering
+relationships; they are not part of the outcome claim itself and are not
+asserted to be necessary or sufficient business preconditions.
+
+The expected outcome $\hat{y}_i$ is generated together with the hypothesis and
+frozen before execution. It must identify a change that can be checked in a
+subsequent GUI observation or saved observable state. Freezing $\hat{y}_i$
+prevents the claimed outcome from being retrofitted after observing the
+execution result. A proposed hypothesis is a candidate for verification, not
+yet a fact about the application.
+
+\paragraph{Execution evidence and functional outcome.}
+For an attempted hypothesis $h_i$, the system stores an evidence packet
+\begin{equation}
+    e_i=(o_i^{\mathrm{pre}}, a_i, x_i,
+         o_i^{\mathrm{post}}, m_i),
+\end{equation}
+where $o_i^{\mathrm{pre}}$ and $o_i^{\mathrm{post}}$ are the before and after
+observations, $a_i$ is the executed interaction, $x_i$ is the executor-reported
+status, and $m_i$ contains available metadata and evidence references. An
+evidence judgment
+\begin{equation}
+    J(h_i,e_i) \in \{\textsc{Supported},\textsc{Unsupported},
+    \textsc{Unresolved}\}
+\end{equation}
+evaluates whether $e_i$ supports the frozen expected outcome $\hat{y}_i$.
+\textsc{Unsupported} requires sufficiently complete evidence that does not
+support the expected outcome. A hypothesis that has not been attempted, whose
+execution failed before producing diagnostic evidence, or whose evidence is
+missing or only partial remains \textsc{Unresolved}. We separately record
+whether an executed interaction preserves the current semantic location or
+transitions to another one.
+
+This definition distinguishes three claims that are otherwise easy to
+conflate: proposing $h_i$ establishes only that a candidate was discovered;
+an executor success $x_i$ establishes only that the interaction was reported
+as completed; and $J(h_i,e_i)=\textsc{Supported}$ establishes that the available
+before--after evidence supports the expected functional outcome. Neither
+candidate discovery nor executor-reported success alone is sufficient for
+functional knowledge admission.
+
+\paragraph{Evidence judgment and knowledge admission.}
+The three-way judgment is distinct from the binary admission indicator
+$A(h_i)\in\{0,1\}$. A hypothesis is admitted to the downstream-usable
+functional knowledge set only when its evidence is complete and supports its
+frozen expected outcome:
+\begin{equation}
+    A(h_i)=1
+    \quad\Longleftrightarrow\quad
+    \operatorname{complete}(e_i) \land
+    J(h_i,e_i)=\textsc{Supported}.
+    \label{eq:admission}
+\end{equation}
+When $A(h_i)=0$, the hypothesis is not admitted under the current evidence.
+This does not by itself mean that the proposed function is false. Non-admitted
+records and diagnostic reasons are retained for inspection and possible
+continuation; in particular, an unresolved attempt is not treated as negative
+evidence about the proposed function. We call the set of hypotheses, their
+evidence judgments and admission indicators, and their linked interaction
+evidence the evidence-grounded functional model $\mathcal{M}$.
+
+\paragraph{Context-conditioned interaction risk.}
+Before executing a selected browser action $a_t$ under observation $o_t$, the
+system assigns an interaction-level risk annotation
+\begin{equation}
+    \rho_t=(b_t,k_t,q_t)=R(o_t,a_t,\mathcal{K}),
+\end{equation}
+where $b_t$ is a binary potential-risk judgment, $k_t$ is one primary risk type
+(or null when no risk is identified), $q_t$ is supporting interface evidence,
+and $\mathcal{K}$ is a versioned risk taxonomy. The object of this judgment is
+whether executing this selected interaction in the current GUI context may
+perform, enter, or prepare a risk-sensitive operation. The implemented judge
+receives the pre-action screenshot and a semantic label for $a_t$. It does not
+assign an intrinsic, context-free risk property to $f_i$, assess an entire
+multi-action verification attempt as one unit, or enumerate every possible
+action visible on the screen.
+
+The annotation $\rho_t$ is attached to the interaction record $\tau_t$. When
+$a_t$ is selected to test $h_i$, the record also links $\rho_t$ to that
+functional claim and its subsequent outcome evidence. Replay actions are
+assessed individually and linked to their replay steps, even when they do not
+propose a new claim. In the system evaluated here, risk assessment runs in
+shadow mode: it records a pre-execution judgment but does not block or modify
+the selected action. Consequently, the formulation supports risk awareness and
+auditability, but does not by itself imply safer execution or an end-to-end
+safety guarantee.
+
+The overall problem is therefore to induce $\mathcal{M}$ through open-ended
+interaction while (i) admitting only functional claims supported by observable
+execution evidence, (ii) continuing to produce useful supported knowledge
+under a bounded exploration budget, and (iii) associating each selected
+evidence-gathering action with a context-conditioned pre-execution risk record.

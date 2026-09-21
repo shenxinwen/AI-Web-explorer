@@ -2,6 +2,8 @@
 
 ## 潜在风险
 
+本文将安全视为开放式探索的重要动机和长期目标，但当前方法贡献限于执行前环境风险感知、记录与审计。shadow-mode 判断不阻断动作，因此不能把本文结果解释为已经防止不可逆后果或降低实际危险行为发生率。
+
 - 开放探索可能主动触发删除、发送、提交、授权、交易等高影响或不可逆操作。
 - 对真实网站的自动交互可能影响账号数据、其他用户、服务资源或网站正常运行。
 - 页面内容、执行轨迹和截图可能包含个人信息、凭据或其他敏感数据。
@@ -26,7 +28,7 @@
 
 - 优先在受控、可重置、获得授权的测试环境和隔离账号中开展实验。
 - 在执行前记录二元风险判断、主要风险类型和页面证据，为人工确认、停止或拦截等后续策略提供依据。
-- 显式区分 Proposed、Partially Supported、Interaction-Supported、Failed 和 Incomplete，保守限制下游可用知识。
+- 显式区分 Supported、Unsupported 与 Unresolved evidence judgment，并以独立 admission indicator 保守限制下游可用知识；未执行、部分证据和执行异常作为 Unresolved 的诊断原因保留。
 - 保存 hypothesis source、execution trace、before/after observations 和 outcome judgment，支持人工检查。
 - 对敏感数据进行最小化收集、脱敏、受限保存与投稿前清理。
 - 记录失败、不确定、风险误报、漏报和错误分类案例，不只报告成功轨迹。

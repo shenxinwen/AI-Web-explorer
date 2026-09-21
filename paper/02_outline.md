@@ -9,7 +9,7 @@ VERA: Verification and Environmental Risk Awareness for Functional Model Inducti
 ## 摘要结构（待撰写）
 
 1. 背景：任务无关的开放探索能够发现网站功能，但其价值不应只由覆盖率衡量。
-2. 问题：自动探索同时面临行为与知识两类可靠性问题——自主验证动作可能具有环境风险，功能提议或 executor success 也不能直接成为持久知识。
+2. 问题：自动探索同时引入两类关联风险——功能提议或 executor success 可能被错误持久化为知识，而自主验证动作也可能对环境产生重要后果。
 3. 缺口：现有方法可以探索界面、验证动作效果或判断执行风险，但没有显式管理 task-free 探索如何形成风险信息与证据状态共同可追溯的持久功能知识。
 4. 方法：VERA 通过执行前环境风险判断、真实 GUI 交互、执行前冻结的 expected outcome 和执行后证据准入持续归纳功能模型。
 5. 评价：知识准入可靠性；在固定预算下保留的证据支持功能覆盖；已选探索动作的风险识别与记录完整性。
@@ -21,7 +21,7 @@ VERA: Verification and Environmental Risk Awareness for Functional Model Inducti
 
 自主 Web/GUI 探索能够自动提出目标并发现页面、功能和转移，但“探索到信息”不等于“获得可靠知识”；自动化程度越高，越需要在不实质性放弃功能发现能力的情况下，提高所得知识的可靠性并识别系统主动行为的潜在环境风险。
 
-### 1.2 Two Core Challenges
+### 1.2 Two Risks of Autonomous Evidence Production
 
 1. 候选动作被发现、executor 报告执行成功，都不能直接证明预期功能结果真实发生，因而不能直接作为功能知识准入依据。
 2. 验证未知功能可能触发删除、发送、授权、交易等高影响或不可逆行为，而这些风险判断通常没有与最终形成的功能知识和证据链共同保存。
@@ -32,7 +32,7 @@ VERA: Verification and Environmental Risk Awareness for Functional Model Inducti
 
 ### 1.4 Contributions
 
-概述三项并列且相互依赖的贡献：evidence-grounded knowledge admission、execution-grounded open-ended functional model induction、environmental risk awareness for open-ended exploration。强调探索是证据生产手段，可靠知识和风险可审查性是主要目标。
+概述统一问题下的三条机制与证据轨道：evidence-grounded knowledge admission 控制模型归纳的认知风险，environmental risk awareness 使证据生产行为的潜在后果可感知和可审查，execution-grounded open-ended exploration 为二者生产候选、轨迹和观察证据。强调安全是动机，当前贡献是风险感知而非风险阻断。
 
 ## 2. Related Work
 
@@ -50,7 +50,11 @@ VERA: Verification and Environmental Risk Awareness for Functional Model Inducti
 
 定义未知 Web GUI、任务无关开放探索、交互轨迹、应用级功能模型及风险约束。
 
-### 3.2 Evidence-Grounded Functional Model
+### 3.2 Design Principle: Evidence Production under Dual Risk
+
+开放探索提高自主性，但同时产生知识污染风险与环境交互风险。VERA 分离证据生产、知识准入和交互风险监督，并将三者绑定到同一可追溯 interaction record。
+
+### 3.3 Evidence-Grounded Functional Model and Admission
 
 定义候选、executor-reported success 与 verified functional outcome 三个不同层次。每个候选关联一个执行前冻结的 expected observable outcome；系统仅在动作后证据支持该预期结果时准入对应功能知识。验证被明确用于持久功能知识准入，而不只是当前动作纠错；该机制旨在减少未经支持的知识准入，不构成绝对正确性保证。
 
@@ -59,18 +63,18 @@ VERA: Verification and Environmental Risk Awareness for Functional Model Inducti
 - Functional Outcome
 - Verification State and Interaction Evidence
 
-### 3.3 Open-Ended Functional Model Induction
+### 3.4 Open-Ended Evidence Production
 
 - Function Hypothesis Proposal
 - Execution and Outcome Observation
 - Evidence-Driven Model Update
 - Persistent Frontier
 
-### 3.4 Risk-Aware Open-Ended Exploration
+### 3.5 Context-Conditioned Environmental Risk Awareness
 
 定义由执行前截图、已选动作 label 与版本化风险库共同驱动的上下文条件 VLM 二元风险判断。风险标注属于具体 interaction attempt，不作为 high-level function 的固定属性；确认与拦截不是当前必要机制。
 
-### 3.5 Conservative Downstream Projection
+### 3.6 Conservative Downstream Projection
 
 仅将达到证据要求的知识投影给规划/验证模型；PDDL-compatible representation 为一种实例。
 

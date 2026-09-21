@@ -17,7 +17,7 @@
 
 1. 功能是由静态观察提出，还是经过真实 GUI 交互支持；
 2. 是否区分执行器成功与功能结果成功；
-3. 是否显式保存 Proposed、Partially Supported、Interaction-Supported、Failed、Incomplete 等知识状态；
+3. 是否显式区分 evidence judgment、知识准入与实现层生命周期/失败原因；
 4. 是否能从结论回溯 hypothesis、execution trace、before/after observations 和 outcome judgment；
 5. 是否在自动探索阶段识别候选功能的潜在风险；
 6. 是否将二元风险判断、主要风险类型和判断证据写入长期环境模型。

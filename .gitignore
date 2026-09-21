@@ -24,3 +24,13 @@ outputs/
 
 # isolated Codex worktrees
 .worktrees/
+
+# LaTeX build artifacts (PDF previews remain visible and are not ignored)
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
