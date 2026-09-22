@@ -34,6 +34,20 @@ VERA: Verification and Environmental Risk Awareness for Functional Model Inducti
 
 概述统一问题下的三条机制与证据轨道：evidence-grounded knowledge admission 控制模型归纳的认知风险，environmental risk awareness 使证据生产行为的潜在后果可感知和可审查，execution-grounded open-ended exploration 为二者生产候选、轨迹和观察证据。强调安全是动机，当前贡献是风险感知而非风险阻断。
 
+### Introduction 段落级论证设计
+
+Introduction 计划采用七段结构。它的任务不是提前解释全部系统细节，而是建立从具体应用场景、研究机会、核心困难、统一问题、解决方案到证据的完整论证链。
+
+1. **具体应用场景。** 智能体进入未知网站，不是完成单个给定任务，而是认识网站功能并建立供未来任务复用的模型。
+2. **为什么需要开放式探索。** 说明 task-conditioned interaction 适合完成当前目标，而 task-free/open-ended exploration 能够主动发现与当前目标无关但可供未来复用的功能；二者目标互补，不宣称开放式探索普遍优于任务导向方法。
+3. **自主性的核心矛盾。** 开放探索提高发现范围，也减少具体用户目标提供的行为约束，从而引出知识与环境两类关联风险。
+4. **知识侧困难。** 区分候选发现、executor-reported success 与 evidence-supported functional outcome。若直接持久化前两者，功能模型会吸收未经支持的主张；功能知识必须由针对预先声明结果的可观察执行证据支持。
+5. **环境侧困难。** 验证未知功能必须主动执行 GUI 动作，风险取决于执行前页面状态和具体已选动作；风险判断应在执行前形成，并与动作、主张、轨迹和结果证据共同保存。当前目标是风险感知与审计，而非阻断或端到端安全。
+6. **统一研究问题与 VERA。** 将开放探索表述为同时面对知识污染风险和环境交互风险的证据生产过程。概述 VERA 的闭环，并强调贡献在协议与可追溯模型，而非新的基础模型。
+7. **实证回答与贡献。** 按 RQ1--RQ3 给出冻结结果并总结三条贡献。C3 先呈现最明确的 acceptable-type accuracy 改善，再报告 recall/precision 权衡及二元差异区间跨 0；不使用 SOTA、statistically significant binary improvement 或 safer execution 等表述。
+
+Introduction 写完后的检查标准：读者应能回答“为什么需要开放探索”“为什么它同时产生两类风险”“VERA 分别在哪个时间点处理什么”“三个实验各验证哪一部分”，且不会误解为本文已经实现风险阻断、完整业务逻辑恢复或通用探索 SOTA。
+
 ## 2. Related Work
 
 ### 2.1 Autonomous GUI Exploration and Environment Modeling

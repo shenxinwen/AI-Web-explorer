@@ -1,6 +1,6 @@
 # 论文状态
 
-> 最后更新：2026-09-21
+> 最后更新：2026-09-22
 >
 > 维护规则：只记录当前有效结论、证据缺口和下一步；详细内容写入对应专题文件。
 
@@ -8,18 +8,18 @@
 
 - 目标会议：ICLR 2027
 - 论文题目：VERA: Verification and Environmental Risk Awareness for Functional Model Induction through Open-Ended Web Exploration
-- 当前阶段：C1、C2、C3 的正式实验与结果包均已冻结，论文级状态文档已对齐；ICLR 2027 官方 LaTeX 模板已放入 `manuscript/`，下一阶段是搭建匿名主稿并写入三项贡献的有界结果。
+- 当前阶段：C1、C2、C3 的正式实验与结果包均已冻结；匿名 LaTeX 主稿骨架已经建立，Introduction、Problem Formulation 与 Method 已形成首轮英文稿和中英对照审阅稿。下一阶段是完成 Experiments 与 Results，形成可通读的全篇初稿，再进行论证、证据边界和语言三轮修改。
 
 ## 写作状态
 
 - 正式 LaTeX 入口：`manuscript/iclr2027_conference.tex`。
 - 原始模板备份：`manuscript/iclr2027_conference_template.tex`；后续不在该文件上撰写正文。
 - 投稿模式：保持 `\iclrfinalcopy` 注释，作者身份不写入匿名投稿版本。
-- 标题已暂定为 VERA 正式标题；摘要结构已暂定，现可根据 C1–C3 冻结结果统一形成结果句，但尚未写入匿名主稿。
+- 标题已暂定为 VERA 正式标题；摘要结构已暂定，但正文仍为占位符。摘要将在 Introduction、Experiments 与 Results 形成连贯初稿后集中撰写。
 - Keywords 暂定为：`web agents, open-ended web exploration, GUI agents, functional model induction, evidence-grounded verification, knowledge admission, environmental risk awareness`。
 - TL;DR 暂定为：`VERA builds reliable functional models through open-ended web exploration by assessing interaction risks in context and admitting only evidence-supported functions, while preserving useful functional coverage.`
-- `manuscript/sections/` 尚未开始写作；模板示例正文尚未替换。
-- 当前本地环境未检测到 `latexmk` 或 `pdflatex`，现阶段使用 Overleaf 编译；若后续安装本地 TeX 工具链，再补充本地编译命令。
+- `manuscript/sections/` 已建立完整章节骨架；Introduction、Problem Formulation 与 Method 已有首轮正文，其余章节主要仍为提纲或占位符。
+- 本地已安装 LaTeX 与 Perl 工具链，并曾成功生成预览 PDF；按当前协作约定，不主动编译或打开 PDF，作者需要时再执行。
 
 ## 当前有效结论
 
@@ -57,12 +57,12 @@
 - 逐字段人工标注指南已建立；主文将冻结实现字段与人工标签归并为 Supported、Unsupported、Unresolved 三类 evidence judgment，并单独表达二元 admission indicator；该论文级抽象不新增运行时功能，也不修改冻结工件。
 - C2 三条件开关、随机 seed、replay GUI 动作计数、恢复后 attempt 关联、完整 attempt 导出和离线指标/绘图脚本已实现并通过回归；pilot 与 formal v2 的 18 条运行、覆盖映射与最终汇总均已冻结。
 - 补全统一可复现环境说明；C1–C3 的模型、配置、轨迹、人工 gold、指标和结果工件已经分别冻结。
-- 将 ICLR 模板示例整理为匿名主稿骨架，并开始逐节写作；当前尚无本地 LaTeX 编译器。
+- 将已冻结的 C1--C3 事实与结果写入 Experiments、Results、Limitations 和 Reproducibility，并完成相关工作引用核实。
 
 ## 下一步
 
-1. 在 `manuscript/iclr2027_conference.tex` 中建立匿名论文骨架，将章节正文拆分到 `manuscript/sections/`，并替换模板示例内容。
-2. 优先撰写 Introduction、Problem Formulation 与 Method；写作时以 `00_scope.md`、`01_contributions.md` 和 `04_method.md` 为事实边界。
-3. 将 C1–C3 冻结结果写入匿名主稿的实验与结果章节；C3 明确区分探索关联评测和外部 context challenge。
-4. 基于冻结结果更新摘要结果句；将 C3 的主要证据表述为类型 grounding 改善和 recall/precision 权衡，不宣称二元增益显著。
-5. 完成相关工作引用与复现环境说明；不得把 shadow-mode 风险感知写成端到端安全提升。
+1. 审阅 Introduction 首轮英文稿及其中英对照稿，确认问题驱动叙事是否准确。
+2. 将 C1–C3 冻结设置与结果写入 Experiments 和 Results；C3 明确区分探索关联评测和外部 context challenge。
+3. 完成 Limitations、Ethics、Reproducibility、Related Work 与 Conclusion，形成可从头到尾阅读的初稿。
+4. 在全文论证链稳定后撰写 Abstract，并统一贡献句与结果句。
+5. 依次进行三轮修改：整体论证与章节衔接、证据与主张边界、语言与篇幅。不得把 shadow-mode 风险感知写成端到端安全提升。

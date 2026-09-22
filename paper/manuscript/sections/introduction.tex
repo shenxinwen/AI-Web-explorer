@@ -1,4 +1,93 @@
 \section{Introduction}
 \label{sec:introduction}
 
-% Motivation, unified research question, approach, results, and contributions.
+Consider an agent entering a previously unseen Web application. Rather than
+receiving a single user goal, the agent must determine what the application
+can do and organize its experience into a functional model that can support
+future tasks. Such a model could amortize interaction across tasks: instead of
+rediscovering the interface for every new request, a downstream agent could
+reuse grounded knowledge about available functions, where they apply, and what
+observable outcomes they produce. Building this model, however, requires more
+than passively reading a page. Many application functions become evident only
+after the agent changes state through interaction.
+
+This setting motivates \emph{open-ended Web exploration}. Task-conditioned
+agents typically search for a path that completes a specified objective; they
+need not discover functionality irrelevant to that objective or preserve it
+for later use. An open-ended explorer instead proposes its own functional
+hypotheses, visits different application states, and accumulates knowledge for
+goals that are not yet known. These paradigms are complementary rather than
+universally ordered: task-conditioned interaction is well suited to completing
+the current request, whereas open-ended exploration is naturally aligned with
+constructing a reusable functional model. The same autonomy that enables this
+broader discovery, however, also removes much of the behavioral constraint
+provided by a concrete user goal.
+
+The first resulting challenge is epistemic. A proposed function is only a
+candidate, and an executor-reported success establishes only that an
+interaction was completed. Neither establishes that the intended
+application-level outcome occurred. Persisting either signal as fact can
+introduce unsupported knowledge that later misleads planning or verification.
+Functional model induction therefore needs an explicit admission boundary:
+the agent should state an expected observable outcome before acting, preserve
+the resulting interaction evidence, and admit the claim only when that
+evidence supports the frozen expectation.
+
+The second challenge concerns the process used to obtain that evidence.
+Testing an unknown function may require clicking, entering data, submitting a
+form, or confirming a transition. Depending on the visible application state,
+such an action may delete information, send content, change access, enter a
+transactional workflow, or prepare another consequential operation. Risk is
+therefore not a context-free property of a function name: it depends on the
+current observation and the particular browser action about to be executed.
+Moreover, a function can be learned correctly even though the interaction used
+to learn it was consequential. Trustworthy model induction must consequently
+make both the evidential status of acquired knowledge and the environmental
+risk of acquiring it explicit.
+
+We study open-ended exploration as \emph{evidence production under dual risk}
+and introduce \textbf{VERA}, a framework for Verification and Environmental
+Risk Awareness in functional model induction. VERA proposes a
+location-conditioned functional claim together with a frozen expected
+observable outcome. Before each selected browser action, it records a
+context-conditioned risk judgment grounded in the current GUI observation.
+After execution, it links the action, executor status, and before--after
+observations to the claim, and admits the claim to downstream-usable knowledge
+only when the evidence supports the expected outcome. Persistent unresolved
+hypotheses, dependency-aware selection, and replay allow the exploration
+process to recover further opportunities for evidence production. The
+generators, executor, and judges are replaceable; the contribution is the
+protocol that connects their outputs into a traceable functional model.
+
+Controlled studies support these design choices. Evidence-grounded admission
+attains 96.97\% precision while retaining 96.97\% of human-supported functional
+knowledge. Under the same ordinary-attempt budget, VERA's full exploration
+mechanism improves website-macro-average evidence-supported functional coverage
+by 11.9 percentage points over linear exploration, with replay costs reported
+separately. Finally, adding visual context improves acceptable risk-type
+accuracy by 35.4 percentage points on an external context-challenge set, while
+binary detection exhibits a higher-recall, lower-precision trade-off. Together,
+these results provide bounded evidence for reliable knowledge admission,
+sustained evidence production, and context-grounded risk awareness. In the
+evaluated system, potential risks are identified and recorded before execution
+but do not alter the selected action. They can inform a future blocking or
+human-confirmation policy, although such intervention is not implemented or
+evaluated in this work.
+
+Our contributions are:
+\begin{itemize}
+    \item We formulate open-ended functional model induction as evidence
+    production under epistemic and environmental interaction risks, and define
+    a traceable model that separates candidate discovery, executor-reported
+    success, evidence judgment, and knowledge admission.
+    \item We introduce an execution-grounded induction protocol that freezes
+    expected outcomes before interaction, admits only evidence-supported
+    functional claims, and preserves unresolved verification opportunities;
+    controlled studies evaluate both admission reliability and retained
+    evidence-supported coverage.
+    \item We associate each selected evidence-gathering action with a
+    pre-execution, context-conditioned environmental-risk record, and evaluate
+    this layer on both exploration-linked actions and an external
+    context-challenge set. The evaluated layer provides awareness and audit
+    evidence while remaining explicitly separate from execution-time control.
+\end{itemize}
