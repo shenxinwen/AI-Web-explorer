@@ -1,9 +1,0 @@
-{
-  "safesym_parse_ready": true,
-  "safety_injection_ready": true,
-  "base_plan_ready": true,
-  "safe_plan_ready": true,
-  "safety_actions_inserted": false,
-  "source_projection": "Location V1 fallback",
-  "boundary": "The fallback graph contained no sensitive action"
-}

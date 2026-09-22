@@ -414,12 +414,10 @@ VLM 截图观察
   -> SafeSym
 ```
 
-旧 Trace/Location/Surface PDDL、旧 graph/debug exploration CLI、Behavior State Graph phase-a、旧 ecommerce smoke runner、`SemanticExperimentProfile`、`ActionContract` 和 `business_milestone` 已从生产路径移除。历史 specs、plans 和 experiments 只用于追溯项目演进，不代表当前接口。
+旧 Trace/Location/Surface PDDL、旧 graph/debug exploration CLI、Behavior State Graph phase-a、旧 ecommerce smoke runner、`SemanticExperimentProfile`、`ActionContract` 和 `business_milestone` 已从生产路径移除。相关历史 specs、plans 和 experiments 已从当前工作树清理，仍可通过 Git 历史追溯，不代表当前接口。
 
 ## 相关文档
 
 - `docs/project-structure.zh-CN.md`：当前模块、代码职责与数据流；
 - `docs/safesym-bridge.md`：语义投影和 SafeSym 使用方式；
-- `docs/project-decisions.zh-CN.md`：关键决策及演进原因；
-- `docs/experiments/`：历史实验与证据；
-- `docs/superpowers/specs/`：历史和当前设计规格。
+- `docs/project-decisions.zh-CN.md`：关键决策及演进原因。

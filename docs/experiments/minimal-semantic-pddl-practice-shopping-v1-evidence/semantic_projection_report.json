@@ -1,8 +1,0 @@
-{
-  "included_raw_edge_ids": [],
-  "excluded_semantic_observation_count": 9,
-  "fallback_projection": "location",
-  "fallback_reason": "no_usable_semantic_actions",
-  "uncertain_preconditions": [],
-  "boundary": "No unverified VLM role/location output entered Minimal Semantic PDDL"
-}
