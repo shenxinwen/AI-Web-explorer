@@ -6,7 +6,7 @@
 
 18 条预定的 C2 运行均已完成并保留了原始工件。SauceDemo / Linear 与 Full 的原始 `run_03` 因登录动作类型兼容性缺口而无效；修复后重跑的有效结果已提升为标准 `run_03` 路径，原结果归档为 `run_03_login_type_failure_archived`。
 
-执行矩阵与覆盖映射均已冻结。用户于 2026-09-19 接受覆盖账本 v1，逐 run 的首次证据与 core 映射见 [c2_coverage_mapping_ledger_v1.md](c2_coverage_mapping_ledger_v1.md)，机器可读输入与输出分别为 [ledger CSV](c2_coverage_mapping_ledger_v1.csv) 和 [metrics JSON](c2_metrics_consolidated_ai_initial.json)。逐 attempt CSV 保留原始 AI 初标；最终人工确认以冻结账本为准。
+执行矩阵与覆盖映射均已冻结。用户于 2026-09-19 接受覆盖账本 v1，逐 run 的首次证据与 core 映射见 [coverage ledger](../final/c2_coverage_mapping_ledger_v1.md)，机器可读输入与输出分别为 [ledger CSV](../final/c2_coverage_mapping_ledger_v1.csv) 和 [final metrics JSON](../final/c2_metrics_final.json)。逐 attempt CSV 保留原始 AI 初标；最终人工确认以冻结账本为准。
 
 ## 执行质量
 

@@ -1,6 +1,6 @@
 # E004 / C2 Pilot 配置 v1
 
-> 状态：已冻结并中止。4/6 runs 已启动；因 checkpoint 写入阻塞停止，详见 `paper/experiments/results/E004/README.md`。本版本不进入论文正式结果。
+> 状态：已冻结并中止。4/6 runs 已启动；因 checkpoint 写入阻塞停止，详见 `paper/experiments/results/E004/provenance/experiment_history.md`。本版本不进入论文正式结果。
 >
 > 冻结后如需修改，创建新版本；不得覆盖本版本产物。
 

@@ -4,9 +4,9 @@
 
 | 结果 ID | 支撑的主张 | 图或表 | 状态 | 结论边界 |
 | --- | --- | --- | --- | --- |
-| R1 | C1：功能结果验证与知识准入 | `experiments/results/E003/` | 已完成 | 在两个冻结网站和现有设置内，evidence-grounded admission 提高准入 precision 并保留绝大多数 supported knowledge；不得外推为绝对正确 |
-| R2 | C2：执行驱动证据生产与功能发现保留 | `experiments/results/E004/c2_final_results.md` | 已完成并冻结 | 18 条运行与覆盖账本 v1 已人工确认；macro-average：Random 28.8%、Linear 42.6%、Full 54.5%；Full 相对 Linear +11.9 pp。 |
-| R3 | C3：自动探索中已选执行动作的风险识别能力 | `experiments/results/E002/c3_final_results.md` | 已完成并冻结 | 探索关联数据证明记录链路可运行；外部数据支持更高风险类型 grounding 与召回导向的二元权衡，但风险识别不等于实际拦截或探索安全 |
+| R1 | C1：功能结果验证与知识准入 | `experiments/results/E003/final/c1_final_results.md` | 已完成 | 在两个冻结网站和现有设置内，evidence-grounded admission 提高准入 precision 并保留绝大多数 supported knowledge；不得外推为绝对正确 |
+| R2 | C2：执行驱动证据生产与功能发现保留 | `experiments/results/E004/final/c2_final_results.md` | 已完成并冻结 | 18 条运行与覆盖账本 v1 已人工确认；macro-average：Random 28.8%、Linear 42.6%、Full 54.5%；Full 相对 Linear +11.9 pp。 |
+| R3 | C3：自动探索中已选执行动作的风险识别能力 | `experiments/results/E002/final/c3_final_results.md` | 已完成并冻结 | 探索关联数据证明记录链路可运行；外部数据支持更高风险类型 grounding 与召回导向的二元权衡，但风险识别不等于实际拦截或探索安全 |
 | R4 | C1–C3 的下游规划与行为验证效用 | 待定 | 未开始 | 不外推为完整通用自动化能力 |
 
 ## 当前状态

@@ -1,6 +1,6 @@
 # E004 / C2 正式实验配置 v1
 
-> 状态：已冻结并暂停。首条 Full run 暴露 replay reset 导航未计入 GUI 成本的问题；其余 runs 未启动，详见 `paper/experiments/results/E004/README.md`。
+> 状态：已冻结并暂停。首条 Full run 暴露 replay reset 导航未计入 GUI 成本的问题；其余 runs 未启动，详见 `paper/experiments/results/E004/provenance/experiment_history.md`。
 >
 > Pilot v1/v2 产物不计入正式结果，且不得复制、续跑或替换为正式 run。
 

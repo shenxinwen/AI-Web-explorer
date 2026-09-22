@@ -201,7 +201,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--output", type=Path,
-        default=Path("paper/experiments/results/E003/c1_metrics.json"),
+        default=Path("paper/experiments/results/E003/final/c1_metrics.json"),
     )
     args = parser.parse_args()
     root = Path.cwd()
@@ -209,13 +209,13 @@ def main() -> None:
         "saucedemo": {
             "runs": root / "outputs/paper/formal/E003_c1_v1/saucedemo",
             "package": root / "outputs/paper/formal/E003_c1_v1/annotation_package_saucedemo_v2",
-            "gold": root / "paper/experiments/results/E003/gold/saucedemo.csv",
+            "gold": root / "paper/experiments/results/E003/final/gold/saucedemo.csv",
             "legacy_run_grouping": True,
         },
         "practice-shopping": {
             "runs": root / "outputs/paper/formal/E003_c1_v4/practice_shopping",
             "package": root / "outputs/paper/formal/E003_c1_v4/practice_shopping/annotation_package_practice_shopping_v4",
-            "gold": root / "paper/experiments/results/E003/gold/practice_shopping.csv",
+            "gold": root / "paper/experiments/results/E003/final/gold/practice_shopping.csv",
             "legacy_run_grouping": False,
         },
     }
