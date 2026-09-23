@@ -1,6 +1,8 @@
 # VERA Problem Formulation and Method: Bilingual Review Draft
 
 > Review artifact only. The English text mirrors the current LaTeX manuscript; the Chinese text is a semantic translation for author review. This file is not included in the paper build.
+>
+> **Snapshot notice:** This file preserves the pre-compression review version and will be regenerated after the revised English structure is approved.
 
 ## 3. Problem Formulation / 问题形式化
 

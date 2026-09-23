@@ -18,11 +18,8 @@ need not discover functionality irrelevant to that objective or preserve it
 for later use. An open-ended explorer instead proposes its own functional
 hypotheses, visits different application states, and accumulates knowledge for
 goals that are not yet known. These paradigms are complementary rather than
-universally ordered: task-conditioned interaction is well suited to completing
-the current request, whereas open-ended exploration is naturally aligned with
-constructing a reusable functional model. The same autonomy that enables this
-broader discovery, however, also removes much of the behavioral constraint
-provided by a concrete user goal.
+universally ordered: open-ended exploration is aligned with reusable model
+construction, but its autonomy removes constraints supplied by a concrete goal.
 
 The first resulting challenge is epistemic. A proposed function is only a
 candidate, and an executor-reported success establishes only that an
@@ -56,10 +53,9 @@ context-conditioned risk judgment grounded in the current GUI observation.
 After execution, it links the action, executor status, and before--after
 observations to the claim, and admits the claim to downstream-usable knowledge
 only when the evidence supports the expected outcome. Persistent unresolved
-hypotheses, dependency-aware selection, and replay allow the exploration
-process to recover further opportunities for evidence production. The
-generators, executor, and judges are replaceable; the contribution is the
-protocol that connects their outputs into a traceable functional model.
+hypotheses and replay recover further opportunities for evidence production.
+The contribution is the protocol connecting these records into a traceable
+functional model.
 
 Controlled studies support these design choices. Evidence-grounded admission
 attains 96.97\% precision while retaining 96.97\% of human-supported functional
@@ -70,11 +66,8 @@ separately. Finally, adding visual context improves acceptable risk-type
 accuracy by 35.4 percentage points on an external context-challenge set, while
 binary detection exhibits a higher-recall, lower-precision trade-off. Together,
 these results provide bounded evidence for reliable knowledge admission,
-sustained evidence production, and context-grounded risk awareness. In the
-evaluated system, potential risks are identified and recorded before execution
-but do not alter the selected action. They can inform a future blocking or
-human-confirmation policy, although such intervention is not implemented or
-evaluated in this work.
+sustained evidence production, and context-grounded risk awareness. The
+evaluated risk records do not alter the selected action.
 
 Our contributions are:
 \begin{itemize}
@@ -82,14 +75,10 @@ Our contributions are:
     production under epistemic and environmental interaction risks, and define
     a traceable model that separates candidate discovery, executor-reported
     success, evidence judgment, and knowledge admission.
-    \item We introduce an execution-grounded induction protocol that freezes
-    expected outcomes before interaction, admits only evidence-supported
-    functional claims, and preserves unresolved verification opportunities;
-    controlled studies evaluate both admission reliability and retained
-    evidence-supported coverage.
-    \item We associate each selected evidence-gathering action with a
-    pre-execution, context-conditioned environmental-risk record, and evaluate
-    this layer on both exploration-linked actions and an external
-    context-challenge set. The evaluated layer provides awareness and audit
-    evidence while remaining explicitly separate from execution-time control.
+    \item We show how outcome verification can govern persistent knowledge
+    admission, while a persistent frontier and replay sustain evidence
+    production for unresolved claims.
+    \item We make evidence acquisition traceable by linking each selected
+    action's context-conditioned risk record to its claim, execution trace, and
+    outcome evidence, and evaluate this record on workflow and external cases.
 \end{itemize}

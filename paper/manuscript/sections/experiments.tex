@@ -1,156 +1,80 @@
 \section{Experimental Setup}
 \label{sec:experiments}
 
-We design three controlled studies around the claims in
-Sections~\ref{sec:problem-formulation} and~\ref{sec:method}. Rather than compare
-end-to-end scores against systems with different tasks, action spaces,
-executors, and label definitions, each study holds the relevant inputs fixed
-and varies the mechanism under examination. We ask:
-\begin{itemize}
-    \item \textbf{RQ1:} Does evidence-grounded admission improve the precision
-    of persistent functional knowledge while retaining human-supported claims?
-    \item \textbf{RQ2:} Under a fixed ordinary-attempt budget, does persistent,
-    execution-grounded exploration retain useful evidence-supported functional
-    coverage, and what additional GUI cost does replay incur?
-    \item \textbf{RQ3:} Can the risk assessor identify and type potential
-    environmental consequences of selected actions, and how does current visual
-    context affect its judgments?
-\end{itemize}
+We use controlled comparisons rather than align end-to-end scores from systems
+with different tasks, action spaces, executors, and labels. The studies ask:
+(RQ1) whether outcome evidence improves knowledge admission while retaining
+human-supported claims; (RQ2) whether persistent recovery extends
+evidence-supported coverage under a fixed ordinary-attempt budget and at what
+replay cost; and (RQ3) whether VERA records risk on its selected actions and how
+visual context changes risk grounding.
 
 \subsection{Applications and Common Protocol}
 
-RQ1 and RQ2 use two interactive shopping applications: SauceDemo and Practice
-Shopping. Each exploration run starts from the designated entry URL in a clean
-browser session; resettable application state is restored before a run.
-Formal exploration uses three runs per application and condition, with at most
-25 ordinary high-level candidate attempts per run. The budget counts attempts
-to test candidate functions. Replay actions do not consume this budget because
-they restore a previously observed context rather than test a new candidate;
-we therefore limit and report their GUI actions separately.
-
-For RQ1 and RQ2, all candidate hypotheses include an expected observable
-outcome frozen before execution. The retained artifacts include the selected
-action, executor status, before and after observations, evidence references,
-and model judgments.
-Initial annotations were generated with AI assistance and then reviewed and
-revised item by item by a human author under a frozen annotation guide. The
-reviewed labels are used as gold. This process is not independent double
-annotation, so we do not report inter-annotator agreement. Failed executions,
-incomplete evidence, and negative examples remain in the evaluation artifacts
-rather than being discarded.
+RQ1 and RQ2 use the resettable shopping applications SauceDemo and Practice
+Shopping. Each condition has three runs per application, starts from a clean
+browser session, and permits at most 25 ordinary high-level candidate attempts.
+Replay restores an observed context rather than testing a new candidate, so its
+GUI actions are limited and reported separately. Every RQ1/RQ2 hypothesis has
+an expected outcome fixed before execution, and failed or incomplete attempts
+remain in the artifacts. AI-assisted initial annotations were reviewed and
+revised item by item by a human author under frozen guides. Appendix details
+the configurations, annotation protocols, and retained artifacts.
 
 \subsection{RQ1: Evidence-Grounded Knowledge Admission}
 
-RQ1 tests whether outcome evidence provides a more reliable admission boundary
-than either proposal or executor status alone. The comparison is designed to
-falsify this claim if evidence-grounded admission fails to improve precision or
-does so only by discarding most human-supported knowledge.
+RQ1 holds discovery and execution fixed while varying only the admission rule.
+It aggregates candidates from six Full runs by application, semantic location,
+and canonical action identifier, yielding 45 functional claims backed by 103
+attempts. Human review identifies 33 claims with at least one valid attempt
+supporting the core outcome; four attempts lack complete evidence.
 
-\paragraph{Data and unit of analysis.}
-RQ1 uses the naturally occurring candidates and frozen trajectories from three
-full-method runs on each application. Duplicate attempts are aggregated by
-application, semantic location, and canonical action identifier, yielding 45
-unique functional claims backed by 103 attempts. Human review identifies a
-claim as supported when at least one valid attempt both confirms that the
-function exists at that location and provides before--after evidence for its
-core functional outcome. The final set contains 33 supported claims. Four of
-the 103 attempts lack complete evidence and remain non-admissible under the
-evidence-grounded rule.
-
-\paragraph{Compared admission rules.}
-All three rules consume exactly the same candidates and interaction traces:
-\begin{itemize}
-    \item \textbf{Proposal-as-fact} admits every proposed claim;
-    \item \textbf{Executor-success-as-fact} admits a claim after at least one
-    attempt is reported successful by the executor;
-    \item \textbf{Evidence-grounded admission} admits a claim only after at
-    least one evidence-complete attempt is judged to support its frozen
-    expected outcome.
-\end{itemize}
-This comparison isolates the admission rule from differences in exploration or
-execution.
-
-\paragraph{Metrics.}
-The primary measures are admitted knowledge precision, the fraction of admitted
-claims supported by human review; supported knowledge retention, the fraction
-of human-supported claims admitted; and admission yield, the fraction of all
-candidates admitted. We additionally inspect false admissions, missed supported
-claims, evidence completeness, and disagreements between executor status and
-functional outcome.
+\textbf{Proposal as fact} admits all candidates; \textbf{executor success as
+fact} requires at least one executor-reported success; and
+\textbf{evidence-grounded admission} requires a complete attempt that supports
+the frozen outcome. The primary metrics are admitted-knowledge precision and
+supported-knowledge retention. This design would contradict the reliability
+claim if evidence grounding failed to improve precision or retained little of
+the human-supported knowledge.
 
 \subsection{RQ2: Persistent Evidence Production}
 
-RQ2 tests whether preserving and recovering unresolved verification
-opportunities produces additional evidence-supported functionality under the
-same ordinary candidate-attempt budget. The relevant comparison is Full versus
-Linear: both use the same dependency-aware selection and admission rule, while
-only Full retains a frontier across locations and replays observed paths. Any
-coverage gain must therefore be interpreted together with replay's additional
-GUI cost.
+RQ2 fixes the application, entry state, candidate representation, executor,
+admission rule, and ordinary-attempt budget. \textbf{Random} selects unfinished
+candidates with a frozen seed and uses neither dependency checks nor replay.
+\textbf{Linear} uses observed direct dependencies and deterministic selection
+but abandons unresolved candidates after leaving their location.
+\textbf{Full} adds a persistent frontier and replay to Linear. The design has
+18 valid runs.
 
-\paragraph{Conditions.}
-We compare three exploration policies while holding the applications, entry
-states, ordinary-attempt budget, candidate representation, executor, and
-evidence admission rule fixed. \textbf{Random} selects among unfinished
-candidates using a frozen seed, without checking observed dependencies or
-replaying prior paths. \textbf{Linear} checks observed direct dependencies and
-uses deterministic selection, but abandons unresolved candidates after leaving
-their semantic location. \textbf{Full} adds a persistent frontier and replay to
-Linear, allowing the explorer to return to an observed location and continue
-evidence production. The design comprises 18 valid runs: two applications,
-three conditions, and three repetitions.
-
-\paragraph{Coverage gold and metrics.}
-The manually reviewed coverage inventories contain 16 functions for Practice
-Shopping and 22 for SauceDemo. Within a run, a listed function counts as
-covered at most once and only when an evidence-complete interaction supports
-its functional outcome. The primary metric is evidence-supported functional
-coverage, reported as both a count and a percentage for each run, averaged
-within each application and then macro-averaged across applications. Coverage
-growth over ordinary attempts is descriptive. We separately report ordinary
-attempt counts, execution outcomes, stopping reasons, the number of replay
-operations and GUI actions, and functions first covered after replay. Because
-replay has an additional GUI cost, higher coverage under the ordinary-attempt
-budget is not interpreted as higher total-interaction efficiency.
+The reviewed inventories contain 16 functions for Practice Shopping and 22 for
+SauceDemo. A function counts once per run and only when complete evidence
+supports its outcome. We report application means and their macro-average,
+together with replay operations, GUI actions, and functions first covered after
+replay. Because replay adds interaction outside the ordinary-attempt budget,
+coverage gains are not interpreted as total-interaction efficiency gains.
 
 \subsection{RQ3: Context-Conditioned Environmental Risk Awareness}
 
-RQ3 tests whether a pre-execution risk record can be produced for VERA's own
-selected actions and whether visual context improves the grounding of risk
-judgments. No single dataset adequately answers both questions: naturally
-occurring exploration actions provide workflow fidelity but a narrow risk
-distribution, whereas a deliberately varied challenge set supplies stronger
-contextual contrasts but not actions proposed by VERA. We therefore use two
-complementary tracks and report them separately.
-
-The
-\textbf{exploration-linked track} contains 106 run-locally deduplicated ordinary
-actions selected during the six valid Full runs from RQ2. Human gold contains
-32 risk-positive actions, drawn from the financial-transaction and
-sensitive-data categories. We evaluate four inputs to the same risk judge:
-action label only; action label with the taxonomy; screenshot with the action
-label; and the full screenshot, action label, and taxonomy input. This track
-tests whether risk records can be produced for actions arising in VERA's own
-exploration workflow. Replay is retained for audit but excluded from this
-classification comparison.
+RQ3 uses two complementary tracks. Naturally occurring exploration actions
+provide workflow fidelity but limited risk diversity; an external challenge set
+provides stronger contextual contrasts but uses actions supplied to the
+assessor. The \textbf{exploration-linked track} contains 106 run-locally
+deduplicated ordinary actions from the six RQ2 Full runs, including 32
+human-confirmed risk positives. It evaluates action-only, action-plus-taxonomy,
+screenshot-plus-action, and complete screenshot--action--taxonomy inputs to the
+same judge.
 
 The \textbf{external context-challenge track} contains 100 independently
 sampled screenshot--action cases, including 30 candidate context pairs and 40
-additional diversity samples. The actions are supplied to the assessor; this
-track does not claim that VERA's explorer would propose them. Human review
-labels 65 cases as risk-positive and permits multiple acceptable risk types for
-compound cases, while the assessor still returns one primary type. We compare
-\textbf{Text-only} (action label and the shared taxonomy) with
-\textbf{Context-conditioned} (screenshot, action label, and the same taxonomy),
-thereby isolating the contribution of visual context. The taxonomy is shared
-output vocabulary, not a separately evaluated predictor.
+diversity cases; 65 are risk-positive. It compares \textbf{Text-only} (action
+and shared taxonomy) with \textbf{Context-conditioned} (screenshot, action, and
+the same taxonomy), isolating visual context. Compound positives may have
+multiple acceptable types, while the assessor returns one primary type.
 
-Both tracks report binary precision, recall, and F1, plus risk-type accuracy on
-human-positive cases. For the external track, a predicted type is correct if it
-matches any human-accepted type. We also analyze context-corrected decisions,
-new errors, false positives, false negatives, and context-pair consistency.
-External uncertainty estimates use 10,000 cluster-bootstrap samples, treating
-each candidate pair as one cluster and each diversity example as a singleton
-(seed 20260920). Differences whose intervals cross zero are described only as
-point-estimate directions. The assessed risks are recorded before execution;
-the experiments do not change actions or evaluate an intervention policy.
+Both tracks report binary precision, recall, F1, and type accuracy on positive
+cases. For the external set, we additionally report cluster-bootstrap intervals
+for condition differences and analyze corrected and introduced errors. An
+interval crossing zero is treated as an unresolved difference rather than a
+significant effect. Risk judgments are produced before execution, but the
+experiment does not use them to modify actions.

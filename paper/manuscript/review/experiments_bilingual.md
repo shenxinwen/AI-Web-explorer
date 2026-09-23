@@ -1,6 +1,8 @@
 # VERA Experimental Setup: Bilingual Review Draft
 
 > Review artifact only. The English text mirrors the current LaTeX draft; the Chinese text is a semantic translation for author review. No C1--C3 artifact or result is modified.
+>
+> **Snapshot notice:** This file preserves the pre-compression review version and will be regenerated after the revised English structure is approved.
 
 ## Evaluation questions / 评价问题
 

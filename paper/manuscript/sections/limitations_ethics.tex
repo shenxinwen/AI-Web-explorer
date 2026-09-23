@@ -1,58 +1,33 @@
 \section{Limitations and Ethics}
 \label{sec:limitations}
 
-\paragraph{Evaluation scope.}
-Our functional-model experiments use two resettable shopping applications and
-three runs per condition. This controlled setting permits shared candidates,
-budgets, and evidence criteria, but does not establish performance across the
-diversity of production Web applications. The induced model covers only states
-and functions reached during exploration; it is neither a complete inventory
-of application functionality nor a reconstruction of hidden business logic.
-Location constraints and observed direct dependencies are local applicability
-evidence, not complete preconditions or causal rules. Comparisons with systems
-that use different tasks, action spaces, executors, or labels would require a
-new common evaluation rather than direct comparison of reported scores.
+\paragraph{Scope and validity.}
+The functional-model experiments cover two resettable shopping applications
+with three runs per condition. They do not establish performance across
+production sites, and the induced model includes only states and functions
+reached during exploration. VLM and executor errors can propagate into missed
+functions, incorrect evidence judgments, or inaccurate risk records; executor
+failure may also be difficult to distinguish from an unavailable function.
+AI-assisted labels were reviewed by one human author rather than independently
+double-annotated. The three C2 repetitions are descriptive, and only eight C3
+candidate pairs realize a binary gold-label difference. External C3 actions are
+supplied to the assessor and do not show that VERA would propose them.
 
-\paragraph{Imperfect components and changing environments.}
-VERA currently relies on vision-language models for hypothesis generation,
-outcome judgment, and risk assessment, and on a browser executor for grounding
-and interaction. Errors in any component can propagate into missed functions,
-incorrect evidence judgments, or inaccurate risk records. Executor failure can
-also be difficult to distinguish from an unavailable function. Moreover, Web
-applications evolve: a claim supported at one time can become stale after an
-interface or policy change. The current work retains provenance that can
-support reinspection, but does not implement systematic staleness detection or
-continuous revalidation.
+\paragraph{Knowledge and risk boundaries.}
+Observed dependencies are local applicability evidence, not complete business
+preconditions, and supported claims can become stale as sites change. The
+current model retains provenance for reinspection but does not implement
+continuous revalidation. The risk layer judges the selected semantic action,
+not every visible candidate or all long-horizon consequences; its binary label
+and single primary type also compress compound risks. Risk records can inform
+blocking or human confirmation, but the evaluated system does not alter actions
+and therefore provides no evidence of harm reduction or end-to-end safety.
 
-\paragraph{Risk recognition is not intervention.}
-The evaluated risk layer judges only the selected semantic action in its
-current visual context; it does not scan every visible candidate or reason over
-all possible long-horizon consequences. Its binary decision and single primary
-type also compress compound or ambiguous risks. In C3, visual context improves
-risk-type grounding most clearly, while binary detection trades higher recall
-for lower precision and its recall and F1 difference intervals cross zero.
-Risk records are produced before execution and could be consumed by a blocking
-or human-confirmation policy, but the evaluated system does not use them to
-alter actions. We therefore do not claim reduced harm, successful prevention,
-or an end-to-end safety guarantee.
-
-\paragraph{Annotation and statistical limitations.}
-AI-assisted initial labels were reviewed and revised item by item by a human
-author under frozen guides, but the study does not include independent double
-annotation or inter-annotator agreement. The external context challenge
-improves contextual diversity, yet its actions are supplied to the assessor and
-do not show that VERA would propose them. Only eight candidate pairs realize a
-binary gold-label difference, limiting pair-level conclusions. The three C2
-repetitions are reported descriptively rather than used for significance
-claims.
-
-\paragraph{Ethical use of autonomous exploration.}
+\paragraph{Ethical deployment.}
 Open-ended agents can delete or disclose data, send communications, change
-permissions, enter transactions, or consume service resources. Screenshots and
-traces may also contain credentials or personal information. Experiments should
-therefore use authorized, resettable environments and isolated accounts where
-possible, minimize and redact sensitive data, retain only necessary artifacts,
-and respect access controls, service terms, and applicable review requirements.
-Deploying VERA on production systems would require an intervention policy,
-failure handling, data governance, and human oversight beyond the mechanisms
-evaluated here.
+permissions, enter transactions, or consume service resources; screenshots and
+traces may contain credentials or personal information. Experiments should use
+authorized, resettable environments and isolated accounts, minimize and redact
+sensitive data, and respect access controls, service terms, and review
+requirements. Production deployment would additionally require intervention
+policies, failure handling, data governance, and human oversight.

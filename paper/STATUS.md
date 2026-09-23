@@ -8,7 +8,7 @@
 
 - 目标会议：ICLR 2027
 - 论文题目：VERA: Verification and Environmental Risk Awareness for Functional Model Induction through Open-Ended Web Exploration
-- 当前阶段：C1、C2、C3 的正式实验与结果包均已冻结；匿名 LaTeX 主稿已形成可从头到尾阅读的首轮英文稿。Introduction、Related Work、Problem Formulation、Method、Experimental Setup、Results、Limitations and Ethics、Reproducibility、Conclusion 与 Abstract 均已有正文，并配有中英对照审阅稿。下一阶段是作者审阅与三轮整体修改：论证结构、证据边界、语言与篇幅。
+- 当前阶段：C1、C2、C3 的正式实验与结果包均已冻结；匿名 LaTeX 主稿已完成首轮全文和第一次论证/结构压缩。主文估算从约 6250 词压缩至约 3890 词（不含 Appendix），Related Work 已改为主动比较，Problem Formulation、Method 与 Experimental Setup 已去重，错误分析已并回对应 RQ，局限性集中表达。概念图暂不制作，后续交由协作者推进。
 
 ## 写作状态
 
@@ -18,7 +18,8 @@
 - 标题已暂定为 VERA 正式标题；摘要已依据统一论证主线和冻结 C1--C3 结果形成首轮正文。
 - Keywords 暂定为：`web agents, open-ended web exploration, GUI agents, functional model induction, evidence-grounded verification, knowledge admission, environmental risk awareness`。
 - TL;DR 暂定为：`VERA builds reliable functional models through open-ended web exploration by assessing interaction risks in context and admitting only evidence-supported functions, while preserving useful functional coverage.`
-- `manuscript/sections/` 的全部核心正文均已有首轮内容；Appendix 仍为章节骨架，待根据正文篇幅与审阅结果选择补充材料。
+- `manuscript/sections/` 的全部核心正文均已有首轮内容；Appendix 已开始承接从正文移出的协议、标注、uncertainty 和案例细节。
+- `manuscript/review/` 中英对照稿当前保留压缩前审阅快照，已显式标注；待本轮英文结构获作者确认后统一重新生成。
 - 本地已安装 LaTeX 与 Perl 工具链，并曾成功生成预览 PDF；按当前协作约定，不主动编译或打开 PDF，作者需要时再执行。
 
 ## 当前有效结论
@@ -61,8 +62,8 @@
 
 ## 下一步
 
-1. 作者审阅 Abstract、Results、Limitations and Ethics、Reproducibility 与 Conclusion 的中英对照稿。
-2. 进行第一轮全文修改：检查中心论点在各章节的推进关系，删除重复防御性表述并改善章节衔接。
+1. 作者审阅第一次压缩后的英文主稿，重点检查是否因压缩损失必要解释。
+2. 在结构获确认后重新生成中英对照审阅稿。
 3. 进行第二轮全文修改：逐项核对数字、比较条件、统计措辞与 claim ceiling。
-4. 进行第三轮全文修改：压缩语言与篇幅，选择正文图表和 Appendix 内容。
+4. 由协作者设计统一证据链概念图；随后依据实际排版选择正文图表与进一步压缩。
 5. 补齐匿名补充材料中的运行环境版本，并在发布截图和轨迹前完成敏感数据审查。

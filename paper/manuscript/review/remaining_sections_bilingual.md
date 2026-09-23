@@ -1,6 +1,8 @@
 # VERA Remaining Sections: Bilingual Review Draft
 
 > Review artifact only. The English text mirrors the current LaTeX draft; the Chinese text is a semantic translation for author review.
+>
+> **Snapshot notice:** This file preserves the pre-compression review version and will be regenerated after the revised English structure is approved.
 
 ## Abstract / 摘要
 

@@ -1,6 +1,8 @@
 # VERA Results: Bilingual Review Draft
 
 > Review artifact only. The English text mirrors the current LaTeX draft; the Chinese text is a semantic translation for author review. All numbers come from the frozen C1--C3 final reports.
+>
+> **Snapshot notice:** This file preserves the pre-compression review version and will be regenerated after the revised English structure is approved.
 
 ## Knowledge Admission Reliability / 知识准入可靠性
 

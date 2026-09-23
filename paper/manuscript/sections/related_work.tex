@@ -1,65 +1,45 @@
 \section{Related Work}
 \label{sec:related-work}
 
-\paragraph{Autonomous GUI exploration and environment modeling.}
-Recent work treats interaction as a way to acquire environment-specific GUI
-knowledge. GUI-explorer generates function-aware goals, collects trajectories,
-and mines transition-aware knowledge from observation--action--outcome triples
-\citep{xie2025guiexplorer}. UIExplore-Bench formalizes autonomous UI exploration
-as discovering actionable functionality and evaluates both structured and
-screenshot-only agents \citep{nica2025uiexplore}, while GUI-Bee explores novel
-environments to collect data for environment-specific grounding
-\citep{fan2025guibee}. Other systems organize experience into graphs or
-state-machine memories for later task execution: UI-KOBE and EAM construct
-reusable app-specific graph knowledge \citep{chai2026uikobe,qin2026eam},
-GraphPilot records page and element functions together with transitions
-\citep{yu2026graphpilot}, and ActionEngine builds an updatable state-machine
-memory through offline crawling \citep{zhong2026actionengine}. These works
-establish that autonomous exploration, graph construction, and revisitation are
-important mechanisms; VERA does not claim them as new. We instead ask when a
-function proposed during such exploration has sufficient outcome evidence to
-enter a persistent functional model, and how the interaction used to obtain
-that evidence should remain auditable.
+\paragraph{Autonomous GUI exploration and environment models.}
+GUI-explorer, UIExplore-Bench, and GUI-Bee treat interaction as a means to
+discover environment-specific functionality or collect grounding data
+\citep{xie2025guiexplorer,nica2025uiexplore,fan2025guibee}. UI-KOBE, EAM,
+GraphPilot, and ActionEngine further organize experience into reusable graphs
+or state-machine memories \citep{chai2026uikobe,qin2026eam,yu2026graphpilot,
+zhong2026actionengine}. These systems establish exploration, structured memory,
+and revisitation as important mechanisms. VERA changes the evidential status of
+their typical outputs: a discovered function remains a hypothesis until an
+observable outcome supports its admission to persistent knowledge.
 
-\paragraph{Action-effect verification and reliable knowledge.}
-Post-action verification is increasingly used to make GUI execution robust.
-VeriGUI explicitly predicts action effects, checks subsequent observations, and
-uses failed verification to guide recovery \citep{zhang2026verigui}. VAGEN goes
-further by giving a verifier interaction tools with which to probe an
-environment for task-completion evidence \citep{cui2026vagen}. Validation also
-appears in memory-based systems: GraphPilot checks generated action sequences
-against stored transitions, and ActionEngine repairs failed execution while
-updating its memory \citep{yu2026graphpilot,zhong2026actionengine}. VERA shares
-the principle that execution claims require environmental evidence, so
-expected-effect verification itself is not our novelty. The distinction is its
-role in task-free model induction: verification governs whether a reusable
-location-conditioned functional claim is admitted to persistent knowledge. Our
-evaluation therefore holds candidates and trajectories fixed and directly
-compares proposal-based, executor-status-based, and evidence-grounded admission.
+\paragraph{Action-effect verification.}
+VeriGUI predicts action effects and checks subsequent observations for
+execution recovery, while VAGEN equips a verifier with interaction tools for
+collecting task-completion evidence \citep{zhang2026verigui,cui2026vagen}.
+GraphPilot and ActionEngine also validate or repair execution against stored
+transitions \citep{yu2026graphpilot,zhong2026actionengine}. VERA uses the same
+general insight---execution claims require environmental evidence---but assigns
+verification a different decision role. In task-free model induction, the
+verifier controls whether a location-conditioned functional claim becomes
+reusable knowledge, rather than only whether the current task should continue
+or recover.
 
-\paragraph{Risk awareness and guardrails for GUI agents.}
-Several benchmarks and guardrails assess the consequences of computer-use
-actions. WebGuard labels state-changing Web actions and trains models to predict
-their outcomes and risk levels \citep{zheng2025webguard}. OS-Sentinel combines
-formal checks with a contextual VLM judge over realistic mobile trajectories
-\citep{sun2026ossentinel}, and OSGuard distinguishes isolated action judgments
-from end-to-end execution under state-based safety invariants
-\citep{mohammadmirzaei2026osguard}. SeerGuard evaluates proposed actions in the
-current GUI state and predicts likely consequences before execution
-\citep{yu2026seerguard}. These studies preclude a claim that VERA is the first
-to consider contextual or pre-execution GUI risk. VERA instead studies this
-signal inside open-ended functional model induction: a risk record is attached
-to the selected evidence-gathering action and, for ordinary exploration, linked
-to the functional claim, execution trace, and subsequent outcome evidence. The
-current system records this information for awareness and audit; intervention
-policies are outside the evaluated scope.
+\paragraph{Risk-aware GUI agents.}
+WebGuard predicts outcomes and risk levels for state-changing Web actions
+\citep{zheng2025webguard}; OS-Sentinel and OSGuard combine contextual judgment
+with safety specifications or state invariants
+\citep{sun2026ossentinel,mohammadmirzaei2026osguard}; and SeerGuard evaluates
+proposed actions in the current GUI state before execution
+\citep{yu2026seerguard}. VERA studies contextual risk at a different interface:
+the assessed action is being used to acquire evidence for an unknown function.
+Its risk record is therefore linked to the same claim, execution trace, and
+outcome evidence that govern knowledge admission.
 
 \paragraph{Positioning.}
-Prior work has separately made substantial progress in autonomous exploration,
-effect verification, persistent GUI memory, and action-risk assessment. VERA
-focuses on their intersection. It represents open-ended functional model
-induction as evidence production under two linked concerns: whether an acquired
-claim is sufficiently supported to become reusable knowledge, and whether the
-action used to acquire that evidence may have an important environmental
-consequence. This framing yields a common trace from hypothesis and pre-action
-risk record through execution evidence to the admission decision.
+VERA connects these directions around a single question: how should an
+open-ended agent acquire reusable functional knowledge when both the conclusion
+and the act of testing it carry risk? This yields a common trace from a frozen
+hypothesis and pre-action risk record through execution evidence to an
+admission decision. The contribution is this role assignment and connection in
+task-free functional model induction, rather than a new foundation model,
+browser executor, exploration primitive, or standalone risk taxonomy.

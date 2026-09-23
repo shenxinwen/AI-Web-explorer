@@ -1,9 +1,55 @@
-\section{Additional Method Details}
+\section{Additional Method and Protocol Details}
+\label{app:method}
+
+VERA assesses semantic browser actions submitted to the executor, not every
+atomic mouse or keyboard event used internally to realize them. Ordinary
+verification links one such action to a frozen claim and outcome evidence.
+Replay consists of previously observed semantic actions; every replay step
+receives its own risk record and is counted separately from ordinary candidate
+attempts. If risk inference fails, execution continues and the error is retained
+in the audit record. This behavior keeps risk recognition observational in the
+evaluated system.
+
+Formal RQ1/RQ2 runs start from designated entry URLs in clean browser sessions
+with resettable state restored. Each application--condition pair has three runs
+and a maximum of 25 ordinary candidate attempts. Configurations record model
+settings, viewport, seeds, retry rules, stopping conditions, and replay limits.
 
 \section{Prompts, Schemas, and Risk Taxonomy}
 
-\section{Annotation Protocols}
+The artifact package includes the functional-claim and evidence schemas,
+versioned proposal and judgment prompts, and
+\texttt{risk\_taxonomy\_v1.json}. Risk outputs contain a binary
+\texttt{potential\_risk}, one primary \texttt{risk\_type} when applicable, and
+brief GUI-grounded evidence. The same taxonomy is supplied across compared C3
+conditions and therefore serves as shared output vocabulary.
 
-\section{Complete Experimental Results}
+\section{Annotation and Uncertainty Protocols}
 
-\section{Additional Qualitative Examples}
+Initial C1--C3 annotations were generated with AI assistance and then reviewed
+and revised item by item by a human author under frozen guides. The resulting
+labels are used as gold; the process is not independent double annotation. C1
+gold is aggregated by application, semantic location, and canonical action
+identifier. C2 uses frozen per-application coverage inventories and a reviewed
+claim-to-inventory ledger. C3 permits multiple acceptable risk types for
+compound external cases while the assessor returns one primary type.
+
+External C3 uncertainty estimates use 10,000 cluster-bootstrap samples, with
+each candidate context pair treated as one cluster and each diversity case as a
+singleton (seed 20260920). Differences whose intervals cross zero are reported
+as unresolved point-estimate directions.
+
+\section{Result Artifacts and Additional Cases}
+
+Machine-readable metrics, reviewed gold, artifact manifests, and complete
+reports are organized under \texttt{paper/experiments/results/E002--E004}.
+These packages retain failed executions, incomplete evidence, and negative
+examples rather than filtering them from analysis.
+
+The C1 false admission concerns a form-completion claim for which grouped
+evidence did not directly show that all required fields were completed. The
+missed supported claim concerns product sorting despite a visible ordering
+change. In external C3, a recurring binary error treats entry into a
+consequential workflow as if the immediate action completed the downstream
+consequence; context nevertheless corrects substantially more risk-type
+decisions than it introduces.

@@ -1,6 +1,8 @@
 # VERA Related Work: Bilingual Review Draft
 
 > Review artifact only. The English text mirrors the current LaTeX draft; the Chinese text is a semantic translation. Publication metadata was checked against ACL Anthology or the cited arXiv record on 2026-09-22.
+>
+> **Snapshot notice:** This file preserves the pre-compression review version and will be regenerated after the revised English structure is approved.
 
 ## Autonomous GUI exploration and environment modeling / 自主 GUI 探索与环境建模
 

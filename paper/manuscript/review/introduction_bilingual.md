@@ -1,6 +1,8 @@
 # VERA Introduction: Bilingual Review Draft
 
 > Review artifact only. The English text mirrors the current LaTeX draft; the Chinese text is a semantic translation for author review. Formal citations will be inserted after the related-work bibliography is verified.
+>
+> **Snapshot notice:** This file preserves the pre-compression review version and will be regenerated after the revised English structure is approved.
 
 ## Paragraph 1: Application scenario / 应用场景
 

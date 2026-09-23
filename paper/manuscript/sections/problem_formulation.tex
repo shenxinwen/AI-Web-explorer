@@ -1,124 +1,72 @@
 \section{Problem Formulation}
 \label{sec:problem-formulation}
 
-\paragraph{Open-ended Web exploration.}
-Let $\mathcal{W}$ denote a Web application whose internal business state and
-transition rules are unknown. At interaction step $t$, an agent receives a GUI
-observation $o_t \in \mathcal{O}$ and selects a browser action
-$a_t \in \mathcal{A}$. Executing $a_t$ produces a new observation $o_{t+1}$
-and executor-reported status $x_t$. The resulting interaction record is
-$\tau_t=(o_t,a_t,x_t,o_{t+1})$. Here, $a_t$ denotes the semantic browser
-interaction submitted to the executor---such as clicking a labeled control or
-entering a value into a field---rather than every atomic mouse or keyboard
-event used internally to realize it. Unlike task-conditioned Web agents, the
-agent is not given a user goal to complete. It instead explores the application
-to induce a reusable functional model from interaction traces. The model is
-limited to states and outcomes that are observable through the GUI or saved
-interaction artifacts; it is not intended to recover hidden application logic.
+\paragraph{Open-ended functional model induction.}
+Let $\mathcal{W}$ be a Web application with unknown business state and
+transition rules. At step $t$, an agent observes the GUI $o_t\in\mathcal{O}$,
+selects a semantic browser action $a_t\in\mathcal{A}$, and receives an
+executor-reported status $x_t$ and new observation $o_{t+1}$. The interaction
+record is $\tau_t=(o_t,a_t,x_t,o_{t+1})$. The agent has no predefined user task;
+its objective is to induce a reusable functional model from observable
+interaction. The model describes GUI-grounded functions and outcomes, not
+hidden application logic.
 
-\paragraph{Testable functional hypotheses.}
-From an observation, the agent may propose a functional hypothesis
+\paragraph{Functional claims and outcome evidence.}
+At a semantic location, the agent may propose
 \begin{equation}
     h_i=(\ell_i,f_i,\hat{y}_i),
 \end{equation}
-where $\ell_i$ is a semantic location, $f_i$ is a high-level function,
-and $\hat{y}_i$ is an expected observable outcome. The claim states that
-executing $f_i$ at $\ell_i$ is expected to produce $\hat{y}_i$. Semantic
-locations and high-level functions describe application-level concepts rather
-than individual DOM elements. The model may additionally retain applicability
-metadata, including location constraints and observed direct action
-dependencies. Such dependencies record interaction-supported ordering
-relationships; they are not part of the outcome claim itself and are not
-asserted to be necessary or sufficient business preconditions.
+where $\ell_i$ is the location, $f_i$ is a high-level function, and
+$\hat{y}_i$ is its expected observable outcome. The outcome is fixed before
+execution so that subsequent evidence evaluates a prior claim rather than a
+post-hoc interpretation. Location constraints and observed direct dependencies
+may be retained as applicability metadata, but are not complete business
+preconditions.
 
-The expected outcome $\hat{y}_i$ is generated together with the hypothesis and
-frozen before execution. It must identify a change that can be checked in a
-subsequent GUI observation or saved observable state. Freezing $\hat{y}_i$
-prevents the claimed outcome from being retrofitted after observing the
-execution result. A proposed hypothesis is a candidate for verification, not
-yet a fact about the application.
-
-\paragraph{Execution evidence and functional outcome.}
-For an attempted hypothesis $h_i$, the system stores an evidence packet
+For an attempted claim, VERA stores
 \begin{equation}
-    e_i=(o_i^{\mathrm{pre}}, a_i, x_i,
-         o_i^{\mathrm{post}}, m_i),
+    e_i=(o_i^{\mathrm{pre}},a_i,x_i,o_i^{\mathrm{post}},m_i),
 \end{equation}
-where $o_i^{\mathrm{pre}}$ and $o_i^{\mathrm{post}}$ are the before and after
-observations, $a_i$ is the semantic interaction selected to test the claim,
-$x_i$ is the executor-reported status, and $m_i$ contains available metadata,
-evidence references, and any lower-level execution trace retained by the
-executor. Thus, a verification attempt is organized around a frozen claim and
-its selected semantic interaction, while the executor may use multiple atomic
-GUI operations to realize that interaction. An evidence judgment
+where $m_i$ contains the available trace, structured changes, and evidence
+references. An evidence judgment
 \begin{equation}
-    J(h_i,e_i) \in \{\textsc{Supported},\textsc{Unsupported},
+    J(h_i,e_i)\in\{\textsc{Supported},\textsc{Unsupported},
     \textsc{Unresolved}\}
 \end{equation}
-evaluates whether $e_i$ supports the frozen expected outcome $\hat{y}_i$.
-\textsc{Unsupported} requires sufficiently complete evidence that does not
-support the expected outcome. A hypothesis that has not been attempted, whose
-execution failed before producing diagnostic evidence, or whose evidence is
-missing or only partial remains \textsc{Unresolved}. We separately record
-whether an executed interaction preserves the current semantic location or
-transitions to another one.
+states whether complete observable evidence supports the frozen outcome.
+\textsc{Unsupported} requires sufficiently complete contrary evidence;
+unattempted claims, failed executions without diagnostic evidence, and partial
+evidence remain \textsc{Unresolved}. This separates candidate discovery,
+executor-reported completion, and evidence-supported functional outcome.
 
-This definition distinguishes three claims that are otherwise easy to
-conflate: proposing $h_i$ establishes only that a candidate was discovered;
-an executor success $x_i$ establishes only that the interaction was reported
-as completed; and $J(h_i,e_i)=\textsc{Supported}$ establishes that the available
-before--after evidence supports the expected functional outcome. Neither
-candidate discovery nor executor-reported success alone is sufficient for
-functional knowledge admission.
-
-\paragraph{Evidence judgment and knowledge admission.}
-The three-way judgment is distinct from the binary admission indicator
-$A(h_i)\in\{0,1\}$. A hypothesis is admitted to the downstream-usable
-functional knowledge set only when its evidence is complete and supports its
-frozen expected outcome:
+\paragraph{Knowledge admission.}
+Evidence judgment is distinct from the binary decision to expose a claim as
+downstream-usable knowledge:
 \begin{equation}
     A(h_i)=1
     \quad\Longleftrightarrow\quad
-    \operatorname{complete}(e_i) \land
+    \operatorname{complete}(e_i)\land
     J(h_i,e_i)=\textsc{Supported}.
     \label{eq:admission}
 \end{equation}
-When $A(h_i)=0$, the hypothesis is not admitted under the current evidence.
-This does not by itself mean that the proposed function is false. Non-admitted
-records and diagnostic reasons are retained for inspection and possible
-continuation; in particular, an unresolved attempt is not treated as negative
-evidence about the proposed function. We call the set of hypotheses, their
-evidence judgments and admission indicators, and their linked interaction
-evidence the evidence-grounded functional model $\mathcal{M}$.
+A non-admitted claim is not necessarily false; its judgment, diagnostic reason,
+and evidence remain available for inspection or later verification. We denote
+the resulting evidence-grounded functional model by $\mathcal{M}$.
 
 \paragraph{Context-conditioned interaction risk.}
-Before executing a selected browser action $a_t$ under observation $o_t$, the
-system assigns an interaction-level risk annotation
+Before action $a_t$ is executed under observation $o_t$, the agent produces
 \begin{equation}
     \rho_t=(b_t,k_t,q_t)=R(o_t,a_t,\mathcal{K}),
 \end{equation}
-where $b_t$ is a binary potential-risk judgment, $k_t$ is one primary risk type
-(or null when no risk is identified), $q_t$ is supporting interface evidence,
-and $\mathcal{K}$ is a versioned risk taxonomy. The object of this judgment is
-whether executing this selected interaction in the current GUI context may
-perform, enter, or prepare a risk-sensitive operation. The implemented judge
-receives the pre-action screenshot and a semantic label for $a_t$. It does not
-assign an intrinsic, context-free risk property to $f_i$, assess an entire
-verification process as one unit, classify the executor's internal atomic GUI
-events independently, or enumerate every possible action visible on the screen.
+where $b_t$ is a binary potential-risk judgment, $k_t$ is one primary type (or
+null), $q_t$ is supporting interface evidence, and $\mathcal{K}$ is a versioned
+taxonomy. The assessed object is the selected semantic action in its current
+GUI context, not a context-free property of $f_i$. The risk record is attached
+to $\tau_t$ and, when the action tests $h_i$, to the same evidence chain used
+for outcome judgment. Replay actions receive their own action-level records.
 
-The annotation $\rho_t$ is attached to the interaction record $\tau_t$. When
-$a_t$ is selected to test $h_i$, the record also links $\rho_t$ to that
-functional claim and its subsequent outcome evidence. Replay actions are
-assessed at the same semantic-action granularity and linked to their replay
-steps, even when they do not propose a new claim. In the system evaluated here,
-risk assessment records a pre-execution judgment but does not block or modify
-the selected action. Consequently, the formulation supports risk awareness and
-auditability, but does not by itself imply safer execution or an end-to-end
-safety guarantee.
-
-The overall problem is therefore to induce $\mathcal{M}$ through open-ended
-interaction while (i) admitting only functional claims supported by observable
-execution evidence, (ii) continuing to produce useful supported knowledge
-under a bounded exploration budget, and (iii) associating each selected
-evidence-gathering action with a context-conditioned pre-execution risk record.
+The problem is to induce $\mathcal{M}$ under a bounded interaction budget while
+(i) admitting only outcome-supported functional claims, (ii) sustaining
+evidence production across changing locations, and (iii) making the potential
+environmental consequences of evidence-gathering actions explicit before
+execution.
