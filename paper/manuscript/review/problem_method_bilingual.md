@@ -10,9 +10,13 @@
 
 Let $\mathcal{W}$ denote a Web application whose internal business state and transition rules are unknown. At interaction step $t$, an agent receives a GUI observation $o_t \in \mathcal{O}$ and selects a browser action $a_t \in \mathcal{A}$. Executing $a_t$ produces a new observation $o_{t+1}$ and executor-reported status $x_t$. The resulting interaction record is $\tau_t=(o_t,a_t,x_t,o_{t+1})$. Unlike task-conditioned Web agents, the agent is not given a user goal to complete. It instead explores the application to induce a reusable functional model from interaction traces. The model is limited to states and outcomes that are observable through the GUI or saved interaction artifacts; it is not intended to recover hidden application logic.
 
+Here, $a_t$ denotes the semantic browser interaction submitted to the executor---such as clicking a labeled control or entering a value into a field---rather than every atomic mouse or keyboard event used internally to realize it.
+
 **中文**
 
 令 $\mathcal{W}$ 表示一个内部业务状态和转移规则未知的 Web 应用。在交互步骤 $t$，智能体接收 GUI 观察 $o_t \in \mathcal{O}$，并选择浏览器动作 $a_t \in \mathcal{A}$。执行 $a_t$ 后，环境产生新的观察 $o_{t+1}$，执行器返回状态 $x_t$。由此形成交互记录 $\tau_t=(o_t,a_t,x_t,o_{t+1})$。不同于以具体任务为条件的 Web 智能体，这里的智能体没有需要完成的用户目标，而是通过探索应用，从交互轨迹中归纳可复用的功能模型。该模型仅描述能够通过 GUI 或保存的交互工件观察到的状态与结果，不试图恢复应用内部不可见的业务逻辑。
+
+这里，$a_t$ 表示提交给执行器的语义浏览器交互，例如点击带有语义标签的控件或在字段中输入值，而不是执行器为了完成该交互而在内部产生的每一次原子鼠标或键盘事件。
 
 ### Testable functional hypotheses / 可检验的功能假设
 
@@ -54,7 +58,7 @@ $$
 e_i=(o_i^{\mathrm{pre}}, a_i, x_i, o_i^{\mathrm{post}}, m_i),
 $$
 
-where $o_i^{\mathrm{pre}}$ and $o_i^{\mathrm{post}}$ are the before and after observations, $a_i$ is the executed interaction, $x_i$ is the executor-reported status, and $m_i$ contains available metadata and evidence references. An evidence judgment $J(h_i,e_i) \in \{\mathrm{Supported},\mathrm{Unsupported},\mathrm{Unresolved}\}$ evaluates whether $e_i$ supports the frozen expected outcome $\hat{y}_i$. `Unsupported` requires sufficiently complete evidence that does not support the expected outcome. A hypothesis that has not been attempted, whose execution failed before producing diagnostic evidence, or whose evidence is missing or only partial remains `Unresolved`. We separately record whether an executed interaction preserves the current semantic location or transitions to another one.
+where $o_i^{\mathrm{pre}}$ and $o_i^{\mathrm{post}}$ are the before and after observations, $a_i$ is the semantic interaction selected to test the claim, $x_i$ is the executor-reported status, and $m_i$ contains available metadata, evidence references, and any lower-level execution trace retained by the executor. Thus, a verification attempt is organized around a frozen claim and its selected semantic interaction, while the executor may use multiple atomic GUI operations to realize that interaction. An evidence judgment $J(h_i,e_i) \in \{\mathrm{Supported},\mathrm{Unsupported},\mathrm{Unresolved}\}$ evaluates whether $e_i$ supports the frozen expected outcome $\hat{y}_i$. `Unsupported` requires sufficiently complete evidence that does not support the expected outcome. A hypothesis that has not been attempted, whose execution failed before producing diagnostic evidence, or whose evidence is missing or only partial remains `Unresolved`. We separately record whether an executed interaction preserves the current semantic location or transitions to another one.
 
 **中文**
 
@@ -64,7 +68,7 @@ $$
 e_i=(o_i^{\mathrm{pre}}, a_i, x_i, o_i^{\mathrm{post}}, m_i),
 $$
 
-其中，$o_i^{\mathrm{pre}}$ 和 $o_i^{\mathrm{post}}$ 分别表示动作执行前后的观察，$a_i$ 表示实际执行的交互，$x_i$ 表示执行器报告的状态，$m_i$ 包含可用的元数据和证据引用。证据判断 $J(h_i,e_i) \in \{\mathrm{Supported},\mathrm{Unsupported},\mathrm{Unresolved}\}$ 用于评价证据包 $e_i$ 是否支持执行前冻结的预期结果 $\hat{y}_i$。`Unsupported` 要求足够完整的证据不支持预期结果；尚未执行、执行失败且未产生可诊断证据、证据缺失或只有部分证据的假设均保持为 `Unresolved`。系统还单独记录已执行交互是保持在当前语义位置，还是转移到了另一个语义位置。
+其中，$o_i^{\mathrm{pre}}$ 和 $o_i^{\mathrm{post}}$ 分别表示动作执行前后的观察，$a_i$ 表示为检验该主张而选择的语义交互，$x_i$ 表示执行器报告的状态，$m_i$ 包含可用的元数据、证据引用以及执行器保留的低层执行轨迹。因此，一次验证尝试围绕一个冻结的功能主张及其已选语义交互组织，而执行器可以使用多个原子 GUI 操作来完成该交互。证据判断 $J(h_i,e_i) \in \{\mathrm{Supported},\mathrm{Unsupported},\mathrm{Unresolved}\}$ 用于评价证据包 $e_i$ 是否支持执行前冻结的预期结果 $\hat{y}_i$。`Unsupported` 要求足够完整的证据不支持预期结果；尚未执行、执行失败且未产生可诊断证据、证据缺失或只有部分证据的假设均保持为 `Unresolved`。系统还单独记录已执行交互是保持在当前语义位置，还是转移到了另一个语义位置。
 
 **English**
 
@@ -116,7 +120,7 @@ $$
 \rho_t=(b_t,k_t,q_t)=R(o_t,a_t,\mathcal{K}),
 $$
 
-where $b_t$ is a binary potential-risk judgment, $k_t$ is one primary risk type (or null when no risk is identified), $q_t$ is supporting interface evidence, and $\mathcal{K}$ is a versioned risk taxonomy. The object of this judgment is whether executing this selected interaction in the current GUI context may perform, enter, or prepare a risk-sensitive operation. The implemented judge receives the pre-action screenshot and a semantic label for $a_t$. It does not assign an intrinsic, context-free risk property to $f_i$, assess an entire multi-action verification attempt as one unit, or enumerate every possible action visible on the screen.
+where $b_t$ is a binary potential-risk judgment, $k_t$ is one primary risk type (or null when no risk is identified), $q_t$ is supporting interface evidence, and $\mathcal{K}$ is a versioned risk taxonomy. The object of this judgment is whether executing this selected interaction in the current GUI context may perform, enter, or prepare a risk-sensitive operation. The implemented judge receives the pre-action screenshot and a semantic label for $a_t$. It does not assign an intrinsic, context-free risk property to $f_i$, assess an entire verification process as one unit, classify the executor's internal atomic GUI events independently, or enumerate every possible action visible on the screen.
 
 **中文**
 
@@ -126,15 +130,15 @@ $$
 \rho_t=(b_t,k_t,q_t)=R(o_t,a_t,\mathcal{K}),
 $$
 
-其中，$b_t$ 是二元潜在风险判断，$k_t$ 是一个主要风险类型（未识别到风险时为空），$q_t$ 是支撑该判断的界面证据，$\mathcal{K}$ 是带版本的风险分类体系。判断对象是：在当前 GUI 上下文中执行这个已选交互，是否可能实施、进入或准备一项风险敏感操作。实际判断器接收动作执行前的截图和 $a_t$ 的语义标签。该判断既不把风险视为高层功能 $f_i$ 固有且脱离上下文的属性，也不把整个多动作验证尝试合并为一个判断单元，更不枚举屏幕上所有可能执行的动作。
+其中，$b_t$ 是二元潜在风险判断，$k_t$ 是一个主要风险类型（未识别到风险时为空），$q_t$ 是支撑该判断的界面证据，$\mathcal{K}$ 是带版本的风险分类体系。判断对象是：在当前 GUI 上下文中执行这个已选交互，是否可能实施、进入或准备一项风险敏感操作。实际判断器接收动作执行前的截图和 $a_t$ 的语义标签。该判断既不把风险视为高层功能 $f_i$ 固有且脱离上下文的属性，也不把整个验证过程合并为一个判断单元，不单独分类执行器内部的原子 GUI 事件，更不枚举屏幕上所有可能执行的动作。
 
 **English**
 
-The annotation $\rho_t$ is attached to the interaction record $\tau_t$. When $a_t$ is selected to test $h_i$, the record also links $\rho_t$ to that functional claim and its subsequent outcome evidence. Replay actions are assessed individually and linked to their replay steps, even when they do not propose a new claim. In the system evaluated here, risk assessment runs in shadow mode: it records a pre-execution judgment but does not block or modify the selected action. Consequently, the formulation supports risk awareness and auditability, but does not by itself imply safer execution or an end-to-end safety guarantee.
+The annotation $\rho_t$ is attached to the interaction record $\tau_t$. When $a_t$ is selected to test $h_i$, the record also links $\rho_t$ to that functional claim and its subsequent outcome evidence. Replay actions are assessed at the same semantic-action granularity and linked to their replay steps, even when they do not propose a new claim. In the system evaluated here, risk assessment records a pre-execution judgment but does not block or modify the selected action. Consequently, the formulation supports risk awareness and auditability, but does not by itself imply safer execution or an end-to-end safety guarantee.
 
 **中文**
 
-风险标注 $\rho_t$ 附着在交互记录 $\tau_t$ 上。当 $a_t$ 被选来检验 $h_i$ 时，该记录还会把 $\rho_t$ 与相应功能主张及其后续结果证据关联起来。即使 replay 动作不提出新主张，也会逐动作进行判断并关联到各自的 replay 步骤。在本文评测的系统中，风险判断以 shadow mode 运行：系统在执行前记录判断，但不会阻止或修改已经选定的动作。因此，这一形式化支持风险感知和可审查性，但其本身并不意味着执行过程已经更加安全，也不构成端到端的安全保证。
+风险标注 $\rho_t$ 附着在交互记录 $\tau_t$ 上。当 $a_t$ 被选来检验 $h_i$ 时，该记录还会把 $\rho_t$ 与相应功能主张及其后续结果证据关联起来。即使 replay 动作不提出新主张，也会以相同的语义动作粒度进行判断，并关联到各自的 replay 步骤。在本文评测的系统中，风险判断在执行前被记录，但不会阻止或修改已经选定的动作。因此，这一形式化支持风险感知和可审查性，但其本身并不意味着执行过程已经更加安全，也不构成端到端的安全保证。
 
 **English**
 
@@ -152,125 +156,133 @@ The overall problem is therefore to induce $\mathcal{M}$ through open-ended inte
 
 **English**
 
-VERA organizes open-ended Web exploration as a cycle for producing, evaluating, and retaining functional knowledge. Given the current GUI observation and the functional model accumulated so far, the system proposes a testable function hypothesis and freezes an expected observable outcome. It then annotates the potential environmental risk of executing the selected verification action in the current context. A browser executor performs the interaction and returns an execution status, while VERA stores the before and after observations and associated metadata. Finally, an outcome verifier compares this evidence with the frozen expectation and controls whether the hypothesis is admitted to the persistent functional model.
+VERA treats open-ended functional model induction as evidence production under two linked risks. The agent must act on an unfamiliar application to discover functionality, yet a proposed function or an executor-reported completion may not establish that the expected application-level outcome occurred. At the same time, the interactions used to obtain that evidence can alter the environment. The method therefore governs both how functional claims become persistent knowledge and how the actions used to test them are represented.
 
 **中文**
 
-VERA 将开放式 Web 探索组织成一个持续生产、评价和保留功能知识的循环。给定当前 GUI 观察和此前累积的功能模型，系统提出一个可检验的功能假设，并冻结对应的预期可观察结果。随后，系统标注在当前上下文中执行已选验证动作可能带来的环境风险。浏览器执行器完成交互并返回执行状态，VERA 同时保存动作前后的观察以及相关元数据。最后，结果验证器将这些证据与冻结的预期结果进行比较，并据此决定是否将该假设准入持久功能模型。
+VERA 将开放式功能模型归纳视为一个面临两类相互关联风险的证据生产过程。为了发现功能，智能体必须在陌生应用中采取行动；但被提出的功能或执行器报告的完成状态，并不能证明预期的应用级结果确实发生。与此同时，用于获得证据的交互本身可能改变环境。因此，VERA 的方法同时管理功能主张如何成为持久知识，以及用于检验这些主张的动作应当如何被表达和记录。
 
 **English**
 
-This cycle separates three responsibilities. Open-ended exploration discovers candidates and produces interaction evidence; pre-execution risk awareness describes the potential consequence of the selected interaction; and post-execution verification governs knowledge admission. The candidate generator, browser executor, risk judge, and outcome verifier are replaceable components. VERA's method is the protocol connecting their outputs into a traceable functional model, rather than a new vision-language model or browser automation backend.
+This view yields three design principles. First, *claims precede evidence*: VERA states a testable functional hypothesis and freezes its expected observable outcome before execution. Second, *knowledge requires outcome evidence*: executor status remains a diagnostic signal, while admission depends on whether the resulting observations support the frozen expectation. Third, *evidence acquisition is accountable interaction*: VERA assesses a selected semantic browser action in its current GUI context before execution and links the resulting risk record to the action, claim, and outcome evidence.
 
 **中文**
 
-这一循环区分了三项职责：开放式探索负责发现候选并产生交互证据；执行前风险感知负责描述已选交互的潜在后果；执行后验证负责控制知识准入。候选生成器、浏览器执行器、风险判断器和结果验证器都是可替换组件。VERA 的方法贡献在于把这些组件的输出连接为可追溯功能模型的协议，而不是提出一种新的视觉语言模型或浏览器自动化后端。
+这一观点导出三条设计原则。第一，*主张先于证据*：VERA 在执行前陈述可检验的功能假设，并冻结其预期可观察结果。第二，*知识需要结果证据*：执行器状态只作为诊断信号，知识准入取决于执行后观察是否支持冻结的预期。第三，*证据采集是可问责的交互*：VERA 在执行前结合当前 GUI 上下文判断已选语义浏览器动作，并将风险记录与动作、主张及结果证据关联起来。
+
+**English**
+
+VERA operationalizes these principles in a persistent exploration cycle. Candidate generation proposes claims; pre-execution risk assessment records potential consequences; browser interaction produces observable evidence; and post-execution verification governs admission to the functional model. A persistent frontier, dependency-aware selection, and replay preserve and recover unresolved verification opportunities so that evidence production can continue across locations. The candidate generator, browser executor, risk judge, and outcome verifier are replaceable components. VERA's method is the protocol that connects their outputs into a traceable functional model, rather than a new vision-language model or browser automation backend.
+
+**中文**
+
+VERA 在一个持续探索循环中操作化这些原则：候选生成提出功能主张；执行前风险判断记录潜在后果；浏览器交互产生可观察证据；执行后验证控制功能模型的知识准入。持久 frontier、依赖感知选择和 replay 保存并恢复未解决的验证机会，使证据生产能够跨语义位置继续进行。候选生成器、浏览器执行器、风险判断器和结果验证器都是可替换组件。VERA 的方法是把这些组件的输出连接成可追溯功能模型的协议，而不是一种新的视觉语言模型或浏览器自动化后端。
 
 ### Testable Function Hypothesis Proposal / 可检验功能假设的提出
 
 **English**
 
-At a semantic location $\ell$, a proposal component conditions on the current GUI observation and the existing model to generate one or more high-level function hypotheses. Each proposal defines a location-conditioned functional claim using a functional label and a concise expected observable outcome. The model separately retains applicability metadata, including location constraints and any directly observed action dependencies. The proposal operates at the level of application functions---for example, adding an item or creating a project---rather than enumerating every visible widget.
+To evaluate evidence rather than reinterpret it after the fact, VERA first turns a possible function into an explicit, testable claim. At a semantic location $\ell$, the proposal component conditions on the current GUI observation and the accumulated model to specify a high-level function together with its expected observable outcome. This representation targets application-level functionality---for example, adding an item or creating a project---rather than treating every visible widget as a separate function.
 
 **中文**
 
-在语义位置 $\ell$，候选提出组件以当前 GUI 观察和已有功能模型为条件，生成一个或多个高层功能假设。每个候选用功能标签和一条简洁的预期可观察结果定义一个位置条件下的功能主张。模型另行保存适用性元数据，包括位置约束和任何直接观察到的动作依赖。候选描述的是应用功能层面的行为，例如添加商品或创建项目，而不是枚举界面上每一个可见控件。
+为了评价证据，而不是在事后重新解释证据，VERA 首先把一个可能存在的功能转化为明确且可检验的主张。在语义位置 $\ell$，候选提出组件以当前 GUI 观察和已经积累的模型为条件，同时给出一个高层功能及其预期可观察结果。这种表达以应用级功能为对象，例如添加商品或创建项目，而不是把每个可见控件都当作一个独立功能。
 
 **English**
 
-The expected outcome states what evidence should become observable if the function succeeds. It may allow equivalent visible manifestations, but it may not depend solely on hidden backend state. The hypothesis and expectation are stored together before the browser interaction begins and are not revised in response to the resulting observation. New hypotheses are registered as unresolved claims awaiting evidence. Thus, proposal generation expands the set of claims to test without asserting that those claims are already true.
+The expected outcome defines in advance what subsequent evidence must support. It may describe equivalent visible manifestations, but cannot rely solely on hidden backend state. VERA stores the function and expectation together before browser interaction and does not revise the expectation in response to the observed result. The resulting hypothesis is registered as unresolved until execution evidence is judged. Proposal generation therefore creates a claim to test, not knowledge to admit.
 
 **中文**
 
-预期结果说明：如果该功能成功，应当能够观察到什么证据。它可以允许多种等价的可见表现，但不能只依赖隐藏的后端状态。功能假设和预期结果在浏览器交互开始前一并保存，且不会根据事后观察到的结果进行改写。新假设被登记为等待证据的 unresolved 主张。因此，候选生成扩展的是待检验主张的集合，而不是直接宣称这些主张已经成立。
+预期结果预先规定了后续证据必须支持什么。它可以描述多种等价的可见表现，但不能只依赖隐藏的后端状态。VERA 在浏览器交互开始前一并保存功能与预期，并且不会根据观察到的结果修改该预期。在执行证据得到判断之前，相应假设保持为 unresolved。因此，候选生成产生的是等待检验的主张，而不是可以直接准入的知识。
 
 **English**
 
-When a proposed function depends on an earlier interaction, VERA records the dependency as an observed direct ordering relation. These relations help prioritize executable hypotheses and preserve the local interaction context, but they are deliberately narrower than general business preconditions or causal rules.
+VERA keeps the outcome claim distinct from metadata describing where and when it has been observed to apply. Location constraints associate the claim with its semantic context. When testing a function relies on an earlier interaction, VERA also records that relation as an observed direct dependency. Such metadata helps select currently executable hypotheses and preserve local interaction context, but does not assert complete business preconditions or causal rules.
 
 **中文**
 
-当一个候选功能依赖于更早的交互时，VERA 将这种依赖记录为观察到的直接顺序关系。这些关系有助于优先选择当前可执行的假设，并保留局部交互上下文；但其含义被有意限定得比一般业务前置条件或因果规则更窄。
+VERA 将结果主张与描述其在何处、何时被观察为适用的元数据分开保存。位置约束把主张与其语义上下文关联起来。当某项功能的检验依赖更早的交互时，VERA 还将这种关系记录为观察到的直接依赖。这些元数据有助于选择当前可执行的假设并保留局部交互上下文，但并不宣称恢复了完整的业务前置条件或因果规则。
 
 ### Pre-Execution Risk Awareness / 执行前风险感知
 
 **English**
 
-Before executing each selected browser action, VERA captures the current screenshot and constructs a risk-query tuple containing the screenshot, the semantic label of that action, and the complete versioned risk taxonomy. An independent vision-language judge returns a structured record with a binary \texttt{potential\_risk} decision, one primary \texttt{risk\_type} when risk is identified, and brief interface-grounded evidence. The taxonomy supplies stable category definitions, positive examples, and explicit low-risk counterexamples; it is shared output vocabulary rather than a prediction model on its own.
+Evidence acquisition is an interaction with the environment, not a neutral internal computation. VERA therefore assesses the selected semantic browser action before it is executed. Because the consequence of an action depends on the visible application state, the assessed object is the pair of the current GUI observation and the selected action, rather than a context-free function name. The same action label can consequently receive different judgments in different states.
 
 **中文**
 
-在执行每个已选浏览器动作之前，VERA 截取当前界面，并构造一个风险查询元组，其中包含截图、该动作的语义标签和完整的版本化风险分类体系。一个独立的视觉语言判断器返回结构化记录，包括二元 \texttt{potential\_risk} 判断、识别到风险时的一个主要 \texttt{risk\_type}，以及简短的界面依据。风险分类体系提供稳定的类别定义、正例和明确的低风险反例；它是各条件共享的输出词汇，而不是一个独立的预测模型。
+证据采集是对环境的交互，而不是中性的内部计算。因此，VERA 在已选语义浏览器动作执行前对其进行判断。由于动作后果取决于应用的可见状态，判断对象是当前 GUI 观察与已选动作的组合，而不是脱离上下文的功能名称。因此，同一动作标签在不同状态下可以得到不同判断。
 
 **English**
 
-Risk is assessed for the observation-conditioned selected action. The same action label may therefore receive different judgments on different pages or under different visible application states. VERA attaches the resulting record to the particular hypothesis and interaction attempt, rather than storing risk as a context-free property of a high-level function or an aggregate property of a multi-action verification attempt. Ordinary exploration actions store the annotation in their action metadata; every replay action is assessed separately and retains the same information in an audit record linked to its replay step.
+For each selected action, VERA captures the current screenshot and combines it with the action label and a versioned risk taxonomy. An independent vision-language judge returns a structured record containing a binary \texttt{potential\_risk} decision, one primary \texttt{risk\_type} when risk is identified, and brief interface-grounded evidence. The taxonomy supplies a shared vocabulary of category definitions and examples; it is not a prediction model on its own.
 
 **中文**
 
-风险判断针对的是以当前观察为条件的已选动作。因此，同一个动作标签在不同页面或不同可见应用状态下可能得到不同判断。VERA 将风险记录附着到具体的功能假设和交互尝试，而不是将风险保存为某个高层功能脱离上下文后的固定属性，也不把它作为整个多动作验证尝试的聚合属性。普通探索动作把风险标注保存在动作元数据中；每个 replay 动作也会被单独判断，并将相同信息保存在与该 replay 步骤关联的审计记录中。
+对于每个已选动作，VERA 截取当前界面，并将截图、动作标签和版本化风险分类体系组合为判断输入。独立的视觉语言判断器返回结构化记录，包括二元 \texttt{potential\_risk} 判断、识别到风险时的一个主要 \texttt{risk\_type}，以及简短的界面依据。风险分类体系提供共享的类别定义和示例词汇，而不是一个独立预测模型。
 
 **English**
 
-The evaluated system uses the detector in shadow mode. Its output does not cancel, replace, or modify the selected action. If risk inference fails, the execution path continues and the error is recorded. This fail-open execution policy preserves the exploration process for measurement, while making clear that the risk component is an awareness and audit layer rather than an execution-time safety boundary.
+VERA attaches this record to the assessed action and, for an ordinary verification attempt, to the functional claim and subsequent outcome evidence. Replay actions receive separate records at the same semantic-action granularity. These records expose a pre-execution signal that a downstream policy could use for blocking or human confirmation. In the evaluated system, however, the signal is recorded without changing the selected action; if risk inference fails, execution continues and the error remains in the audit trail.
 
 **中文**
 
-本文评测的系统以 shadow mode 使用风险检测器。检测结果不会取消、替换或修改已选动作。如果风险推理失败，执行链路仍然继续，同时记录该错误。这种 fail-open 执行策略使探索过程能够继续用于测量，也明确表明风险组件是一层感知与审计机制，而不是执行时的安全边界。
+VERA 将该记录关联到被判断的动作；对于普通验证尝试，还会将其与功能主张及后续结果证据关联。Replay 动作以相同的语义动作粒度分别生成记录。这些记录提供一种可供下游阻断或人工确认策略使用的执行前信号。不过，在本文评测的系统中，该信号只被记录，并不改变已选动作；如果风险推理失败，执行继续，同时错误保留在审计轨迹中。
 
 ### Execution and Evidence Collection / 执行与证据采集
 
 **English**
 
-The browser executor receives the selected browser action that serves the current functional claim and attempts to realize that interaction. VERA stores the pre-execution observation, the concrete interaction trace, the executor-reported status, the post-execution observation, URLs, and any available structured state changes or evidence references. Together these fields form the evidence packet defined in Section 3.
+Testing a functional claim requires evidence about the application-level outcome, not merely evidence that an interaction command was issued. The browser executor receives the selected semantic action and attempts to realize it. VERA stores the pre-execution observation, the concrete interaction trace, the executor-reported status, the post-execution observation, URLs, and any available structured state changes or evidence references. Together these fields form the evidence packet in Section 3.
 
 **中文**
 
-浏览器执行器接收服务于当前功能主张的已选浏览器动作，并尝试完成该交互。VERA 保存执行前观察、具体交互轨迹、执行器报告状态、执行后观察、URL，以及任何可用的结构化状态变化或证据引用。这些字段共同构成第 3 节定义的证据包。
+检验功能主张需要关于应用级结果的证据，而不只是某条交互命令已经发出的证据。浏览器执行器接收已选语义动作并尝试完成它。VERA 保存执行前观察、具体交互轨迹、执行器报告状态、执行后观察、URL，以及任何可用的结构化状态变化或证据引用。这些字段共同构成第 3 节定义的证据包。
 
 **English**
 
-The executor status is retained as a diagnostic signal, not used as the final functional truth label. In particular, an executor may report success after completing a click or input sequence even when the intended application-level outcome did not occur. Conversely, an execution failure may reflect grounding, timing, or environment errors rather than the absence of the proposed function. VERA therefore defers persistent knowledge admission until the evidence packet is evaluated against the frozen expected outcome.
+This packet deliberately preserves both executor status and observable outcome evidence. A successful executor status can indicate that a click or input sequence completed even when the expected application-level change did not occur. Conversely, a reported failure may reflect grounding, timing, or environment errors rather than the absence of the proposed function. VERA uses the status diagnostically and defers knowledge admission until the evidence is compared with the frozen outcome claim.
 
 **中文**
 
-执行器状态被保留为诊断信号，而不被用作最终的功能事实标签。具体而言，执行器可能在完成点击或输入序列后报告成功，即使预期的应用级结果并未发生。反过来，一次执行失败也可能源于动作定位、时序或环境错误，而不是说明候选功能不存在。因此，VERA 会推迟持久知识准入，直到证据包依据冻结的预期结果完成评价。
+该证据包有意同时保留执行器状态和可观察结果证据。执行器报告成功可能只说明点击或输入序列已经完成，即使预期的应用级变化并未发生。反过来，执行器报告失败也可能源于动作定位、时序或环境错误，而不是候选功能不存在。VERA 将执行器状态作为诊断信号，并推迟知识准入，直到证据与冻结的结果主张完成比较。
 
 ### Evidence-Grounded Model Update / 基于证据的模型更新
 
 **English**
 
-The outcome verifier receives the frozen functional claim, its expected observable outcome, and the evidence packet. It decides whether the observed post-interaction state supports the expectation and records a `Supported`, `Unsupported`, or `Unresolved` evidence judgment. The current implementation uses a vision-language model for this judgment, but the admission protocol does not depend on a particular verifier architecture.
+Knowledge admission is a separate decision from both proposal and execution. The outcome verifier receives the frozen functional claim and its evidence packet, compares the expected outcome with the observed post-interaction state, and records a `Supported`, `Unsupported`, or `Unresolved` judgment. The current implementation uses a vision-language model, but the admission protocol does not depend on a particular verifier architecture.
 
 **中文**
 
-结果验证器接收冻结的功能主张、对应的预期可观察结果以及证据包。它判断交互后的可观察状态是否支持该预期，并记录 `Supported`、`Unsupported` 或 `Unresolved` 证据判断。当前实现使用视觉语言模型完成这一判断，但知识准入协议并不依赖某一种特定的验证器架构。
+知识准入是独立于候选提出和动作执行的决定。结果验证器接收冻结的功能主张及其证据包，将预期结果与交互后的可观察状态进行比较，并记录 `Supported`、`Unsupported` 或 `Unresolved` 判断。当前实现使用视觉语言模型，但知识准入协议不依赖某种特定的验证器架构。
 
 **English**
 
-VERA admits a hypothesis only when the required evidence is complete and the evidence judgment is `Supported`, following Equation (4). The admitted record links the functional claim and frozen expectation to the execution trace, before--after observations, evidence judgment, and admission indicator. Evidence that is missing, inconclusive, or inconsistent with the expectation does not enter the downstream-usable knowledge set. The associated attempt is nevertheless retained so that failure and uncertainty remain auditable.
+VERA admits a hypothesis only when the required evidence is complete and the evidence judgment is `Supported`, following Equation (4). The admitted record links the functional claim and frozen expectation to the execution trace, before--after observations, evidence judgment, and admission decision. Evidence that is missing, inconclusive, or inconsistent with the expectation does not enter the downstream-usable knowledge set. The associated claim and attempt nevertheless remain in the model with their judgment and diagnostic reason. This separation prevents unresolved execution problems from becoming functional facts while preserving them as future verification opportunities.
 
 **中文**
 
-按照公式（4），只有在必要证据完整且 evidence judgment 为 `Supported` 时，VERA 才准入该假设。准入记录把功能主张及其冻结预期与执行轨迹、动作前后观察、证据判断和准入指示变量关联起来。缺失、不确定或与预期不一致的证据不能进入可供下游使用的知识集合，但相应尝试仍会被保留，以便失败和不确定情况可以被审查。
-
-**English**
-
-Knowledge admission is conservative even though risk inference is fail-open for execution. A risk-detector error does not halt the browser interaction, whereas an outcome-verification error or incomplete evidence cannot produce admitted knowledge. This asymmetry separates continuity of evidence production from the reliability requirement imposed on persistent knowledge.
-
-**中文**
-
-尽管风险推理在执行层采用 fail-open 策略，知识准入仍然是保守的。风险检测器出错不会中止浏览器交互，而结果验证器出错或证据不完整则不能产生被准入的知识。这种不对称设计把“持续产生证据”的要求与“持久知识必须可靠”的要求区分开来。
+按照公式（4），只有在必要证据完整且 evidence judgment 为 `Supported` 时，VERA 才准入该假设。准入记录把功能主张及其冻结预期与执行轨迹、动作前后观察、证据判断和准入决定关联起来。缺失、不确定或与预期不一致的证据不能进入可供下游使用的知识集合，但相应主张和尝试仍连同判断与诊断原因保留在模型中。这种区分防止未解决的执行问题变成功能事实，同时把它们保存为未来的验证机会。
 
 ### Persistent Evidence Production / 持久化证据生产
 
 **English**
 
-Open-ended exploration can leave hypotheses unresolved when an interaction moves away from their semantic location, encounters an execution error, or exhausts the current budget. VERA maintains these hypotheses in a persistent frontier instead of discarding them. The selection procedure prioritizes hypotheses whose observed direct dependencies are satisfied in the current context. When unresolved hypotheses remain at a previously visited location, the system may replay an observed path to that location and resume evidence production.
+Conservative admission is useful only if exploration can continue producing evidence for claims that are not resolved immediately. An interaction may move the browser away from a claim's semantic location, an execution may fail, or a run may exhaust its current budget. VERA retains such hypotheses in a persistent frontier rather than equating interruption with rejection or discarding the verification opportunity.
 
 **中文**
 
-在开放式探索中，如果一次交互离开了假设所属的语义位置、遇到执行错误，或耗尽了当前预算，一些假设可能仍未得到解决。VERA 不会丢弃这些假设，而是将其保存在持久 frontier 中。选择过程优先考虑那些观察到的直接依赖已经在当前上下文中满足的假设。当先前访问过的位置仍存在未解决假设时，系统可以 replay 一条已观察到的路径返回该位置，并继续产生验证证据。
+只有当探索能够继续为尚未立即解决的主张生产证据时，保守准入才真正有用。一次交互可能使浏览器离开主张所属的语义位置，执行可能失败，或者当前运行可能耗尽预算。VERA 将这些假设保存在持久 frontier 中，而不是把中断等同于拒绝，或直接丢弃验证机会。
+
+**English**
+
+The selection procedure prioritizes hypotheses whose observed direct dependencies are satisfied in the current context. When unresolved hypotheses remain at a previously visited location, VERA may replay an observed path to that location and resume evidence production. Replay restores a previously observed context; it does not relax the evidence judgment or admission rule.
+
+**中文**
+
+选择过程优先处理那些观察到的直接依赖已在当前上下文中满足的假设。当先前访问过的位置仍有未解决假设时，VERA 可以 replay 一条已经观察到的路径返回该位置并继续生产证据。Replay 恢复的是先前观察到的上下文，不会放宽证据判断或知识准入规则。
 
 **English**
 
@@ -288,23 +300,23 @@ Persistent frontier, dependency-aware selection, and replay implement the eviden
 
 持久 frontier、依赖感知选择和 replay 共同实现了方法中的证据生产部分。它们不会改变知识准入规则：无论系统通过何种方式到达候选，只有获得真实交互结果支持的内容才能成为被准入的功能知识。
 
-### Conservative Downstream Projection / 保守的下游投影
+### Traceable Functional Model / 可追溯功能模型
 
 **English**
 
-The complete VERA model retains supported, unsupported, and unresolved claims, including diagnostic reasons for non-admission, alongside admitted knowledge, evidence, and interaction-level risk annotations. A downstream consumer need not receive all of this internal state. VERA instead exposes a conservative projection that selects only admitted functions and preserves their semantic locations, supported direct dependencies, and observed outcomes.
+The resulting model preserves more than a list of discovered functions. For each claim, it links the frozen expectation, selected semantic action, pre-execution risk record, interaction trace, before--after evidence, evidence judgment, and admission decision. Supported, unsupported, and unresolved claims remain distinguishable, together with diagnostic reasons for non-admission. This trace is the common representation through which VERA accounts for both how evidence was acquired and why a claim did or did not become reusable knowledge.
 
 **中文**
 
-完整的 VERA 模型在保存已准入知识、相关证据和交互级风险标注的同时，也保留 supported、unsupported 和 unresolved 主张以及未准入的诊断原因。下游使用者不必接收全部内部状态。VERA 提供一个保守投影，只选择已准入功能，并保留其语义位置、获得支持的直接依赖和观察到的结果。
+最终模型保存的不只是已发现功能的列表。对于每条主张，它将冻结的预期、已选语义动作、执行前风险记录、交互轨迹、动作前后证据、证据判断和准入决定关联起来。Supported、unsupported 和 unresolved 主张保持可区分，并保留未准入的诊断原因。借助这条共同轨迹，VERA 同时说明证据是如何获得的，以及一条主张为何成为或没有成为可复用知识。
 
 **English**
 
-For symbolic planning, one possible projection maps semantic locations to predicates and admitted functions to actions. Location constraints and supported direct dependencies provide conservative applicability conditions, while observed successful outcomes provide effects. Risk records may remain available to a downstream policy as contextual metadata, but the current shadow-mode system does not prescribe a blocking policy. The projection is an interface for using the induced model, not a claim that VERA recovers complete preconditions, causal dynamics, or hidden business state.
+Downstream consumers can use a conservative view containing only admitted functions, their semantic locations, observed direct dependencies, and supported outcomes, while the complete trace remains available for inspection or further verification. This interface does not require a particular planner and does not treat the induced model as a complete recovery of hidden business state or causal dynamics.
 
 **中文**
 
-对于符号规划，一种可能的投影方式是把语义位置映射为谓词，把已准入功能映射为动作。位置约束和获得支持的直接依赖提供保守的适用条件，观察到的成功结果则提供动作效果。风险记录可以作为上下文元数据继续提供给下游策略，但当前采用 shadow mode 的系统并未规定阻断策略。这种投影只是使用所归纳模型的一种接口，并不意味着 VERA 恢复了完整的前置条件、因果动态或隐藏业务状态。
+下游使用者可以采用一个保守视图，其中只包含已准入功能、其语义位置、观察到的直接依赖和获得支持的结果；完整轨迹则继续用于检查或后续验证。该接口不依赖某种特定规划器，也不把归纳出的模型视为对隐藏业务状态或因果动态的完整恢复。
 
 ---
 
@@ -314,4 +326,4 @@ For symbolic planning, one possible projection maps semantic locations to predic
 2. **Admission semantics / 准入语义：** Does the binary indicator $A(h)\in\{0,1\}$ clearly separate non-admission from a judgment that the function is false? / 二元准入指示变量是否已清楚区分“当前不准入”与“该功能为假”？
 3. **Risk object / 风险对象：** Does $\rho_t=R(o_t,a_t,\mathcal{K})$ clearly express a pre-execution judgment about each selected browser action in its current visual context, including action-level replay assessment? / $\rho_t=R(o_t,a_t,\mathcal{K})$ 是否清楚表达了对每个已选浏览器动作在当前视觉上下文中的执行前判断，并涵盖逐动作的 replay 风险评估？
 4. **Unresolved reasons / Unresolved 原因：** Are not-attempted, execution failure, missing evidence, and partial evidence sufficient diagnostic subtypes for the appendix? / 尚未尝试、执行失败、证据缺失和部分证据是否足以作为附录中的诊断子类型？
-5. **Downstream projection / 下游投影：** Since the downstream evaluation is unfinished, should this subsection remain in the main method or move to the appendix until corresponding evidence is available? / 由于下游实验尚未完成，这一小节应继续保留在主方法中，还是暂时移至附录？
+5. **Traceable model / 可追溯模型：** Does the final subsection clearly explain why claims, action risk, execution evidence, judgment, and admission belong in one linked representation? / 最后一小节是否清楚解释了为什么功能主张、动作风险、执行证据、证据判断与准入决定应保存在同一关联表达中？

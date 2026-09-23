@@ -7,9 +7,12 @@ transition rules are unknown. At interaction step $t$, an agent receives a GUI
 observation $o_t \in \mathcal{O}$ and selects a browser action
 $a_t \in \mathcal{A}$. Executing $a_t$ produces a new observation $o_{t+1}$
 and executor-reported status $x_t$. The resulting interaction record is
-$\tau_t=(o_t,a_t,x_t,o_{t+1})$. Unlike task-conditioned Web agents, the agent
-is not given a user goal to complete. It instead explores the application to
-induce a reusable functional model from interaction traces. The model is
+$\tau_t=(o_t,a_t,x_t,o_{t+1})$. Here, $a_t$ denotes the semantic browser
+interaction submitted to the executor---such as clicking a labeled control or
+entering a value into a field---rather than every atomic mouse or keyboard
+event used internally to realize it. Unlike task-conditioned Web agents, the
+agent is not given a user goal to complete. It instead explores the application
+to induce a reusable functional model from interaction traces. The model is
 limited to states and outcomes that are observable through the GUI or saved
 interaction artifacts; it is not intended to recover hidden application logic.
 
@@ -42,9 +45,12 @@ For an attempted hypothesis $h_i$, the system stores an evidence packet
          o_i^{\mathrm{post}}, m_i),
 \end{equation}
 where $o_i^{\mathrm{pre}}$ and $o_i^{\mathrm{post}}$ are the before and after
-observations, $a_i$ is the executed interaction, $x_i$ is the executor-reported
-status, and $m_i$ contains available metadata and evidence references. An
-evidence judgment
+observations, $a_i$ is the semantic interaction selected to test the claim,
+$x_i$ is the executor-reported status, and $m_i$ contains available metadata,
+evidence references, and any lower-level execution trace retained by the
+executor. Thus, a verification attempt is organized around a frozen claim and
+its selected semantic interaction, while the executor may use multiple atomic
+GUI operations to realize that interaction. An evidence judgment
 \begin{equation}
     J(h_i,e_i) \in \{\textsc{Supported},\textsc{Unsupported},
     \textsc{Unresolved}\}
@@ -98,15 +104,15 @@ whether executing this selected interaction in the current GUI context may
 perform, enter, or prepare a risk-sensitive operation. The implemented judge
 receives the pre-action screenshot and a semantic label for $a_t$. It does not
 assign an intrinsic, context-free risk property to $f_i$, assess an entire
-multi-action verification attempt as one unit, or enumerate every possible
-action visible on the screen.
+verification process as one unit, classify the executor's internal atomic GUI
+events independently, or enumerate every possible action visible on the screen.
 
 The annotation $\rho_t$ is attached to the interaction record $\tau_t$. When
 $a_t$ is selected to test $h_i$, the record also links $\rho_t$ to that
 functional claim and its subsequent outcome evidence. Replay actions are
-assessed individually and linked to their replay steps, even when they do not
-propose a new claim. In the system evaluated here, risk assessment runs in
-shadow mode: it records a pre-execution judgment but does not block or modify
+assessed at the same semantic-action granularity and linked to their replay
+steps, even when they do not propose a new claim. In the system evaluated here,
+risk assessment records a pre-execution judgment but does not block or modify
 the selected action. Consequently, the formulation supports risk awareness and
 auditability, but does not by itself imply safer execution or an end-to-end
 safety guarantee.

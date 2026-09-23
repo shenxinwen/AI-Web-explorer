@@ -8,7 +8,7 @@
 
 - 目标会议：ICLR 2027
 - 论文题目：VERA: Verification and Environmental Risk Awareness for Functional Model Induction through Open-Ended Web Exploration
-- 当前阶段：C1、C2、C3 的正式实验与结果包均已冻结；匿名 LaTeX 主稿骨架已经建立，Introduction、Problem Formulation 与 Method 已形成首轮英文稿和中英对照审阅稿。下一阶段是完成 Experiments 与 Results，形成可通读的全篇初稿，再进行论证、证据边界和语言三轮修改。
+- 当前阶段：C1、C2、C3 的正式实验与结果包均已冻结；匿名 LaTeX 主稿骨架已经建立，Introduction、Related Work、Problem Formulation、Method 与 Experimental Setup 已形成首轮英文稿和中英对照审阅稿。下一阶段是审阅新增章节并完成 Results，形成可通读的全篇初稿，再进行论证、证据边界和语言三轮修改。
 
 ## 写作状态
 
@@ -18,7 +18,7 @@
 - 标题已暂定为 VERA 正式标题；摘要结构已暂定，但正文仍为占位符。摘要将在 Introduction、Experiments 与 Results 形成连贯初稿后集中撰写。
 - Keywords 暂定为：`web agents, open-ended web exploration, GUI agents, functional model induction, evidence-grounded verification, knowledge admission, environmental risk awareness`。
 - TL;DR 暂定为：`VERA builds reliable functional models through open-ended web exploration by assessing interaction risks in context and admitting only evidence-supported functions, while preserving useful functional coverage.`
-- `manuscript/sections/` 已建立完整章节骨架；Introduction、Problem Formulation 与 Method 已有首轮正文，其余章节主要仍为提纲或占位符。
+- `manuscript/sections/` 已建立完整章节骨架；Introduction、Related Work、Problem Formulation、Method 与 Experimental Setup 已有首轮正文，其余章节主要仍为提纲或占位符。
 - 本地已安装 LaTeX 与 Perl 工具链，并曾成功生成预览 PDF；按当前协作约定，不主动编译或打开 PDF，作者需要时再执行。
 
 ## 当前有效结论
@@ -40,8 +40,8 @@
 - 下游规划与行为验证用于检验模型价值；PDDL、SafeSym、VLM、浏览器执行器和 persistent frontier 均不作为独立创新。
 - C1 正式结果已归档：45 条候选功能中有 33 条人工支持知识。Evidence-grounded admission 的 precision 为 96.97%，supported knowledge retention 为 96.97%，高于 proposal-as-fact 的 73.33% precision 和 executor-success-as-fact 的 82.50% precision。该结论目前仅限 C1 的两个正式网站和冻结设置。
 - C2 主实验已收敛为 Random、Linear、Full 三条件比较，唯一主指标为有交互证据支持的功能覆盖率；覆盖增长、有效尝试率以及 replay 成本与新增覆盖作为辅助分析。该实验用于评估可靠知识归纳是否保留有用的功能发现能力，而非宣称通用探索能力领先。Replay GUI 动作不计入普通候选 attempt 预算，但单独限额和报告。
-- C2 formal v2 的 18 条运行已执行，覆盖账本 v1 已人工确认并冻结。网站 macro-average 为 Random 28.8%、Linear 42.6%、Full 54.5%，Full 相对 Linear 为 +11.9 pp；replay GUI 成本单列。SauceDemo Linear/Full 的登录失败 run_03 原件已归档，重跑结果已提升为标准 `run_03`。最终报告为 `paper/experiments/results/E004/c2_final_results.md`。
-- C3 正式结果已冻结为两条互补证据轨道。探索关联评测含 106 条 C2 Full 普通探索动作，Full pooled precision/recall/F1 为 86.5%/100.0%/92.8%，但四条件二元 F1 差异均未获得明确区分。外部 context-challenge 含 100 条样本；Context-conditioned 相对 Text-only 的 recall、F1、acceptable-type accuracy 分别提高 12.3、5.2、35.4 pp，precision 下降 4.5 pp。二元差异区间跨 0，类型准确率差异区间为 [+21.7, +49.3] pp。最终报告为 `paper/experiments/results/E002/c3_final_results.md`。
+- C2 formal v2 的 18 条运行已执行，覆盖账本 v1 已人工确认并冻结。网站 macro-average 为 Random 28.8%、Linear 42.6%、Full 54.5%，Full 相对 Linear 为 +11.9 pp；replay GUI 成本单列。SauceDemo Linear/Full 的登录失败 run_03 原件已归档，重跑结果已提升为标准 `run_03`。最终报告为 `paper/experiments/results/E004/final/c2_final_results.md`。
+- C3 正式结果已冻结为两条互补证据轨道。探索关联评测含 106 条 C2 Full 普通探索动作，Full pooled precision/recall/F1 为 86.5%/100.0%/92.8%，但四条件二元 F1 差异均未获得明确区分。外部 context-challenge 含 100 条样本；Context-conditioned 相对 Text-only 的 recall、F1、acceptable-type accuracy 分别提高 12.3、5.2、35.4 pp，precision 下降 4.5 pp。二元差异区间跨 0，类型准确率差异区间为 [+21.7, +49.3] pp。最终报告为 `paper/experiments/results/E002/final/c3_final_results.md`。
 - C3 错误分析显示视觉上下文纠正 16 个二元判断并引入 14 个错误；主要收益是消解模糊动作并改善风险后果类型表达，主要代价是把进入或准备工作流误判为已经产生下游影响。
 
 ## 已有资产
@@ -62,7 +62,7 @@
 ## 下一步
 
 1. 审阅 Introduction 首轮英文稿及其中英对照稿，确认问题驱动叙事是否准确。
-2. 将 C1–C3 冻结设置与结果写入 Experiments 和 Results；C3 明确区分探索关联评测和外部 context challenge。
-3. 完成 Limitations、Ethics、Reproducibility、Related Work 与 Conclusion，形成可从头到尾阅读的初稿。
+2. 审阅 Experimental Setup 首轮稿，然后将 C1–C3 冻结结果写入 Results；C3 明确区分探索关联评测和外部 context challenge。
+3. 完成 Limitations、Ethics、Reproducibility 与 Conclusion，形成可从头到尾阅读的初稿。
 4. 在全文论证链稳定后撰写 Abstract，并统一贡献句与结果句。
 5. 依次进行三轮修改：整体论证与章节衔接、证据与主张边界、语言与篇幅。不得把 shadow-mode 风险感知写成端到端安全提升。
