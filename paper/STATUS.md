@@ -19,7 +19,7 @@
 - Keywords 暂定为：`web agents, open-ended web exploration, GUI agents, functional model induction, evidence-grounded verification, knowledge admission, environmental risk awareness`。
 - TL;DR 暂定为：`VERA builds reliable functional models through open-ended web exploration by assessing interaction risks in context and admitting only evidence-supported functions, while preserving useful functional coverage.`
 - `manuscript/sections/` 的全部核心正文均已有首轮内容；Appendix 已开始承接从正文移出的协议、标注、uncertainty 和案例细节。
-- `manuscript/review/` 中英对照稿当前保留压缩前审阅快照，已显式标注；待本轮英文结构获作者确认后统一重新生成。
+- `manuscript/review/` 中英对照稿已按第一次压缩后的英文主稿重新生成，并新增 Appendix 对照稿。
 - 本地已安装 LaTeX 与 Perl 工具链，并曾成功生成预览 PDF；按当前协作约定，不主动编译或打开 PDF，作者需要时再执行。
 
 ## 当前有效结论
@@ -62,8 +62,7 @@
 
 ## 下一步
 
-1. 作者审阅第一次压缩后的英文主稿，重点检查是否因压缩损失必要解释。
-2. 在结构获确认后重新生成中英对照审阅稿。
-3. 进行第二轮全文修改：逐项核对数字、比较条件、统计措辞与 claim ceiling。
-4. 由协作者设计统一证据链概念图；随后依据实际排版选择正文图表与进一步压缩。
-5. 补齐匿名补充材料中的运行环境版本，并在发布截图和轨迹前完成敏感数据审查。
+1. 作者通过新版中英对照稿审阅第一次压缩后的结构，重点检查是否损失必要解释。
+2. 进行第二轮全文修改：逐项核对数字、比较条件、统计措辞与 claim ceiling。
+3. 由协作者设计统一证据链概念图；随后依据实际排版选择正文图表与进一步压缩。
+4. 补齐匿名补充材料中的运行环境版本，并在发布截图和轨迹前完成敏感数据审查。
