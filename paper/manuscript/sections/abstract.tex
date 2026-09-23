@@ -1,3 +1,25 @@
 \begin{abstract}
-% To be written after the problem formulation and method are stable.
+Open-ended Web exploration allows agents to discover application functionality
+without predefined user tasks, but its autonomy creates two linked risks:
+probing unknown functions can affect the environment, and insufficiently
+supported observations can become persistent knowledge. We introduce VERA, a
+framework that treats functional model induction as a traceable process of
+evidence production. VERA represents each discovered function as a testable
+claim with an expected observable outcome fixed before execution. For every
+selected semantic browser action, it records a context-conditioned assessment
+of potential environmental risk and links that record to the claim and
+interaction trace. After execution, VERA compares the observed outcome with the
+fixed expectation and admits the claim to reusable knowledge only when the
+interaction evidence supports it. Unresolved claims remain available for later
+verification through a persistent exploration process. In controlled studies,
+evidence-grounded admission achieves 96.97\% precision while retaining 96.97\%
+of human-supported functional knowledge. Persistent recovery improves
+website-macro-average evidence-supported coverage by 11.9 percentage points
+over linear exploration under the same ordinary-attempt budget, with replay
+cost reported separately. On an external context-challenge set, visual context
+improves acceptable risk-type accuracy by 35.4 points; binary detection shows a
+higher-recall, lower-precision trade-off. These results support shifting the
+focus of open-ended exploration from coverage alone toward reliable functional
+knowledge whose evidential basis and acquisition risks remain explicit and
+auditable.
 \end{abstract}

@@ -8,17 +8,17 @@
 
 - 目标会议：ICLR 2027
 - 论文题目：VERA: Verification and Environmental Risk Awareness for Functional Model Induction through Open-Ended Web Exploration
-- 当前阶段：C1、C2、C3 的正式实验与结果包均已冻结；匿名 LaTeX 主稿骨架已经建立，Introduction、Related Work、Problem Formulation、Method 与 Experimental Setup 已形成首轮英文稿和中英对照审阅稿。下一阶段是审阅新增章节并完成 Results，形成可通读的全篇初稿，再进行论证、证据边界和语言三轮修改。
+- 当前阶段：C1、C2、C3 的正式实验与结果包均已冻结；匿名 LaTeX 主稿已形成可从头到尾阅读的首轮英文稿。Introduction、Related Work、Problem Formulation、Method、Experimental Setup、Results、Limitations and Ethics、Reproducibility、Conclusion 与 Abstract 均已有正文，并配有中英对照审阅稿。下一阶段是作者审阅与三轮整体修改：论证结构、证据边界、语言与篇幅。
 
 ## 写作状态
 
 - 正式 LaTeX 入口：`manuscript/iclr2027_conference.tex`。
 - 原始模板备份：`manuscript/iclr2027_conference_template.tex`；后续不在该文件上撰写正文。
 - 投稿模式：保持 `\iclrfinalcopy` 注释，作者身份不写入匿名投稿版本。
-- 标题已暂定为 VERA 正式标题；摘要结构已暂定，但正文仍为占位符。摘要将在 Introduction、Experiments 与 Results 形成连贯初稿后集中撰写。
+- 标题已暂定为 VERA 正式标题；摘要已依据统一论证主线和冻结 C1--C3 结果形成首轮正文。
 - Keywords 暂定为：`web agents, open-ended web exploration, GUI agents, functional model induction, evidence-grounded verification, knowledge admission, environmental risk awareness`。
 - TL;DR 暂定为：`VERA builds reliable functional models through open-ended web exploration by assessing interaction risks in context and admitting only evidence-supported functions, while preserving useful functional coverage.`
-- `manuscript/sections/` 已建立完整章节骨架；Introduction、Related Work、Problem Formulation、Method 与 Experimental Setup 已有首轮正文，其余章节主要仍为提纲或占位符。
+- `manuscript/sections/` 的全部核心正文均已有首轮内容；Appendix 仍为章节骨架，待根据正文篇幅与审阅结果选择补充材料。
 - 本地已安装 LaTeX 与 Perl 工具链，并曾成功生成预览 PDF；按当前协作约定，不主动编译或打开 PDF，作者需要时再执行。
 
 ## 当前有效结论
@@ -61,8 +61,8 @@
 
 ## 下一步
 
-1. 审阅 Introduction 首轮英文稿及其中英对照稿，确认问题驱动叙事是否准确。
-2. 审阅 Experimental Setup 首轮稿，然后将 C1–C3 冻结结果写入 Results；C3 明确区分探索关联评测和外部 context challenge。
-3. 完成 Limitations、Ethics、Reproducibility 与 Conclusion，形成可从头到尾阅读的初稿。
-4. 在全文论证链稳定后撰写 Abstract，并统一贡献句与结果句。
-5. 依次进行三轮修改：整体论证与章节衔接、证据与主张边界、语言与篇幅。不得把 shadow-mode 风险感知写成端到端安全提升。
+1. 作者审阅 Abstract、Results、Limitations and Ethics、Reproducibility 与 Conclusion 的中英对照稿。
+2. 进行第一轮全文修改：检查中心论点在各章节的推进关系，删除重复防御性表述并改善章节衔接。
+3. 进行第二轮全文修改：逐项核对数字、比较条件、统计措辞与 claim ceiling。
+4. 进行第三轮全文修改：压缩语言与篇幅，选择正文图表和 Appendix 内容。
+5. 补齐匿名补充材料中的运行环境版本，并在发布截图和轨迹前完成敏感数据审查。

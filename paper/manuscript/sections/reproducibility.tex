@@ -1,4 +1,17 @@
 \subsection*{Reproducibility Statement}
 
-% Summarize and point to the reproducibility details in the paper, appendix,
-% and anonymous supplementary materials.
+The anonymous artifact package contains the implementation, versioned prompts
+and risk taxonomy, frozen experiment configurations, reviewed annotations,
+machine-readable metrics, and analysis scripts for C1--C3. Configurations record
+entry states, ordinary-attempt and replay limits, random seeds where applicable,
+model sampling settings, viewport, and failure-handling rules. The C1 package
+contains 45 aggregated claims, 103 attempts, and the reviewed gold used by
+\texttt{scripts/paper/analyze\_c1.py}. C2 provides the 18-run configuration,
+frozen coverage ledger, replay accounting, and
+\texttt{scripts/paper/analyze\_c2.py}. C3 provides the 106 exploration-linked
+cases, 100 external cases, frozen assessor configuration, artifact manifests,
+and scripts for both evaluations. Failed executions, incomplete evidence, and
+negative examples are retained. Exact result packages are under
+\texttt{paper/experiments/results/E002--E004}. Their manifests reference the
+raw browser artifacts; inclusion of screenshots and traces in the supplementary
+release is contingent on sensitive-data review.
