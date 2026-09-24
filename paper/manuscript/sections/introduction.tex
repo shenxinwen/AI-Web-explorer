@@ -46,16 +46,20 @@ risk of acquiring it explicit.
 
 We study open-ended exploration as \emph{evidence production under dual risk}
 and introduce \textbf{VERA}, a framework for Verification and Environmental
-Risk Awareness in functional model induction. VERA proposes a
-location-conditioned functional claim together with a frozen expected
-observable outcome. Before each selected browser action, it records a
-context-conditioned risk judgment grounded in the current GUI observation.
-After execution, it links the action, executor status, and before--after
-observations to the claim, and admits the claim to downstream-usable knowledge
-only when the evidence supports the expected outcome. Persistent unresolved
-hypotheses and replay recover further opportunities for evidence production.
-The contribution is the protocol connecting these records into a traceable
-functional model.
+Risk Awareness in functional model induction. VERA organizes exploration
+around a single traceable evidence chain. At a semantic location, it first
+states a functional claim and freezes its expected observable outcome. It then
+selects an action to test that claim and, before execution, records the action's
+potential environmental consequences in the current GUI context. Execution
+produces a trace and before--after observations, which are judged against the
+frozen expectation. Only supporting evidence admits the claim to
+downstream-usable knowledge; otherwise the claim remains distinguishable as
+unsupported or unresolved. A persistent frontier and replay preserve
+unresolved claims and recover their contexts, allowing this evidence-production
+process to continue rather than weakening the admission rule. Thus, pre-action
+risk judgment describes the potential consequences of acquiring evidence,
+post-action verification determines what that evidence supports, and admission
+determines what becomes reusable knowledge.
 
 Controlled studies support these design choices. Evidence-grounded admission
 attains 96.97\% precision while retaining 96.97\% of human-supported functional
@@ -64,21 +68,26 @@ mechanism improves website-macro-average evidence-supported functional coverage
 by 11.9 percentage points over linear exploration, with replay costs reported
 separately. Finally, adding visual context improves acceptable risk-type
 accuracy by 35.4 percentage points on an external context-challenge set, while
-binary detection exhibits a higher-recall, lower-precision trade-off. Together,
-these results provide bounded evidence for reliable knowledge admission,
-sustained evidence production, and context-grounded risk awareness. The
-evaluated risk records do not alter the selected action.
+binary detection exhibits a higher-recall, lower-precision trade-off. A
+complementary exploration-linked evaluation confirms that risk records can be
+attached to actions arising in VERA's ordinary workflow; the external actions
+are supplied to the assessor to isolate contextual grounding. Together, these
+results provide bounded evidence for reliable knowledge admission, sustained
+evidence production, and context-grounded risk awareness. The evaluated risk
+records do not alter the selected action.
 
 Our contributions are:
 \begin{itemize}
     \item We formulate open-ended functional model induction as evidence
     production under epistemic and environmental interaction risks, and define
-    a traceable model that separates candidate discovery, executor-reported
-    success, evidence judgment, and knowledge admission.
-    \item We show how outcome verification can govern persistent knowledge
-    admission, while a persistent frontier and replay sustain evidence
-    production for unresolved claims.
-    \item We make evidence acquisition traceable by linking each selected
-    action's context-conditioned risk record to its claim, execution trace, and
-    outcome evidence, and evaluate this record on workflow and external cases.
+    a traceable model linking functional claims, acquisition actions, risk
+    records, execution traces, outcome evidence, and admission decisions.
+    \item We separate candidate discovery and executor-reported completion from
+    evidence-grounded knowledge admission, and show how a persistent frontier
+    and replay sustain the verification opportunities required by conservative
+    admission.
+    \item We make the acquisition side of the same evidence chain auditable by
+    attaching context-conditioned risk records to selected actions, and evaluate
+    their workflow coverage and contextual grounding through complementary
+    exploration-linked and external evaluations.
 \end{itemize}
