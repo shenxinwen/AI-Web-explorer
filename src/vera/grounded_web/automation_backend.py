@@ -1,0 +1,32 @@
+from __future__ import annotations
+
+from typing import Any, Protocol, runtime_checkable
+
+from vera.grounded_web.graph import BrowserAction
+from vera.grounded_web.models import StateSnapshot
+
+InteractableRecord = dict[str, Any]
+
+
+@runtime_checkable
+class AutomationBackend(Protocol):
+    """Browser operation boundary used by Web-KOBE exploration.
+
+    Implementations operate the browser. They do not own exploration strategy,
+    graph recording, state-delta inference, or SafeSym/PDDL projection.
+    """
+
+    app_name: str
+
+    async def observe_state(self) -> StateSnapshot: ...
+
+    async def list_interactables(
+        self,
+        state: StateSnapshot,
+    ) -> list[InteractableRecord]: ...
+
+    async def execute(self, action: BrowserAction) -> bool: ...
+
+    async def go_back(self) -> bool: ...
+
+    async def reset_to(self, url: str) -> bool: ...

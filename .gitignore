@@ -1,0 +1,22 @@
+# Local credentials and environments
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+# Generated interaction data
+outputs/
+*.log
+# Python build/test artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+# Local editor files
+.idea/
+.vscode/
+.DS_Store

@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling>=1.26,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vera-explorer"
+version = "0.1.1"
+description = "Evidence-grounded functional models through open-ended web exploration"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "playwright>=1.42,<2",
+    "openai>=1.14.2,<3",
+    "python-dotenv>=1,<2",
+    "stagehand==3.21.0",
+]
+
+[project.scripts]
+vera = "vera.runtime.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/vera"]
+

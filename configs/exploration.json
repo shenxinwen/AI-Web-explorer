@@ -1,0 +1,25 @@
+{
+  "steps": 25,
+  "max_candidates": 12,
+  "limits": {
+    "max_exploration_steps": 25,
+    "max_consecutive_no_progress": 3,
+    "max_action_attempts_per_candidate": 2,
+    "max_replay_attempts_per_frontier": 2,
+    "max_total_replays": 4,
+    "max_vlm_scan_attempts": 2,
+    "max_candidates_per_location": 12
+  },
+  "stagehand_execution_mode": "observe_act",
+  "exploration_condition": "full",
+  "use_openai_visual_delta": true,
+  "use_openai_risk_detection": true,
+  "visual_delta_model": "gpt-4o",
+  "action_outcome_model": "gpt-4o",
+  "risk_detection_model": "gpt-4o",
+  "model": "openai/gpt-4o",
+  "business_profile": "none",
+  "viewport_width": 1440,
+  "viewport_height": 1000,
+  "allow_test_site_final_order": false
+}
